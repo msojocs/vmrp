@@ -15,6 +15,8 @@
 // #else
 #include "../windows/unicorn-1.0.2-win32/include/unicorn/unicorn.h"
 // #endif
+#elif defined(__linux__)
+#include <unicorn/unicorn.h>
 #endif
 
 #ifndef EM_PORT_API
