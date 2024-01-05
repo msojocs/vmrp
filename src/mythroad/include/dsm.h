@@ -2,7 +2,7 @@
 #define _DSM_H
 
 #ifdef VMRP
-#include "../../header/types.h"
+#include "../../include/types.h"
 #else
 #include "mrporting.h"
 #endif
