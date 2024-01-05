@@ -3,13 +3,25 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "/usr/include/SDL2"
             ],
-            "defines": [],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c11",
             "cppStandard": "c++17",
-            "intelliSenseMode": "clang-x64"
+            "intelliSenseMode": "clang-x64",
+            "defines": [
+                "_DEBUG",
+                "DEBUG",
+                "UNICODE",
+                "_UNICODE",
+                "DSM_FULL",
+                "TARGET_MOD",
+                "MTK_MOD",
+                "MR_PLAT_DRAWTEXT",
+                "VMRP",
+                "NETWORK_SUPPORT"
+            ]
         },
         {
             "name": "Win32",

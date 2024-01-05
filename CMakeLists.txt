@@ -18,7 +18,7 @@ add_executable(vmrp
   ./fileLib.c
 )
 
-target_link_libraries(vmrp "/usr/local/lib/libunicorn.a")
+target_link_libraries(vmrp unicorn)
 target_link_libraries(vmrp SDL2main SDL2 m pthread)
 
 
