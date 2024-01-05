@@ -2,9 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "./header/bridge.h"
-#include "./header/vmrp.h"
-#include "./header/memory.h"
+#include "./include/bridge.h"
+#include "./include/vmrp.h"
+#include "./include/memory.h"
 
 #ifdef _WIN32
 // #ifdef __x86_64__

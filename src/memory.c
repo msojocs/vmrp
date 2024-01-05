@@ -1,6 +1,6 @@
-#include "./header/vmrp.h"
-#include "./header/memory.h"
-#include "./header/utils.h"
+#include "./include/vmrp.h"
+#include "./include/memory.h"
+#include "./include/utils.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>

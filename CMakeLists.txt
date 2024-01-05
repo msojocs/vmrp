@@ -8,14 +8,14 @@ set(CMAKE_C_FLAGS "-m32 -g -Wall -DNETWORK_SUPPORT -DVMRP")
 
 
 add_executable(vmrp
-  ./main.c
-  ./bridge.c
-  ./vmrp.c
-  ./utils.c
-  ./rbtree.c
-  ./network.c
-  ./memory.c
-  ./fileLib.c
+  ./src/main.c
+  ./src/bridge.c
+  ./src/vmrp.c
+  ./src/utils.c
+  ./src/rbtree.c
+  ./src/network.c
+  ./src/memory.c
+  ./src/fileLib.c
 )
 
 target_link_libraries(vmrp unicorn)
