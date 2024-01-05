@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "./header/network.h"
-#include "./header/posix_sockets.h"
+#include "./include/network.h"
+#include "./include/posix_sockets.h"
 
 // #define NETWORK_SUPPORT
 

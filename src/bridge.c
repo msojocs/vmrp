@@ -1,4 +1,4 @@
-#include "./header/bridge.h"
+#include "./include/bridge.h"
 
 #include <ctype.h>
 #include <pthread.h>
@@ -8,11 +8,11 @@
 #include <unistd.h>
 
 #include "./mythroad/include/dsm.h"
-#include "./header/fileLib.h"
-#include "./header/memory.h"
-#include "./header/vmrp.h"
-#include "./header/debug.h"
-#include "./header/network.h"
+#include "./include/fileLib.h"
+#include "./include/memory.h"
+#include "./include/vmrp.h"
+#include "./include/debug.h"
+#include "./include/network.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
