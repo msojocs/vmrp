@@ -4,15 +4,4 @@
 *.exe
 *.dll
 .vscode/settings.json
-
-
-
-
-
-
-
-
-
-
-
-
+build
