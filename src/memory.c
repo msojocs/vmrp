@@ -28,7 +28,7 @@ void initMemoryManager(uint32_t baseAddress, uint32_t len) {
     Origin_LG_mem_base = getMrpMemPtr(baseAddress);
     Origin_LG_mem_len = len;
 
-    LG_mem_base = (char *)((uint32)(Origin_LG_mem_base + 3) & (~3));
+    LG_mem_base = (char *)(((uintptr_t)(Origin_LG_mem_base + 3)) & ~(uintptr_t)3);
     LG_mem_len = (Origin_LG_mem_len - (LG_mem_base - Origin_LG_mem_base)) & (~3);
     LG_mem_end = LG_mem_base + LG_mem_len;
     LG_mem_free.next = 0;
@@ -114,7 +114,7 @@ void my_free(void *p, uint32 len) {
 #ifdef MEM_DEBUG
     if (!len || !p || (char *)p < LG_mem_base || (char *)p >= LG_mem_end || (char *)p + len > LG_mem_end || (char *)p + len <= LG_mem_base) {
         printf("my_free invalid\n");
-        printf("p=%d,l=%d,base=%d,LG_mem_end=%d\n", (int32)p, len, (int32)LG_mem_base, (int32)LG_mem_end);
+        printf("p=%p,l=%d,base=%p,LG_mem_end=%p\n", p, len, (void*)LG_mem_base, (void*)LG_mem_end);
         return;
     }
 #endif

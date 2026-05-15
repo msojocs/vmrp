@@ -3,12 +3,12 @@ set -e
 
 cd /home/msojocs/github/unicorn
 
-export PKG_CONFIG_PATH="/usr/lib/i386-linux-gnu/pkgconfig" 
-export CFLAGS=-m32
-export LDFLAGS=-m32
-export LDFLAGS_STATIC=-m32
-export LIBRARY_PATH="/usr/lib/i386-linux-gnu"
-export UNICORN_QEMU_FLAGS="--cpu=i386 ${UNICORN_QEMU_FLAGS}"
+# export PKG_CONFIG_PATH="/usr/lib/i386-linux-gnu/pkgconfig" 
+# export CFLAGS=-m32
+# export LDFLAGS=-m32
+# export LDFLAGS_STATIC=-m32
+# export LIBRARY_PATH="/usr/lib/i386-linux-gnu"
+# export UNICORN_QEMU_FLAGS="--cpu=i386 ${UNICORN_QEMU_FLAGS}"
 mkdir -p build
 cd build
 rm -rf ./*

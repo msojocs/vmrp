@@ -55,7 +55,7 @@ void saveEditText(char *str) {
         my_freeExt(holdEditText);
         holdEditText = NULL;
     }
-    uint32_t len = (uint32_t)utf8Str - (uint32_t)str;
+    uint32_t len = (uint32_t)(utf8Str - (uint8_t *)str);
     holdEditText = my_mallocExt(len + 1);
     memcpy(holdEditText, str, len);
     holdEditText[len] = '\0';
