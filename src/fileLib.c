@@ -37,7 +37,7 @@ int32_t my_open(const char *filename, uint32_t mode) {
     filef_count++;
     uIntMap *obj = malloc(sizeof(uIntMap));
     obj->key = filef_count;
-    obj->data = (void *)f;
+    obj->data = (void *)(intptr_t)f;
     uIntMap_insert(&filef_map, obj);
     return filef_count;
 }
@@ -50,7 +50,7 @@ int32_t my_close(int32_t f) {
     if (f == filef_count) {
         filef_count--;
     }
-    int fh = (int)obj->data;
+    int fh = (int)(intptr_t)obj->data;
     free(obj);
     if (close(fh) != 0) {
         return MR_FAILED;
@@ -63,7 +63,7 @@ int32_t my_seek(int32_t f, int32_t pos, int method) {
     if (obj == NULL) {
         return MR_FAILED;
     }
-    off_t ret = lseek((int)obj->data, (off_t)pos, method);
+    off_t ret = lseek((int)(intptr_t)obj->data, (off_t)pos, method);
     if (ret == -1) {
         return MR_FAILED;
     }
@@ -75,7 +75,7 @@ int32_t my_read(int32_t f, void *p, uint32_t l) {
     if (obj == NULL) {
         return MR_FAILED;
     }
-    int32_t readnum = read((int)obj->data, p, (size_t)l);
+    int32_t readnum = read((int)(intptr_t)obj->data, p, (size_t)l);
     if (readnum == -1) {
         return MR_FAILED;
     }
@@ -87,7 +87,7 @@ int32_t my_write(int32_t f, void *p, uint32_t l) {
     if (obj == NULL) {
         return MR_FAILED;
     }
-    int32_t writenum = write((int)obj->data, p, (size_t)l);
+    int32_t writenum = write((int)(intptr_t)obj->data, p, (size_t)l);
     if (writenum == -1) {
         return MR_FAILED;
     }
