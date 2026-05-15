@@ -9,7 +9,7 @@ sudo apt-get install libsdl2-dev:i386
 
 ln -s /usr/include/asm-generic /usr/include/asm
 
-## 构建32位的unicorn
+## 构建32位的unicorn（直接编译64位也行）
 
 `set(EXTRA_CFLAGS "--extra-cflags=")` -> `set(EXTRA_CFLAGS "--extra-cflags=-m32 ")`
 
