@@ -5,3 +5,4 @@
 *.dll
 .vscode/settings.json
 build
+.cache

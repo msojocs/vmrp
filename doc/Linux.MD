@@ -1,7 +1,11 @@
+# 编译unicorn
+
+Git地址：https://github.com/unicorn-engine/unicorn.git
+
+## 环境准备
 
 sudo dpkg --add-architecture i386 
 sudo apt-get install libsdl2-dev:i386
-
 
 ln -s /usr/include/asm-generic /usr/include/asm
 
