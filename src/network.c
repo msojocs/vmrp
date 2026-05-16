@@ -2,9 +2,11 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 
 #include "./include/network.h"
 #include "./include/posix_sockets.h"
+#include "include/types.h"
 
 // #define NETWORK_SUPPORT
 
@@ -38,6 +40,7 @@ typedef struct {
     uint32_t sendCounter;
     int32_t realState;  // 真正的连接状态
     int32_t state;      // cmwap模式下是一个伪状态，cmnet模式下与realState的值始终相同
+    int32_t cmwapProxyAck;  // cmwap模式：真实连接建立后需要返回伪造的代理200响应
 } mSocket;
 
 static int isCMWAP = FALSE;
@@ -45,11 +48,17 @@ static struct rb_root sockets = RB_ROOT;
 
 static int parseHostPort(char* str, char* outHost, int outHostLen, uint16_t* outPort) {
     int i;
-    char* h = strstr(str, "://");
-    if (h == NULL) {
-        return -1;
+    char* h;
+    // 支持 "CONNECT host:port HTTP/x.x" 格式（CMWAP代理格式）
+    if (strncmp(str, "CONNECT ", 8) == 0) {
+        h = str + 8;
+    } else {
+        h = strstr(str, "://");
+        if (h == NULL) {
+            return -1;
+        }
+        h += 3;  // 跳过'://'
     }
-    h += 3;  // 跳过'://'
 
     for (i = 0; i < outHostLen; i++) {
         if (*h == '\0' || *h == ':' || *h == '/') {
@@ -124,6 +133,8 @@ static void* my_connectAsync(void* arg) {
     data->s->realState = r;
     if (!isCMWAP) {  // cmnet模式下保持相同的连接状态
         data->s->state = r;
+    } else if (r == MR_SUCCESS) {
+        data->s->cmwapProxyAck = 1;  // 触发伪造的代理200响应
     }
     free(data);
     return NULL;
@@ -201,6 +212,7 @@ int32 my_socket(int32 type, int32 protocol) {
     data->realState = MR_WAITING;
     data->state = MR_WAITING;
     data->sendCounter = 0;
+    data->cmwapProxyAck = 0;
 
     uIntMap* obj = malloc(sizeof(uIntMap));
     obj->key = socketCounter;
@@ -330,6 +342,10 @@ static int32 my_getHostByNameSync(const char* name) {
 
 #if 1
     struct addrinfo *result, *res;
+    printf("getaddrinfo of %s\n", name);
+    if (strcmp("wap.skmeg.com", name) == 0) {
+        return 0x7F000001;
+    }
     if (getaddrinfo(name, NULL, NULL, &result) != 0) {
         printf("getaddrinfo failed!\n");
         return ret;
@@ -487,6 +503,7 @@ int32 my_send(int32 s, const char* buf, int len) {
         return 0;
     }
     ret = send(data->s, buf, len, 0);
+    printf("my_send(s:%d, len:%d): sent=%d, errno=%d\n", s, len, ret, errno);
     if (ret == -1) {
         return MR_FAILED;
     }
@@ -558,13 +575,44 @@ int32 my_recv(int32 s, char* buf, int len) {
 #ifdef NETWORK_SUPPORT
     uIntMap* obj = uIntMap_search(&sockets, (uint32_t)s);
     mSocket* data = (mSocket*)obj->data;
+    if (data->realState == MR_WAITING) {
+        return 0;
+    }
+    if (data->realState == MR_FAILED) {
+        return MR_FAILED;
+    }
+    // cmwap模式：真实连接建立后，伪造代理的"200 Connection established"响应
+    // if (isCMWAP && data->cmwapProxyAck) {
+    //     static const char fakeResp[] = "HTTP/1.0 200 Connection established\r\n\r\n";
+    //     int respLen = (int)(sizeof(fakeResp) - 1);
+    //     if (len >= respLen) {
+    //         memcpy(buf, fakeResp, respLen);
+    //         data->cmwapProxyAck = 0;
+    //         printf("my_recv: injected CMWAP fake proxy ack\n");
+    //         return respLen;
+    //     }
+    // }
     int ret = checkReadable(data->s);
+    printf("my_recv(s:%d, len:%d): checkReadable=%d\n", s, len, ret);
     if (ret == -1) {
         return MR_FAILED;
     } else if (ret == 0) {
         return 0;
     }
     ret = recv(data->s, buf, len, 0);
+    printf("my_recv(s:%d): recv=%d, errno=%d\n", s, ret, errno);
+    // if (ret == 0) {  // EOF: 对端关闭连接
+    //     printf("my_recv(s:%d): EOF, returning MR_FAILED\n", s);
+    //     return MR_FAILED;
+    // }
+    if (ret > 0) {
+        // 打印前64字节可见字符
+        char preview[65];
+        int plen = ret < 64 ? ret : 64;
+        memcpy(preview, buf, plen);
+        preview[plen] = '\0';
+        printf("my_recv data: [%s]\n", preview);
+    }
     if (ret == -1) {
         return MR_FAILED;
     }
