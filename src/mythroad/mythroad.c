@@ -19,8 +19,11 @@
 #include "./include/printf.h"
 #include "./include/string.h"
 #include "./luadec/luadec.h"
+#ifdef VMRP_NATIVE
+#include "../include/arm_ext_executor.h"
+#endif
 
-#define MR_VERSION 1968
+#define MR_VERSION 2011
 
 const unsigned char* mr_m0_files[50];
 
@@ -3239,6 +3242,9 @@ int32 _mr_c_function_new(MR_C_FUNCTION f, int32 len) {
 // _strCom(int,str)
 int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
     int ret = 0;
+#ifdef VMRP_NATIVE
+    static ArmExtModule* native_ext;
+#endif
 
     switch (input0) {
         case 2:
@@ -3446,6 +3452,13 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
         }
         case 800: {
             int code = ((int)mr_L_optint(L, 3, 0));
+#ifdef VMRP_NATIVE
+            arm_ext_unload(native_ext);
+            native_ext = NULL;
+            ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code);
+            mrp_pushnumber(L, ret);
+            return 1;
+#else
             mr_load_c_function = (MR_LOAD_C_FUNCTION)(input1 + 8);
             *((void**)(input1)) = (void*)_mr_c_function_table;
             mr_cacheSync((void*)((uint32)(input1) & (~0x0000001F)), ((len + 0x0000001F * 3) & (~0x0000001F)));
@@ -3456,6 +3469,7 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             mrp_pushnumber(L, ret);
             MRDBGPRINTF("--- r9: mr_c_function_P.start_of_ER_RW = @%p", mr_c_function_P->start_of_ER_RW);
             return 1;
+#endif
         } break;
         case 801: {  // 发送事件给ext
             int32 output_len, ret;
@@ -3465,11 +3479,15 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             uint8* output = NULL;
             output_len = 0;
 
+#ifdef VMRP_NATIVE
+            ret = arm_ext_call(native_ext, code, (uint8*)input1, (uint32)len, (uint8**)&output, &output_len);
+#else
             // mr_printf("before mr_c_function------r9:%p  r10:%p code:%d %p---",  getR9(),getR10(), code, input1);
             fixR9_saveMythroad();
             // mr_printf("801 mr_c_function");
             ret = mr_c_function(mr_c_function_P, code, (uint8*)input1, len, (uint8**)&output, &output_len);
             // mr_printf("after mr_c_function------r9:%p r10:%p---",  getR9(),getR10());
+#endif
 
             if (output && output_len) {
                 mrp_pushlstring(L, (const char*)output, output_len);
@@ -3482,6 +3500,13 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
         case 802: {
             int32 ret;
             int code = ((int)mr_L_optint(L, 3, 0));
+#ifdef VMRP_NATIVE
+            arm_ext_unload(native_ext);
+            native_ext = NULL;
+            ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code);
+            mrp_pushnumber(L, ret);
+            return 1;
+#else
             mr_c_function_fix_p = ((int32*)mr_L_optint(L, 4, 0));
             mr_load_c_function = (MR_LOAD_C_FUNCTION)(input1 + 8);
             *((void**)(mr_c_function_fix_p)) = (void*)_mr_c_function_table;
@@ -3491,6 +3516,7 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             ret = mr_load_c_function(code);
             mrp_pushnumber(L, ret);
             return 1;
+#endif
         } break;
         case 900:
             ret = mr_platEx(200001, (uint8*)_mr_c_port_table, sizeof(_mr_c_port_table), NULL, NULL, NULL);

@@ -14,6 +14,9 @@
 #include "./include/mythroad.h"
 #include "./include/string.h"
 #include "./include/encode.h"
+#ifdef VMRP_NATIVE
+#include "../include/arm_ext_executor.h"
+#endif
 
 #define MR_VERSION 2011
 
@@ -1582,6 +1585,27 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
 
 static int _mr_TestComC(int input0, char* input1, int32 len, int32 code) {
     int ret = 0;
+#ifdef VMRP_NATIVE
+    static ArmExtModule* native_ext;
+    switch (input0) {
+        case 800:
+            arm_ext_unload(native_ext);
+            native_ext = NULL;
+            ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code);
+            break;
+        case 801: {
+            uint8* output = NULL;
+            int32 output_len = 0;
+            ret = arm_ext_call(native_ext, code, input1, (uint32)len, &output, &output_len);
+            (void)output;
+            (void)output_len;
+        } break;
+        default:
+            ret = MR_IGNORE;
+            break;
+    }
+    return ret;
+#else
     switch (input0) {
         case 800: {
             mr_load_c_function = (MR_LOAD_C_FUNCTION)(input1 + 8);
@@ -1604,6 +1628,7 @@ static int _mr_TestComC(int input0, char* input1, int32 len, int32 code) {
         } break;
     }
     return ret;
+#endif
 }
 
 typedef enum {

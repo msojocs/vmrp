@@ -55,6 +55,11 @@ ext调用mythroad时在mythroad空间通过r9 恢复 r9 r10
 #include "./include/fixR9.h"
 #include "./include/mr.h"
 
+#ifdef VMRP_NATIVE
+void fixR9_saveMythroad(void) {
+}
+#else
+
 static void *lr;
 static void *r10Mythroad;
 static void *r9Ext;
@@ -102,3 +107,4 @@ void *fixR9_end() {
     setR9R10(r9Ext, r10Ext);
     return ret;
 }
+#endif
