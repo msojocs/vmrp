@@ -69,17 +69,37 @@ sudo apt install libsdl2-dev
 
 直接`mingw32-make`即可编译，使用`mingw32-make DEBUG=1`可以编译出带调试功能的版本
 
-另外，需要用斯凯SDK单独编译 /mythroad/build/build_full.bat 生成vmrp.mrp，提取里面的cfunction.ext，这么做的原因是mythroad层代码量非常大，arm编译和gcc编译有一点差别，例如char类型的变量值传递给uint16类型时在arm编译时可能char也是被当成uint8来处理的，而在gcc中这种情况char是有符号的，会导致bug，因此还不敢将全部代码整合到一起，目前正在mythroad分支中尝试合并
+默认构建已将 `src/mythroad/` 中的 Mythroad/DSM 层作为本机代码编入程序，不再要求用斯凯 SDK/ARMCC 单独生成并提取外层 `cfunction.ext`。如需对照旧实现，可显式关闭原生路径：
 
-编译vmrp.mrp可能会遇到`"<command line>": Error: A1023E: File "..\asm\r9r10.s" could not be opened`，这是因为r9r10.s需要用代码生成，在./mythroad/asm/文件夹下通过`node genR9R10.js 0 1`生成
+```bash
+cmake -S . -B build-armext -DVMRP_USE_NATIVE_MYTHROAD=OFF
+cmake --build build-armext
+```
 
-编译成功后还需要补充bin文件夹里面的文件才能运行：
+默认原生构建：
 
-1. mythroad文件夹: 与真实手机上的文件相同，主要是一些基本的mrp和字体等文件，在./wasm/dist/fs文件夹中能获得
-2. cfunction.ext: 从vmrp.mrp内提取，每次编译mythroad层后会生成vmrp.mrp，利用工具提取出来，在./wasm/dist/fs文件夹中能获得一个编译好的文件
-3. capstone.dll: 反编译引擎，只有用`make DEBUG=1`编译的main.exe才会依赖这个文件，在`./windows/capstone-4.0.1-win32/capstone.dll`
-4. SDL2.dll: 用于图形界面，在`./windows/SDL2-2.0.10/i686-w64-mingw32/bin/SDL2.dll`
-5. unicorn.dll: 用于arm指令的执行，在`./windows/unicorn-1.0.2-win32/unicorn.dll`
+```bash
+cmake -S . -B build-native -DVMRP_USE_NATIVE_MYTHROAD=ON
+cmake --build build-native
+```
+
+运行时默认启动 `dsm_gm.mrp` / `start.mr`；调试时可用环境变量覆盖：
+
+```bash
+VMRP_MRP=dsm_gm.mrp VMRP_EXT=start.mr VMRP_ENTRY=_dsm ./build-native/vmrp
+VMRP_ARM_EXT_SMOKE=mrc/asm/asm.mrp ./build-native/vmrp
+```
+
+第二条命令直接从 `mrc/asm/asm.mrp` 提取示例 ARM EXT，并用内置 `arm_ext_executor` 检查 `mrc_init()` 路径。
+
+编译成功后还需要补充 bin 文件夹里面的文件才能运行：
+
+1. mythroad 文件夹: 与真实手机上的文件相同，主要是一些基本的 mrp 和字体等文件，在 `./wasm/dist/fs` 文件夹中能获得
+2. capstone.dll: 反编译引擎，只有用 DEBUG 功能编译的 main.exe 才会依赖这个文件，在 `./windows/capstone-4.0.1-win32/capstone.dll`
+3. SDL2.dll: 用于图形界面，在 `./windows/SDL2-2.0.10/i686-w64-mingw32/bin/SDL2.dll`
+4. unicorn.dll: 仍用于执行 MRP 包内 ARM EXT，在 `./windows/unicorn-1.0.2-win32/unicorn.dll`
+
+历史说明：旧 ARM 外层 `cfunction.ext` 路径仍保留为显式回退模式；只有该模式才需要旧的斯凯 SDK/ARMCC 产物。
 
 在改代码的时候严格注意将`./mythroad/`文件夹中的代码看成是另一个项目，不要与其它地方的源码混在一起，这么做的原因是`./mythroad/`是直接复制的vmrp_arm项目，考虑到将来移植到嵌入式系统中的便利性因此要求将`./mythroad/`完全独立开发。
 

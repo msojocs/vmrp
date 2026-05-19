@@ -70,9 +70,19 @@ static int LoadInt(LoadState* S) {
 }
 
 static size_t LoadSize(LoadState* S) {
+#ifdef VMRP_NATIVE
+    /*
+     * MRP chunks are a 32-bit file format even when the native host is
+     * x86_64.  Do not read host sizeof(size_t) bytes from the bytecode.
+     */
+    uint32 x;
+    LoadBlock(S, &x, sizeof(x));
+    return (size_t)x;
+#else
     size_t x;
     LoadBlock(S, &x, sizeof(x));
     return x;
+#endif
 }
 
 static mrp_Number LoadNumber(LoadState* S) {

@@ -27,6 +27,7 @@
 
 void *getMrpMemPtr(uint32_t addr);
 uint32_t toMrpMemAddr(void *ptr);
+int freeVmrp(uc_engine *uc);
 
 int32_t event(int32_t code, int32_t p1, int32_t p2);
 int32_t timer();

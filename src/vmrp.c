@@ -3,13 +3,19 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <zlib.h>
 
 #include "./include/bridge.h"
 #include "./include/fileLib.h"
 #include "./include/memory.h"
 #include "./include/utils.h"
 #include "./include/debug.h"
+#include "./include/runtime.h"
+#if VMRP_USE_NATIVE_MYTHROAD
+#include "./include/arm_ext_executor.h"
+#endif
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -17,22 +23,178 @@
 
 static uint8_t *mrpMem;  // 模拟器的全部内存
 static uc_engine *uc = NULL;
+static VmrpRuntime runtime;
+
+#if VMRP_USE_NATIVE_MYTHROAD
+static uint32_t rd32le(const uint8 *p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static int gunzip_buffer(const uint8 *input, uint32 input_len, uint8 **output, uint32 *output_len) {
+    z_stream zs;
+    uint32 cap = input_len * 4 + 1024;
+    int zret;
+
+    memset(&zs, 0, sizeof(zs));
+    if (inflateInit2(&zs, 16 + MAX_WBITS) != Z_OK) return MR_FAILED;
+
+    if (cap < 4096) cap = 4096;
+    *output = (uint8 *)malloc(cap);
+    if (!*output) {
+        inflateEnd(&zs);
+        return MR_FAILED;
+    }
+
+    zs.next_in = (Bytef *)input;
+    zs.avail_in = input_len;
+    do {
+        if (zs.total_out == cap) {
+            uint32 new_cap = cap * 2;
+            uint8 *new_buf = (uint8 *)realloc(*output, new_cap);
+            if (!new_buf) {
+                free(*output);
+                *output = NULL;
+                inflateEnd(&zs);
+                return MR_FAILED;
+            }
+            *output = new_buf;
+            cap = new_cap;
+        }
+        zs.next_out = *output + zs.total_out;
+        zs.avail_out = cap - (uint32)zs.total_out;
+        zret = inflate(&zs, Z_NO_FLUSH);
+    } while (zret == Z_OK);
+
+    if (zret != Z_STREAM_END) {
+        free(*output);
+        *output = NULL;
+        inflateEnd(&zs);
+        return MR_FAILED;
+    }
+    *output_len = (uint32)zs.total_out;
+    inflateEnd(&zs);
+    return MR_SUCCESS;
+}
+
+static int extract_ext_from_mrp(uint8 *raw, uint32 raw_len, const char *name,
+                                uint8 **code, uint32 *code_len) {
+    uint32 pos = 240;
+    if (raw_len < pos || memcmp(raw, "MRPG", 4) != 0) return MR_FAILED;
+    while (pos + 16 <= raw_len) {
+        uint32 name_len = rd32le(raw + pos);
+        pos += 4;
+        if (name_len == 0 || name_len > 255 || pos + name_len + 12 > raw_len) break;
+        char entry_name[256];
+        uint32 copy_len = name_len < sizeof(entry_name) - 1 ? name_len : sizeof(entry_name) - 1;
+        memcpy(entry_name, raw + pos, copy_len);
+        entry_name[copy_len] = '\0';
+        pos += name_len;
+        uint32 off = rd32le(raw + pos);
+        uint32 packed_len = rd32le(raw + pos + 4);
+        pos += 12;
+        if (off > raw_len || packed_len > raw_len - off) return MR_FAILED;
+        if (strcmp(entry_name, name) == 0) {
+            if (packed_len >= 2 && raw[off] == 0x1f && raw[off + 1] == 0x8b) {
+                return gunzip_buffer(raw + off, packed_len, code, code_len);
+            }
+            *code = (uint8 *)malloc(packed_len);
+            if (!*code) return MR_FAILED;
+            memcpy(*code, raw + off, packed_len);
+            *code_len = packed_len;
+            return MR_SUCCESS;
+        }
+    }
+    return MR_FAILED;
+}
+
+static int smoke_arm_ext(const char *path) {
+    FILE *fp = fopen(path, "rb");
+    if (!fp) {
+        perror(path);
+        return MR_FAILED;
+    }
+    fseek(fp, 0, SEEK_END);
+    long sz = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    if (sz <= 0) {
+        fclose(fp);
+        return MR_FAILED;
+    }
+    uint8 *buf = (uint8 *)malloc((size_t)sz);
+    if (!buf) {
+        fclose(fp);
+        return MR_FAILED;
+    }
+    if (fread(buf, 1, (size_t)sz, fp) != (size_t)sz) {
+        fclose(fp);
+        free(buf);
+        return MR_FAILED;
+    }
+    fclose(fp);
+
+    uint8 *code = buf;
+    uint32 code_len = (uint32)sz;
+    if ((uint32)sz >= 4 && memcmp(buf, "MRPG", 4) == 0) {
+        const char *ext_name = getenv("VMRP_ARM_EXT_NAME");
+        uint8 *extracted = NULL;
+        uint32 extracted_len = 0;
+        if (!ext_name || !*ext_name) ext_name = "cfunction.ext";
+        if (extract_ext_from_mrp(buf, (uint32)sz, ext_name, &extracted, &extracted_len) != MR_SUCCESS) {
+            printf("arm_ext_smoke_extract('%s','%s') failed\n", path, ext_name);
+            free(buf);
+            return MR_FAILED;
+        }
+        printf("arm_ext_smoke_extract('%s','%s'): %u bytes\n", path, ext_name, extracted_len);
+        code = extracted;
+        code_len = extracted_len;
+    }
+
+    ArmExtModule *mod = NULL;
+    const char *load_code_env = getenv("VMRP_ARM_EXT_LOAD_CODE");
+    int load_code = (load_code_env && *load_code_env) ? atoi(load_code_env) : 1;
+    int ret = arm_ext_load(&mod, code, code_len, load_code);
+    printf("arm_ext_smoke_load('%s'): %d\n", path, ret);
+    if (ret == MR_SUCCESS) {
+        uint8 *output = NULL;
+        int32 output_len = 0;
+        ret = arm_ext_call(mod, 6, code, 2011, &output, &output_len);
+        printf("arm_ext_smoke_call(code=6): %d output_len=%d\n", ret, output_len);
+        ret = arm_ext_call(mod, 0, code, 2011, &output, &output_len);
+        printf("arm_ext_smoke_call(code=0/mrc_init): %d output_len=%d\n", ret, output_len);
+    }
+    arm_ext_unload(mod);
+    if (code != buf) free(code);
+    free(buf);
+    return ret;
+}
+#endif
 
 // 返回的内存禁止free
 #ifdef __EMSCRIPTEN__
 EMSCRIPTEN_KEEPALIVE
 #endif
 void *getMrpMemPtr(uint32_t addr) {
+#if VMRP_USE_NATIVE_MYTHROAD
+    (void)addr;
+    return NULL;
+#else
     return mrpMem + (addr - START_ADDRESS);
+#endif
 }
 
 #ifdef __EMSCRIPTEN__
 EMSCRIPTEN_KEEPALIVE
 #endif
 uint32_t toMrpMemAddr(void *ptr) {
+#if VMRP_USE_NATIVE_MYTHROAD
+    (void)ptr;
+    return 0;
+#else
     return ((uint8_t *)ptr - mrpMem) + START_ADDRESS;
+#endif
 }
 
+#if !VMRP_USE_NATIVE_MYTHROAD
 #ifdef DEBUG
 static void hook_block(uc_engine *uc, uint64_t address, uint32_t size, void *user_data) {
     printf(">>> Tracing basic block at 0x%" PRIx64 ", block size = 0x%x\n", address, size);
@@ -117,66 +279,59 @@ end:
     uc_close(uc);
     return NULL;
 }
+#endif
 
 #ifdef __EMSCRIPTEN__
 EMSCRIPTEN_KEEPALIVE
 int32_t c_event(int32_t code, int32_t p1, int32_t p2) {
-    if (uc) {
-        return bridge_dsm_mr_event(uc, code, p1, p2);
-    }
-    return MR_FAILED;
+    return vmrp_runtime_event(&runtime, code, p1, p2);
 }
 #endif
 
 int32_t event(int32_t code, int32_t p1, int32_t p2) {
-    if (uc) {
-        return bridge_dsm_mr_event(uc, code, p1, p2);
-    }
-    return MR_FAILED;
+    return vmrp_runtime_event(&runtime, code, p1, p2);
 }
 
 int32_t timer() {
-    if (uc) {
-        return bridge_dsm_mr_timer(uc);
-    }
-    return MR_FAILED;
+    return vmrp_runtime_timer(&runtime);
 }
 
-int32_t loadCode() {
+#if !VMRP_USE_NATIVE_MYTHROAD
+int32_t loadCode(uc_engine *engine) {
     char *filename = "cfunction.ext";
     int32_t len = my_getLen(filename);
     char *buf = readFile(filename);
     if (buf == NULL) {
         return MR_FAILED;
     }
-    uc_mem_write(uc, CODE_ADDRESS, buf, len);
+    uc_mem_write(engine, CODE_ADDRESS, buf, len);
+    free(buf);
     return MR_SUCCESS;
 }
+#endif
 
 int startVmrp() {
-    uc = initVmrp();
-    if (uc == NULL) {
-        printf("initVmrp() fail.\n");
-        return MR_FAILED;
+    if (vmrp_runtime_init(&runtime) != MR_SUCCESS) return MR_FAILED;
+    uc = runtime.uc;
+
+#if VMRP_USE_NATIVE_MYTHROAD
+    const char *arm_ext_smoke = getenv("VMRP_ARM_EXT_SMOKE");
+    if (arm_ext_smoke && *arm_ext_smoke) {
+        int smoke_ret = smoke_arm_ext(arm_ext_smoke);
+        vmrp_runtime_destroy(&runtime);
+        exit(smoke_ret == MR_SUCCESS ? 0 : 1);
     }
+#endif
 
-    if (loadCode() == MR_FAILED) {
-        printf("loadCode fail.\n");
-        return MR_FAILED;
-    }
-    bridge_ext_init(uc);
+    char *filename = getenv("VMRP_MRP");
+    char *extName = getenv("VMRP_EXT");
+    char *entry = getenv("VMRP_ENTRY");
+    if (!filename || !*filename) filename = "dsm_gm.mrp";
+    if (!extName || !*extName) extName = "start.mr";
+    if (entry && !*entry) entry = NULL;
 
-    if (bridge_dsm_init(uc) == MR_SUCCESS) {
-        printf("bridge_dsm_init success\n");
-        dumpREG(uc);
-
-        char *filename = "dsm_gm.mrp";
-        // char *filename = "winmine.mrp";
-        char *extName = "start.mr";
-        // char *extName = "cfunction.ext";
-
-        uint32_t ret = bridge_dsm_mr_start_dsm(uc, filename, extName, NULL);
-        printf("bridge_dsm_mr_start_dsm('%s','%s',NULL): 0x%X\n", filename, extName, ret);
-    }
+    uint32_t ret = vmrp_runtime_start_dsm(&runtime, filename, extName, entry);
+    printf("vmrp_runtime_start_dsm('%s','%s','%s'): 0x%X\n",
+           filename, extName, entry ? entry : "", ret);
     return MR_SUCCESS;
 }
