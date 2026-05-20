@@ -306,6 +306,14 @@ void loop() {
 }
 
 int main(int argc, char *args[]) {
+    if (argc > 1 && (strcmp(args[1], "-h") == 0 || strcmp(args[1], "--help") == 0)) {
+        printVmrpUsage(args[0]);
+        return 0;
+    }
+    if (prepareVmrpArgs(argc, args) != MR_SUCCESS) {
+        return -1;
+    }
+
 #ifdef __x86_64__
     printf("__x86_64__\n");
 #elif __i386__
@@ -326,15 +334,22 @@ int main(int argc, char *args[]) {
     window = SDL_CreateWindow("vmrp", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL);
     if (window == NULL) {
         printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
+        SDL_Quit();
         return -1;
     }
 
-    startVmrp();
+    if (startVmrp(argc, args) != MR_SUCCESS) {
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return -1;
+    }
 
 #if defined(__EMSCRIPTEN__)
     emscripten_set_main_loop(loop, 0, 1);
 #else
     loop();
 #endif
+    SDL_DestroyWindow(window);
+    SDL_Quit();
     return 0;
 }
