@@ -1,11 +1,27 @@
 #include "./include/vmrp.h"
 
+#include <errno.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <zlib.h>
+#ifdef _WIN32
+#include <direct.h>
+#ifndef PATH_MAX
+#define PATH_MAX 260
+#endif
+#else
+#include <unistd.h>
+#endif
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+#define VMRP_MRP_NAME_LIMIT 128
 
 #include "./include/bridge.h"
 #include "./include/fileLib.h"
@@ -24,6 +40,114 @@
 static uint8_t *mrpMem;  // 模拟器的全部内存
 static uc_engine *uc = NULL;
 static VmrpRuntime runtime;
+
+typedef struct VmrpStartupConfig {
+    int prepared;
+    const char *mrp_arg;
+    const char *ext_arg;
+    const char *entry_arg;
+    char cli_mrp_path[PATH_MAX];
+} VmrpStartupConfig;
+
+static VmrpStartupConfig startup_config;
+
+void printVmrpUsage(const char *program) {
+    const char *name = (program && *program) ? program : "vmrp";
+    printf("Usage: %s [MRP_PATH] [EXT_NAME] [ENTRY]\n", name);
+    printf("       %s --help\n", name);
+    printf("\n");
+    printf("Without arguments, vmrp keeps the old behavior and starts VMRP_MRP or dsm_gm.mrp.\n");
+    printf("Examples:\n");
+    printf("  %s /path/to/app.mrp\n", name);
+    printf("  %s /path/to/app.mrp start.mr _dsm\n", name);
+}
+
+static int resolve_cli_mrp_path(const char *input, char *output, size_t output_size) {
+    if (!input || !*input) {
+        fprintf(stderr, "vmrp: empty MRP path\n");
+        return MR_FAILED;
+    }
+
+#ifdef _WIN32
+    if (_fullpath(output, input, output_size) == NULL) {
+        fprintf(stderr, "vmrp: unable to resolve '%s'\n", input);
+        return MR_FAILED;
+    }
+#else
+    if (realpath(input, output) == NULL) {
+        fprintf(stderr, "vmrp: unable to resolve '%s': %s\n", input, strerror(errno));
+        return MR_FAILED;
+    }
+#endif
+
+    if (my_info(output) != MR_IS_FILE) {
+        fprintf(stderr, "vmrp: MRP file not found: %s\n", output);
+        return MR_FAILED;
+    }
+    if (strlen(output) >= VMRP_MRP_NAME_LIMIT) {
+        fprintf(stderr, "vmrp: MRP path is too long for Mythroad runtime (%zu >= %d): %s\n",
+                strlen(output), VMRP_MRP_NAME_LIMIT, output);
+        return MR_FAILED;
+    }
+    return MR_SUCCESS;
+}
+
+static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
+                                 const char **ext_arg, const char **entry_arg) {
+    int positional = 0;
+    int after_dashdash = 0;
+    *mrp_arg = NULL;
+    *ext_arg = NULL;
+    *entry_arg = NULL;
+
+    for (int i = 1; i < argc; i++) {
+        const char *arg = argv[i];
+        if (!after_dashdash && strcmp(arg, "--") == 0) {
+            after_dashdash = 1;
+            continue;
+        }
+        if (!after_dashdash && arg[0] == '-') {
+            fprintf(stderr, "vmrp: unknown option: %s\n", arg);
+            printVmrpUsage(argv[0]);
+            return MR_FAILED;
+        }
+
+        if (positional == 0) {
+            *mrp_arg = arg;
+        } else if (positional == 1) {
+            *ext_arg = arg;
+        } else if (positional == 2) {
+            *entry_arg = arg;
+        } else {
+            fprintf(stderr, "vmrp: too many arguments\n");
+            printVmrpUsage(argv[0]);
+            return MR_FAILED;
+        }
+        positional++;
+    }
+    return MR_SUCCESS;
+}
+
+int prepareVmrpArgs(int argc, char *argv[]) {
+    const char *mrp_arg = NULL;
+    const char *ext_arg = NULL;
+    const char *entry_arg = NULL;
+
+    memset(&startup_config, 0, sizeof(startup_config));
+    if (parse_positional_args(argc, argv, &mrp_arg, &ext_arg, &entry_arg) != MR_SUCCESS) {
+        return MR_FAILED;
+    }
+    if (mrp_arg && resolve_cli_mrp_path(mrp_arg, startup_config.cli_mrp_path,
+                                        sizeof(startup_config.cli_mrp_path)) != MR_SUCCESS) {
+        return MR_FAILED;
+    }
+
+    startup_config.mrp_arg = mrp_arg;
+    startup_config.ext_arg = ext_arg;
+    startup_config.entry_arg = entry_arg;
+    startup_config.prepared = 1;
+    return MR_SUCCESS;
+}
 
 #if VMRP_USE_NATIVE_MYTHROAD
 static uint32_t rd32le(const uint8 *p) {
@@ -310,7 +434,11 @@ int32_t loadCode(uc_engine *engine) {
 }
 #endif
 
-int startVmrp() {
+int startVmrp(int argc, char *argv[]) {
+    if (!startup_config.prepared && prepareVmrpArgs(argc, argv) != MR_SUCCESS) {
+        return MR_FAILED;
+    }
+
     if (vmrp_runtime_init(&runtime) != MR_SUCCESS) return MR_FAILED;
     uc = runtime.uc;
 
@@ -323,15 +451,30 @@ int startVmrp() {
     }
 #endif
 
-    char *filename = getenv("VMRP_MRP");
-    char *extName = getenv("VMRP_EXT");
-    char *entry = getenv("VMRP_ENTRY");
+    const char *filename = getenv("VMRP_MRP");
+    const char *extName = getenv("VMRP_EXT");
+    const char *entry = getenv("VMRP_ENTRY");
+    if (startup_config.mrp_arg) {
+        filename = startup_config.cli_mrp_path;
+    }
+    if (startup_config.ext_arg) extName = startup_config.ext_arg;
+    if (startup_config.entry_arg) entry = startup_config.entry_arg;
     if (!filename || !*filename) filename = "dsm_gm.mrp";
     if (!extName || !*extName) extName = "start.mr";
     if (entry && !*entry) entry = NULL;
+    if (strlen(filename) >= VMRP_MRP_NAME_LIMIT) {
+        fprintf(stderr, "vmrp: MRP path is too long for Mythroad runtime (%zu >= %d): %s\n",
+                strlen(filename), VMRP_MRP_NAME_LIMIT, filename);
+        vmrp_runtime_destroy(&runtime);
+        return MR_FAILED;
+    }
 
     uint32_t ret = vmrp_runtime_start_dsm(&runtime, filename, extName, entry);
     printf("vmrp_runtime_start_dsm('%s','%s','%s'): 0x%X\n",
            filename, extName, entry ? entry : "", ret);
+    if (ret != MR_SUCCESS) {
+        vmrp_runtime_destroy(&runtime);
+        return MR_FAILED;
+    }
     return MR_SUCCESS;
 }
