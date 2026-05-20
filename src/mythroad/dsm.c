@@ -322,8 +322,31 @@ static int32 dsmSwitchPath(uint8 *input, int32 input_len, uint8 **output, int32 
     return MR_SUCCESS;
 }
 
+static int isHostAbsolutePath(const char *filename) {
+    if (!filename || !*filename) {
+        return 0;
+    }
+    if (filename[0] == '/') {
+        return 1;
+    }
+#ifdef _WIN32
+    if (filename[0] == '\\') {
+        return 1;
+    }
+    if (((filename[0] >= 'A' && filename[0] <= 'Z') || (filename[0] >= 'a' && filename[0] <= 'z')) &&
+        filename[1] == ':' && (filename[2] == '/' || filename[2] == '\\')) {
+        return 1;
+    }
+#endif
+    return 0;
+}
+
 char *get_filename(char *outputbuf, const char *filename) {
-    sprintf_(outputbuf, "%s%s", dsmWorkPath, filename);
+    if (isHostAbsolutePath(filename)) {
+        sprintf_(outputbuf, "%s", filename);
+    } else {
+        sprintf_(outputbuf, "%s%s", dsmWorkPath, filename);
+    }
     formatPathString(outputbuf, '/');
     if (dsmInFuncs->flags & FLAG_USE_UTF8_FS) {
         char *us = (char *)GBStrToUCS2BEStr((uint8 *)outputbuf, NULL);

@@ -83,7 +83,14 @@ cmake -S . -B build-native -DVMRP_USE_NATIVE_MYTHROAD=ON
 cmake --build build-native
 ```
 
-运行时默认启动 `dsm_gm.mrp` / `start.mr`；调试时可用环境变量覆盖：
+运行时默认启动 `dsm_gm.mrp` / `start.mr`；也可以直接传入要执行的 MRP：
+
+```bash
+./build-native/vmrp /path/to/xxx.mrp
+./build-native/vmrp /path/to/xxx.mrp start.mr _dsm
+```
+
+调试时仍可用环境变量覆盖：
 
 ```bash
 VMRP_MRP=dsm_gm.mrp VMRP_EXT=start.mr VMRP_ENTRY=_dsm ./build-native/vmrp
