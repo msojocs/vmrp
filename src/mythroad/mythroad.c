@@ -64,6 +64,27 @@ static void* mr_timer_p;
 static int32 mr_timer_state = MR_TIMER_STATE_IDLE;
 int32 mr_timer_run_without_pause = FALSE;
 
+const char* mr_get_pack_filename(void) {
+    return pack_filename;
+}
+
+const char* mr_get_start_filename(void) {
+    return start_filename;
+}
+
+const char* mr_get_old_pack_filename(void) {
+    return old_pack_filename;
+}
+
+const char* mr_get_old_start_filename(void) {
+    return old_start_filename;
+}
+
+const char* mr_get_start_fileparameter(void) {
+    return start_fileparameter;
+}
+
+
 static char* mr_exception_str = NULL;
 
 #ifdef MR_CFG_USE_A_DISK
@@ -127,9 +148,43 @@ MR_TIMER_FUNCTION mr_timer_function = NULL;
 MR_STOP_FUNCTION mr_stop_function = NULL;
 MR_PAUSEAPP_FUNCTION mr_pauseApp_function = NULL;
 MR_RESUMEAPP_FUNCTION mr_resumeApp_function = NULL;
+#ifdef VMRP_NATIVE
+static ArmExtModule* native_ext;
+static uint32 native_event_function;
+static uint32 native_timer_function;
+static uint32 native_stop_function;
+static uint32 native_pauseApp_function;
+static uint32 native_resumeApp_function;
+#endif
 
 static mrc_timerCB mr_exit_cb = NULL;
 static int32 mr_exit_cb_data;
+
+#ifdef VMRP_NATIVE
+static int32 native_ext_event(int32 code, const void* input, uint32 input_len) {
+    uint8* output = NULL;
+    int32 output_len = 0;
+    return arm_ext_call(native_ext, code, input, input_len, &output, &output_len);
+}
+
+static int32 native_ext_void_event(int32 code) {
+    return native_ext_event(code, NULL, 1);
+}
+
+static int32 native_ext_callback0(uint32 func) {
+    int32 status = MR_IGNORE;
+    if (!func || !native_ext) return MR_IGNORE;
+    if (arm_ext_invoke0(native_ext, func, &status) != MR_SUCCESS) return MR_IGNORE;
+    return status;
+}
+
+static int32 native_ext_callback3(uint32 func, uint32 arg0, uint32 arg1, uint32 arg2) {
+    int32 status = MR_IGNORE;
+    if (!func || !native_ext) return MR_IGNORE;
+    if (arm_ext_invoke3(native_ext, func, arg0, arg1, arg2, &status) != MR_SUCCESS) return MR_IGNORE;
+    return status;
+}
+#endif
 
 int32 _mr_smsSetBytes(int32 pos, char* p, int32 len);
 int32 _mr_smsAddNum(int32 index, char* pNum);
@@ -149,9 +204,31 @@ int _mr_EffSetCon(int16 x, int16 y, int16 w, int16 h, int16 perr, int16 perg, in
 int32 _DrawTextEx(char* pcText, int16 x, int16 y, mr_screenRectSt rect, mr_colourSt colorst, int flag, uint16 font);
 int _mr_TestCom(mrp_State* L, int input0, int input1);
 int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len);
+void* mr_readFile_from_ram(const char* filename, int* filelen, int lookfor, char* ram_file, int ram_file_len_value);
 int32 mr_stop_ex(int16 freemem);
 static int32 _mr_div(int32 a, int32 b);
 static int32 _mr_mod(int32 a, int32 b);
+
+
+void* mr_readFile_from_ram(const char* filename, int* filelen, int lookfor, char* ram_file, int ram_file_len_value) {
+    char saved_pack_filename[MR_MAX_FILENAME_SIZE];
+    char* saved_ram_file = mr_ram_file;
+    int saved_ram_file_len = mr_ram_file_len;
+    void* ret;
+
+    MEMCPY(saved_pack_filename, pack_filename, sizeof(saved_pack_filename));
+    MEMSET(pack_filename, 0, sizeof(pack_filename));
+    pack_filename[0] = '$';
+    mr_ram_file = ram_file;
+    mr_ram_file_len = ram_file_len_value;
+
+    ret = _mr_readFile(filename, filelen, lookfor);
+
+    MEMCPY(pack_filename, saved_pack_filename, sizeof(pack_filename));
+    mr_ram_file = saved_ram_file;
+    mr_ram_file_len = saved_ram_file_len;
+    return ret;
+}
 
 static const void* _mr_c_internal_table[78];
 
@@ -1241,7 +1318,7 @@ void* _mr_readFile(const char* filename, int* filelen, int lookfor) {
     } else { /*read file from efs , EFS 中的文件*/
 #if 1
         if (lookfor == 0) {  // 先尝试直接从文件加载
-            filebuf = readFile(filename, (uint32*)filelen);
+            filebuf = mythroad_readFile(filename, (uint32*)filelen);
             if (filebuf) {
                 return filebuf;
             }
@@ -2905,19 +2982,39 @@ int _mr_TestCom(mrp_State* L, int input0, int input1) {
             ret = mr_getTime();
             break;
         case 2:
+#ifdef VMRP_NATIVE
+            native_event_function = (uint32)input1;
+#else
             mr_event_function = (MR_EVENT_FUNCTION)input1;
+#endif
             break;
         case 3:
+#ifdef VMRP_NATIVE
+            native_timer_function = (uint32)input1;
+#else
             mr_timer_function = (MR_TIMER_FUNCTION)input1;
+#endif
             break;
         case 4:
+#ifdef VMRP_NATIVE
+            native_stop_function = (uint32)input1;
+#else
             mr_stop_function = (MR_STOP_FUNCTION)input1;
+#endif
             break;
         case 5:
+#ifdef VMRP_NATIVE
+            native_pauseApp_function = (uint32)input1;
+#else
             mr_pauseApp_function = (MR_PAUSEAPP_FUNCTION)input1;
+#endif
             break;
         case 6:
+#ifdef VMRP_NATIVE
+            native_resumeApp_function = (uint32)input1;
+#else
             mr_resumeApp_function = (MR_RESUMEAPP_FUNCTION)input1;
+#endif
             break;
 #ifdef MR_PLAT_DRAWTEXT
         case 7:
@@ -3242,9 +3339,6 @@ int32 _mr_c_function_new(MR_C_FUNCTION f, int32 len) {
 // _strCom(int,str)
 int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
     int ret = 0;
-#ifdef VMRP_NATIVE
-    static ArmExtModule* native_ext;
-#endif
 
     switch (input0) {
         case 2:
@@ -3455,6 +3549,11 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
 #ifdef VMRP_NATIVE
             arm_ext_unload(native_ext);
             native_ext = NULL;
+            native_event_function = 0;
+            native_timer_function = 0;
+            native_stop_function = 0;
+            native_pauseApp_function = 0;
+            native_resumeApp_function = 0;
             ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code);
             mrp_pushnumber(L, ret);
             return 1;
@@ -3503,6 +3602,11 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
 #ifdef VMRP_NATIVE
             arm_ext_unload(native_ext);
             native_ext = NULL;
+            native_event_function = 0;
+            native_timer_function = 0;
+            native_stop_function = 0;
+            native_pauseApp_function = 0;
+            native_resumeApp_function = 0;
             ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code);
             mrp_pushnumber(L, ret);
             return 1;
@@ -3891,12 +3995,22 @@ int32 mr_stop_ex(int16 freemem) {
 
 int32 mr_stop(void)  // int16 freemem)
 {
+#ifndef VMRP_NATIVE
     if (mr_stop_function) {
         int status = mr_stop_function();
         mr_stop_function = NULL;  // 1943
         if (status != MR_IGNORE)
             return status;
     }
+#endif /* !VMRP_NATIVE */
+#ifdef VMRP_NATIVE
+    if (native_stop_function) {
+        int32 status = native_ext_callback0(native_stop_function);
+        native_stop_function = 0;
+        if (status != MR_IGNORE)
+            return status;
+    }
+#endif
     return mr_stop_ex(TRUE);
 }
 
@@ -3913,11 +4027,25 @@ int32 mr_pauseApp(void) {
         return MR_IGNORE;
     };
 
+#ifndef VMRP_NATIVE
     if (mr_pauseApp_function) {
         int status = mr_pauseApp_function();
         if (status != MR_IGNORE)
             return status;
     }
+#endif
+#ifdef VMRP_NATIVE
+    if (native_pauseApp_function) {
+        int32 status = native_ext_callback0(native_pauseApp_function);
+        if (status != MR_IGNORE)
+            return status;
+    }
+    if (native_ext) {
+        int32 status = native_ext_void_event(4);
+        if (status != MR_IGNORE)
+            return status;
+    }
+#endif
 
     mrp_getglobal(vm_state, "suspend");
     if (mrp_isfunction(vm_state, -1)) {
@@ -3964,11 +4092,25 @@ int32 mr_resumeApp(void) {
         return MR_IGNORE;
     };
 
+#ifndef VMRP_NATIVE
     if (mr_resumeApp_function) {
         int status = mr_resumeApp_function();
         if (status != MR_IGNORE)
             return status;
     }
+#endif
+#ifdef VMRP_NATIVE
+    if (native_resumeApp_function) {
+        int32 status = native_ext_callback0(native_resumeApp_function);
+        if (status != MR_IGNORE)
+            return status;
+    }
+    if (native_ext) {
+        int32 status = native_ext_void_event(5);
+        if (status != MR_IGNORE)
+            return status;
+    }
+#endif
 
     mrp_getglobal(vm_state, "resume");
     if (mrp_isfunction(vm_state, -1)) {
@@ -4004,11 +4146,29 @@ int32 mr_event(int16 type, int32 param1, int32 param2) {
     // MRDBGPRINTF("mr_event %d %d %d", type, param1, param2);
 
     if ((mr_state == MR_STATE_RUN) || ((mr_timer_run_without_pause) && (mr_state == MR_STATE_PAUSE))) {
+#ifdef VMRP_NATIVE
+        if (native_event_function) {
+            int32 status = native_ext_callback3(native_event_function, (uint32)type, (uint32)param1, (uint32)param2);
+            if (status != MR_IGNORE)
+                return status;
+        }
+        if (native_ext) {
+            mr_c_event_st event = {0};
+            event.code = type;
+            event.param0 = param1;
+            event.param1 = param2;
+            int32 status = native_ext_event(1, &event, sizeof(event));
+            if (status != MR_IGNORE)
+                return status;
+        }
+#endif
+#ifndef VMRP_NATIVE
         if (mr_event_function) {
             int status = mr_event_function(type, param1, param2);
             if (status != MR_IGNORE)
                 return status;
         }
+#endif
 
         mrp_getglobal(vm_state, "dealevent");
         if (mrp_isfunction(vm_state, -1)) {
@@ -4063,12 +4223,26 @@ int32 mr_timer(void) {
 
     // MRDBGPRINTF("before timer");
 
+#ifndef VMRP_NATIVE
     if (mr_timer_function) {
         int status = mr_timer_function();
 
         if (status != MR_IGNORE)
             return status;
     }
+#endif
+#ifdef VMRP_NATIVE
+    if (native_timer_function) {
+        int32 status = native_ext_callback0(native_timer_function);
+        if (status != MR_IGNORE)
+            return status;
+    }
+    if (native_ext) {
+        int32 status = native_ext_void_event(2);
+        if (status != MR_IGNORE)
+            return status;
+    }
+#endif
 
     mrp_getglobal(vm_state, (char*)mr_timer_p);
     if (mrp_isfunction(vm_state, -1)) {

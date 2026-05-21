@@ -188,11 +188,17 @@ static void keyEvent(int16 type, SDL_Keycode code) {
         case SDLK_RETURN:                   // 回车键
             event(type, MR_KEY_SELECT, 0);  // 确认/选择/ok
             break;
-        case SDLK_EQUALS:                  // 等号
-            event(type, MR_KEY_POUND, 0);  // 按键 #
+        case SDLK_EQUALS:                 // 等号
+            event(type, MR_KEY_SOFTLEFT, 0);
             break;
         case SDLK_MINUS:                  // 减号
-            event(type, MR_KEY_STAR, 0);  // 按键 *
+            event(type, MR_KEY_SOFTRIGHT, 0);
+            break;
+        case SDLK_ASTERISK:
+            event(type, MR_KEY_STAR, 0);
+            break;
+        case SDLK_HASH:
+            event(type, MR_KEY_POUND, 0);
             break;
         case SDLK_w:
         case SDLK_UP:  // 上
@@ -294,11 +300,11 @@ void loop() {
                     break;
                 case SDL_MOUSEBUTTONDOWN:
                     isMouseDown = true;
-                    event(MR_MOUSE_DOWN, ev.motion.x, ev.motion.y);
+                    event(MR_MOUSE_DOWN, ev.button.x, ev.button.y);
                     break;
                 case SDL_MOUSEBUTTONUP:
                     isMouseDown = false;
-                    event(MR_MOUSE_UP, ev.motion.x, ev.motion.y);
+                    event(MR_MOUSE_UP, ev.button.x, ev.button.y);
                     break;
             }
         }

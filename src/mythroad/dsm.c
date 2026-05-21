@@ -77,8 +77,10 @@ static void panic(char *msg) {
 #define CN_CHAR_W 16
 
 // todo "上有名不"这四个字必定显示为错别字(是编码转换的问题，不是字体的问题)
-static char font_sky16_bitbuf[32];
+static unsigned char font_sky16_bitbuf[32];
 static int font_sky16_f;
+
+static void xl_font_sky16_charWidthHeight(uint16 id, int32 *width, int32 *height);
 
 static int xl_font_sky16_init() {  //字体初始化，打开字体文件
     font_sky16_f = mr_open("system/gb16.uc2", MR_FILE_RDONLY);
@@ -98,21 +100,21 @@ static int xl_font_sky16_close() {  //关闭字体
 static char *xl_font_sky16_getChar(uint16 id) {
     mr_seek(font_sky16_f, id * 32, 0);
     mr_read(font_sky16_f, font_sky16_bitbuf, 32);
-    return font_sky16_bitbuf;
+    return (char *)font_sky16_bitbuf;
 }
 
 static void xl_font_sky16_drawChar(uint16 ch, int x, int y, uint16 color) {
     extern void _DrawPoint(int16 x, int16 y, uint16 nativecolor);
+    int width, height;
     int ix, iy;
     uint16 data;
 
     mr_seek(font_sky16_f, ch * 32, 0);  // 一行两字节，高度16，所以2*16=32字节
     mr_read(font_sky16_f, font_sky16_bitbuf, 32);
-    for (iy = 0; iy < CHAR_H; iy++) {
-        // 字节序的问题
-        data = font_sky16_bitbuf[iy * 2 + 1];
-        data |= font_sky16_bitbuf[iy * 2] << 8;
-        for (ix = 0; data > 0; ix++) {
+    xl_font_sky16_charWidthHeight(ch, &width, &height);
+    for (iy = 0; iy < height; iy++) {
+        data = ((uint16)font_sky16_bitbuf[iy * 2] << 8) | font_sky16_bitbuf[iy * 2 + 1];
+        for (ix = 0; ix < width; ix++) {
             if (data & (1 << 15)) {
                 _DrawPoint(ix + x, iy + y, color);
             }
@@ -644,6 +646,8 @@ int32 mr_plat(int32 code, int32 param) {
             return MR_TOUCH_SCREEN;
         case MR_GET_HANDSET_LG:  // 1206获取语言
             return MR_CHINESE;
+        case 1106:  // 获取短信中心
+            return MR_WAITING;
         case 1218:  // 查询存储卡的状态
             return MR_MSDC_OK;
         default:
