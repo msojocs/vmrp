@@ -78,6 +78,7 @@ extern int wstrlen(char *txt);
 #define EXT_HEAP_ADDR 0x00200000u
 #define EXT_STOP_ADDR 0x0007FFF0u
 #define EXT_WRAPPER_STACK_SIZE 0x20000u
+#define EXT_TRACE_PC_RING 64u
 
 typedef struct mr_c_function_P_t {
     uint32 start_of_ER_RW;
@@ -128,6 +129,9 @@ struct ArmExtModule {
     uint32_t nested_return_addr;
     uint32_t screen_write_count;
     uint32_t thumb_fix_count;
+    uint32_t pc_ring[EXT_TRACE_PC_RING];
+    uint32_t cpsr_ring[EXT_TRACE_PC_RING];
+    uint32_t pc_ring_pos;
     int nested_loading;
     int screen_dirty;
     uc_hook hook;
@@ -184,6 +188,30 @@ static void set_arm_mode_for_addr(ArmExtModule *m, uint32_t addr) {
     reg_write32(m->uc, UC_ARM_REG_CPSR, cpsr);
 }
 
+static uint32_t arm_exec_addr(uint32_t addr) {
+    return addr & ~1u;
+}
+
+static void trace_pc(uc_engine *uc, uint64_t address, uint32_t size, void *user_data) {
+    (void)size;
+    ArmExtModule *m = (ArmExtModule *)user_data;
+    uint32_t pos = m->pc_ring_pos++ % EXT_TRACE_PC_RING;
+    m->pc_ring[pos] = (uint32_t)address;
+    m->cpsr_ring[pos] = reg_read32(uc, UC_ARM_REG_CPSR);
+}
+
+static void dump_pc_ring(ArmExtModule *m) {
+    if (!getenv("VMRP_ARM_EXT_TRACE_PC")) return;
+    uint32_t total = m->pc_ring_pos < EXT_TRACE_PC_RING ? m->pc_ring_pos : EXT_TRACE_PC_RING;
+    printf("arm_ext_executor: recent PCs:\n");
+    for (uint32_t i = 0; i < total; ++i) {
+        uint32_t idx = (m->pc_ring_pos - total + i) % EXT_TRACE_PC_RING;
+        printf("  #%02u pc=0x%X cpsr=0x%X %s\n",
+               i, m->pc_ring[idx], m->cpsr_ring[idx],
+               (m->cpsr_ring[idx] & (1u << 5)) ? "thumb" : "arm");
+    }
+}
+
 static uint32_t arg_read(ArmExtModule *m, unsigned n) {
     if (n < 4) return reg_read32(m->uc, UC_ARM_REG_R0 + n);
     uint32_t sp = reg_read32(m->uc, UC_ARM_REG_SP);
@@ -196,10 +224,25 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
     set_arm_mode_for_addr(m, start);
     reg_write32(m->uc, UC_ARM_REG_SP, sp);
     reg_write32(m->uc, UC_ARM_REG_LR, EXT_STOP_ADDR);
-    uc_err err = uc_emu_start(m->uc, start, EXT_STOP_ADDR, 0, 0);
+    uc_err err = uc_emu_start(m->uc, arm_exec_addr(start), EXT_STOP_ADDR, 0, 0);
     if (err != UC_ERR_OK) {
         if (reg_read32(m->uc, UC_ARM_REG_PC) == EXT_STOP_ADDR) return MR_SUCCESS;
+        uint32_t pc = reg_read32(m->uc, UC_ARM_REG_PC) & ~1u;
+        uint32_t cur_sp = reg_read32(m->uc, UC_ARM_REG_SP);
+        if (err == UC_ERR_INSN_INVALID && pc >= EXT_CODE_ADDR && pc < EXT_CODE_ADDR + m->code_len &&
+            cur_sp >= EXT_CODE_ADDR && cur_sp < EXT_CODE_ADDR + m->code_len) {
+            printf("arm_ext_executor: code stack reached executable area pc=0x%X sp=0x%X, exiting runtime\n", pc, cur_sp);
+            mr_exit();
+            return MR_SUCCESS;
+        }
         printf("arm_ext_executor: uc_emu_start(0x%X) failed: %u (%s)\n", start, err, uc_strerror(err));
+        uint8_t *pc_mem = arm_ptr(m, pc);
+        if (pc_mem) {
+            printf("arm_ext_executor: pc bytes @0x%X:", pc);
+            for (uint32_t i = 0; i < 16; ++i) printf(" %02X", pc_mem[i]);
+            printf("\n");
+        }
+        dump_pc_ring(m);
         dumpREG(m->uc);
         return MR_FAILED;
     }
@@ -211,9 +254,11 @@ static int run_arm(ArmExtModule *m, uint32_t start) {
 }
 
 static void restore_ext_r9(ArmExtModule *m) {
-    if (!m || !m->p_addr) return;
+    if (!m) return;
+    uint32_t p_addr = m->active_p_addr ? m->active_p_addr : m->p_addr;
+    if (!p_addr) return;
     uint32_t rw_base = 0;
-    memcpy(&rw_base, arm_ptr(m, m->p_addr), 4);
+    memcpy(&rw_base, arm_ptr(m, p_addr), 4);
     if (rw_base) reg_write32(m->uc, UC_ARM_REG_R9, rw_base);
 }
 
@@ -843,6 +888,12 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     memcpy(arm_ptr(m, EXT_CODE_ADDR), &table, 4);
     err = uc_hook_add(m->uc, &m->hook, UC_HOOK_CODE, hook_table, m, EXT_TABLE_ADDR, EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4);
     if (err != UC_ERR_OK) goto fail;
+    if (getenv("VMRP_ARM_EXT_TRACE_PC")) {
+        uc_hook pc_hook;
+        err = uc_hook_add(m->uc, &pc_hook, UC_HOOK_CODE, trace_pc, m,
+                          EXT_CODE_ADDR, EXT_CODE_ADDR + len);
+        if (err != UC_ERR_OK) goto fail;
+    }
     uc_hook restore_hook;
     err = uc_hook_add(m->uc, &restore_hook, UC_HOOK_CODE, hook_restore_r9, m,
                       EXT_CODE_ADDR, EXT_CODE_ADDR + len);
