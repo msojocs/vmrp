@@ -105,6 +105,9 @@ struct ArmExtModule {
     int32_t screen_h;
     uint32_t origin_mem_addr;
     uint32_t origin_mem_len;
+    uint32_t origin_mem_left;
+    uint32_t origin_mem_min;
+    uint32_t origin_mem_top;
     uint32_t internal_table_addr;
     uint32_t port_table_addr;
     uint32_t mr_m0_files_addr;
@@ -231,10 +234,12 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
         if (reg_read32(m->uc, UC_ARM_REG_PC) == EXT_STOP_ADDR) return MR_SUCCESS;
         uint32_t pc = reg_read32(m->uc, UC_ARM_REG_PC) & ~1u;
         uint32_t cur_sp = reg_read32(m->uc, UC_ARM_REG_SP);
-        if (err == UC_ERR_INSN_INVALID && pc >= EXT_CODE_ADDR && pc < EXT_CODE_ADDR + m->code_len &&
-            cur_sp >= EXT_CODE_ADDR && cur_sp < EXT_CODE_ADDR + m->code_len) {
-            printf("arm_ext_executor: code stack reached executable area pc=0x%X sp=0x%X, exiting runtime\n", pc, cur_sp);
-            mr_exit();
+        if (err == UC_ERR_INSN_INVALID && pc >= EXT_CODE_ADDR && pc < EXT_CODE_ADDR + m->code_len) {
+            if (getenv("VMRP_ARM_EXT_TRACE")) {
+                printf("arm_ext_executor: ARM callback stopped at non-instruction pc=0x%X sp=0x%X\n", pc, cur_sp);
+                dump_pc_ring(m);
+            }
+            reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
             return MR_SUCCESS;
         }
         printf("arm_ext_executor: uc_emu_start(0x%X) failed: %u (%s)\n", start, err, uc_strerror(err));
@@ -327,6 +332,37 @@ static void internal_slot_write(ArmExtModule *m, uint32_t slot, uint32_t value) 
     if (slot) memcpy(arm_ptr(m, slot), &value, 4);
 }
 
+static void sync_origin_mem_stats(ArmExtModule *m) {
+    if (!m->origin_mem_addr) return;
+    uint32_t left_slot = 0;
+    uint32_t min_slot = 0;
+    uint32_t top_slot = 0;
+    memcpy(&left_slot, arm_ptr(m, EXT_TABLE_ADDR + 111 * 4), 4);
+    memcpy(&min_slot, arm_ptr(m, EXT_TABLE_ADDR + 135 * 4), 4);
+    memcpy(&top_slot, arm_ptr(m, EXT_TABLE_ADDR + 136 * 4), 4);
+    internal_slot_write(m, left_slot, m->origin_mem_left);
+    internal_slot_write(m, min_slot, m->origin_mem_min);
+    internal_slot_write(m, top_slot, m->origin_mem_top);
+}
+
+static void note_origin_mem_alloc(ArmExtModule *m, uint32_t len) {
+    if (!m->origin_mem_addr) return;
+    len = align4(len ? len : 1);
+    m->origin_mem_left = len < m->origin_mem_left ? m->origin_mem_left - len : 0;
+    if (m->origin_mem_left < m->origin_mem_min) {
+        m->origin_mem_min = m->origin_mem_left;
+        m->origin_mem_top = m->origin_mem_len - m->origin_mem_min;
+    }
+    sync_origin_mem_stats(m);
+}
+
+static void note_origin_mem_free(ArmExtModule *m, uint32_t len) {
+    if (!m->origin_mem_addr) return;
+    m->origin_mem_left += align4(len);
+    if (m->origin_mem_left > m->origin_mem_len) m->origin_mem_left = m->origin_mem_len;
+    sync_origin_mem_stats(m);
+}
+
 static void enter_screen_context(ArmExtModule *m, uint16 **saved_screen) {
     *saved_screen = mr_screenBuf;
     if (m->screen_addr) mr_screenBuf = (uint16 *)arm_ptr(m, m->screen_addr);
@@ -382,6 +418,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             ret = arm_alloc(m, r0);
             m->last_alloc_addr = ret;
             m->last_alloc_len = r0;
+            if (ret) note_origin_mem_alloc(m, r0);
             {
                 uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR) & ~1u;
                 if (m->nested_loading && m->last_file_addr && lr >= m->last_file_addr && lr < m->last_file_addr + m->last_file_len && r0 > 0x1000) {
@@ -405,9 +442,13 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 }
             }
             break;
-        case 1: ret = MR_SUCCESS; break;
+        case 1:
+            note_origin_mem_free(m, r1);
+            ret = MR_SUCCESS;
+            break;
         case 2: {
             uint32_t p = arm_alloc(m, r2);
+            if (p) note_origin_mem_alloc(m, r2);
             if (p && r0 && r1) memcpy(arm_ptr(m, p), arm_ptr(m, r0), r1 < r2 ? r1 : r2);
             ret = p;
         } break;
@@ -865,6 +906,9 @@ static void init_table(ArmExtModule *m) {
     write_table_entry(m, 138, alloc_string(m, mr_get_start_fileparameter()));
 
     m->origin_mem_len = 4u * 1024u * 1024u;
+    m->origin_mem_left = m->origin_mem_len;
+    m->origin_mem_min = m->origin_mem_len;
+    m->origin_mem_top = 0;
     m->origin_mem_addr = arm_alloc(m, m->origin_mem_len);
     if (m->origin_mem_addr) {
         uint32_t free_next = m->origin_mem_len;
@@ -875,9 +919,9 @@ static void init_table(ArmExtModule *m) {
         write_table_entry(m, 108, alloc_u32_slot(m, m->origin_mem_addr));
         write_table_entry(m, 109, alloc_u32_slot(m, m->origin_mem_len));
         write_table_entry(m, 110, alloc_u32_slot(m, m->origin_mem_addr + m->origin_mem_len));
-        write_table_entry(m, 111, alloc_u32_slot(m, m->origin_mem_len));
-        write_table_entry(m, 135, alloc_u32_slot(m, m->origin_mem_len));
-        write_table_entry(m, 136, alloc_u32_slot(m, 0));
+        write_table_entry(m, 111, alloc_u32_slot(m, m->origin_mem_left));
+        write_table_entry(m, 135, alloc_u32_slot(m, m->origin_mem_min));
+        write_table_entry(m, 136, alloc_u32_slot(m, m->origin_mem_top));
 
         uint32_t free_head = arm_alloc(m, 8);
         if (free_head) write_table_entry(m, 146, free_head);
