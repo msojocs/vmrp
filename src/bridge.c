@@ -1174,10 +1174,12 @@ uc_err bridge_init(uc_engine *uc) {
     mr_table = hooks_init(uc, mr_table_funcMap, countof(mr_table_funcMap), len);
 
     dsm_require_funcs = hooks_init(uc, dsm_require_funcs_funcMap, countof(dsm_require_funcs_funcMap), sizeof(DSM_REQUIRE_FUNCS));
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__)
     ((DSM_REQUIRE_FUNCS *)dsm_require_funcs)->flags = FLAG_USE_UTF8_FS;  // wasm文件系统是UTF8编码
-#else
+#elif defined(_WIN32)
     ((DSM_REQUIRE_FUNCS *)dsm_require_funcs)->flags = FLAG_USE_UTF8_EDIT;  // windows下文件系统是GBK编码，编辑框暂时用复制粘贴代替（需要utf8编码）
+#else
+    ((DSM_REQUIRE_FUNCS *)dsm_require_funcs)->flags = FLAG_USE_UTF8_FS | FLAG_USE_UTF8_EDIT;
 #endif
 
     mr_c_event = my_mallocExt(sizeof(event_t));
