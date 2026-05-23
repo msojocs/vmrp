@@ -136,6 +136,9 @@ static void xl_font_sky16_charWidthHeight(uint16 id, int32 *width, int32 *height
 
 int32 mr_exit(void) {
     LOGD("%s", "mr_exit() called by mythroad!");
+    if (mr_restart_old_app() == MR_SUCCESS) {
+        return MR_SUCCESS;
+    }
     xl_font_sky16_close();
     dsmInFuncs->exit();
     return MR_SUCCESS;
