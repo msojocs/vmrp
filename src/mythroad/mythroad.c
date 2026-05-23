@@ -4015,8 +4015,10 @@ int32 mr_stop(void)  // int16 freemem)
 #endif /* !VMRP_NATIVE */
 #ifdef VMRP_NATIVE
     if (native_stop_function) {
-        native_ext_callback0(native_stop_function);
+        int32 status = native_ext_callback0(native_stop_function);
         native_stop_function = 0;
+        if (status != MR_IGNORE)
+            return status;
     }
 #endif
     return mr_stop_ex(TRUE);
@@ -4240,12 +4242,13 @@ int32 mr_timer(void) {
     }
 #endif
 #ifdef VMRP_NATIVE
-    if (native_ext) {
-        native_ext_void_event(2);
-        return MR_SUCCESS;
-    }
     if (native_timer_function) {
         int32 status = native_ext_callback0(native_timer_function);
+        if (status != MR_IGNORE)
+            return status;
+    }
+    if (native_ext) {
+        int32 status = native_ext_void_event(2);
         if (status != MR_IGNORE)
             return status;
     }
