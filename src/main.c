@@ -33,6 +33,7 @@ static bool isMouseDown = false;
 static bool isEditMode = false;
 static int32_t editMaxSize = 0;
 static char *holdEditText = NULL;
+static uint32_t clickSeq = 0;
 
 static SDL_Keycode isKeyDown = SDLK_UNKNOWN;
 
@@ -298,14 +299,22 @@ void loop() {
                         event(MR_MOUSE_MOVE, ev.motion.x, ev.motion.y);
                     }
                     break;
-                case SDL_MOUSEBUTTONDOWN:
+                case SDL_MOUSEBUTTONDOWN: {
+                    uint32_t seq = ++clickSeq;
+                    printf("[CLICK] #%u down x=%d y=%d\n", seq, ev.button.x, ev.button.y);
                     isMouseDown = true;
-                    event(MR_MOUSE_DOWN, ev.button.x, ev.button.y);
+                    int32_t ret = event(MR_MOUSE_DOWN, ev.button.x, ev.button.y);
+                    printf("[CLICK] #%u down ret=%d\n", seq, ret);
                     break;
-                case SDL_MOUSEBUTTONUP:
+                }
+                case SDL_MOUSEBUTTONUP: {
+                    uint32_t seq = clickSeq;
+                    printf("[CLICK] #%u up x=%d y=%d\n", seq, ev.button.x, ev.button.y);
                     isMouseDown = false;
-                    event(MR_MOUSE_UP, ev.button.x, ev.button.y);
+                    int32_t ret = event(MR_MOUSE_UP, ev.button.x, ev.button.y);
+                    printf("[CLICK] #%u up ret=%d\n", seq, ret);
                     break;
+                }
             }
         }
     }
