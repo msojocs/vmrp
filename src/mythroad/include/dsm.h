@@ -109,5 +109,6 @@ typedef struct start_t {
 } start_t;
 
 int32 dsm_init(DSM_REQUIRE_FUNCS *inFuncs);
+int32 mr_restart_old_app(void);
 
 #endif
