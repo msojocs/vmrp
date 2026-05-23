@@ -78,6 +78,7 @@ extern int wstrlen(char *txt);
 #define EXT_HEAP_ADDR 0x00200000u
 #define EXT_STOP_ADDR 0x0007FFF0u
 #define EXT_WRAPPER_STACK_SIZE 0x20000u
+#define EXT_LOW_TABLE_SIZE 0x1000u
 #define EXT_TRACE_PC_RING 64u
 
 typedef struct mr_c_function_P_t {
@@ -91,6 +92,7 @@ typedef struct mr_c_function_P_t {
 struct ArmExtModule {
     uc_engine *uc;
     uint8_t *mem;
+    uint8_t *low_table;
     uint32_t heap_top;
     uint32_t code_len;
     const uint8_t *host_code;
@@ -346,6 +348,21 @@ static void cb_ret(ArmExtModule *m, uint32_t ret) {
     uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
     set_arm_mode_for_addr(m, lr);
     reg_write32(m->uc, UC_ARM_REG_PC, lr);
+}
+
+static void hook_low_zero(uc_engine *uc, uint64_t address, uint32_t size, void *user_data) {
+    (void)size;
+    ArmExtModule *m = (ArmExtModule *)user_data;
+    if (address != 0) return;
+    uint32_t lr = reg_read32(uc, UC_ARM_REG_LR);
+    if (lr) {
+        set_arm_mode_for_addr(m, lr);
+        reg_write32(uc, UC_ARM_REG_PC, lr);
+    } else {
+        uint32_t pc = EXT_STOP_ADDR;
+        reg_write32(uc, UC_ARM_REG_PC, pc);
+        uc_emu_stop(uc);
+    }
 }
 
 static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *user_data) {
@@ -873,6 +890,8 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     if (!m) return MR_FAILED;
     m->mem = calloc(1, EXT_MEM_SIZE);
     if (!m->mem) goto fail;
+    m->low_table = calloc(1, EXT_LOW_TABLE_SIZE);
+    if (!m->low_table) goto fail;
     m->heap_top = EXT_HEAP_ADDR;
     m->code_len = len;
     m->host_code = code;
@@ -882,11 +901,17 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     err = uc_mem_map_ptr(m->uc, EXT_BASE_ADDR, EXT_MEM_SIZE, UC_PROT_ALL, m->mem);
     if (err != UC_ERR_OK) goto fail;
     init_table(m);
+    memcpy(m->low_table, m->mem, EXT_TABLE_COUNT * 4);
+    err = uc_mem_map_ptr(m->uc, 0, EXT_LOW_TABLE_SIZE, UC_PROT_ALL, m->low_table);
+    if (err != UC_ERR_OK) goto fail;
     memcpy(arm_ptr(m, EXT_CODE_ADDR), code, len);
     patch_wrapper_stack_size(m);
     uint32_t table = EXT_TABLE_ADDR;
     memcpy(arm_ptr(m, EXT_CODE_ADDR), &table, 4);
     err = uc_hook_add(m->uc, &m->hook, UC_HOOK_CODE, hook_table, m, EXT_TABLE_ADDR, EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4);
+    if (err != UC_ERR_OK) goto fail;
+    uc_hook low_zero_hook;
+    err = uc_hook_add(m->uc, &low_zero_hook, UC_HOOK_CODE, hook_low_zero, m, 0, EXT_LOW_TABLE_SIZE - 1);
     if (err != UC_ERR_OK) goto fail;
     if (getenv("VMRP_ARM_EXT_TRACE_PC")) {
         uc_hook pc_hook;
@@ -1023,6 +1048,7 @@ void arm_ext_unload(ArmExtModule *m) {
     if (!m) return;
     if (m->uc) uc_close(m->uc);
     free(m->last_file_copy);
+    free(m->low_table);
     free(m->mem);
     free(m);
 }
