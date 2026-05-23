@@ -156,6 +156,14 @@ static int32 native_textRefresh(int32 handle, const char *title, const char *tex
     return MR_FAILED;
 }
 
+#if defined(__EMSCRIPTEN__)
+#define NATIVE_DSM_FLAGS FLAG_USE_UTF8_FS
+#elif defined(_WIN32)
+#define NATIVE_DSM_FLAGS FLAG_USE_UTF8_EDIT
+#else
+#define NATIVE_DSM_FLAGS (FLAG_USE_UTF8_FS | FLAG_USE_UTF8_EDIT)
+#endif
+
 static DSM_REQUIRE_FUNCS native_funcs = {
     .test = native_test,
     .log = native_log,
@@ -208,11 +216,7 @@ static DSM_REQUIRE_FUNCS native_funcs = {
     .mr_editCreate = editCreate,
     .mr_editRelease = editRelease,
     .mr_editGetText = editGetText,
-#ifdef __EMSCRIPTEN__
-    .flags = FLAG_USE_UTF8_FS,
-#else
-    .flags = FLAG_USE_UTF8_EDIT,
-#endif
+    .flags = NATIVE_DSM_FLAGS,
 };
 
 DSM_REQUIRE_FUNCS *native_dsm_funcs_get(void) {
