@@ -130,6 +130,8 @@ struct ArmExtModule {
     uint32_t nested_p_addr;
     uint32_t active_p_addr;
     uint32_t active_helper_addr;
+    uint32_t primary_p_addr;       // First nested EXT is the app logic; later nested EXTs can be helpers.
+    uint32_t primary_helper_addr;
     uint32_t outer_r9;
     uint32_t nested_return_addr;
     uint32_t screen_write_count;
@@ -194,7 +196,8 @@ static void set_arm_mode_for_addr(ArmExtModule *m, uint32_t addr) {
 }
 
 static uint32_t arm_exec_addr(uint32_t addr) {
-    return addr & ~1u;
+    // Keep bit 0 so Unicorn enters Thumb mode for Thumb entry points.
+    return addr;
 }
 
 static void trace_pc(uc_engine *uc, uint64_t address, uint32_t size, void *user_data) {
@@ -498,9 +501,13 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 }
                 m->active_helper_addr = r0;
                 m->active_p_addr = p_addr;
+                if (!m->primary_helper_addr) {
+                    m->primary_helper_addr = r0;
+                    m->primary_p_addr = p_addr;
+                }
                 if (getenv("VMRP_ARM_EXT_TRACE")) {
-                    printf("arm_ext_executor: nested helper=0x%X P=0x%X len=%u slot=0x%X\n",
-                           r0, p_addr, r1, helper_slot);
+                    printf("arm_ext_executor: nested helper=0x%X P=0x%X len=%u slot=0x%X primary=0x%X/0x%X\n",
+                           r0, p_addr, r1, helper_slot, m->primary_helper_addr, m->primary_p_addr);
                 }
                 m->nested_loading = 1;
                 m->nested_p_addr = 0;
@@ -1016,8 +1023,9 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     }
     uint32_t outp_addr = arm_alloc(m, 4);
     uint32_t outl_addr = arm_alloc(m, 4);
-    uint32_t call_p_addr = m->active_p_addr ? m->active_p_addr : m->p_addr;
-    uint32_t call_helper_addr = m->active_helper_addr ? m->active_helper_addr : m->helper_addr;
+    // Lifecycle/event calls belong to the app EXT, not later helper EXT modules.
+    uint32_t call_p_addr = (code >= 0 && code <= 5 && m->primary_p_addr) ? m->primary_p_addr : (m->active_p_addr ? m->active_p_addr : m->p_addr);
+    uint32_t call_helper_addr = (code >= 0 && code <= 5 && m->primary_helper_addr) ? m->primary_helper_addr : (m->active_helper_addr ? m->active_helper_addr : m->helper_addr);
     uint32_t rw_base = 0;
     memcpy(&rw_base, arm_ptr(m, call_p_addr), 4);
     if (rw_base) reg_write32(m->uc, UC_ARM_REG_R9, rw_base);
