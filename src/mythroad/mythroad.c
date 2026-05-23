@@ -3002,6 +3002,7 @@ int _mr_TestCom(mrp_State* L, int input0, int input1) {
         case 2:
 #ifdef VMRP_NATIVE
             native_event_function = (uint32)input1;
+            if (getenv("VMRP_ARM_EXT_TRACE")) printf("native_event_function=0x%X\n", native_event_function);
 #else
             mr_event_function = (MR_EVENT_FUNCTION)input1;
 #endif
@@ -3009,6 +3010,7 @@ int _mr_TestCom(mrp_State* L, int input0, int input1) {
         case 3:
 #ifdef VMRP_NATIVE
             native_timer_function = (uint32)input1;
+            if (getenv("VMRP_ARM_EXT_TRACE")) printf("native_timer_function=0x%X\n", native_timer_function);
 #else
             mr_timer_function = (MR_TIMER_FUNCTION)input1;
 #endif
@@ -3016,6 +3018,7 @@ int _mr_TestCom(mrp_State* L, int input0, int input1) {
         case 4:
 #ifdef VMRP_NATIVE
             native_stop_function = (uint32)input1;
+            if (getenv("VMRP_ARM_EXT_TRACE")) printf("native_stop_function=0x%X\n", native_stop_function);
 #else
             mr_stop_function = (MR_STOP_FUNCTION)input1;
 #endif
@@ -4158,7 +4161,9 @@ int32 mr_event(int16 type, int32 param1, int32 param2) {
     if ((mr_state == MR_STATE_RUN) || ((mr_timer_run_without_pause) && (mr_state == MR_STATE_PAUSE))) {
 #ifdef VMRP_NATIVE
         if (native_event_function) {
+            if (getenv("VMRP_ARM_EXT_TRACE")) printf("native_event call func=0x%X type=%d p1=%d p2=%d\n", native_event_function, type, param1, param2);
             int32 status = native_ext_callback3(native_event_function, (uint32)type, (uint32)param1, (uint32)param2);
+            if (getenv("VMRP_ARM_EXT_TRACE")) printf("native_event ret=%d state=%d\n", status, mr_state);
             if (status != MR_IGNORE)
                 return status;
         }
