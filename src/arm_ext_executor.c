@@ -18,6 +18,7 @@ extern void mr_free(void *p, uint32 len);
 extern int32 mr_mem_get(char **mem_base, uint32 *mem_len);
 extern int32 mr_timerStart(uint16 t);
 extern int32 mr_timerStop(void);
+extern int32 mr_stop_ex(int16 freemem);
 extern uint32 mr_getTime(void);
 extern int32 mr_getDatetime(mr_datetime *datetime);
 extern int32 mr_sleep(uint32 ms);
@@ -139,6 +140,7 @@ struct ArmExtModule {
     uint32_t pc_ring[EXT_TRACE_PC_RING];
     uint32_t cpsr_ring[EXT_TRACE_PC_RING];
     uint32_t pc_ring_pos;
+    uint32_t busy_wait_count;
     int nested_loading;
     int screen_dirty;
     uc_hook hook;
@@ -413,7 +415,11 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
     uint32_t ret = MR_SUCCESS;
     int trace_table = getenv("VMRP_ARM_EXT_TRACE") != NULL;
     if (trace_table) {
-        printf("arm_ext_executor: table[%u](0x%X,0x%X,0x%X,0x%X)\n", idx, r0, r1, r2, r3);
+        uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
+        printf("arm_ext_executor: table[%u](0x%X,0x%X,0x%X,0x%X) lr=0x%X\n", idx, r0, r1, r2, r3, lr);
+    }
+    if (idx != 33) {
+        m->busy_wait_count = 0;
     }
 
     switch (idx) {
@@ -471,6 +477,11 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 18: ret = atoi(arm_str(m, r0)); break;
         case 19: ret = (uint32_t)strtoul(arm_str(m, r0), NULL, r1); break;
         case 20: ret = mr_rand(); break;
+        case 22:
+            ret = mr_stop_ex((int16)r0);
+            internal_slot_write(m, m->mr_state_slot, 0);
+            internal_slot_write(m, m->mr_timer_state_slot, 0);
+            break;
         case 25: {
             uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
             int nested = m->last_file_addr && lr >= m->last_file_addr && lr < m->last_file_addr + m->last_file_len;
@@ -562,7 +573,25 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             ret = mr_timerStop();
             internal_slot_write(m, m->mr_timer_state_slot, 0);
             break;
-        case 33: ret = mr_getTime(); break;
+        case 33: {
+            ret = mr_getTime();
+            /*
+             * mpc.mrp's exit path enters a busy-wait loop polling mr_getTime
+             * indefinitely. On real hardware the wait yields to the OS so
+             * other events (timer, exit signal) can fire. In our synchronous
+             * emulator nothing can break the loop. Detect a long run of
+             * consecutive mr_getTime calls and treat it as an exit request.
+             */
+            m->busy_wait_count++;
+            if (m->busy_wait_count >= 200) {
+                printf("[arm_ext_executor] mr_getTime busy-wait detected (count=%u), triggering exit\n",
+                       m->busy_wait_count);
+                m->busy_wait_count = 0;
+                reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
+                uc_emu_stop(m->uc);
+                mr_exit();
+            }
+        } break;
         case 34: ret = mr_getDatetime(arm_ptr(m, r0)); break;
         case 36: ret = mr_sleep(r0); break;
         case 37: ret = mr_plat((int32)r0, (int32)r1); break;
