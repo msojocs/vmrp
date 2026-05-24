@@ -834,6 +834,14 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 57: ret = mr_playSound((int)r0, arm_ptr(m, r1), r2, (int32)r3); break;
         case 58: ret = mr_stopSound((int)r0); break;
         case 60: mr_call(arm_str(m, r0)); ret = MR_SUCCESS; break;
+        /* table[61] mr_getNetworkID()：返回 0 表示移动网络（MR_NET_ID_MOBILE） */
+        case 61: ret = 0; break;
+        /* table[81] mr_initNetwork(cb, mode)：直接返回 MR_FAILED，让插件按
+         * "网络不可用" 路径走。我们没有可靠的方式回调 ARM 侧 cb，且 netpay
+         * 的网络功能本来就在我们的桌面环境中不可用。 */
+        case 81: ret = MR_FAILED; break;
+        /* table[82] mr_closeNetwork()：return success，跟 mr_initNetwork 配对。 */
+        case 82: ret = MR_SUCCESS; break;
         case 69: ret = mr_dialogCreate(arm_str(m, r0), arm_str(m, r1), (int32)r2); break;
         case 70: ret = mr_dialogRelease((int32)r0); break;
         case 71: ret = mr_dialogRefresh((int32)r0, arm_str(m, r1), arm_str(m, r2), (int32)r3); break;
@@ -921,6 +929,29 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 if (getenv("VMRP_ARM_EXT_TRACE")) {
                     printf("arm_ext_executor: staged nested ext at 0x%X len=%u P=0x%X\n",
                            r2, r3, m->nested_p_addr);
+                }
+            }
+            /*
+             * 关键修复：case 131 (r1=9) 是 mr_cacheSync。原意是同步指令缓存，
+             * 因为 wrapper 刚把新的 .ext 二进制写到了 [r2, r2+r3) 范围。在真机
+             * 上这会清掉 D-cache 并 invalidate I-cache，让后续取指看到新指令。
+             *
+             * 我们用 Unicorn 跑 ARM，Unicorn 通过 QEMU TCG 做 JIT 翻译并 cache
+             * translation blocks（TB）。当 gghjt 把 netpay 的 smcheck/advsms
+             * 等子插件 staging 到同一段内存时，TB cache 仍然是上一个插件留下的
+             * 翻译结果，结果就是 PC 进了新 .ext 的代码区，执行的却是旧代码。
+             *
+             * 表现为 r3 不被 LDR 重新加载、movs r1/r2 立即数被跳过等"鬼指令"，
+             * 最后 BLX r3 跳到一个看着像数据/字符串的地址，崩在 0x627A60 一类
+             * 位置。修复方式就是 mimic 真机的 mr_cacheSync：在 staging 完成后
+             * 通过 uc_ctl_remove_cache 让 Unicorn 把这段地址的 TB 翻译丢掉，
+             * 下次执行强制重新翻译现在的字节。
+             */
+            if (r1 == 9 && r2 && r3 > 0 && arm_ptr(m, r2) && arm_ptr(m, r2 + r3 - 1)) {
+                uc_err cerr = uc_ctl_remove_cache(m->uc, r2, r2 + r3);
+                if (cerr != UC_ERR_OK && getenv("VMRP_ARM_EXT_TRACE")) {
+                    printf("arm_ext_executor: uc_ctl_remove_cache(0x%X, 0x%X) failed: %u\n",
+                           r2, r2 + r3, cerr);
                 }
             }
             break;
