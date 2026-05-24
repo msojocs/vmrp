@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h> /* for usleep in busy-wait detection */
 #include <zlib.h>
 
 #include "./include/utils.h"
@@ -662,20 +663,29 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 33: {
             ret = mr_getTime();
             /*
-             * mpc.mrp's exit path enters a busy-wait loop polling mr_getTime
-             * indefinitely. On real hardware the wait yields to the OS so
-             * other events (timer, exit signal) can fire. In our synchronous
-             * emulator nothing can break the loop. Detect a long run of
-             * consecutive mr_getTime calls and treat it as an exit request.
+             * 部分 .mrp（如 mpc.mrp 的菜单切换、退出动画）会进入忙等循环，反复
+             * 调用 mr_getTime() 等待真实时间流逝。在真机上 OS 抢占允许定时器/
+             * 事件穿插进来；在本模拟器里若不让出 CPU，宿主线程的时钟也无法及
+             * 时推进，导致这种合法的"实时延时"看上去像死锁。
+             *
+             * 原来这里识别到忙等就直接调用 mr_exit() 强制结束进程——这虽然修
+             * 复了"无法退出 mpc"的现象，却把所有依赖时间推进的 UI 路径（包括
+             * 普通的菜单点击）一并误判为退出。
+             *
+             * 现在的策略：检测到忙等时调用 usleep 让真实时间真正推进若干毫秒，
+             * 同时把计数器适度回退，使得实时延时循环能因 mr_getTime() 返回值
+             * 增大而自然退出。我们不再主动调用 mr_exit。
              */
             m->busy_wait_count++;
             if (m->busy_wait_count >= 200) {
-                printf("[arm_ext_executor] mr_getTime busy-wait detected (count=%u), triggering exit\n",
-                       m->busy_wait_count);
-                m->busy_wait_count = 0;
-                reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
-                uc_emu_stop(m->uc);
-                mr_exit();
+                /* 让宿主时钟推进 ~5ms，足够使大多数 UI 动画/短延时循环看到
+                 * mr_getTime() 的返回值发生明显变化，从而自行跳出循环。 */
+                usleep(5 * 1000);
+                /* 不要把计数完全清零：清零会让下一轮等待重新"积攒" 200 次后才
+                 * 再次让出，长时间延时（如 100ms 以上）期间累计的真实时间不
+                 * 够多。回退到 100 让让出节奏稳定在约每 100 次 mr_getTime 一
+                 * 次 5ms 睡眠。 */
+                m->busy_wait_count = 100;
             }
         } break;
         case 34: ret = mr_getDatetime(arm_ptr(m, r0)); break;
