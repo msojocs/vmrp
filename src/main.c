@@ -241,9 +241,111 @@ static void keyEvent(int16 type, SDL_Keycode code) {
     }
 }
 
+/*
+ * 自动点击注入：通过环境变量 VMRP_AUTO_CLICKS 触发一连串模拟点击，便于在没有
+ * 真实交互的情况下复现 UI 路径上的 Bug。格式为 "x1,y1;x2,y2;..."，每个点击之间
+ * 间隔 VMRP_AUTO_CLICK_DELAY_MS 毫秒（默认 800ms）。
+ *
+ * 在专用线程中调用 SDL_PushEvent，让事件像真实输入那样进入主循环。
+ */
+typedef struct {
+    int x;
+    int y;
+} AutoClickPoint;
+
+static AutoClickPoint *autoClickList = NULL;
+static int autoClickCount = 0;
+
+static int autoClickThread(void *data) {
+    (void)data;
+    const char *delay_env = getenv("VMRP_AUTO_CLICK_DELAY_MS");
+    Uint32 delay_ms = delay_env ? (Uint32)atoi(delay_env) : 800;
+    if (delay_ms == 0) delay_ms = 800;
+
+    /* 先等一段时间让应用完成启动 */
+    SDL_Delay(delay_ms);
+
+    for (int i = 0; i < autoClickCount; ++i) {
+        /* 约定：x = -1 表示发送一次 ESC（MR_KEY_POWER），y 携带 SDL_Keycode 用
+         * 于自定义按键；这里只用到 ESC。其它情况按普通鼠标点击注入。 */
+        if (autoClickList[i].x == -1) {
+            SDL_Event ev;
+            memset(&ev, 0, sizeof(ev));
+            ev.type = SDL_KEYDOWN;
+            ev.key.type = SDL_KEYDOWN;
+            ev.key.state = SDL_PRESSED;
+            ev.key.keysym.sym = SDLK_ESCAPE;
+            SDL_PushEvent(&ev);
+            SDL_Delay(50);
+            memset(&ev, 0, sizeof(ev));
+            ev.type = SDL_KEYUP;
+            ev.key.type = SDL_KEYUP;
+            ev.key.state = SDL_RELEASED;
+            ev.key.keysym.sym = SDLK_ESCAPE;
+            SDL_PushEvent(&ev);
+            SDL_Delay(delay_ms);
+            continue;
+        }
+        SDL_Event ev;
+        memset(&ev, 0, sizeof(ev));
+        ev.type = SDL_MOUSEBUTTONDOWN;
+        ev.button.type = SDL_MOUSEBUTTONDOWN;
+        ev.button.button = SDL_BUTTON_LEFT;
+        ev.button.state = SDL_PRESSED;
+        ev.button.x = autoClickList[i].x;
+        ev.button.y = autoClickList[i].y;
+        SDL_PushEvent(&ev);
+
+        SDL_Delay(50); /* down 与 up 之间的间隔 */
+
+        memset(&ev, 0, sizeof(ev));
+        ev.type = SDL_MOUSEBUTTONUP;
+        ev.button.type = SDL_MOUSEBUTTONUP;
+        ev.button.button = SDL_BUTTON_LEFT;
+        ev.button.state = SDL_RELEASED;
+        ev.button.x = autoClickList[i].x;
+        ev.button.y = autoClickList[i].y;
+        SDL_PushEvent(&ev);
+
+        SDL_Delay(delay_ms);
+    }
+    return 0;
+}
+
+static void startAutoClicksIfRequested(void) {
+    const char *env = getenv("VMRP_AUTO_CLICKS");
+    if (!env || !*env) return;
+    /* 解析 "x1,y1;x2,y2;..." */
+    int capacity = 8;
+    autoClickList = (AutoClickPoint *)malloc(sizeof(AutoClickPoint) * capacity);
+    autoClickCount = 0;
+    const char *p = env;
+    while (*p) {
+        int x = 0, y = 0;
+        if (sscanf(p, "%d,%d", &x, &y) == 2) {
+            if (autoClickCount >= capacity) {
+                capacity *= 2;
+                autoClickList = (AutoClickPoint *)realloc(autoClickList, sizeof(AutoClickPoint) * capacity);
+            }
+            autoClickList[autoClickCount].x = x;
+            autoClickList[autoClickCount].y = y;
+            autoClickCount++;
+        }
+        const char *semi = strchr(p, ';');
+        if (!semi) break;
+        p = semi + 1;
+    }
+    if (autoClickCount > 0) {
+        printf("[AUTO_CLICK] scheduled %d clicks\n", autoClickCount);
+        SDL_CreateThread(autoClickThread, "auto-click", NULL);
+    }
+}
+
 void loop() {
     SDL_Event ev;
     bool isLoop = true;
+
+    startAutoClicksIfRequested();
 
 #if defined(__EMSCRIPTEN__)
 #else

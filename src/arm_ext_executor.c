@@ -153,6 +153,16 @@ struct ArmExtModule {
     uint32_t cpsr_ring[EXT_TRACE_PC_RING];
     uint32_t pc_ring_pos;
     uint32_t busy_wait_count;
+    /* 忙等开始时的真实 mr_getTime 返回值；用于在合法实时延时不能自然完成时
+     * 识别"卡死"并触发 mr_exit。 */
+    uint32_t busy_wait_start_ms;
+    /* 当前 ARM 事件 / 回调中是否做过"真实工作"（除了 mr_getTime 与 arm_alloc
+     * 之外的 table 调用，例如绘图、文件 IO 等）。用于区分两种 SP 漂移崩溃
+     * 场景：
+     *   a) 正常的菜单切换：会先大量绘制后才进入计时器忙等 ⇒ event_did_work=1
+     *   b) mpc 的退出路径：跳过 UI 渲染直接进入计时器自旋 ⇒ event_did_work=0
+     * 在 (b) 上把 SP-in-code 崩溃当作"应当退出"，调用 mr_exit() 收尾。 */
+    int event_did_work;
     int nested_loading;
     int screen_dirty;
     uc_hook hook;
@@ -270,6 +280,33 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
         uint32_t pc = reg_read32(m->uc, UC_ARM_REG_PC) & ~1u;
         uint32_t cur_sp = reg_read32(m->uc, UC_ARM_REG_SP);
         if (err == UC_ERR_INSN_INVALID && pc >= EXT_CODE_ADDR && pc < EXT_CODE_ADDR + m->code_len) {
+            /*
+             * ARM 侧栈漂进了代码段——通常是反复忙等导致栈被破坏。这种崩溃
+             * 不可恢复，但应当怎么收尾要看回调里之前都做了什么：
+             *
+             *   • event_did_work == 1：本次事件先完成了真实工作（绘图/IO/
+             *     对话框等），然后才在结尾的计时器自旋里崩了。这种属于"正
+             *     常 UI 路径"——例如 mpc 的菜单切换、对话框打开等动画；
+             *     调用方期望事件回调返回后 app 继续运行。沿用既有的静默
+             *     清退处理。
+             *
+             *   • event_did_work == 0 且确实进入过 mr_getTime 忙等
+             *     （busy_wait_count > 0）：本次事件跳过所有渲染，进来就一头
+             *     扎进自旋等待。这种是 mpc 的退出回调，原始 ARM 代码期望
+             *     在自旋"完成"后调用 mr_exit() 结束进程；在我们的仿真器里
+             *     自旋走不到那一步就崩了，因此这里替它把 mr_exit() 补上，
+             *     恢复历史上 a5ca8ab "无法退出 mpc" 修复时点的体验。
+             */
+            int is_exit_spin = (m->event_did_work == 0 && m->busy_wait_count > 0);
+            if (is_exit_spin) {
+                printf("arm_ext_executor: code stack reached executable area pc=0x%X sp=0x%X (no UI work seen, treating as mpc exit) -> mr_exit\n", pc, cur_sp);
+                if (getenv("VMRP_ARM_EXT_TRACE")) dump_pc_ring(m);
+                reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
+                m->busy_wait_count = 0;
+                m->busy_wait_start_ms = 0;
+                mr_exit();
+                return MR_SUCCESS;
+            }
             if (getenv("VMRP_ARM_EXT_TRACE")) {
                 printf("arm_ext_executor: ARM callback stopped at non-instruction pc=0x%X sp=0x%X\n", pc, cur_sp);
                 dump_pc_ring(m);
@@ -493,6 +530,15 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
     }
     if (idx != 33) {
         m->busy_wait_count = 0;
+        m->busy_wait_start_ms = 0;
+    }
+    /* 把"实质性 work"定义为：除了 mr_getTime(33)、arm_alloc(0)、arm_free(1)、
+     * mr_strlen(3)、整型 mul/div(132-134) 这些纯算/计时之外的 table 调用，
+     * 都视为产生了可观测副作用（UI 绘制、文件/网络、对话框等）。这条标志被
+     * 后面的 SP-in-code 崩溃分支用来区分"正常 UI 路径意外崩了"和"mpc 退出
+     * 路径的最终自旋崩了"。 */
+    if (idx != 33 && idx != 0 && idx != 1 && idx != 3 && idx != 132 && idx != 133 && idx != 134) {
+        m->event_did_work = 1;
     }
 
     switch (idx) {
@@ -668,24 +714,38 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
              * 事件穿插进来；在本模拟器里若不让出 CPU，宿主线程的时钟也无法及
              * 时推进，导致这种合法的"实时延时"看上去像死锁。
              *
-             * 原来这里识别到忙等就直接调用 mr_exit() 强制结束进程——这虽然修
-             * 复了"无法退出 mpc"的现象，却把所有依赖时间推进的 UI 路径（包括
-             * 普通的菜单点击）一并误判为退出。
-             *
-             * 现在的策略：检测到忙等时调用 usleep 让真实时间真正推进若干毫秒，
-             * 同时把计数器适度回退，使得实时延时循环能因 mr_getTime() 返回值
-             * 增大而自然退出。我们不再主动调用 mr_exit。
+             * 策略分两段：
+             *  1) 一旦连续 200 次 mr_getTime 调用都没有夹杂其它 table 调用，
+             *     就 usleep 5ms 让宿主真实时间推进。这样大多数 UI 动画 /
+             *     短延时循环会因 mr_getTime() 返回值变化而自然退出。
+             *  2) 如果忙等已经持续了一个"明显超出任何合理 UI 动画"的真实
+             *     时长（这里取 3s），说明循环并不是单纯等时间——很可能是
+             *     mpc 退出流程里的最终自旋，对应代码本应在循环结束后调用
+             *     mr_exit。但我们的仿真器在那之前往往会因为栈漂移而崩溃，
+             *     根本到不了 mr_exit。这种情况下主动调用 mr_exit() 帮它把
+             *     进程收尾，复刻早期 a5ca8ab/6f0ca40 修复"无法退出 mpc"的
+             *     效果，同时阈值足够大不会误伤正常的菜单切换动画（实测约
+             *     1~1.5s 即可完成）。
              */
             m->busy_wait_count++;
+            if (m->busy_wait_count == 1) {
+                /* 记录第一次进入忙等的时间，用于判断卡死时长。 */
+                m->busy_wait_start_ms = ret;
+            }
             if (m->busy_wait_count >= 200) {
-                /* 让宿主时钟推进 ~5ms，足够使大多数 UI 动画/短延时循环看到
-                 * mr_getTime() 的返回值发生明显变化，从而自行跳出循环。 */
                 usleep(5 * 1000);
-                /* 不要把计数完全清零：清零会让下一轮等待重新"积攒" 200 次后才
-                 * 再次让出，长时间延时（如 100ms 以上）期间累计的真实时间不
-                 * 够多。回退到 100 让让出节奏稳定在约每 100 次 mr_getTime 一
-                 * 次 5ms 睡眠。 */
                 m->busy_wait_count = 100;
+                /* ret 是刚拿到的 mr_getTime() 返回值，单位 ms。 */
+                uint32_t elapsed_ms = ret - m->busy_wait_start_ms;
+                if (elapsed_ms >= 3000) {
+                    printf("[arm_ext_executor] mr_getTime busy-wait exceeded %ums (count=%u), assuming app is exiting -> mr_exit\n",
+                           elapsed_ms, m->busy_wait_count);
+                    m->busy_wait_count = 0;
+                    m->busy_wait_start_ms = 0;
+                    reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
+                    uc_emu_stop(m->uc);
+                    mr_exit();
+                }
             }
         } break;
         case 34: ret = mr_getDatetime(arm_ptr(m, r0)); break;
@@ -1266,6 +1326,12 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if (output) *output = NULL;
     if (output_len) *output_len = 0;
     if (!m || !m->helper_addr || !m->p_addr) return MR_FAILED;
+    /* 见 arm_ext_invoke0/3 中的同名注释——mr_event 走 arm_ext_call 路径时
+     * 也需要重置 event_did_work，否则上一轮事件残留的 did_work=1 会让本轮
+     * 的 SP 漂移崩溃误判，错过 mpc 退出回调那种"无 UI 工作即自旋"的特征。 */
+    m->event_did_work = 0;
+    m->busy_wait_count = 0;
+    m->busy_wait_start_ms = 0;
 
     uint32_t input_addr = 0;
     if (input != NULL) {
@@ -1324,6 +1390,11 @@ int arm_ext_invoke0(ArmExtModule *m, uint32 func, int32 *ret_out) {
     if (ret_out) *ret_out = MR_FAILED;
     if (!m || !func) return MR_FAILED;
 
+    /* 每次进入 ARM 事件 / 定时器回调前清空"是否做过实质工作"的标志，便于
+     * 在 SP 漂移崩溃时判断该回调走的是哪条路径（参见 ArmExtModule 注释）。 */
+    m->event_did_work = 0;
+    m->busy_wait_count = 0;
+    m->busy_wait_start_ms = 0;
     restore_ext_r9(m);
     reg_write32(m->uc, UC_ARM_REG_R0, 0);
     reg_write32(m->uc, UC_ARM_REG_R1, 0);
@@ -1345,6 +1416,10 @@ int arm_ext_invoke3(ArmExtModule *m, uint32 func, uint32 arg0, uint32 arg1,
     if (ret_out) *ret_out = MR_FAILED;
     if (!m || !func) return MR_FAILED;
 
+    /* 见 arm_ext_invoke0 中的同名注释。 */
+    m->event_did_work = 0;
+    m->busy_wait_count = 0;
+    m->busy_wait_start_ms = 0;
     restore_ext_r9(m);
     reg_write32(m->uc, UC_ARM_REG_R0, arg0);
     reg_write32(m->uc, UC_ARM_REG_R1, arg1);
