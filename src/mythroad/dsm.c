@@ -653,6 +653,8 @@ int32 mr_plat(int32 code, int32 param) {
             return MR_WAITING;
         case 1218:  // 查询存储卡的状态
             return MR_MSDC_OK;
+        case 1101:  // 兼容性查询 (e.g. gghjt netpay 在 adisk.sys 重命名后调用)
+            return MR_IGNORE;
         default:
             LOGW("mr_plat(code:%d, param:%d) not impl!", code, param);
             break;
