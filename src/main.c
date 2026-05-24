@@ -1,6 +1,10 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <unistd.h>
 
 #include "./include/bridge.h"
 #include "./include/vmrp.h"
@@ -320,6 +324,23 @@ void loop() {
     }
 }
 
+static void remove_dir_recursive(const char *path) {
+    DIR *d = opendir(path);
+    if (!d) return;
+    struct dirent *e;
+    char buf[4096];
+    while ((e = readdir(d)) != NULL) {
+        if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+        snprintf(buf, sizeof(buf), "%s/%s", path, e->d_name);
+        struct stat st;
+        if (lstat(buf, &st) != 0) continue;
+        if (S_ISDIR(st.st_mode)) remove_dir_recursive(buf);
+        else unlink(buf);
+    }
+    closedir(d);
+    rmdir(path);
+}
+
 int main(int argc, char *args[]) {
     if (argc > 1 && (strcmp(args[1], "-h") == 0 || strcmp(args[1], "--help") == 0)) {
         printVmrpUsage(args[0]);
@@ -328,6 +349,12 @@ int main(int argc, char *args[]) {
     if (prepareVmrpArgs(argc, args) != MR_SUCCESS) {
         return -1;
     }
+
+    /* gghjt.mrp's netpay plugin extracts files into gghjt via APPEND-style
+     * writes (MR_FILE_CREATE without truncate). A leftover folder from a
+     * prior run therefore accumulates duplicated content. Clear it before
+     * each launch. */
+    remove_dir_recursive("mythroad/gghjt");
 
 #ifdef __x86_64__
     printf("__x86_64__\n");

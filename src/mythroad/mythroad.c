@@ -61,7 +61,7 @@ int32 mr_screen_h;
 
 static int32 mr_screen_bit;
 static void* mr_timer_p;
-static int32 mr_timer_state = MR_TIMER_STATE_IDLE;
+int32 mr_timer_state = MR_TIMER_STATE_IDLE;
 int32 mr_timer_run_without_pause = FALSE;
 
 const char* mr_get_pack_filename(void) {
