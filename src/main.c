@@ -34,6 +34,10 @@
 static SDL_TimerID timeId = 0;
 static SDL_Window *window;
 static bool isMouseDown = false;
+/* timerCb 在 SDL 定时器线程中触发，直接调用 timer() 会与主线程的 event()
+ * 同时访问同一个 Unicorn ARM 引擎，引发竞态崩溃。改为向 SDL 事件队列推送
+ * 自定义事件，由主循环统一调度 timer()，保证单线程串行执行。 */
+static Uint32 timerEventType = 0;
 static bool isEditMode = false;
 static int32_t editMaxSize = 0;
 static char *holdEditText = NULL;
@@ -130,7 +134,11 @@ void setEventEnable(int v) {
 uint32_t timerCb(uint32_t interval, void *param) {
     SDL_RemoveTimer(timeId);
     timeId = 0;
-    timer();
+    /* 不在定时器线程调用 timer()，改为推送事件到主线程 */
+    SDL_Event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type = timerEventType;
+    SDL_PushEvent(&ev);
     return 0;
 }
 
@@ -387,7 +395,10 @@ void loop() {
                 }
                 continue;
             }
-            switch (ev.type) {
+            if (ev.type == timerEventType) {
+                /* 由 timerCb 推送到主线程的定时器事件 */
+                timer();
+            } else switch (ev.type) {
                 case SDL_KEYDOWN:
                     if (isKeyDown == SDLK_UNKNOWN) {
                         isKeyDown = ev.key.keysym.sym;
@@ -474,6 +485,7 @@ int main(int argc, char *args[]) {
         printf("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
         return -1;
     }
+    timerEventType = SDL_RegisterEvents(1);
 
     window = SDL_CreateWindow("vmrp", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL);
     if (window == NULL) {
