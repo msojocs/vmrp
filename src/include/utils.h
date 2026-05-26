@@ -9,21 +9,12 @@
 
 #include "types.h"
 
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
-// #ifdef _WIN64
-// #include "../windows/unicorn-1.0.1-win64/include/unicorn/unicorn.h"
-// #else
-#include "../windows/unicorn-1.0.2-win32/include/unicorn/unicorn.h"
-// #endif
-#elif defined(__linux__)
 #include <unicorn/unicorn.h>
-#endif
 
 #ifndef EM_PORT_API
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 #define EM_PORT_API(rettype) rettype EMSCRIPTEN_KEEPALIVE
-#include "../wasm/unicorn/unicorn.h"
 #else
 #define EM_PORT_API(rettype) rettype
 #endif

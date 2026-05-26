@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.5)
 project(vmrp VERSION 0.1.0 LANGUAGES C CXX)
 
 option(VMRP_USE_NATIVE_MYTHROAD "Use native x86 Mythroad instead of cfunction.ext" ON)
@@ -6,6 +6,15 @@ option(VMRP_USE_NATIVE_MYTHROAD "Use native x86 Mythroad instead of cfunction.ex
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall -DNETWORK_SUPPORT -DVMRP -funsigned-char")
+
+# --- Unicorn (submodule) ---
+# 只编译 ARM 架构，静态链接，不构建示例和测试
+set(UNICORN_ARCH "arm" CACHE STRING "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(UNICORN_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+set(UNICORN_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(UNICORN_INSTALL OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/unicorn EXCLUDE_FROM_ALL)
 
 set(VMRP_COMMON_SOURCES
   ./src/main.c
@@ -80,11 +89,13 @@ else()
   target_compile_definitions(vmrp PRIVATE VMRP_USE_NATIVE_MYTHROAD=0)
 endif()
 
-target_link_libraries(vmrp unicorn)
+target_include_directories(vmrp PRIVATE ${CMAKE_SOURCE_DIR}/third_party/unicorn/include)
 if(VMRP_USE_NATIVE_MYTHROAD)
   target_link_options(vmrp PRIVATE -Wl,--allow-multiple-definition)
 endif()
-target_link_libraries(vmrp SDL2main SDL2 m pthread z)
+# --no-as-needed 确保 libm 不被 GNU ld 按需跳过——unicorn 的内部静态库
+# （arm-softmmu）在链接顺序上排在 -lm 之后，需要其中的 sqrtf 等符号
+target_link_libraries(vmrp unicorn "-Wl,--no-as-needed" SDL2main SDL2 m pthread z)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
