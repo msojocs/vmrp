@@ -60,6 +60,7 @@ extern int32 mr_stopShake(void);
 extern int32 mr_playSound(int type, const void *data, uint32 dataLen, int32 loop);
 extern int32 mr_stopSound(int type);
 extern void mr_call(char *number);
+extern int32 mr_sendSms(char *pNumber, char *pContent, int32 encode);
 extern int32 mr_dialogCreate(const char *title, const char *text, int32 type);
 extern int32 mr_dialogRelease(int32 dialog);
 extern int32 mr_dialogRefresh(int32 dialog, const char *title, const char *text, int32 type);
@@ -905,6 +906,8 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 56: ret = mr_stopShake(); break;
         case 57: ret = mr_playSound((int)r0, arm_ptr(m, r1), r2, (int32)r3); break;
         case 58: ret = mr_stopSound((int)r0); break;
+        /* table[59] mr_sendSms(pNumber, pContent, encode) */
+        case 59: ret = mr_sendSms(arm_str(m, r0), arm_str(m, r1), (int32)r2); break;
         case 60: mr_call(arm_str(m, r0)); ret = MR_SUCCESS; break;
         /* table[61] mr_getNetworkID()：返回 0 表示移动网络（MR_NET_ID_MOBILE） */
         case 61: ret = 0; break;
@@ -926,6 +929,9 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             const char *text = mr_editGetText((int32)r0);
             ret = alloc_string(m, text ? text : "");
         } break;
+        /* table[78] mr_winCreate / table[79] mr_winRelease: 窗口功能不支持 */
+        case 78: ret = MR_IGNORE; break;
+        case 79: ret = MR_IGNORE; break;
         case 80: ret = mr_getScreenInfo(arm_ptr(m, r0)); break;
         case 113: {
             void *p = arm_ptr(m, r0);
