@@ -276,7 +276,7 @@ static int smoke_arm_ext(const char *path) {
     ArmExtModule *mod = NULL;
     const char *load_code_env = getenv("VMRP_ARM_EXT_LOAD_CODE");
     int load_code = (load_code_env && *load_code_env) ? atoi(load_code_env) : 1;
-    int ret = arm_ext_load(&mod, code, code_len, load_code);
+    int ret = arm_ext_load(&mod, code, code_len, load_code, NULL);
     printf("arm_ext_smoke_load('%s'): %d\n", path, ret);
     if (ret == MR_SUCCESS) {
         uint8 *output = NULL;
