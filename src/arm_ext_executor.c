@@ -168,6 +168,10 @@ struct ArmExtModule {
     int nested_loading;
     int screen_dirty;
     int mem_is_mmap;
+    /* 嵌套 ext 覆盖 table[31/32] 的 dispatch 函数地址 */
+    uint32_t dispatch_timer_start;
+    uint32_t dispatch_timer_stop;
+    int in_dispatch; /* 防止 dispatch -> wrapper -> table[31/32] -> dispatch 重入 */
     uc_hook hook;
 };
 
@@ -698,16 +702,12 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 31:
             ret = mr_timerStart((uint16)r0);
             internal_slot_write(m, m->mr_timer_state_slot, 1);
-            /* On real handsets MRC_TIME_START bumps mr_timer_state along
-             * with mr_timerStart; mirror that so the host-side mr_timer()
-             * doesn't bail with "warning:mr_timer event unexpected!" when
-             * SDL delivers the tick. */
-            mr_timer_state = 1; /* MR_TIMER_STATE_RUNNING */
+            mr_timer_state = 1;
             break;
         case 32:
             ret = mr_timerStop();
             internal_slot_write(m, m->mr_timer_state_slot, 0);
-            mr_timer_state = 0; /* MR_TIMER_STATE_IDLE */
+            mr_timer_state = 0;
             break;
         case 33: {
             ret = mr_getTime();
@@ -1133,6 +1133,7 @@ static void hook_restore_r9(uc_engine *uc, uint64_t address, uint32_t size, void
         m->outer_r9 = 0;
         m->nested_return_addr = 0;
     }
+
 }
 
 static void patch_wrapper_stack_size(ArmExtModule *m) {
@@ -1402,32 +1403,30 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     uint32_t helper_args[4] = {outp_addr, outl_addr, 0, 0};
     uc_mem_write(m->uc, sp, helper_args, sizeof(helper_args));
     reg_write32(m->uc, UC_ARM_REG_SP, sp);
-    /* 嵌套 ext 的 mr_c_function_load 会覆盖 table[31]/[32] 为自身地址。
-     * 当路由到嵌套 ext 的 helper 时(primary), 需要先恢复这些 table 条目
-     * 为标准 hook 地址, 否则 cf.bin wrapper 函数会跳到 game.ext 代码
-     * 而 R9 上下文错误导致崩溃。 */
-    int is_primary = (call_helper_addr == m->primary_helper_addr && m->primary_helper_addr != m->helper_addr);
-    uint32_t saved_t31 = 0, saved_t32 = 0;
-    if (is_primary) {
-        void *t31 = arm_ptr(m, EXT_TABLE_ADDR + 31 * 4);
-        void *t32 = arm_ptr(m, EXT_TABLE_ADDR + 32 * 4);
-        if (t31) { memcpy(&saved_t31, t31, 4); uint32_t v = EXT_TABLE_ADDR + 31*4; memcpy(t31, &v, 4); }
-        if (t32) { memcpy(&saved_t32, t32, 4); uint32_t v = EXT_TABLE_ADDR + 32*4; memcpy(t32, &v, 4); }
-    }
     uint16 *saved_screenBuf = NULL;
     enter_screen_context(m, &saved_screenBuf);
     int call_ret = run_arm_with_sp(m, call_helper_addr, sp);
     leave_screen_context(m, saved_screenBuf);
-    if (is_primary) {
-        void *t31 = arm_ptr(m, EXT_TABLE_ADDR + 31 * 4);
-        void *t32 = arm_ptr(m, EXT_TABLE_ADDR + 32 * 4);
-        if (t31 && saved_t31) memcpy(t31, &saved_t31, 4);
-        if (t32 && saved_t32) memcpy(t32, &saved_t32, 4);
-    }
     if (call_ret != MR_SUCCESS) return MR_FAILED;
 
-
-
+    /* 嵌套 ext 的 mr_c_function_load 将 table[31/32] (timerStart/Stop)
+     * 覆盖为 dispatch 函数（通过 P->extChunk 回调 wrapper 代码）。
+     * 当路由到嵌套 ext (primary) 时 R9 是嵌套 ext 的值，dispatch 回调
+     * wrapper 函数需要 wrapper R9，导致崩溃。
+     * 捕获 dispatch 地址并恢复为 hook，使 timer 直接通过 hook_table 处理。*/
+    if (m->primary_helper_addr && m->primary_helper_addr != m->helper_addr) {
+        uint32_t t31v = 0, t32v = 0;
+        memcpy(&t31v, arm_ptr(m, EXT_TABLE_ADDR + 31 * 4), 4);
+        memcpy(&t32v, arm_ptr(m, EXT_TABLE_ADDR + 32 * 4), 4);
+        if (t31v != EXT_TABLE_ADDR + 31 * 4) {
+            uint32_t hook = EXT_TABLE_ADDR + 31 * 4;
+            memcpy(arm_ptr(m, EXT_TABLE_ADDR + 31 * 4), &hook, 4);
+        }
+        if (t32v != EXT_TABLE_ADDR + 32 * 4) {
+            uint32_t hook = EXT_TABLE_ADDR + 32 * 4;
+            memcpy(arm_ptr(m, EXT_TABLE_ADDR + 32 * 4), &hook, 4);
+        }
+    }
 
 
     uint32_t arm_output = 0;
@@ -1447,6 +1446,46 @@ uint32 arm_ext_primary_helper(ArmExtModule *m) {
     if (!m) return 0;
     return (m->primary_helper_addr && m->primary_helper_addr != m->helper_addr)
            ? m->primary_helper_addr : 0;
+}
+
+void arm_ext_set_init_guard(ArmExtModule *m, int on) { (void)m; (void)on; }
+
+int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval) {
+    if (!m || !m->p_addr || !m->last_file_addr) return MR_FAILED;
+    /* 读取嵌套 ext 的 P 指针（存储在 [last_file_addr+4]） */
+    uint32_t nested_p = 0;
+    void *p4 = arm_ptr(m, m->last_file_addr + 4);
+    if (!p4) return MR_FAILED;
+    memcpy(&nested_p, p4, 4);
+    if (!nested_p || !arm_ptr(m, nested_p + 12)) return MR_FAILED;
+    /* 读取 P->mrc_extChunk (offset 12) */
+    uint32_t ext_chunk = 0;
+    memcpy(&ext_chunk, arm_ptr(m, nested_p + 12), 4);
+    if (!ext_chunk || !arm_ptr(m, ext_chunk + 0x28)) return MR_FAILED;
+    /* 读取目标函数 extChunk[0x28] 和参数 extChunk[0x24] */
+    uint32_t func = 0, param = 0;
+    memcpy(&func, arm_ptr(m, ext_chunk + 0x28), 4);
+    memcpy(&param, arm_ptr(m, ext_chunk + 0x24), 4);
+    if (!func) return MR_FAILED;
+    /* 以 wrapper 的 R9 调用目标函数:
+     * R0=extChunk, R1=is_stop, R2=param, R3=timer_interval */
+    uint32_t wrapper_rw = 0;
+    memcpy(&wrapper_rw, arm_ptr(m, m->p_addr), 4);
+    if (wrapper_rw) reg_write32(m->uc, UC_ARM_REG_R9, wrapper_rw);
+    reg_write32(m->uc, UC_ARM_REG_R0, ext_chunk);
+    reg_write32(m->uc, UC_ARM_REG_R1, (uint32_t)is_stop);
+    reg_write32(m->uc, UC_ARM_REG_R2, param);
+    reg_write32(m->uc, UC_ARM_REG_R3, timer_interval);
+    /* dispatch 的栈参数全为0 */
+    uint32_t sp = EXT_STACK_ADDR + EXT_STACK_SIZE - 32;
+    uint32_t stack_args[8] = {0};
+    uc_mem_write(m->uc, sp, stack_args, sizeof(stack_args));
+    reg_write32(m->uc, UC_ARM_REG_SP, sp);
+    uint16 *saved_screenBuf = NULL;
+    enter_screen_context(m, &saved_screenBuf);
+    int ret = run_arm_with_sp(m, func, sp);
+    leave_screen_context(m, saved_screenBuf);
+    return ret;
 }
 
 int arm_ext_invoke0(ArmExtModule *m, uint32 func, int32 *ret_out) {
