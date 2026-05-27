@@ -1063,7 +1063,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
 
 
 static bool hook_invalid(uc_engine *uc, uc_mem_type type, uint64_t address, int size, int64_t value, void *user_data) {
-    (void)user_data;
+    ArmExtModule *m = (ArmExtModule *)user_data;
     if (type == UC_MEM_FETCH_UNMAPPED && address == 0) {
         uint32_t lr = 0;
         uc_reg_read(uc, UC_ARM_REG_LR, &lr);
@@ -1085,8 +1085,23 @@ static bool hook_invalid(uc_engine *uc, uc_mem_type type, uint64_t address, int 
         }
         return true;
     }
-    printf("arm_ext_executor: invalid memory %s addr=0x%llX size=%d value=0x%llX\n",
-           memTypeStr(type), (unsigned long long)address, size, (unsigned long long)value);
+    {
+        uint32_t pc = reg_read32(uc, UC_ARM_REG_PC);
+        uint32_t cpsr = reg_read32(uc, UC_ARM_REG_CPSR);
+        int thumb = (cpsr >> 5) & 1;
+        printf("arm_ext_executor: invalid memory %s addr=0x%llX size=%d value=0x%llX\n",
+               memTypeStr(type), (unsigned long long)address, size, (unsigned long long)value);
+        printf("  crash PC=0x%X (%s) last_file=0x%X..0x%X\n",
+               pc, thumb ? "thumb" : "arm",
+               m->last_file_addr, m->last_file_addr + m->last_file_len);
+        /* 打印 crash PC 附近的指令字节 */
+        uint8_t bytes[16];
+        if (uc_mem_read(uc, pc, bytes, 16) == UC_ERR_OK) {
+            printf("  bytes @0x%X:", pc);
+            for (int i = 0; i < 16; i++) printf(" %02x", bytes[i]);
+            printf("\n");
+        }
+    }
     dumpREG(uc);
     return false;
 }
@@ -1349,9 +1364,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if (output) *output = NULL;
     if (output_len) *output_len = 0;
     if (!m || !m->helper_addr || !m->p_addr) return MR_FAILED;
-    /* 见 arm_ext_invoke0/3 中的同名注释——mr_event 走 arm_ext_call 路径时
-     * 也需要重置 event_did_work，否则上一轮事件残留的 did_work=1 会让本轮
-     * 的 SP 漂移崩溃误判，错过 mpc 退出回调那种"无 UI 工作即自旋"的特征。 */
     m->event_did_work = 0;
     m->busy_wait_count = 0;
     m->busy_wait_start_ms = 0;
@@ -1390,11 +1402,33 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     uint32_t helper_args[4] = {outp_addr, outl_addr, 0, 0};
     uc_mem_write(m->uc, sp, helper_args, sizeof(helper_args));
     reg_write32(m->uc, UC_ARM_REG_SP, sp);
+    /* 嵌套 ext 的 mr_c_function_load 会覆盖 table[31]/[32] 为自身地址。
+     * 当路由到嵌套 ext 的 helper 时(primary), 需要先恢复这些 table 条目
+     * 为标准 hook 地址, 否则 cf.bin wrapper 函数会跳到 game.ext 代码
+     * 而 R9 上下文错误导致崩溃。 */
+    int is_primary = (call_helper_addr == m->primary_helper_addr && m->primary_helper_addr != m->helper_addr);
+    uint32_t saved_t31 = 0, saved_t32 = 0;
+    if (is_primary) {
+        void *t31 = arm_ptr(m, EXT_TABLE_ADDR + 31 * 4);
+        void *t32 = arm_ptr(m, EXT_TABLE_ADDR + 32 * 4);
+        if (t31) { memcpy(&saved_t31, t31, 4); uint32_t v = EXT_TABLE_ADDR + 31*4; memcpy(t31, &v, 4); }
+        if (t32) { memcpy(&saved_t32, t32, 4); uint32_t v = EXT_TABLE_ADDR + 32*4; memcpy(t32, &v, 4); }
+    }
     uint16 *saved_screenBuf = NULL;
     enter_screen_context(m, &saved_screenBuf);
     int call_ret = run_arm_with_sp(m, call_helper_addr, sp);
     leave_screen_context(m, saved_screenBuf);
+    if (is_primary) {
+        void *t31 = arm_ptr(m, EXT_TABLE_ADDR + 31 * 4);
+        void *t32 = arm_ptr(m, EXT_TABLE_ADDR + 32 * 4);
+        if (t31 && saved_t31) memcpy(t31, &saved_t31, 4);
+        if (t32 && saved_t32) memcpy(t32, &saved_t32, 4);
+    }
     if (call_ret != MR_SUCCESS) return MR_FAILED;
+
+
+
+
 
     uint32_t arm_output = 0;
     uint32_t arm_output_len = 0;
@@ -1407,6 +1441,12 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
 
 uint32 arm_ext_helper_addr(ArmExtModule *m) {
     return m ? m->helper_addr : 0;
+}
+
+uint32 arm_ext_primary_helper(ArmExtModule *m) {
+    if (!m) return 0;
+    return (m->primary_helper_addr && m->primary_helper_addr != m->helper_addr)
+           ? m->primary_helper_addr : 0;
 }
 
 int arm_ext_invoke0(ArmExtModule *m, uint32 func, int32 *ret_out) {
