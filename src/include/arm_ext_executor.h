@@ -12,6 +12,8 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
 int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_len,
                  uint8 **output, int32 *output_len);
 uint32 arm_ext_helper_addr(ArmExtModule *m);
+/* 检查 ext 内部是否加载了嵌套 ext（primary），返回 primary helper 地址，0 表示无 */
+uint32 arm_ext_primary_helper(ArmExtModule *m);
 int arm_ext_invoke0(ArmExtModule *m, uint32 func, int32 *ret_out);
 int arm_ext_invoke3(ArmExtModule *m, uint32 func, uint32 arg0, uint32 arg1,
                     uint32 arg2, int32 *ret_out);
