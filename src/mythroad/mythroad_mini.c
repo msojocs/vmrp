@@ -1588,10 +1588,14 @@ static int _mr_TestComC(int input0, char* input1, int32 len, int32 code) {
 #ifdef VMRP_NATIVE
     static ArmExtModule* native_ext;
     switch (input0) {
-        case 800:
+        case 800: {
             arm_ext_unload(native_ext);
             native_ext = NULL;
-            ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code);
+            int32 ext_r0 = 0;
+            int load_ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code, &ext_r0);
+            /* 将 ARM ext 代码的返回值传给调用者，与非 native 路径一致 */
+            ret = (load_ret == MR_SUCCESS) ? ext_r0 : load_ret;
+        }
             break;
         case 801: {
             uint8* output = NULL;
