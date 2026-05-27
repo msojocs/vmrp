@@ -7,7 +7,8 @@
 
 typedef struct ArmExtModule ArmExtModule;
 
-int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_code);
+/* ext_ret: ARM 代码 mr_c_function_load() 的返回值 (R0)，供 Lua 层使用 */
+int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_code, int32 *ext_ret);
 int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_len,
                  uint8 **output, int32 *output_len);
 uint32 arm_ext_helper_addr(ArmExtModule *m);

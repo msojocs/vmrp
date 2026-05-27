@@ -2628,9 +2628,6 @@ static int MRF_BgMusicStop(mrp_State* L) {
 }
 
 static int MRF_Exit(mrp_State* L) {
-    /*这里调用内存释放，内存的内容不能被
-   清空，不然虚拟机会崩溃。如果内存会被
-   清空，使用时钟延时释放内存。*/
     // mr_mem_free(LG_mem_base, LG_mem_len);
 
     // bi = bi|MR_FLAGS_RI;
@@ -2994,7 +2991,6 @@ static int MRF_closeNet(mrp_State* L) {
 
 int _mr_TestCom(mrp_State* L, int input0, int input1) {
     int ret = 0;
-
     switch (input0) {
         case 1:
             ret = mr_getTime();
@@ -3568,9 +3564,21 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
         case 800: {
             int code = ((int)mr_L_optint(L, 3, 0));
 #ifdef VMRP_NATIVE
-            native_ext_reset();
-            ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code);
-            mrp_pushnumber(L, ret);
+            /* 延迟释放旧模块：input1 可能指向旧模块的 ARM 内存
+             * (mrc_loader 读取 cfunction.ext 后 Lua 创建的字符串)，
+             * 必须等新模块加载完成后才能释放旧模块 */
+            ArmExtModule *old_ext = native_ext;
+            native_ext = NULL;
+            native_event_function = 0;
+            native_timer_function = 0;
+            native_stop_function = 0;
+            native_pauseApp_function = 0;
+            native_resumeApp_function = 0;
+            int32 ext_r0 = 0;
+            ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code, &ext_r0);
+            arm_ext_unload(old_ext);
+            /* 将 ARM ext 代码的返回值传给 Lua，与非 native 路径一致 */
+            mrp_pushnumber(L, ret == MR_SUCCESS ? ext_r0 : ret);
             return 1;
 #else
             mr_load_c_function = (MR_LOAD_C_FUNCTION)(input1 + 8);
@@ -3588,11 +3596,8 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
         case 801: {  // 发送事件给ext
             int32 output_len, ret;
             int code = ((int)to_mr_tonumber(L, 3, 0));
-            // int32 input_len;
-            // uint8* input = (uint8*)mr_L_checklstring(L,4,(size_t*)&input_len);
             uint8* output = NULL;
             output_len = 0;
-
 #ifdef VMRP_NATIVE
             ret = arm_ext_call(native_ext, code, (uint8*)input1, (uint32)len, (uint8**)&output, &output_len);
 #else
@@ -3615,9 +3620,19 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             int32 ret;
             int code = ((int)mr_L_optint(L, 3, 0));
 #ifdef VMRP_NATIVE
-            native_ext_reset();
-            ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code);
-            mrp_pushnumber(L, ret);
+            /* 同 case 800: 延迟释放旧模块 */
+            ArmExtModule *old_ext = native_ext;
+            native_ext = NULL;
+            native_event_function = 0;
+            native_timer_function = 0;
+            native_stop_function = 0;
+            native_pauseApp_function = 0;
+            native_resumeApp_function = 0;
+            int32 ext_r0 = 0;
+            ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code, &ext_r0);
+            arm_ext_unload(old_ext);
+            /* 将 ARM ext 代码的返回值传给 Lua，与非 native 路径一致 */
+            mrp_pushnumber(L, ret == MR_SUCCESS ? ext_r0 : ret);
             return 1;
 #else
             mr_c_function_fix_p = ((int32*)mr_L_optint(L, 4, 0));
@@ -3882,7 +3897,6 @@ static int32 _mr_intra_start(char* appExName, const char* entry) {
 #endif
     ret = mrp_dofile(vm_state, appExName);
 
-    //这里需要完善
     if (ret != 0) {
         /*
         mrp_close(vm_state);
