@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h> /* for usleep in busy-wait detection */
+#include <sys/mman.h>
 #include <zlib.h>
 
 #include "./include/utils.h"
@@ -165,6 +166,7 @@ struct ArmExtModule {
     int event_did_work;
     int nested_loading;
     int screen_dirty;
+    int mem_is_mmap;
     uc_hook hook;
 };
 
@@ -1259,11 +1261,21 @@ static void init_table(ArmExtModule *m) {
     }
 }
 
-int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_code) {
+int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_code, int32 *ext_ret) {
     if (!out || !code || len < 12) return MR_FAILED;
     ArmExtModule *m = calloc(1, sizeof(*m));
     if (!m) return MR_FAILED;
-    m->mem = calloc(1, EXT_MEM_SIZE);
+    /* 在 EXT_BASE_ADDR 固定地址分配 ARM 内存，使 ARM 虚拟地址等于宿主指针，
+     * 与 unicorn 模式下 uc_mem_map_ptr 的行为一致——ext 返回的指针可被 Lua 直接使用 */
+    m->mem = mmap((void *)(uintptr_t)EXT_BASE_ADDR, EXT_MEM_SIZE,
+                  PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+    if (m->mem == MAP_FAILED) {
+        m->mem = calloc(1, EXT_MEM_SIZE);
+        m->mem_is_mmap = 0;
+    } else {
+        m->mem_is_mmap = 1;
+        memset(m->mem, 0, EXT_MEM_SIZE);
+    }
     if (!m->mem) goto fail;
     m->low_table = calloc(1, EXT_LOW_TABLE_SIZE);
     if (!m->low_table) goto fail;
@@ -1279,7 +1291,9 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     memcpy(m->low_table, m->mem, EXT_TABLE_COUNT * 4);
     err = uc_mem_map_ptr(m->uc, 0, EXT_LOW_TABLE_SIZE, UC_PROT_ALL, m->low_table);
     if (err != UC_ERR_OK) goto fail;
-    memcpy(arm_ptr(m, EXT_CODE_ADDR), code, len);
+    void *code_dst = arm_ptr(m, EXT_CODE_ADDR);
+    if (!code_dst) goto fail;
+    memcpy(code_dst, code, len);
     patch_wrapper_stack_size(m);
     uint32_t table = EXT_TABLE_ADDR;
     memcpy(arm_ptr(m, EXT_CODE_ADDR), &table, 4);
@@ -1314,6 +1328,9 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     int load_ret = run_arm(m, EXT_CODE_ADDR + 8);
     leave_screen_context(m, saved_screenBuf);
     if (load_ret != MR_SUCCESS) goto fail;
+    /* 将 ARM 代码 mr_c_function_load() 的返回值 (R0) 传给调用者，
+     * 与非 native 路径中 mr_load_c_function(code) 的返回值语义一致 */
+    if (ext_ret) *ext_ret = (int32_t)reg_read32(m->uc, UC_ARM_REG_R0);
     *out = m;
     return MR_SUCCESS;
 fail:
@@ -1440,6 +1457,9 @@ void arm_ext_unload(ArmExtModule *m) {
     if (m->uc) uc_close(m->uc);
     free(m->last_file_copy);
     free(m->low_table);
-    free(m->mem);
+    if (m->mem_is_mmap)
+        munmap(m->mem, EXT_MEM_SIZE);
+    else
+        free(m->mem);
     free(m);
 }
