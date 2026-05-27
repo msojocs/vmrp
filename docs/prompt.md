@@ -1,10 +1,10 @@
-修复执行命令`build/vmrp mythroad/mpc.mrp`启动应用后，点击界面的退出选项没有反应，预期是退出程序；
+修复执行命令`build/vmrp mythroad/xmwq.mrp`启动应用后，黑屏；
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。
 不要使用xvfb。
 修改代码要加注释，不要有兜底代码逻辑。
-你可以模拟日志的点击位置触发问题，来验证修复是否成功。
+你可以检测PPM，来验证修复是否成功。
 
 build/vmrp mythroad/mpc.mrp 
 __x86_64__
