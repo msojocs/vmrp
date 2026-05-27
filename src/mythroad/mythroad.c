@@ -3356,7 +3356,7 @@ int32 _mr_c_function_new(MR_C_FUNCTION f, int32 len) {
 // _strCom(int,str)
 int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
     int ret = 0;
-
+    /* 诊断：跟踪所有 _strCom 调用 */
     switch (input0) {
         case 2:
             if (mr_ram_file) {
@@ -3599,7 +3599,22 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             uint8* output = NULL;
             output_len = 0;
 #ifdef VMRP_NATIVE
-            ret = arm_ext_call(native_ext, code, (uint8*)input1, (uint32)len, (uint8**)&output, &output_len);
+            {
+                /* 检测 wrapper 的 extHelper(code=0) 是否加载了嵌套 ext */
+                uint32 before_primary = arm_ext_primary_helper(native_ext);
+                ret = arm_ext_call(native_ext, code, (uint8*)input1, (uint32)len, (uint8**)&output, &output_len);
+                uint32 after_primary = arm_ext_primary_helper(native_ext);
+                if (!before_primary && after_primary && code == 0) {
+                    /* 非 native 路径下 Lua 的 code=0 直接到达嵌套 ext（因为
+                     * mr_c_function 被 _mr_c_function_new 更新了）。native
+                     * 路径下 wrapper 的 code=0 加载了嵌套 ext 但未调用其
+                     * mrc_init。用 arm_ext_call 补发 code=0 给嵌套 ext
+                     * (primary路由)。code=6 无需补发：wrapper 已在 code=6
+                     * 中处理了 DSM_INIT 参数存储。 */
+                    uint8* o2 = NULL; int32 ol2 = 0;
+                    arm_ext_call(native_ext, 0, (uint8*)input1, (uint32)len, &o2, &ol2);
+                }
+            }
 #else
             // mr_printf("before mr_c_function------r9:%p  r10:%p code:%d %p---",  getR9(),getR10(), code, input1);
             fixR9_saveMythroad();
@@ -4170,7 +4185,6 @@ int32 mr_resumeApp(void) {
 }
 
 int32 mr_event(int16 type, int32 param1, int32 param2) {
-    // MRDBGPRINTF("mr_event %d %d %d", type, param1, param2);
 
     if ((mr_state == MR_STATE_RUN) || ((mr_timer_run_without_pause) && (mr_state == MR_STATE_PAUSE))) {
 #ifdef VMRP_NATIVE
