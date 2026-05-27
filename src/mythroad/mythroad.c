@@ -3608,12 +3608,14 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
                     /* 非 native 路径下 Lua 的 code=0 直接到达嵌套 ext（因为
                      * mr_c_function 被 _mr_c_function_new 更新了）。native
                      * 路径下 wrapper 的 code=0 加载了嵌套 ext 但未调用其
-                     * mrc_init。用 arm_ext_call 补发 code=0 给嵌套 ext
-                     * (primary路由)。code=6 无需补发：wrapper 已在 code=6
-                     * 中处理了 DSM_INIT 参数存储。 */
+                     * mrc_init。补发 code=0 给嵌套 ext (primary 路由)。
+                     * 嵌套 ext 的 mrc_init 通过 table[31/32] dispatch 函数
+                     * 回调 wrapper 代码，需临时恢复为标准 hook 避免 R9 冲突 */
                     uint8* o2 = NULL; int32 ol2 = 0;
+                    arm_ext_set_init_guard(native_ext, 1);
                     arm_ext_call(native_ext, 0, (uint8*)input1, (uint32)len, &o2, &ol2);
                 }
+
             }
 #else
             // mr_printf("before mr_c_function------r9:%p  r10:%p code:%d %p---",  getR9(),getR10(), code, input1);
@@ -4282,6 +4284,12 @@ int32 mr_timer(void) {
     }
     if (native_ext) {
         int32 status = native_ext_void_event(2);
+        /* 嵌套 ext 的 timer dispatch (table[31/32]) 被替换为 hook 以避免
+         * R9 冲突。此处以 wrapper R9 补充调用 dispatch 目标函数，
+         * 使 wrapper 的 timer 逻辑（退出检测等）正常执行。 */
+        if (arm_ext_primary_helper(native_ext)) {
+            arm_ext_call_dispatch(native_ext, 0, 50);
+        }
         if (status != MR_IGNORE)
             return status;
     }
