@@ -4,7 +4,7 @@
 *.exe
 *.dll
 .vscode/settings.json
-build*
+build/*
 .cache
 temp
 .omx
