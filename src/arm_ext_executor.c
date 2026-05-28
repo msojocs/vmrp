@@ -203,9 +203,6 @@ struct ArmExtModule {
     MrpCacheEntry mrp_cache[MRP_CACHE_MAX];
     int mrp_cache_count;
     MrpVirtualFd mrp_vfds[MRP_VFD_MAX];
-    /* 平坦 MRP：所有条目解压后重建的 MRP 二进制，用虚拟 fd 提供给 ARM ext */
-    uint8_t *flat_mrp;
-    uint32_t flat_mrp_len;
 };
 
 extern void _DrawPoint(int16 x, int16 y, uint16 nativecolor);
@@ -478,8 +475,6 @@ static const char *path_basename(const char *path) {
     return p ? p + 1 : path;
 }
 
-static void build_flat_mrp(ArmExtModule *m, const uint8_t *orig, uint32_t orig_len);
-
 /* 解析 MRP 并缓存所有条目（解压 gzip） */
 static void parse_mrp_cache(ArmExtModule *m, const char *mrp_path) {
     m->mrp_cache_count = 0;
@@ -555,8 +550,6 @@ static void parse_mrp_cache(ArmExtModule *m, const char *mrp_path) {
         }
         m->mrp_cache_count++;
     }
-    /* 构建平坦 MRP：ARM ext 打开 MRP 时用它替代原文件，跳过 ARM 侧解压 */
-    build_flat_mrp(m, raw, (uint32_t)sz);
     free(raw);
 }
 
@@ -590,60 +583,12 @@ static MrpVirtualFd *mrp_vfd_get(ArmExtModule *m, uint32_t fd) {
     return v->in_use ? v : NULL;
 }
 
-/* 构建"平坦 MRP"：将所有条目预解压后重建 MRP 索引。
- * ARM ext 读到的数据不再有 gzip 头——跳过极慢的 ARM 侧 inflate。
- * 若嵌套 ext 需要重定位（function pointer patching），hook_low_zero
- * 会将低地址 table 调用重定向到主表，兼容未经重定位的情况。 */
-static void build_flat_mrp(ArmExtModule *m, const uint8_t *orig, uint32_t orig_len) {
-    if (!orig || orig_len <= 240 || m->mrp_cache_count == 0) return;
-
-    uint32_t index_size = 0, data_size = 0;
-    for (int i = 0; i < m->mrp_cache_count; i++) {
-        uint32_t nlen = (uint32_t)strlen(m->mrp_cache[i].name) + 1;
-        index_size += 4 + nlen + 12;
-        data_size += m->mrp_cache[i].data_len;
-    }
-    index_size += 4;
-    uint32_t total = 240 + index_size + data_size;
-
-    uint8_t *flat = (uint8_t *)calloc(1, total);
-    if (!flat) return;
-    memcpy(flat, orig, 240);
-
-    uint32_t idx_pos = 240, dat_pos = 240 + index_size;
-    for (int i = 0; i < m->mrp_cache_count; i++) {
-        MrpCacheEntry *e = &m->mrp_cache[i];
-        uint32_t nlen = (uint32_t)strlen(e->name) + 1;
-        flat[idx_pos] = nlen & 0xFF; flat[idx_pos+1] = (nlen>>8)&0xFF;
-        flat[idx_pos+2] = (nlen>>16)&0xFF; flat[idx_pos+3] = (nlen>>24)&0xFF;
-        idx_pos += 4;
-        memcpy(flat + idx_pos, e->name, nlen);
-        idx_pos += nlen;
-        flat[idx_pos]   = dat_pos & 0xFF;       flat[idx_pos+1] = (dat_pos>>8)&0xFF;
-        flat[idx_pos+2] = (dat_pos>>16)&0xFF;   flat[idx_pos+3] = (dat_pos>>24)&0xFF;
-        flat[idx_pos+4] = e->data_len & 0xFF;   flat[idx_pos+5] = (e->data_len>>8)&0xFF;
-        flat[idx_pos+6] = (e->data_len>>16)&0xFF; flat[idx_pos+7] = (e->data_len>>24)&0xFF;
-        memset(flat + idx_pos + 8, 0, 4);
-        idx_pos += 12;
-        memcpy(flat + dat_pos, e->data, e->data_len);
-        dat_pos += e->data_len;
-    }
-    memset(flat + idx_pos, 0, 4);
-
-    m->flat_mrp = flat;
-    m->flat_mrp_len = total;
-    printf("mrp_cache: built flat MRP (%u bytes, %d entries)\n", total, m->mrp_cache_count);
-}
-
 static void mrp_cache_free(ArmExtModule *m) {
     for (int i = 0; i < m->mrp_cache_count; i++) {
         free(m->mrp_cache[i].data);
         m->mrp_cache[i].data = NULL;
     }
     m->mrp_cache_count = 0;
-    free(m->flat_mrp);
-    m->flat_mrp = NULL;
-    m->flat_mrp_len = 0;
 }
 
 /* ---- 结束 MRP 文件缓存 ---- */
@@ -966,13 +911,21 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 /* ret 是刚拿到的 mr_getTime() 返回值，单位 ms。 */
                 uint32_t elapsed_ms = ret - m->busy_wait_start_ms;
                 if (elapsed_ms >= 3000) {
-                    printf("[arm_ext_executor] mr_getTime busy-wait exceeded %ums (count=%u), assuming app is exiting -> mr_exit\n",
-                           elapsed_ms, m->busy_wait_count);
                     m->busy_wait_count = 0;
                     m->busy_wait_start_ms = 0;
-                    reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
-                    uc_emu_stop(m->uc);
-                    mr_exit();
+                    if (m->event_did_work) {
+                        /* ext 做了实质性 work（加载资源/绘制等）后进入忙等，
+                         * 说明它在等定时器驱动主循环。强制停止 ARM 执行，
+                         * 让调用方有机会启动定时器再重新进入。 */
+                        reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
+                        uc_emu_stop(m->uc);
+                    } else {
+                        printf("[arm_ext_executor] mr_getTime busy-wait exceeded %ums, assuming app is exiting -> mr_exit\n",
+                               elapsed_ms);
+                        reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
+                        uc_emu_stop(m->uc);
+                        mr_exit();
+                    }
                 }
             }
         } break;
@@ -1024,15 +977,11 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 39: ret = mr_ferrno(); break;
         case 40: {
             const char *open_name = arm_str(m, r0);
-            /* 当 ARM ext 打开 MRP 自身时，用平坦 MRP（所有条目已解压）替代，
-             * 跳过 ARM 侧极慢的 gzip 解压 */
-            if (m->flat_mrp && m->flat_mrp_len > 0) {
-                const char *pack = mr_get_pack_filename();
-                if (pack && strcmp(path_basename(open_name), path_basename(pack)) == 0) {
-                    ret = mrp_vfd_open(m, m->flat_mrp, m->flat_mrp_len);
-                    if (ret) break;
-                }
-            }
+            /* 不替换 MRP 文件为平坦 MRP：部分 ext（如 mrpinfo 的 cfunction.ext）
+             * 在加载嵌套 ext 时会读取 MRP 内的 gzip 头来判断是否需要解压。
+             * 平坦 MRP 把所有条目预解压后重建索引，导致 ext 找不到 gzip 魔数而
+             * 跳过加载。直接使用原始 MRP 文件可避免此问题；ext 随后通过
+             * table[125](_mr_readFile) 读取解压数据时仍走 MRP 缓存，不会重复解压。 */
             ret = mr_open(open_name, r1);
             /* 磁盘上找不到时尝试从 MRP 缓存提供虚拟 fd */
             if (ret == 0 && m->mrp_cache_count > 0) {
@@ -1707,25 +1656,30 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     uint32_t helper_args[4] = {outp_addr, outl_addr, 0, 0};
     uc_mem_write(m->uc, sp, helper_args, sizeof(helper_args));
     reg_write32(m->uc, UC_ARM_REG_SP, sp);
+
+    int patch_primary_table = call_helper_addr == m->primary_helper_addr &&
+                              m->primary_helper_addr != m->helper_addr;
+    uint32_t table31_addr = EXT_TABLE_ADDR + 31 * 4;
+    uint32_t table32_addr = EXT_TABLE_ADDR + 32 * 4;
+    uint32_t saved_t31 = 0, saved_t32 = 0;
+    if (patch_primary_table) {
+        /* nested ext 会覆盖 table[31/32]，调用 primary helper 时临时恢复 hook 以保持正确 R9/context。 */
+        memcpy(&saved_t31, arm_ptr(m, table31_addr), 4);
+        memcpy(&saved_t32, arm_ptr(m, table32_addr), 4);
+        memcpy(arm_ptr(m, table31_addr), &table31_addr, 4);
+        memcpy(arm_ptr(m, table32_addr), &table32_addr, 4);
+    }
+
     uint16 *saved_screenBuf = NULL;
     enter_screen_context(m, &saved_screenBuf);
     int call_ret = run_arm_with_sp(m, call_helper_addr, sp);
     leave_screen_context(m, saved_screenBuf);
-    if (call_ret != MR_SUCCESS) return MR_FAILED;
 
-    if (m->primary_helper_addr && m->primary_helper_addr != m->helper_addr) {
-        uint32_t t31v = 0, t32v = 0;
-        memcpy(&t31v, arm_ptr(m, EXT_TABLE_ADDR + 31 * 4), 4);
-        memcpy(&t32v, arm_ptr(m, EXT_TABLE_ADDR + 32 * 4), 4);
-        if (t31v != EXT_TABLE_ADDR + 31 * 4) {
-            uint32_t hook = EXT_TABLE_ADDR + 31 * 4;
-            memcpy(arm_ptr(m, EXT_TABLE_ADDR + 31 * 4), &hook, 4);
-        }
-        if (t32v != EXT_TABLE_ADDR + 32 * 4) {
-            uint32_t hook = EXT_TABLE_ADDR + 32 * 4;
-            memcpy(arm_ptr(m, EXT_TABLE_ADDR + 32 * 4), &hook, 4);
-        }
+    if (patch_primary_table) {
+        memcpy(arm_ptr(m, table31_addr), &saved_t31, 4);
+        memcpy(arm_ptr(m, table32_addr), &saved_t32, 4);
     }
+    if (call_ret != MR_SUCCESS) return MR_FAILED;
 
     uint32_t arm_output = 0;
     uint32_t arm_output_len = 0;
@@ -1745,8 +1699,6 @@ uint32 arm_ext_primary_helper(ArmExtModule *m) {
     return (m->primary_helper_addr && m->primary_helper_addr != m->helper_addr)
            ? m->primary_helper_addr : 0;
 }
-
-void arm_ext_set_init_guard(ArmExtModule *m, int on) { (void)m; (void)on; }
 
 uint32 arm_ext_read_timer_queue(ArmExtModule *m) {
     if (!m || !m->primary_p_addr) return 0;
@@ -1780,7 +1732,12 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
      * R0=extChunk, R1=is_stop, R2=param, R3=timer_interval */
     uint32_t wrapper_rw = 0;
     memcpy(&wrapper_rw, arm_ptr(m, m->p_addr), 4);
-    if (wrapper_rw) reg_write32(m->uc, UC_ARM_REG_R9, wrapper_rw);
+    /* wrapper 的 RW 段基址由 ARM ext 在 mr_c_function_load 期间设置。
+     * 部分 wrapper（如 mrpinfo 的 cfunction.ext）在 Unicorn 环境下
+     * 不初始化 R9，导致 P[0]=0。此时 dispatch 无法正确访问 wrapper 数据，
+     * 跳过即可——primary ext 的定时器仍可通过 arm_ext_call(code=2) 驱动。 */
+    if (!wrapper_rw) return MR_FAILED;
+    reg_write32(m->uc, UC_ARM_REG_R9, wrapper_rw);
     reg_write32(m->uc, UC_ARM_REG_R0, ext_chunk);
     reg_write32(m->uc, UC_ARM_REG_R1, (uint32_t)is_stop);
     reg_write32(m->uc, UC_ARM_REG_R2, param);

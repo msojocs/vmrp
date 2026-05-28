@@ -1,10 +1,13 @@
-修复执行命令`build/vmrp mythroad/nes.mrp`启动应用后，黑屏；
+修复执行命令`build/vmrp mythroad/mrpinfo.mrp`启动应用后，黑屏；
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。
 不要使用xvfb。
 修改代码要加注释，不要有兜底代码逻辑。
 你可以检测PPM，来验证修复是否成功。
+
+注意要兼容`build/vmrp mythroad/nes.mrp`
+`build/vmrp mythroad/dota.mrp`
 
 build/vmrp mythroad/mpc.mrp 
 __x86_64__
