@@ -1,4 +1,4 @@
-修复执行命令`build/vmrp mythroad/xmwq.mrp`启动应用后，黑屏；
+修复执行命令`build/vmrp mythroad/nes.mrp`启动应用后，黑屏；
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。

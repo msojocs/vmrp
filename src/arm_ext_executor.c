@@ -78,6 +78,9 @@ extern int32 _DispUpEx(int16 x, int16 y, uint16 w, uint16 h);
 extern uint16 *c2u(const char *cp, int *err, int *size);
 extern int wstrlen(char *txt);
 
+/* mrporting.h 中定义的 mr_info 返回值，此处直接使用数值避免引入额外头文件 */
+#define MRP_IS_FILE 1
+
 #define EXT_BASE_ADDR 0x00010000u
 #define EXT_MEM_SIZE  (16u * 1024u * 1024u)
 #define EXT_TABLE_ADDR EXT_BASE_ADDR
@@ -88,7 +91,9 @@ extern int wstrlen(char *txt);
 #define EXT_HEAP_ADDR 0x00200000u
 #define EXT_STOP_ADDR 0x0007FFF0u
 #define EXT_WRAPPER_STACK_SIZE 0x20000u
-#define EXT_LOW_TABLE_SIZE 0x1000u
+/* 部分 ARM ext 会跳转到 0x1000 等超出原 0x1000 边界的地址，
+ * 扩大低地址映射以覆盖这些跳转目标。 */
+#define EXT_LOW_TABLE_SIZE 0x2000u
 #define EXT_TRACE_PC_RING 64u
 
 typedef struct mr_c_function_P_t {
@@ -98,6 +103,26 @@ typedef struct mr_c_function_P_t {
     uint32 mrc_extChunk;
     int32 stack;
 } mr_c_function_P_t;
+
+/* MRP 文件缓存：预解析 MRP 包内的所有条目并缓存解压后的数据，
+ * 避免 ARM ext 在 Unicorn 下做极慢的 MRP 索引扫描。 */
+#define MRP_CACHE_MAX 16
+#define MRP_VFD_MAX 4
+#define MRP_VFD_BASE 0x7FFF0000u
+
+typedef struct MrpCacheEntry {
+    char name[128];
+    uint8_t *data;
+    uint32_t data_len;
+} MrpCacheEntry;
+
+/* 虚拟文件描述符：缓存条目被 open 后通过虚拟 fd 提供 read/seek/close */
+typedef struct MrpVirtualFd {
+    int in_use;
+    const uint8_t *data;
+    uint32_t data_len;
+    uint32_t pos;
+} MrpVirtualFd;
 
 struct ArmExtModule {
     uc_engine *uc;
@@ -174,6 +199,13 @@ struct ArmExtModule {
     uint32_t dispatch_timer_stop;
     int in_dispatch; /* 防止 dispatch -> wrapper -> table[31/32] -> dispatch 重入 */
     uc_hook hook;
+    /* MRP 文件缓存：避免 ARM ext 在 Unicorn 下做极慢的 MRP 索引扫描 */
+    MrpCacheEntry mrp_cache[MRP_CACHE_MAX];
+    int mrp_cache_count;
+    MrpVirtualFd mrp_vfds[MRP_VFD_MAX];
+    /* 平坦 MRP：所有条目解压后重建的 MRP 二进制，用虚拟 fd 提供给 ARM ext */
+    uint8_t *flat_mrp;
+    uint32_t flat_mrp_len;
 };
 
 extern void _DrawPoint(int16 x, int16 y, uint16 nativecolor);
@@ -433,6 +465,189 @@ static int format_arm(ArmExtModule *m, char *dst, size_t dst_size, const char *f
     return (int)out;
 }
 
+/* ---- MRP 文件缓存实现 ---- */
+
+static uint32_t mrp_rd32le(const uint8_t *p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static const char *path_basename(const char *path) {
+    const char *p = strrchr(path, '/');
+    const char *q = strrchr(path, '\\');
+    if (q && (!p || q > p)) p = q;
+    return p ? p + 1 : path;
+}
+
+static void build_flat_mrp(ArmExtModule *m, const uint8_t *orig, uint32_t orig_len);
+
+/* 解析 MRP 并缓存所有条目（解压 gzip） */
+static void parse_mrp_cache(ArmExtModule *m, const char *mrp_path) {
+    m->mrp_cache_count = 0;
+    if (!mrp_path || !*mrp_path) return;
+
+    FILE *fp = fopen(mrp_path, "rb");
+    if (!fp) return;
+    fseek(fp, 0, SEEK_END);
+    long sz = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    if (sz <= 240) { fclose(fp); return; }
+
+    uint8_t *raw = (uint8_t *)malloc((size_t)sz);
+    if (!raw) { fclose(fp); return; }
+    if (fread(raw, 1, (size_t)sz, fp) != (size_t)sz) { free(raw); fclose(fp); return; }
+    fclose(fp);
+
+    if (memcmp(raw, "MRPG", 4) != 0) { free(raw); return; }
+
+    uint32_t pos = 240;
+    while (pos + 16 <= (uint32_t)sz && m->mrp_cache_count < MRP_CACHE_MAX) {
+        uint32_t name_len = mrp_rd32le(raw + pos);
+        pos += 4;
+        if (name_len == 0 || name_len > 255 || pos + name_len + 12 > (uint32_t)sz) break;
+        char entry_name[256];
+        uint32_t copy_len = name_len < sizeof(entry_name) - 1 ? name_len : sizeof(entry_name) - 1;
+        memcpy(entry_name, raw + pos, copy_len);
+        entry_name[copy_len] = '\0';
+        /* 去除尾部 null（MRP 条目名含 null 终止符算在 name_len 中） */
+        if (copy_len > 0 && entry_name[copy_len - 1] == '\0') copy_len--;
+        pos += name_len;
+        uint32_t off = mrp_rd32le(raw + pos);
+        uint32_t packed_len = mrp_rd32le(raw + pos + 4);
+        pos += 12;
+        if (off >= (uint32_t)sz || packed_len > (uint32_t)sz - off) continue;
+
+        MrpCacheEntry *e = &m->mrp_cache[m->mrp_cache_count];
+        strncpy(e->name, entry_name, sizeof(e->name) - 1);
+        e->name[sizeof(e->name) - 1] = '\0';
+
+        /* gzip 压缩的条目在宿主侧解压 */
+        if (packed_len >= 2 && raw[off] == 0x1f && raw[off + 1] == 0x8b) {
+            z_stream zs;
+            memset(&zs, 0, sizeof(zs));
+            if (inflateInit2(&zs, 16 + MAX_WBITS) != Z_OK) continue;
+            uint32_t cap = packed_len * 4 + 4096;
+            uint8_t *out = (uint8_t *)malloc(cap);
+            if (!out) { inflateEnd(&zs); continue; }
+            zs.next_in = raw + off;
+            zs.avail_in = packed_len;
+            int zret;
+            do {
+                if (zs.total_out == cap) {
+                    uint32_t new_cap = cap * 2;
+                    uint8_t *nb = (uint8_t *)realloc(out, new_cap);
+                    if (!nb) { free(out); out = NULL; break; }
+                    out = nb;
+                    cap = new_cap;
+                }
+                zs.next_out = out + zs.total_out;
+                zs.avail_out = cap - (uint32_t)zs.total_out;
+                zret = inflate(&zs, Z_NO_FLUSH);
+            } while (zret == Z_OK);
+            if (!out || zret != Z_STREAM_END) { free(out); inflateEnd(&zs); continue; }
+            e->data = out;
+            e->data_len = (uint32_t)zs.total_out;
+            inflateEnd(&zs);
+        } else {
+            e->data = (uint8_t *)malloc(packed_len);
+            if (!e->data) continue;
+            memcpy(e->data, raw + off, packed_len);
+            e->data_len = packed_len;
+        }
+        m->mrp_cache_count++;
+    }
+    /* 构建平坦 MRP：ARM ext 打开 MRP 时用它替代原文件，跳过 ARM 侧解压 */
+    build_flat_mrp(m, raw, (uint32_t)sz);
+    free(raw);
+}
+
+/* 按 basename 在缓存中查找条目 */
+static MrpCacheEntry *mrp_cache_find(ArmExtModule *m, const char *filename) {
+    const char *base = path_basename(filename);
+    for (int i = 0; i < m->mrp_cache_count; i++) {
+        if (strcmp(path_basename(m->mrp_cache[i].name), base) == 0)
+            return &m->mrp_cache[i];
+    }
+    return NULL;
+}
+
+/* 分配一个虚拟 fd 并绑定到指定数据 */
+static uint32_t mrp_vfd_open(ArmExtModule *m, const uint8_t *data, uint32_t len) {
+    for (int i = 0; i < MRP_VFD_MAX; i++) {
+        if (!m->mrp_vfds[i].in_use) {
+            m->mrp_vfds[i].in_use = 1;
+            m->mrp_vfds[i].data = data;
+            m->mrp_vfds[i].data_len = len;
+            m->mrp_vfds[i].pos = 0;
+            return MRP_VFD_BASE + (uint32_t)i + 1;
+        }
+    }
+    return 0;
+}
+
+static MrpVirtualFd *mrp_vfd_get(ArmExtModule *m, uint32_t fd) {
+    if (fd <= MRP_VFD_BASE || fd > MRP_VFD_BASE + MRP_VFD_MAX) return NULL;
+    MrpVirtualFd *v = &m->mrp_vfds[fd - MRP_VFD_BASE - 1];
+    return v->in_use ? v : NULL;
+}
+
+/* 构建"平坦 MRP"：将所有条目预解压后重建 MRP 索引。
+ * ARM ext 读到的数据不再有 gzip 头——跳过极慢的 ARM 侧 inflate。
+ * 若嵌套 ext 需要重定位（function pointer patching），hook_low_zero
+ * 会将低地址 table 调用重定向到主表，兼容未经重定位的情况。 */
+static void build_flat_mrp(ArmExtModule *m, const uint8_t *orig, uint32_t orig_len) {
+    if (!orig || orig_len <= 240 || m->mrp_cache_count == 0) return;
+
+    uint32_t index_size = 0, data_size = 0;
+    for (int i = 0; i < m->mrp_cache_count; i++) {
+        uint32_t nlen = (uint32_t)strlen(m->mrp_cache[i].name) + 1;
+        index_size += 4 + nlen + 12;
+        data_size += m->mrp_cache[i].data_len;
+    }
+    index_size += 4;
+    uint32_t total = 240 + index_size + data_size;
+
+    uint8_t *flat = (uint8_t *)calloc(1, total);
+    if (!flat) return;
+    memcpy(flat, orig, 240);
+
+    uint32_t idx_pos = 240, dat_pos = 240 + index_size;
+    for (int i = 0; i < m->mrp_cache_count; i++) {
+        MrpCacheEntry *e = &m->mrp_cache[i];
+        uint32_t nlen = (uint32_t)strlen(e->name) + 1;
+        flat[idx_pos] = nlen & 0xFF; flat[idx_pos+1] = (nlen>>8)&0xFF;
+        flat[idx_pos+2] = (nlen>>16)&0xFF; flat[idx_pos+3] = (nlen>>24)&0xFF;
+        idx_pos += 4;
+        memcpy(flat + idx_pos, e->name, nlen);
+        idx_pos += nlen;
+        flat[idx_pos]   = dat_pos & 0xFF;       flat[idx_pos+1] = (dat_pos>>8)&0xFF;
+        flat[idx_pos+2] = (dat_pos>>16)&0xFF;   flat[idx_pos+3] = (dat_pos>>24)&0xFF;
+        flat[idx_pos+4] = e->data_len & 0xFF;   flat[idx_pos+5] = (e->data_len>>8)&0xFF;
+        flat[idx_pos+6] = (e->data_len>>16)&0xFF; flat[idx_pos+7] = (e->data_len>>24)&0xFF;
+        memset(flat + idx_pos + 8, 0, 4);
+        idx_pos += 12;
+        memcpy(flat + dat_pos, e->data, e->data_len);
+        dat_pos += e->data_len;
+    }
+    memset(flat + idx_pos, 0, 4);
+
+    m->flat_mrp = flat;
+    m->flat_mrp_len = total;
+    printf("mrp_cache: built flat MRP (%u bytes, %d entries)\n", total, m->mrp_cache_count);
+}
+
+static void mrp_cache_free(ArmExtModule *m) {
+    for (int i = 0; i < m->mrp_cache_count; i++) {
+        free(m->mrp_cache[i].data);
+        m->mrp_cache[i].data = NULL;
+    }
+    m->mrp_cache_count = 0;
+    free(m->flat_mrp);
+    m->flat_mrp = NULL;
+    m->flat_mrp_len = 0;
+}
+
+/* ---- 结束 MRP 文件缓存 ---- */
+
 static void write_table_entry(ArmExtModule *m, uint32_t index, uint32_t value) {
     memcpy((uint8_t *)arm_ptr(m, EXT_TABLE_ADDR + index * 4), &value, 4);
 }
@@ -509,17 +724,29 @@ static void cb_ret(ArmExtModule *m, uint32_t ret) {
     reg_write32(m->uc, UC_ARM_REG_PC, lr);
 }
 
+/* ARM ext 跳转到低地址区（0x0 ~ EXT_LOW_TABLE_SIZE）时的处理。
+ *
+ * 两种场景会到这里：
+ * a) 未经重定位的嵌套 ext 用低地址 table 指针（如 0x8 = table[2]），
+ *    发生在宿主侧预解压后跳过了 ARM 侧的重定位。此时应将执行重定向
+ *    到主表对应条目，由 hook_table 正常分发。
+ * b) 无效跳转（如 0x1000），按 return-to-LR 兜底。 */
 static void hook_low_zero(uc_engine *uc, uint64_t address, uint32_t size, void *user_data) {
     (void)size;
     ArmExtModule *m = (ArmExtModule *)user_data;
-    if (address != 0) return;
+    /* 场景 a：未经重定位的 ext 通过低地址调用 table 函数。
+     * 不做真实分发（参数可能是给嵌套 ext 函数而非 table 函数的），
+     * 安全地返回 0（NULL/失败），让调用方走错误处理路径。 */
+    if (address < EXT_TABLE_COUNT * 4) {
+        reg_write32(uc, UC_ARM_REG_R0, 0);
+    }
+    /* 场景 b：超出 table 范围 → return to LR */
     uint32_t lr = reg_read32(uc, UC_ARM_REG_LR);
     if (lr) {
         set_arm_mode_for_addr(m, lr);
         reg_write32(uc, UC_ARM_REG_PC, lr);
     } else {
-        uint32_t pc = EXT_STOP_ADDR;
-        reg_write32(uc, UC_ARM_REG_PC, pc);
+        reg_write32(uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
         uc_emu_stop(uc);
     }
 }
@@ -795,9 +1022,40 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             }
         } break;
         case 39: ret = mr_ferrno(); break;
-        case 40: ret = mr_open(arm_str(m, r0), r1); break;
-        case 41: ret = mr_close((int32)r0); break;
-        case 42: ret = mr_info(arm_str(m, r0)); break;
+        case 40: {
+            const char *open_name = arm_str(m, r0);
+            /* 当 ARM ext 打开 MRP 自身时，用平坦 MRP（所有条目已解压）替代，
+             * 跳过 ARM 侧极慢的 gzip 解压 */
+            if (m->flat_mrp && m->flat_mrp_len > 0) {
+                const char *pack = mr_get_pack_filename();
+                if (pack && strcmp(path_basename(open_name), path_basename(pack)) == 0) {
+                    ret = mrp_vfd_open(m, m->flat_mrp, m->flat_mrp_len);
+                    if (ret) break;
+                }
+            }
+            ret = mr_open(open_name, r1);
+            /* 磁盘上找不到时尝试从 MRP 缓存提供虚拟 fd */
+            if (ret == 0 && m->mrp_cache_count > 0) {
+                MrpCacheEntry *ce = mrp_cache_find(m, open_name);
+                if (ce) {
+                    ret = mrp_vfd_open(m, ce->data, ce->data_len);
+                }
+            }
+        } break;
+        case 41: {
+            MrpVirtualFd *vf = mrp_vfd_get(m, r0);
+            if (vf) { vf->in_use = 0; ret = MR_SUCCESS; }
+            else ret = mr_close((int32)r0);
+        } break;
+        case 42: {
+            const char *info_name = arm_str(m, r0);
+            ret = mr_info(info_name);
+            /* 磁盘上不存在时检查 MRP 缓存 */
+            if (ret != MRP_IS_FILE && m->mrp_cache_count > 0) {
+                if (mrp_cache_find(m, info_name))
+                    ret = MRP_IS_FILE;
+            }
+        } break;
         case 43: {
             void *src = arm_ptr(m, r1);
             uint32_t len = r2;
@@ -844,7 +1102,17 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         } break;
         case 44: {
             void *hp = arm_ptr(m, r1);
-            ret = mr_read((int32)r0, hp, r2);
+            MrpVirtualFd *vf44 = mrp_vfd_get(m, r0);
+            if (vf44) {
+                /* 从 MRP 缓存读取 */
+                uint32_t avail = vf44->pos < vf44->data_len ? vf44->data_len - vf44->pos : 0;
+                uint32_t n = r2 < avail ? r2 : avail;
+                if (n && hp) memcpy(hp, vf44->data + vf44->pos, n);
+                vf44->pos += n;
+                ret = (int32_t)n;
+            } else {
+                ret = mr_read((int32)r0, hp, r2);
+            }
             /* See case 43 for the netpay extraction workaround. Track every
              * sizable read that looks like a gzip-compressed chunk so we can
              * substitute the decompressed payload at write time. */
@@ -890,8 +1158,29 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 }
             }
         } break;
-        case 45: ret = mr_seek((int32)r0, (int32)r1, (int)r2); break;
-        case 46: ret = mr_getLen(arm_str(m, r0)); break;
+        case 45: {
+            MrpVirtualFd *vf45 = mrp_vfd_get(m, r0);
+            if (vf45) {
+                /* SEEK_SET=0, SEEK_CUR=1, SEEK_END=2 */
+                int32_t new_pos;
+                if ((int)r2 == 0) new_pos = (int32_t)r1;
+                else if ((int)r2 == 1) new_pos = (int32_t)vf45->pos + (int32_t)r1;
+                else new_pos = (int32_t)vf45->data_len + (int32_t)r1;
+                if (new_pos < 0) new_pos = 0;
+                if ((uint32_t)new_pos > vf45->data_len) new_pos = (int32_t)vf45->data_len;
+                vf45->pos = (uint32_t)new_pos;
+                ret = MR_SUCCESS;
+            } else {
+                ret = mr_seek((int32)r0, (int32)r1, (int)r2);
+            }
+        } break;
+        case 46: {
+            ret = mr_getLen(arm_str(m, r0));
+            if (ret < 0 && m->mrp_cache_count > 0) {
+                MrpCacheEntry *ce = mrp_cache_find(m, arm_str(m, r0));
+                if (ce) ret = (int32_t)ce->data_len;
+            }
+        } break;
         case 47: ret = mr_remove(arm_str(m, r0)); break;
         case 48: ret = mr_rename(arm_str(m, r0), arm_str(m, r1)); break;
         case 49: ret = mr_mkDir(arm_str(m, r0)); break;
@@ -1307,6 +1596,8 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     err = uc_mem_map_ptr(m->uc, EXT_BASE_ADDR, EXT_MEM_SIZE, UC_PROT_ALL, m->mem);
     if (err != UC_ERR_OK) goto fail;
     init_table(m);
+    /* 预解析 MRP，缓存所有条目，避免 ARM ext 做极慢的 MRP 索引扫描 */
+    parse_mrp_cache(m, mr_get_pack_filename());
     memcpy(m->low_table, m->mem, EXT_TABLE_COUNT * 4);
     err = uc_mem_map_ptr(m->uc, 0, EXT_LOW_TABLE_SIZE, UC_PROT_ALL, m->low_table);
     if (err != UC_ERR_OK) goto fail;
@@ -1557,6 +1848,7 @@ int arm_ext_invoke3(ArmExtModule *m, uint32 func, uint32 arg0, uint32 arg1,
 
 void arm_ext_unload(ArmExtModule *m) {
     if (!m) return;
+    mrp_cache_free(m);
     if (m->uc) uc_close(m->uc);
     free(m->last_file_copy);
     free(m->low_table);
