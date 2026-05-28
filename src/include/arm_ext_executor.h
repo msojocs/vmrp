@@ -20,6 +20,7 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32 timer_interval);
 int arm_ext_invoke0(ArmExtModule *m, uint32 func, int32 *ret_out);
 int arm_ext_invoke3(ArmExtModule *m, uint32 func, uint32 arg0, uint32 arg1,
                     uint32 arg2, int32 *ret_out);
+uint32 arm_ext_read_timer_queue(ArmExtModule *m);
 void arm_ext_unload(ArmExtModule *m);
 
 #endif
