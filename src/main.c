@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -438,6 +439,9 @@ void loop() {
 }
 
 int main(int argc, char *args[]) {
+#ifndef _WIN32
+    signal(SIGPIPE, SIG_IGN);
+#endif
     if (argc > 1 && (strcmp(args[1], "-h") == 0 || strcmp(args[1], "--help") == 0)) {
         printVmrpUsage(args[0]);
         return 0;
