@@ -3602,12 +3602,8 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
                 uint32 after_primary = arm_ext_primary_helper(native_ext);
                 if (!before_primary && after_primary && code == 0) {
                     uint8* o2 = NULL; int32 ol2 = 0;
-                    arm_ext_set_init_guard(native_ext, 1);
+                    /* native 模式下 wrapper code=0 只会加载 primary ext，需要再发送 init 完成与非 native 路径一致的 handoff。 */
                     arm_ext_call(native_ext, 0, (uint8*)input1, (uint32)len, &o2, &ol2);
-                    mr_timer_p = (void*)"dealtimer";
-                    if (mr_timer_state != MR_TIMER_STATE_RUNNING) {
-                        MR_TIME_START(100);
-                    }
                 }
 
             }
@@ -3927,6 +3923,21 @@ static int32 _mr_intra_start(char* appExName, const char* entry) {
     // MRDBGPRINTF("after gc %d", mr_getTime());
 
     MRDBGPRINTF("After app init, memory left:%d", LG_mem_left);
+
+    /* ext 的 init 可能在 Unicorn 内推迟了 game.ext 的加载，导致定时器
+     * 没有在 code=0 期间启动。如果 Lua 侧定义了 "dealtimer" 但定时器
+     * 仍处于空闲状态，在这里补启定时器，让后续 mr_timer() 正常驱动
+     * ext 完成 game.ext 的延迟加载并开始渲染。 */
+    if (mr_timer_state == MR_TIMER_STATE_IDLE && mr_state == MR_STATE_RUN) {
+        mrp_getglobal(vm_state, "dealtimer");
+        int has_dt = mrp_isfunction(vm_state, -1);
+        mrp_pop(vm_state, 1);
+        if (has_dt) {
+            mr_timer_p = (void*)"dealtimer";
+            MR_TIME_START(100);
+        }
+    }
+
     LUADBGPRINTF("After VM do file");
     return MR_SUCCESS;
 }
