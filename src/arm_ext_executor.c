@@ -147,6 +147,7 @@ struct ArmExtModule {
     uint32_t active_helper_addr;
     uint32_t primary_p_addr;       // First nested EXT is the app logic; later nested EXTs can be helpers.
     uint32_t primary_helper_addr;
+    uint32_t primary_file_addr;    // Code base of the first nested EXT (for code[4] updates).
     uint32_t outer_r9;
     uint32_t nested_return_addr;
     uint32_t screen_write_count;
@@ -631,28 +632,25 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             if (p_addr && !reuse_nested_p) memset(arm_ptr(m, p_addr), 0, p_len);
             if (nested) {
                 memcpy(arm_ptr(m, m->last_file_addr + 4), &p_addr, 4);
-                /*
-                 * Plug-in wrapper EXT code keeps the active nested
-                 * mr_c_function pointer in its own R9-relative runtime block.
-                 * Native _mr_c_function_new updates the global dispatcher; in
-                 * this split executor the wrapper remains the dispatcher, so
-                 * mirror the nested helper into that slot for subsequent
-                 * code-6/code-8/code-0 forwarding.
-                 */
-                uint32_t outer_r9 = reg_read32(m->uc, UC_ARM_REG_R9);
-                uint32_t helper_slot = outer_r9 + 0x1c4u;
-                if (arm_ptr(m, helper_slot)) {
-                    memcpy(arm_ptr(m, helper_slot), &r0, 4);
+                uint32_t wrapper_rw = 0;
+                memcpy(&wrapper_rw, arm_ptr(m, m->p_addr), 4);
+                if (wrapper_rw) {
+                    uint32_t callback_slot = wrapper_rw + 0x1A0u;
+                    if (arm_ptr(m, callback_slot))
+                        memcpy(arm_ptr(m, callback_slot), &r0, 4);
                 }
                 m->active_helper_addr = r0;
                 m->active_p_addr = p_addr;
                 if (!m->primary_helper_addr) {
                     m->primary_helper_addr = r0;
                     m->primary_p_addr = p_addr;
+                    m->primary_file_addr = m->last_file_addr;
+                } else if (m->primary_file_addr) {
+                    memcpy(arm_ptr(m, m->primary_file_addr + 4), &p_addr, 4);
                 }
                 if (getenv("VMRP_ARM_EXT_TRACE")) {
-                    printf("arm_ext_executor: nested helper=0x%X P=0x%X len=%u slot=0x%X primary=0x%X/0x%X\n",
-                           r0, p_addr, r1, helper_slot, m->primary_helper_addr, m->primary_p_addr);
+                    printf("arm_ext_executor: nested helper=0x%X P=0x%X len=%u primary=0x%X/0x%X\n",
+                           r0, p_addr, r1, m->primary_helper_addr, m->primary_p_addr);
                 }
                 m->nested_loading = 1;
                 m->nested_p_addr = 0;
@@ -1133,7 +1131,6 @@ static void hook_restore_r9(uc_engine *uc, uint64_t address, uint32_t size, void
         m->outer_r9 = 0;
         m->nested_return_addr = 0;
     }
-
 }
 
 static void patch_wrapper_stack_size(ArmExtModule *m) {
@@ -1350,6 +1347,22 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     int load_ret = run_arm(m, EXT_CODE_ADDR + 8);
     leave_screen_context(m, saved_screenBuf);
     if (load_ret != MR_SUCCESS) goto fail;
+    /* 嵌套 ext 可能在 mr_c_function_load 期间就被加载（如 dota.mrp 的
+     * cfunction.ext 在 load 阶段就加载 game.ext），此时 table[31/32]
+     * 已被覆盖为 dispatch 地址。提前捕获并恢复为 hook。 */
+    if (m->primary_helper_addr && m->primary_helper_addr != m->helper_addr) {
+        uint32_t t31v = 0, t32v = 0;
+        memcpy(&t31v, arm_ptr(m, EXT_TABLE_ADDR + 31 * 4), 4);
+        memcpy(&t32v, arm_ptr(m, EXT_TABLE_ADDR + 32 * 4), 4);
+        if (t31v != EXT_TABLE_ADDR + 31 * 4) {
+            uint32_t hook = EXT_TABLE_ADDR + 31 * 4;
+            memcpy(arm_ptr(m, EXT_TABLE_ADDR + 31 * 4), &hook, 4);
+        }
+        if (t32v != EXT_TABLE_ADDR + 32 * 4) {
+            uint32_t hook = EXT_TABLE_ADDR + 32 * 4;
+            memcpy(arm_ptr(m, EXT_TABLE_ADDR + 32 * 4), &hook, 4);
+        }
+    }
     /* 将 ARM 代码 mr_c_function_load() 的返回值 (R0) 传给调用者，
      * 与非 native 路径中 mr_load_c_function(code) 的返回值语义一致 */
     if (ext_ret) *ext_ret = (int32_t)reg_read32(m->uc, UC_ARM_REG_R0);
@@ -1409,11 +1422,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     leave_screen_context(m, saved_screenBuf);
     if (call_ret != MR_SUCCESS) return MR_FAILED;
 
-    /* 嵌套 ext 的 mr_c_function_load 将 table[31/32] (timerStart/Stop)
-     * 覆盖为 dispatch 函数（通过 P->extChunk 回调 wrapper 代码）。
-     * 当路由到嵌套 ext (primary) 时 R9 是嵌套 ext 的值，dispatch 回调
-     * wrapper 函数需要 wrapper R9，导致崩溃。
-     * 捕获 dispatch 地址并恢复为 hook，使 timer 直接通过 hook_table 处理。*/
     if (m->primary_helper_addr && m->primary_helper_addr != m->helper_addr) {
         uint32_t t31v = 0, t32v = 0;
         memcpy(&t31v, arm_ptr(m, EXT_TABLE_ADDR + 31 * 4), 4);
@@ -1427,7 +1435,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
             memcpy(arm_ptr(m, EXT_TABLE_ADDR + 32 * 4), &hook, 4);
         }
     }
-
 
     uint32_t arm_output = 0;
     uint32_t arm_output_len = 0;
@@ -1450,13 +1457,24 @@ uint32 arm_ext_primary_helper(ArmExtModule *m) {
 
 void arm_ext_set_init_guard(ArmExtModule *m, int on) { (void)m; (void)on; }
 
+uint32 arm_ext_read_timer_queue(ArmExtModule *m) {
+    if (!m || !m->primary_p_addr) return 0;
+    uint32_t rw = 0;
+    memcpy(&rw, arm_ptr(m, m->primary_p_addr), 4);
+    if (!rw) return 0;
+    uint32_t val = 0;
+    if (arm_ptr(m, rw + 0x8C))
+        memcpy(&val, arm_ptr(m, rw + 0x8C), 4);
+    return val;
+}
+
 int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval) {
-    if (!m || !m->p_addr || !m->last_file_addr) return MR_FAILED;
-    /* 读取嵌套 ext 的 P 指针（存储在 [last_file_addr+4]） */
-    uint32_t nested_p = 0;
-    void *p4 = arm_ptr(m, m->last_file_addr + 4);
-    if (!p4) return MR_FAILED;
-    memcpy(&nested_p, p4, 4);
+    if (!m || !m->p_addr) return MR_FAILED;
+    uint32_t nested_p = m->primary_p_addr ? m->primary_p_addr : 0;
+    if (!nested_p && m->last_file_addr) {
+        void *p4 = arm_ptr(m, m->last_file_addr + 4);
+        if (p4) memcpy(&nested_p, p4, 4);
+    }
     if (!nested_p || !arm_ptr(m, nested_p + 12)) return MR_FAILED;
     /* 读取 P->mrc_extChunk (offset 12) */
     uint32_t ext_chunk = 0;
