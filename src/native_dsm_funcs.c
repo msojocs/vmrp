@@ -82,10 +82,7 @@ static char *native_readdir(int32 f) {
 }
 
 static int32 native_initNetwork(NETWORK_CB cb, const char *mode, void *userData) {
-    (void)cb;
-    (void)mode;
-    (void)userData;
-    return my_closeNetwork() == MR_SUCCESS ? MR_SUCCESS : MR_FAILED;
+    return my_initNetwork(NULL, NULL, mode, NULL);
 }
 
 static int32 native_getHostByName(const char *ptr, NETWORK_CB cb, void *userData) {
