@@ -35,6 +35,35 @@
 static SDL_TimerID timeId = 0;
 static SDL_Window *window;
 static bool isMouseDown = false;
+
+/* PPM 截屏：收到 SIGUSR1 时将当前 SDL surface 转储为 PPM 文件，
+ * 用于在无显示器环境下验证画面是否正常渲染。 */
+static uint32_t guiDrawBitmapCount = 0;
+
+static void dump_screen_ppm(const char *path) {
+    SDL_Surface *surface = SDL_GetWindowSurface(window);
+    if (!surface) return;
+    FILE *fp = fopen(path, "wb");
+    if (!fp) return;
+    fprintf(fp, "P6\n%d %d\n255\n", surface->w, surface->h);
+    if (SDL_MUSTLOCK(surface)) SDL_LockSurface(surface);
+    for (int y = 0; y < surface->h; y++) {
+        for (int x = 0; x < surface->w; x++) {
+            Uint32 px = *((Uint32 *)(((Uint8 *)surface->pixels) + surface->pitch * y) + x);
+            Uint8 r, g, b;
+            SDL_GetRGB(px, surface->format, &r, &g, &b);
+            fputc(r, fp); fputc(g, fp); fputc(b, fp);
+        }
+    }
+    if (SDL_MUSTLOCK(surface)) SDL_UnlockSurface(surface);
+    fclose(fp);
+    printf("[PPM] dumped to %s (%dx%d)\n", path, surface->w, surface->h);
+}
+
+static void sigusr1_handler(int sig) {
+    (void)sig;
+    dump_screen_ppm("/tmp/vmrp_screen.ppm");
+}
 /* timerCb 在 SDL 定时器线程中触发，直接调用 timer() 会与主线程的 event()
  * 同时访问同一个 Unicorn ARM 引擎，引发竞态崩溃。改为向 SDL 事件队列推送
  * 自定义事件，由主循环统一调度 timer()，保证单线程串行执行。 */
@@ -98,6 +127,11 @@ char *editGetText(int32 edit) {
 }
 
 void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
+    guiDrawBitmapCount++;
+    /* 第 5 次绘制时截屏，用于无显示器环境下验证画面 */
+    if (guiDrawBitmapCount == 5) {
+        dump_screen_ppm("/tmp/vmrp_screen.ppm");
+    }
     SDL_Surface *surface = SDL_GetWindowSurface(window);
     if (SDL_MUSTLOCK(surface)) {
         if (SDL_LockSurface(surface) != 0) printf("SDL_LockSurface err\n");
@@ -441,6 +475,7 @@ void loop() {
 int main(int argc, char *args[]) {
 #ifndef _WIN32
     signal(SIGPIPE, SIG_IGN);
+    signal(SIGUSR1, sigusr1_handler);
 #endif
     if (argc > 1 && (strcmp(args[1], "-h") == 0 || strcmp(args[1], "--help") == 0)) {
         printVmrpUsage(args[0]);
