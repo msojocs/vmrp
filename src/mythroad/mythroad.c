@@ -195,7 +195,8 @@ static int32 native_ext_event(int32 code, const void* input, uint32 input_len) {
 }
 
 static int32 native_ext_void_event(int32 code) {
-    return native_ext_event(code, NULL, 1);
+    static const uint8 empty = 0;
+    return native_ext_event(code, &empty, 0);
 }
 
 static int32 native_ext_callback0(uint32 func) {
@@ -3564,9 +3565,6 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
         case 800: {
             int code = ((int)mr_L_optint(L, 3, 0));
 #ifdef VMRP_NATIVE
-            /* 延迟释放旧模块：input1 可能指向旧模块的 ARM 内存
-             * (mrc_loader 读取 cfunction.ext 后 Lua 创建的字符串)，
-             * 必须等新模块加载完成后才能释放旧模块 */
             ArmExtModule *old_ext = native_ext;
             native_ext = NULL;
             native_event_function = 0;
@@ -3577,7 +3575,6 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             int32 ext_r0 = 0;
             ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code, &ext_r0);
             arm_ext_unload(old_ext);
-            /* 将 ARM ext 代码的返回值传给 Lua，与非 native 路径一致 */
             mrp_pushnumber(L, ret == MR_SUCCESS ? ext_r0 : ret);
             return 1;
 #else
@@ -3600,20 +3597,17 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             output_len = 0;
 #ifdef VMRP_NATIVE
             {
-                /* 检测 wrapper 的 extHelper(code=0) 是否加载了嵌套 ext */
                 uint32 before_primary = arm_ext_primary_helper(native_ext);
                 ret = arm_ext_call(native_ext, code, (uint8*)input1, (uint32)len, (uint8**)&output, &output_len);
                 uint32 after_primary = arm_ext_primary_helper(native_ext);
                 if (!before_primary && after_primary && code == 0) {
-                    /* 非 native 路径下 Lua 的 code=0 直接到达嵌套 ext（因为
-                     * mr_c_function 被 _mr_c_function_new 更新了）。native
-                     * 路径下 wrapper 的 code=0 加载了嵌套 ext 但未调用其
-                     * mrc_init。补发 code=0 给嵌套 ext (primary 路由)。
-                     * 嵌套 ext 的 mrc_init 通过 table[31/32] dispatch 函数
-                     * 回调 wrapper 代码，需临时恢复为标准 hook 避免 R9 冲突 */
                     uint8* o2 = NULL; int32 ol2 = 0;
                     arm_ext_set_init_guard(native_ext, 1);
                     arm_ext_call(native_ext, 0, (uint8*)input1, (uint32)len, &o2, &ol2);
+                    mr_timer_p = (void*)"dealtimer";
+                    if (mr_timer_state != MR_TIMER_STATE_RUNNING) {
+                        MR_TIME_START(100);
+                    }
                 }
 
             }
@@ -4249,7 +4243,6 @@ int32 mr_event(int16 type, int32 param1, int32 param2) {
 }
 
 int32 mr_timer(void) {
-    // MRDBGPRINTF("timer %d,%d",mr_state, mr_timer_state);
     if (mr_timer_state != MR_TIMER_STATE_RUNNING) {
         MRDBGPRINTF("warning:mr_timer event unexpected!");
         return MR_IGNORE;
@@ -4284,9 +4277,6 @@ int32 mr_timer(void) {
     }
     if (native_ext) {
         int32 status = native_ext_void_event(2);
-        /* 嵌套 ext 的 timer dispatch (table[31/32]) 被替换为 hook 以避免
-         * R9 冲突。此处以 wrapper R9 补充调用 dispatch 目标函数，
-         * 使 wrapper 的 timer 逻辑（退出检测等）正常执行。 */
         if (arm_ext_primary_helper(native_ext)) {
             arm_ext_call_dispatch(native_ext, 0, 50);
         }
