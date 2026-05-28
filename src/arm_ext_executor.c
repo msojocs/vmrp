@@ -615,19 +615,11 @@ static void internal_slot_write(ArmExtModule *m, uint32_t slot, uint32_t value) 
     if (slot) memcpy(arm_ptr(m, slot), &value, 4);
 }
 
-static void sync_origin_mem_stats(ArmExtModule *m) {
-    if (!m->origin_mem_addr) return;
-    uint32_t left_slot = 0;
-    uint32_t min_slot = 0;
-    uint32_t top_slot = 0;
-    memcpy(&left_slot, arm_ptr(m, EXT_TABLE_ADDR + 111 * 4), 4);
-    memcpy(&min_slot, arm_ptr(m, EXT_TABLE_ADDR + 135 * 4), 4);
-    memcpy(&top_slot, arm_ptr(m, EXT_TABLE_ADDR + 136 * 4), 4);
-    internal_slot_write(m, left_slot, m->origin_mem_left);
-    internal_slot_write(m, min_slot, m->origin_mem_min);
-    internal_slot_write(m, top_slot, m->origin_mem_top);
-}
-
+/* origin_mem 池由 ext 自身的 ARM 内存管理器维护，ext 直接更新
+ * table[111/135/136] 对应的 slot 值。宿主侧不应覆写这些 slot，
+ * 否则 ext 读到的 origin_mem_left 等统计会与实际不符。
+ * 这里仅维护 m->origin_mem_left 用于其他宿主逻辑（如 arm_alloc
+ * 的上限检查），不再调用 sync_origin_mem_stats。 */
 static void note_origin_mem_alloc(ArmExtModule *m, uint32_t len) {
     if (!m->origin_mem_addr) return;
     len = align4(len ? len : 1);
@@ -636,14 +628,12 @@ static void note_origin_mem_alloc(ArmExtModule *m, uint32_t len) {
         m->origin_mem_min = m->origin_mem_left;
         m->origin_mem_top = m->origin_mem_len - m->origin_mem_min;
     }
-    sync_origin_mem_stats(m);
 }
 
 static void note_origin_mem_free(ArmExtModule *m, uint32_t len) {
     if (!m->origin_mem_addr) return;
     m->origin_mem_left += align4(len);
     if (m->origin_mem_left > m->origin_mem_len) m->origin_mem_left = m->origin_mem_len;
-    sync_origin_mem_stats(m);
 }
 
 static void enter_screen_context(ArmExtModule *m, uint16 **saved_screen) {
@@ -1499,6 +1489,15 @@ static void init_table(ArmExtModule *m) {
     m->origin_mem_left = m->origin_mem_len;
     m->origin_mem_min = m->origin_mem_len;
     m->origin_mem_top = 0;
+    /* 先分配统计 slot 和 free_head，再分配 origin_mem 池。ext 的 ARM
+     * 分配器会在 origin_mem 池末尾写入元数据，如果 slot 紧跟池后面就会被覆盖。 */
+    uint32_t slot108 = alloc_u32_slot(m, 0);
+    uint32_t slot109 = alloc_u32_slot(m, 0);
+    uint32_t slot110 = alloc_u32_slot(m, 0);
+    uint32_t slot111 = alloc_u32_slot(m, 0);
+    uint32_t slot135 = alloc_u32_slot(m, 0);
+    uint32_t slot136 = alloc_u32_slot(m, 0);
+    uint32_t free_head = arm_alloc(m, 8);
     m->origin_mem_addr = arm_alloc(m, m->origin_mem_len);
     if (m->origin_mem_addr) {
         uint32_t free_next = m->origin_mem_len;
@@ -1506,14 +1505,18 @@ static void init_table(ArmExtModule *m) {
         memcpy(arm_ptr(m, m->origin_mem_addr), &free_next, 4);
         memcpy((uint8_t *)arm_ptr(m, m->origin_mem_addr) + 4, &free_len, 4);
 
-        write_table_entry(m, 108, alloc_u32_slot(m, m->origin_mem_addr));
-        write_table_entry(m, 109, alloc_u32_slot(m, m->origin_mem_len));
-        write_table_entry(m, 110, alloc_u32_slot(m, m->origin_mem_addr + m->origin_mem_len));
-        write_table_entry(m, 111, alloc_u32_slot(m, m->origin_mem_left));
-        write_table_entry(m, 135, alloc_u32_slot(m, m->origin_mem_min));
-        write_table_entry(m, 136, alloc_u32_slot(m, m->origin_mem_top));
-
-        uint32_t free_head = arm_alloc(m, 8);
+        if (slot108) { uint32_t v = m->origin_mem_addr; memcpy(arm_ptr(m, slot108), &v, 4); }
+        if (slot109) { uint32_t v = m->origin_mem_len; memcpy(arm_ptr(m, slot109), &v, 4); }
+        if (slot110) { uint32_t v = m->origin_mem_addr + m->origin_mem_len; memcpy(arm_ptr(m, slot110), &v, 4); }
+        if (slot111) { uint32_t v = m->origin_mem_left; memcpy(arm_ptr(m, slot111), &v, 4); }
+        if (slot135) { uint32_t v = m->origin_mem_min; memcpy(arm_ptr(m, slot135), &v, 4); }
+        if (slot136) { uint32_t v = m->origin_mem_top; memcpy(arm_ptr(m, slot136), &v, 4); }
+        write_table_entry(m, 108, slot108);
+        write_table_entry(m, 109, slot109);
+        write_table_entry(m, 110, slot110);
+        write_table_entry(m, 111, slot111);
+        write_table_entry(m, 135, slot135);
+        write_table_entry(m, 136, slot136);
         if (free_head) write_table_entry(m, 146, free_head);
     }
 }
