@@ -241,6 +241,14 @@ static void SetDsmWorkPath(const char *path) {
     int l;
     strncpy2(dsmWorkPath, path, sizeof(dsmWorkPath) - 1);
     formatPathString(dsmWorkPath, '/');
+    /* dump/restore 后 ARM 内存中的路径可能被 netpay 破坏，
+     * 检测并修正为正确的 mythroad/ 前缀 */
+    if (strncmp2(dsmWorkPath, "mythroad/", 9) != 0 &&
+        strncmp2(dsmWorkPath, "mythr", 5) == 0) {
+        char fixed[DSM_MAX_FILE_LEN];
+        snprintf_(fixed, sizeof(fixed), "%s%s", MYTHROAD_PATH, dsmWorkPath + strlen2("mythroad/"));
+        strncpy2(dsmWorkPath, fixed, sizeof(dsmWorkPath) - 1);
+    }
 
     l = strlen2(dsmWorkPath);
     if (dsmWorkPath[l - 1] != '/') {
@@ -522,10 +530,12 @@ int32 mr_stopSound(int type) {
     return dsmInFuncs->mr_stopSound(type);
 }
 
+
 int32 mr_sendSms(char *pNumber, char *pContent, int32 encode) {
     LOGI("mr_sendSms(%s)", pNumber);
     return MR_SUCCESS;
 }
+
 void mr_call(char *number) {
     LOGI("mr_call(%s)", number);
 }
@@ -655,6 +665,10 @@ int32 mr_plat(int32 code, int32 param) {
             return MR_MSDC_OK;
         case 1101:  // 兼容性查询 (e.g. gghjt netpay 在 adisk.sys 重命名后调用)
             return MR_IGNORE;
+        case 1011:  // netpay SMS 查询/触发，返回 MR_IGNORE 让正常流程走完
+            return MR_IGNORE;
+        case MR_SET_KEY_END:  // 1214 启用/禁用按键结束事件
+            return MR_SUCCESS;
         default:
             LOGW("mr_plat(code:%d, param:%d) not impl!", code, param);
             break;

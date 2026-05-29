@@ -194,6 +194,9 @@ struct ArmExtModule {
     int nested_loading;
     int screen_dirty;
     int mem_is_mmap;
+    /* R9（rw_base）区域的 GOT 快照：dump/restore 恢复模块内存时用于修复 GOT */
+    uint32_t got_snapshot_base;
+    uint32_t got_snapshot[EXT_TABLE_COUNT];
     /* 嵌套 ext 覆盖 table[31/32] 的 dispatch 函数地址 */
     uint32_t dispatch_timer_start;
     uint32_t dispatch_timer_stop;
@@ -750,7 +753,22 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             if (p && r0 && r1) memcpy(arm_ptr(m, p), arm_ptr(m, r0), r1 < r2 ? r1 : r2);
             ret = p;
         } break;
-        case 3: memcpy(arm_ptr(m, r0), arm_ptr(m, r1), r2); ret = r0; break;
+        case 3:
+            memcpy(arm_ptr(m, r0), arm_ptr(m, r1), r2);
+            /* memcpy 后修复 GOT 中的 bridge 指针 */
+            if (m->got_snapshot_base) {
+                uint32_t got_base = m->got_snapshot_base;
+                uint32_t cpy_end = r0 + r2;
+                for (uint32_t i = 0; i < EXT_TABLE_COUNT; i++) {
+                    uint32_t addr = got_base + i * 4;
+                    if (m->got_snapshot[i] >= EXT_TABLE_ADDR &&
+                        m->got_snapshot[i] < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4 &&
+                        addr >= r0 && addr + 4 <= cpy_end) {
+                        memcpy(arm_ptr(m, addr), &m->got_snapshot[i], 4);
+                    }
+                }
+            }
+            ret = r0; break;
         case 4: memmove(arm_ptr(m, r0), arm_ptr(m, r1), r2); ret = r0; break;
         case 5: strcpy(arm_ptr(m, r0), arm_str(m, r1)); ret = r0; break;
         case 6: strncpy(arm_ptr(m, r0), arm_str(m, r1), r2); ret = r0; break;
@@ -760,7 +778,22 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 10: ret = strcmp(arm_str(m, r0), arm_str(m, r1)); break;
         case 11: ret = strncmp(arm_str(m, r0), arm_str(m, r1), r2); break;
         case 13: { void *p = memchr(arm_ptr(m, r0), (int)r1, r2); ret = p ? arm_addr(m, p) : 0; } break;
-        case 14: memset(arm_ptr(m, r0), (int)r1, r2); ret = r0; break;
+        case 14:
+            memset(arm_ptr(m, r0), (int)r1, r2);
+            /* memset 后修复 GOT 中的 bridge 指针 */
+            if (m->got_snapshot_base) {
+                uint32_t got_base = m->got_snapshot_base;
+                uint32_t set_end = r0 + r2;
+                for (uint32_t i = 0; i < EXT_TABLE_COUNT; i++) {
+                    uint32_t addr = got_base + i * 4;
+                    if (m->got_snapshot[i] >= EXT_TABLE_ADDR &&
+                        m->got_snapshot[i] < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4 &&
+                        addr >= r0 && addr + 4 <= set_end) {
+                        memcpy(arm_ptr(m, addr), &m->got_snapshot[i], 4);
+                    }
+                }
+            }
+            ret = r0; break;
         case 12: ret = strcoll(arm_str(m, r0), arm_str(m, r1)); break;
         case 15: ret = strlen(arm_str(m, r0)); break;
         case 16: {
@@ -892,7 +925,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
              */
             m->busy_wait_count++;
             if (m->busy_wait_count == 1) {
-                /* 记录第一次进入忙等的时间，用于判断卡死时长。 */
                 m->busy_wait_start_ms = ret;
             }
             if (m->busy_wait_count >= 200) {
@@ -967,11 +999,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 39: ret = mr_ferrno(); break;
         case 40: {
             const char *open_name = arm_str(m, r0);
-            /* 不替换 MRP 文件为平坦 MRP：部分 ext（如 mrpinfo 的 cfunction.ext）
-             * 在加载嵌套 ext 时会读取 MRP 内的 gzip 头来判断是否需要解压。
-             * 平坦 MRP 把所有条目预解压后重建索引，导致 ext 找不到 gzip 魔数而
-             * 跳过加载。直接使用原始 MRP 文件可避免此问题；ext 随后通过
-             * table[125](_mr_readFile) 读取解压数据时仍走 MRP 缓存，不会重复解压。 */
             ret = mr_open(open_name, r1);
             /* 磁盘上找不到时尝试从 MRP 缓存提供虚拟 fd */
             if (ret == 0 && m->mrp_cache_count > 0) {
@@ -1093,6 +1120,26 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                             }
                         }
                         inflateEnd(&zs);
+                    }
+                }
+            }
+            /* dump/restore 读回整块模块内存后，需要：
+             * 1) 修复 GOT 中的 bridge 函数指针（文件数据中是原始未重定位的值）
+             * 2) invalidate Unicorn TB cache（否则执行旧翻译） */
+            if ((int32_t)ret > 0 && (uint32_t)ret > 0x1000) {
+                /* 仅在 dump0 恢复时（目标地址匹配）才恢复间隙数据 */
+                uc_ctl_remove_cache(m->uc, r1, r1 + (uint32_t)ret);
+                /* 修复 GOT：只恢复已记录的 bridge 函数指针 */
+                if (m->got_snapshot_base) {
+                    uint32_t got_base = m->got_snapshot_base;
+                    uint32_t read_end = r1 + (uint32_t)ret;
+                    for (uint32_t i = 0; i < EXT_TABLE_COUNT; i++) {
+                        uint32_t addr = got_base + i * 4;
+                        if (m->got_snapshot[i] >= EXT_TABLE_ADDR &&
+                            m->got_snapshot[i] < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4 &&
+                            addr >= r1 && addr + 4 <= read_end) {
+                            memcpy(arm_ptr(m, addr), &m->got_snapshot[i], 4);
+                        }
                     }
                 }
             }
@@ -1313,6 +1360,7 @@ static bool hook_invalid(uc_engine *uc, uc_mem_type type, uint64_t address, int 
     }
     {
         uint32_t pc = reg_read32(uc, UC_ARM_REG_PC);
+        uint32_t sp = reg_read32(uc, UC_ARM_REG_SP);
         uint32_t cpsr = reg_read32(uc, UC_ARM_REG_CPSR);
         int thumb = (cpsr >> 5) & 1;
         printf("arm_ext_executor: invalid memory %s addr=0x%llX size=%d value=0x%llX\n",
@@ -1320,16 +1368,80 @@ static bool hook_invalid(uc_engine *uc, uc_mem_type type, uint64_t address, int 
         printf("  crash PC=0x%X (%s) last_file=0x%X..0x%X\n",
                pc, thumb ? "thumb" : "arm",
                m->last_file_addr, m->last_file_addr + m->last_file_len);
-        /* 打印 crash PC 附近的指令字节 */
+        /* 打印 crash PC 前32字节和后16字节，便于反汇编定位上下文 */
+        {
+            uint32_t pre_start = (pc > 32) ? (pc - 32) : 0;
+            uint32_t pre_len = pc - pre_start;
+            uint8_t pre_bytes[32];
+            if (pre_len > 0 && uc_mem_read(uc, pre_start, pre_bytes, pre_len) == UC_ERR_OK) {
+                printf("  bytes @0x%X (before PC):", pre_start);
+                for (uint32_t i = 0; i < pre_len; i++) printf(" %02X", pre_bytes[i]);
+                printf("\n");
+            }
+        }
         uint8_t bytes[16];
         if (uc_mem_read(uc, pc, bytes, 16) == UC_ERR_OK) {
-            printf("  bytes @0x%X:", pc);
-            for (int i = 0; i < 16; i++) printf(" %02x", bytes[i]);
+            printf("  bytes @0x%X (at PC):", pc);
+            for (int i = 0; i < 16; i++) printf(" %02X", bytes[i]);
             printf("\n");
+        }
+        /* 导出 crash PC 前后各256字节的二进制，供 arm-none-eabi-objdump 反汇编 */
+        {
+            uint32_t dump_start = (pc > 256) ? (pc - 256) : 0;
+            uint32_t dump_end = pc + 256;
+            uint32_t dump_len = dump_end - dump_start;
+            uint8_t *dump_buf = malloc(dump_len);
+            if (dump_buf && uc_mem_read(uc, dump_start, dump_buf, dump_len) == UC_ERR_OK) {
+                FILE *df = fopen("/tmp/vmrp_crash.bin", "wb");
+                if (df) {
+                    fwrite(dump_buf, 1, dump_len, df);
+                    fclose(df);
+                    printf("  [CRASH_DUMP] saved %u bytes [0x%X..0x%X] to /tmp/vmrp_crash.bin\n",
+                           dump_len, dump_start, dump_end);
+                    printf("  [CRASH_DUMP] disassemble: arm-none-eabi-objdump -D -b binary "
+                           "-m arm -M force-thumb --adjust-vma=0x%X /tmp/vmrp_crash.bin\n",
+                           dump_start);
+                }
+            }
+            free(dump_buf);
+        }
+        /* 导出栈内容（SP 向上64字节） */
+        {
+            uint8_t stack_buf[64];
+            if (uc_mem_read(uc, sp, stack_buf, sizeof(stack_buf)) == UC_ERR_OK) {
+                printf("  stack @0x%X:", sp);
+                for (int i = 0; i < 64; i += 4) {
+                    uint32_t val = stack_buf[i] | (stack_buf[i+1]<<8)
+                                 | (stack_buf[i+2]<<16) | (stack_buf[i+3]<<24);
+                    printf(" 0x%08X", val);
+                }
+                printf("\n");
+            }
         }
     }
     dumpREG(uc);
     return false;
+}
+
+/* GOT 写监控 */
+static void hook_got_write(uc_engine *uc, uc_mem_type type, uint64_t address, int size, int64_t value, void *user_data) {
+    (void)type;
+    ArmExtModule *m = (ArmExtModule *)user_data;
+    if (size != 4) return;
+    uint32_t r9 = reg_read32(uc, UC_ARM_REG_R9);
+    uint32_t got_size = EXT_TABLE_COUNT * 4;
+    if (!r9 || (uint32_t)address < r9 || (uint32_t)address >= r9 + got_size) return;
+    uint32_t idx = ((uint32_t)address - r9) / 4;
+    if (idx >= EXT_TABLE_COUNT) return;
+    m->got_snapshot_base = r9;
+    if ((uint32_t)value >= EXT_TABLE_ADDR &&
+        (uint32_t)value < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4) {
+        /* bridge 函数指针写入 → 记录 */
+        m->got_snapshot[idx] = (uint32_t)value;
+    } else {
+        /* 非 bridge 值覆盖 → 清除快照（该槽位是动态回调，不应被恢复） */
+        m->got_snapshot[idx] = 0;
+    }
 }
 
 static void hook_screen_write(uc_engine *uc, uc_mem_type type, uint64_t address, int size, int64_t value, void *user_data) {
@@ -1583,6 +1695,13 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     uc_hook invalid_hook;
     err = uc_hook_add(m->uc, &invalid_hook, UC_HOOK_MEM_INVALID, hook_invalid, m, 1, 0);
     if (err != UC_ERR_OK) goto fail;
+    /* GOT bridge 指针追踪：ARM 代码向 R9 数据区写入 bridge 地址时记录，
+     * 后续 dump/restore 覆盖时自动修复 */
+    {
+        uc_hook got_hook;
+        uc_hook_add(m->uc, &got_hook, UC_HOOK_MEM_WRITE, hook_got_write, m,
+                    EXT_HEAP_ADDR, EXT_BASE_ADDR + EXT_MEM_SIZE - 1);
+    }
 
     reg_write32(m->uc, UC_ARM_REG_R0, (uint32_t)load_code);
     uint16 *saved_screenBuf = NULL;
@@ -1690,6 +1809,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     uc_mem_read(m->uc, outl_addr, &arm_output_len, 4);
     if (output_len) *output_len = (int32)arm_output_len;
     if (output) *output = arm_output ? (uint8 *)arm_ptr(m, arm_output) : NULL;
+
     return (int32_t)reg_read32(m->uc, UC_ARM_REG_R0);
 }
 
