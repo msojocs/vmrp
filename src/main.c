@@ -57,7 +57,7 @@ static void dump_screen_ppm(const char *path) {
     }
     if (SDL_MUSTLOCK(surface)) SDL_UnlockSurface(surface);
     fclose(fp);
-    printf("[PPM] dumped to %s (%dx%d)\n", path, surface->w, surface->h);
+    // printf("[PPM] dumped to %s (%dx%d)\n", path, surface->w, surface->h);
 }
 
 static void sigusr1_handler(int sig) {
@@ -294,6 +294,7 @@ static void keyEvent(int16 type, SDL_Keycode code) {
 typedef struct {
     int x;
     int y;
+    int delay_ms; /* 本次点击后等待的毫秒数，-1 表示使用全局默认值 */
 } AutoClickPoint;
 
 static AutoClickPoint *autoClickList = NULL;
@@ -302,15 +303,17 @@ static int autoClickCount = 0;
 static int autoClickThread(void *data) {
     (void)data;
     const char *delay_env = getenv("VMRP_AUTO_CLICK_DELAY_MS");
-    Uint32 delay_ms = delay_env ? (Uint32)atoi(delay_env) : 800;
-    if (delay_ms == 0) delay_ms = 800;
+    Uint32 default_delay = delay_env ? (Uint32)atoi(delay_env) : 800;
+    if (default_delay == 0) default_delay = 800;
 
     /* 先等一段时间让应用完成启动 */
-    SDL_Delay(delay_ms);
+    SDL_Delay(default_delay);
 
     for (int i = 0; i < autoClickCount; ++i) {
-        /* 约定：x = -1 表示发送一次 ESC（MR_KEY_POWER），y 携带 SDL_Keycode 用
-         * 于自定义按键；这里只用到 ESC。其它情况按普通鼠标点击注入。 */
+        /* 本次点击后的延迟：优先使用自定义值，否则用全局默认值 */
+        Uint32 cur_delay = (autoClickList[i].delay_ms >= 0)
+                           ? (Uint32)autoClickList[i].delay_ms : default_delay;
+        /* 约定：x = -1 表示发送一次 ESC（MR_KEY_POWER） */
         if (autoClickList[i].x == -1) {
             SDL_Event ev;
             memset(&ev, 0, sizeof(ev));
@@ -326,7 +329,7 @@ static int autoClickThread(void *data) {
             ev.key.state = SDL_RELEASED;
             ev.key.keysym.sym = SDLK_ESCAPE;
             SDL_PushEvent(&ev);
-            SDL_Delay(delay_ms);
+            SDL_Delay(cur_delay);
             continue;
         }
         SDL_Event ev;
@@ -339,7 +342,7 @@ static int autoClickThread(void *data) {
         ev.button.y = autoClickList[i].y;
         SDL_PushEvent(&ev);
 
-        SDL_Delay(50); /* down 与 up 之间的间隔 */
+        SDL_Delay(500);
 
         memset(&ev, 0, sizeof(ev));
         ev.type = SDL_MOUSEBUTTONUP;
@@ -350,7 +353,7 @@ static int autoClickThread(void *data) {
         ev.button.y = autoClickList[i].y;
         SDL_PushEvent(&ev);
 
-        SDL_Delay(delay_ms);
+        SDL_Delay(cur_delay);
     }
     return 0;
 }
@@ -358,20 +361,22 @@ static int autoClickThread(void *data) {
 static void startAutoClicksIfRequested(void) {
     const char *env = getenv("VMRP_AUTO_CLICKS");
     if (!env || !*env) return;
-    /* 解析 "x1,y1;x2,y2;..." */
+    /* 解析 "x1,y1[,delay1];x2,y2[,delay2];..." 第三个字段可选，单位 ms */
     int capacity = 8;
     autoClickList = (AutoClickPoint *)malloc(sizeof(AutoClickPoint) * capacity);
     autoClickCount = 0;
     const char *p = env;
     while (*p) {
-        int x = 0, y = 0;
-        if (sscanf(p, "%d,%d", &x, &y) == 2) {
+        int x = 0, y = 0, d = -1;
+        int n = sscanf(p, "%d,%d,%d", &x, &y, &d);
+        if (n >= 2) {
             if (autoClickCount >= capacity) {
                 capacity *= 2;
                 autoClickList = (AutoClickPoint *)realloc(autoClickList, sizeof(AutoClickPoint) * capacity);
             }
             autoClickList[autoClickCount].x = x;
             autoClickList[autoClickCount].y = y;
+            autoClickList[autoClickCount].delay_ms = (n >= 3) ? d : -1;
             autoClickCount++;
         }
         const char *semi = strchr(p, ';');
