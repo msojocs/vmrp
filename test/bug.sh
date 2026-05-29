@@ -1,4 +1,4 @@
 #!/bin/bash
-rm -rf mythroad/c
-rm -rf mythroad/mrcc
-build/vmrp mythroad/mpc.mrp
+# up和down要间隔500ms
+export VMRP_AUTO_CLICKS="0,0,5000;227,308,2000;227,308,2000;227,308,2000;227,308,2000;227,308,4000;160,290,3000;121,291,1000;121,291,3000;28,308,2000"
+build/vmrp mythroad/gghjt.mrp
