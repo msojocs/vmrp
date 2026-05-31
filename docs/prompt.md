@@ -8,12 +8,6 @@
 修改代码要加注释，不要有兜底代码逻辑。
 你可以检测PPM，来验证修复是否成功。
 使用反汇编去分析BUG。
-模拟点击的每个点击事件都添加自定义延迟，然后我会做成可复现的脚本。
-
-注意：
-在解决完BUG后，再去考虑兼容`build/vmrp mythroad/nes.mrp`
-`build/vmrp mythroad/dota.mrp`
-`build/vmrp mythroad/mrpinfo.mrp`
 
 理论上超时条件下，点击返回的行为与`test/normal-back.sh`一致，都是加载pak。
 注意不是重启！注意不是重启！注意不是重启！注意不是重启！
@@ -22,3 +16,8 @@
 付费界面 - 超时 - 点击返回 - 黑屏“请稍等” - 进入游戏菜单界面
 付费界面 - 点击取消 - 黑屏“请稍等” - 进入游戏菜单界面
 付费界面 - 点击确定 - 付费成功 - 进入游戏游玩界面
+
+注意：
+在解决完BUG后，再去考虑兼容`build/vmrp mythroad/nes.mrp`
+`build/vmrp mythroad/dota.mrp`
+`build/vmrp mythroad/mrpinfo.mrp`
