@@ -99,6 +99,24 @@ endif()
 # （arm-softmmu）在链接顺序上排在 -lm 之后，需要其中的 sqrtf 等符号
 target_link_libraries(vmrp unicorn "-Wl,--no-as-needed" SDL2main SDL2 m pthread z)
 
+# --- 测试 ---
+if(VMRP_USE_NATIVE_MYTHROAD)
+  enable_testing()
+  set(TEST_MYTHROAD_SOURCES ${VMRP_MYTHROAD_SOURCES})
+  add_executable(test_vmrp
+    test/test_main.c
+    test/test_got_snapshot.c
+    test/test_parser.c
+    test/stubs.c
+    ${TEST_MYTHROAD_SOURCES}
+  )
+  set_source_files_properties(${TEST_MYTHROAD_SOURCES} PROPERTIES COMPILE_OPTIONS "-UVMRP")
+  target_compile_definitions(test_vmrp PRIVATE VMRP_USE_NATIVE_MYTHROAD=1 VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
+  target_link_libraries(test_vmrp m pthread z)
+  target_link_options(test_vmrp PRIVATE -Wl,--allow-multiple-definition)
+  add_test(NAME vmrp_unit_tests COMMAND test_vmrp)
+endif()
+
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
