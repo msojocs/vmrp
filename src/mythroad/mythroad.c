@@ -80,6 +80,20 @@ const char* mr_get_old_start_filename(void) {
     return old_start_filename;
 }
 
+void mr_set_old_pack_filename(const char* name) {
+    MEMSET(old_pack_filename, 0, sizeof(old_pack_filename));
+    if (name && name[0]) {
+        STRNCPY(old_pack_filename, name, sizeof(old_pack_filename) - 1);
+    }
+}
+
+void mr_set_old_start_filename(const char* name) {
+    MEMSET(old_start_filename, 0, sizeof(old_start_filename));
+    if (name && name[0]) {
+        STRNCPY(old_start_filename, name, sizeof(old_start_filename) - 1);
+    }
+}
+
 int32 mr_restart_old_app(void) {
     if (!old_pack_filename[0]) {
         return MR_IGNORE;

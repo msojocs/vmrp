@@ -300,20 +300,27 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
     /*
      * Some nested .mrp plug-ins (e.g. netpay.mrp loaded by gghjt.mrp) keep
      * function pointers without the Thumb bit, so a BLX into them lands in
-     * ARM mode while the bytes are Thumb-2. When that happens Unicorn raises
-     * UC_ERR_INSN_INVALID; flip to Thumb mode and resume from the same PC.
+     * ARM mode while the bytes are Thumb-2.  Do the mode correction once per
+     * callback entry.  If the same PC still raises UC_ERR_INSN_INVALID after
+     * being retried in Thumb mode, it is real invalid code/data, not a missing
+     * Thumb bit.  gghjt's 60s timeout-return path exposes this after dump0
+     * restore: a copied timer node (e.g. table[3] to 0x738B34) is data, and an
+     * unbounded retry here pins the UI on “请稍等”.  Let the normal invalid-PC
+     * handling below stop the callback cleanly instead of spinning forever.
      */
-    while (err == UC_ERR_INSN_INVALID) {
+    if (err == UC_ERR_INSN_INVALID) {
         uint32_t pc = reg_read32(m->uc, UC_ARM_REG_PC);
-        if (pc == EXT_STOP_ADDR || pc == 0) break;
-        uint32_t cpsr = reg_read32(m->uc, UC_ARM_REG_CPSR);
-        if (cpsr & (1u << 5)) break; /* already Thumb, real failure */
-        cpsr |= (1u << 5);
-        reg_write32(m->uc, UC_ARM_REG_CPSR, cpsr);
-        if (getenv("VMRP_ARM_EXT_TRACE")) {
-            printf("arm_ext_executor: retrying in Thumb mode at pc=0x%X\n", pc);
+        if (pc != EXT_STOP_ADDR && pc != 0) {
+            uint32_t cpsr = reg_read32(m->uc, UC_ARM_REG_CPSR);
+            if ((cpsr & (1u << 5)) == 0) {
+                cpsr |= (1u << 5);
+                reg_write32(m->uc, UC_ARM_REG_CPSR, cpsr);
+                if (getenv("VMRP_ARM_EXT_TRACE")) {
+                    printf("arm_ext_executor: retrying in Thumb mode at pc=0x%X\n", pc);
+                }
+                err = uc_emu_start(m->uc, pc, EXT_STOP_ADDR, 0, 0);
+            }
         }
-        err = uc_emu_start(m->uc, pc, EXT_STOP_ADDR, 0, 0);
     }
     if (err != UC_ERR_OK) {
         if (reg_read32(m->uc, UC_ARM_REG_PC) == EXT_STOP_ADDR) return MR_SUCCESS;
@@ -376,6 +383,38 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
                     reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
                     return MR_SUCCESS;
                 }
+            }
+        }
+        /*
+         * gghjt 60s 超时返回路径：wrapper 的定时器内联分发跳转到堆上的
+         * 定时器/链表节点（如 0x738B58 含 FB FF FF FF …）而非代码。
+         *
+         * 正常流程中 wrapper 在分发前会先完成 dump0 读取（0x96000 字节
+         * → 0x646100），还原游戏内存后分发到的回调指向有效游戏代码。
+         * 超时路径中 dump0 虽已打开但大块读取尚未发生就崩溃了。
+         *
+         * 修复：从宿主侧完成 dump0 读取 + RW 区清理（与正常路径中
+         * table[14] memset(0x645C70,0,0x80) / memset(0x645CF0,0,0x20) 等
+         * 效），然后终止本次 ARM 执行。下一次定时器触发时 wrapper 会
+         * 基于已恢复的游戏状态分发到有效游戏代码，继续加载 pak 资源，
+         * 实现「返回游戏菜单」而非重启。
+         */
+        if (err == UC_ERR_INSN_INVALID && pc >= EXT_HEAP_ADDR && pc < EXT_BASE_ADDR + EXT_MEM_SIZE) {
+            uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
+            /* LR 在 wrapper 代码范围内，说明是 wrapper 内联分发到了堆上
+             * 的无效回调地址——netpay 超时返回的标志性崩溃模式 */
+            int lr_in_wrapper = (lr & ~1u) >= EXT_CODE_ADDR &&
+                                (lr & ~1u) < EXT_CODE_ADDR + m->code_len;
+            uint8_t *pcp = (uint8_t *)arm_ptr(m, pc);
+            if (pcp && ((pcp[0] == 0xFF && pcp[1] == 0xFF) ||
+                       (pcp[0] == 0x00 && pcp[1] == 0x00 && pcp[2] == 0x00 && pcp[3] == 0x00) ||
+                       lr_in_wrapper)) {
+                if (getenv("VMRP_ARM_EXT_TRACE")) {
+                    printf("arm_ext_executor: plugin returned to heap data pc=0x%X sp=0x%X (treated as clean exit)\n", pc, cur_sp);
+                    dump_pc_ring(m);
+                }
+                reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
+                return MR_SUCCESS;
             }
         }
         /*
@@ -1184,10 +1223,10 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 60: mr_call(arm_str(m, r0)); ret = MR_SUCCESS; break;
         /* table[61] mr_getNetworkID()：返回 0 表示移动网络（MR_NET_ID_MOBILE） */
         case 61: ret = 0; break;
-        /* table[81] mr_initNetwork(cb, mode)：直接返回 MR_FAILED，让插件按
-         * "网络不可用" 路径走。我们没有可靠的方式回调 ARM 侧 cb，且 netpay
-         * 的网络功能本来就在我们的桌面环境中不可用。 */
-        case 81: ret = MR_FAILED; break;
+        /* table[81] mr_initNetwork(cb, mode)：同步返回成功，与 reference
+         * 实现（temp/jni/src/network.c）一致。桌面端没有真实网络，但 ARM
+         * 代码只关心初始化是否成功以决定后续流程 */
+        case 81: ret = MR_SUCCESS; break;
         /* table[82] mr_closeNetwork()：return success，跟 mr_initNetwork 配对。 */
         case 82: ret = MR_SUCCESS; break;
         case 69: ret = mr_dialogCreate(arm_str(m, r0), arm_str(m, r1), (int32)r2); break;
@@ -1433,15 +1472,22 @@ static void hook_got_write(uc_engine *uc, uc_mem_type type, uint64_t address, in
     if (!r9 || (uint32_t)address < r9 || (uint32_t)address >= r9 + got_size) return;
     uint32_t idx = ((uint32_t)address - r9) / 4;
     if (idx >= EXT_TABLE_COUNT) return;
-    m->got_snapshot_base = r9;
     if ((uint32_t)value >= EXT_TABLE_ADDR &&
         (uint32_t)value < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4) {
-        /* bridge 函数指针写入 → 记录 */
-        m->got_snapshot[idx] = (uint32_t)value;
-    } else {
-        /* 非 bridge 值覆盖 → 清除快照（该槽位是动态回调，不应被恢复） */
-        m->got_snapshot[idx] = 0;
+        /* bridge 函数指针写入 → 记录快照。只在 got_snapshot_base 尚未
+         * 设置或与当前 R9 一致时更新 base，防止嵌套插件（如 netpay）
+         * 的 GOT 初始化覆盖 wrapper 的 snapshot base */
+        if (!m->got_snapshot_base || m->got_snapshot_base == r9) {
+            m->got_snapshot_base = r9;
+        }
+        /* 只记录属于 snapshot base 所属 GOT 的写入 */
+        if (m->got_snapshot_base == r9) {
+            m->got_snapshot[idx] = (uint32_t)value;
+        }
     }
+    /* 非 bridge 值覆盖时保留已有的快照不清除——netpay 等嵌套插件会将
+     * GOT 中的 bridge 指针临时替换为自己的回调地址，但 dump0 restore
+     * 读回整块内存后需要把这些槽位恢复为原始 bridge 指针 */
 }
 
 static void hook_screen_write(uc_engine *uc, uc_mem_type type, uint64_t address, int size, int64_t value, void *user_data) {
@@ -1801,6 +1847,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         memcpy(arm_ptr(m, table31_addr), &saved_t31, 4);
         memcpy(arm_ptr(m, table32_addr), &saved_t32, 4);
     }
+
     if (call_ret != MR_SUCCESS) return MR_FAILED;
 
     uint32_t arm_output = 0;

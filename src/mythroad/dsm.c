@@ -726,6 +726,20 @@ int32 mr_platEx(int32 code, uint8 *input, int32 input_len, uint8 **output, int32
         case 1307:  //获取SIM卡个数，非多卡多待直接返回 MR_INGORE
             return MR_IGNORE;
 
+        case 0x90004:
+            /*
+             * gghjt 的 netpay 超时返回路径在收到返回键后先调用 platEx(0x90004)
+             * 查询/提交一段 48 字节的计费状态，然后才会回到 dump0 -> gghjt.pak 的
+             * 恢复流程。反汇编定位到调用点在 netpay 恢复后的 0x64D551；default 的
+             * MR_IGNORE 会让 ARM 代码把请求当成“平台未接管”，继续走
+             * mr_getNetworkID/mr_initNetwork 轮询，主事件循环被占住，后续返回点击到不了。
+             * 桌面宿主不提供真实网络计费通道；该私有 code 只用于查询平台是否
+             * 接管计费状态。返回 MR_IGNORE 与未实现分支的语义一致，但避免超时
+             * 路径反复刷 warning。真正让 UI 保持可返回的是 table[81] 的异步网络
+             * 语义，见 arm_ext_executor.c。
+             */
+            return MR_IGNORE;
+
         case MR_GET_FREE_SPACE: {  // 1305 获得指定盘符的剩余空间大小
             // 真机数据, 可以看出内存地址是一样的，因此返回的内存不需要释放
             // mrc_sprintf(buf, "%s %p %d Info:totalSpace=%d/%d, freeSpace=%d/%d\n", disk, getInfo, len, getInfo->total, getInfo->tunit, getInfo->account, getInfo->unit);
