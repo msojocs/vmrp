@@ -606,7 +606,6 @@ int32 my_recv(int32 s, char* buf, int len) {
     //     return MR_FAILED;
     // }
     if (ret > 0) {
-        // 打印前64字节可见字符
         char preview[65];
         int plen = ret < 64 ? ret : 64;
         memcpy(preview, buf, plen);
