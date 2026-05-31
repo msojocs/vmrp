@@ -59,7 +59,9 @@ if(VMRP_USE_NATIVE_MYTHROAD)
     ./src/mythroad/src/mr_undump.c
     ./src/mythroad/src/mr_vm.c
     ./src/mythroad/src/mr_zio.c
-    ./src/mythroad/src/parser/mr_noparser.c
+    ./src/mythroad/src/parser/mr_parser.c
+    ./src/mythroad/src/parser/mr_lex.c
+    ./src/mythroad/src/parser/mr_code.c
     ./src/mythroad/src/lib/mr_auxiliar.c
     ./src/mythroad/src/lib/mr_auxlib.c
     ./src/mythroad/src/lib/mr_baselib.c
