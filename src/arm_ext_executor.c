@@ -917,12 +917,14 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             int width = 0;
             int height = 0;
             const char *bitmap = mr_getCharBitmap((uint16)r0, (uint16)r1, &width, &height);
+            // 根据字体实际尺寸计算位图大小：gb12=18字节(12行×12位紧凑), gb16=32字节(16行×2字节)
+            int bitmap_size = ((width * height) + 7) >> 3;
             if (r2 && arm_ptr(m, r2)) memcpy(arm_ptr(m, r2), &width, 4);
             if (r3 && arm_ptr(m, r3)) memcpy(arm_ptr(m, r3), &height, 4);
             if (bitmap) {
                 if (!m->char_bitmap_addr) m->char_bitmap_addr = arm_alloc(m, 32);
                 if (m->char_bitmap_addr) {
-                    memcpy(arm_ptr(m, m->char_bitmap_addr), bitmap, 32);
+                    memcpy(arm_ptr(m, m->char_bitmap_addr), bitmap, bitmap_size);
                     ret = m->char_bitmap_addr;
                 } else {
                     ret = 0;
