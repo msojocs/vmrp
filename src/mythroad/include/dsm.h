@@ -7,8 +7,16 @@
 #include "mrporting.h"
 #endif
 
-#define SCREEN_WIDTH 240
-#define SCREEN_HEIGHT 320
+#ifdef VMRP
+#include "../../include/vmrp.h"
+#define SCREEN_WIDTH (vmrp_config.screen_width)
+#define SCREEN_HEIGHT (vmrp_config.screen_height)
+#else
+#define DEFAULT_SCREEN_WIDTH 240
+#define DEFAULT_SCREEN_HEIGHT 320
+#define SCREEN_WIDTH DEFAULT_SCREEN_WIDTH
+#define SCREEN_HEIGHT DEFAULT_SCREEN_HEIGHT
+#endif
 
 #define VMRP_VER 20210701
 
@@ -94,6 +102,8 @@ typedef struct {
 
     // 变量放在最后
     int32 flags;  // 调整运行时的一些参数，目前只有调整文件系统路径名是否使用UTF8编码这一个功能
+    int32 screen_width;
+    int32 screen_height;
 } DSM_REQUIRE_FUNCS;
 
 typedef struct event_t {

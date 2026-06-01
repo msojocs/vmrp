@@ -11,6 +11,7 @@
 #include <zlib.h>
 
 #include "./include/utils.h"
+#include "./include/vmrp.h"
 
 extern void mr_printf(const char *format, ...);
 extern uint16 *mr_screenBuf;
@@ -1608,8 +1609,8 @@ static void init_table(ArmExtModule *m) {
         write_table_entry(m, 24, m->port_table_addr);
     }
 
-    int32_t sw = mr_screen_w > 0 ? mr_screen_w : 240;
-    int32_t sh = mr_screen_h > 0 ? mr_screen_h : 320;
+    int32_t sw = mr_screen_w > 0 ? mr_screen_w : vmrp_config.screen_width;
+    int32_t sh = mr_screen_h > 0 ? mr_screen_h : vmrp_config.screen_height;
     int32_t bit = 16;
     m->screen_w = sw;
     m->screen_h = sh;
