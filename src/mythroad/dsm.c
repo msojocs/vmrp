@@ -72,23 +72,51 @@ static void panic(char *msg) {
 }
 
 ///////////////////////////////////////////////////////////////////
-#define CHAR_H 16
-#define EN_CHAR_W 8
-#define CN_CHAR_W 16
+// gb16字体参数：每行2字节，高16像素，每字符32字节
+#define CHAR_H_16 16
+#define EN_CHAR_W_16 8
+#define CN_CHAR_W_16 16
+#define BYTES_PER_CHAR_16 32
+
+// gb12字体参数：英文每行1字节(宽8)，中文每行12位紧凑排列(3字节存2行)，每字符18字节
+#define CHAR_H_12 12
+#define EN_CHAR_W_12 8
+#define CN_CHAR_W_12 12
+#define BYTES_PER_CHAR_12 18
 
 // todo "上有名不"这四个字必定显示为错别字(是编码转换的问题，不是字体的问题)
-static unsigned char font_sky16_bitbuf[32];
+static unsigned char font_sky16_bitbuf[BYTES_PER_CHAR_16];
 static int font_sky16_f;
 
+static unsigned char font_sky12_bitbuf[BYTES_PER_CHAR_12];
+static int font_sky12_f;
+
+// 应用打开gb12_uc2.adl时置1，表示MR_FONT_MEDIUM也使用gb12
+static int font_medium_use_12 = 0;
+
+// mr_platDrawChar没有fontSize参数，通过此变量传递当前字体大小
+static uint16 current_font_size = MR_FONT_MEDIUM;
+
 static void xl_font_sky16_charWidthHeight(uint16 id, int32 *width, int32 *height);
+static void xl_font_sky12_charWidthHeight(uint16 id, int32 *width, int32 *height);
 
 static int xl_font_sky16_init() {  //字体初始化，打开字体文件
     font_sky16_f = mr_open("system/gb16.uc2", MR_FILE_RDONLY);
     if (font_sky16_f == 0) {
-        LOGW("%s", "font load fail");
+        LOGW("%s", "font16 load fail");
         return -1;
     }
-    LOGI("font load suc fd=%d", font_sky16_f);
+    LOGI("font16 load suc fd=%d", font_sky16_f);
+    return 0;
+}
+
+static int xl_font_sky12_init() {
+    font_sky12_f = mr_open("system/gb12.uc2", MR_FILE_RDONLY);
+    if (font_sky12_f == 0) {
+        LOGW("%s", "font12 load fail");
+        return -1;
+    }
+    LOGI("font12 load suc fd=%d", font_sky12_f);
     return 0;
 }
 
@@ -96,11 +124,38 @@ static int xl_font_sky16_close() {  //关闭字体
     return mr_close(font_sky16_f);
 }
 
+static int xl_font_sky12_close() {
+    if (font_sky12_f > 0) {
+        return mr_close(font_sky12_f);
+    }
+    return 0;
+}
+
+// MR_FONT_SMALL始终使用gb12；MR_FONT_MEDIUM在应用激活gb12后也使用gb12
+static int xl_font_should_use_12(uint16 fontSize) {
+    if (font_sky12_f <= 0) {
+        return 0;
+    }
+    if (fontSize == MR_FONT_SMALL) {
+        return 1;
+    }
+    if (fontSize == MR_FONT_MEDIUM && font_medium_use_12) {
+        return 1;
+    }
+    return 0;
+}
+
 //获得字符的位图
 static char *xl_font_sky16_getChar(uint16 id) {
-    mr_seek(font_sky16_f, id * 32, 0);
-    mr_read(font_sky16_f, font_sky16_bitbuf, 32);
+    mr_seek(font_sky16_f, id * BYTES_PER_CHAR_16, 0);
+    mr_read(font_sky16_f, font_sky16_bitbuf, BYTES_PER_CHAR_16);
     return (char *)font_sky16_bitbuf;
+}
+
+static char *xl_font_sky12_getChar(uint16 id) {
+    mr_seek(font_sky12_f, id * BYTES_PER_CHAR_12, 0);
+    mr_read(font_sky12_f, font_sky12_bitbuf, BYTES_PER_CHAR_12);
+    return (char *)font_sky12_bitbuf;
 }
 
 static void xl_font_sky16_drawChar(uint16 ch, int x, int y, uint16 color) {
@@ -109,8 +164,8 @@ static void xl_font_sky16_drawChar(uint16 ch, int x, int y, uint16 color) {
     int ix, iy;
     uint16 data;
 
-    mr_seek(font_sky16_f, ch * 32, 0);  // 一行两字节，高度16，所以2*16=32字节
-    mr_read(font_sky16_f, font_sky16_bitbuf, 32);
+    mr_seek(font_sky16_f, ch * BYTES_PER_CHAR_16, 0);  // 一行两字节，高度16，所以2*16=32字节
+    mr_read(font_sky16_f, font_sky16_bitbuf, BYTES_PER_CHAR_16);
     xl_font_sky16_charWidthHeight(ch, &width, &height);
     for (iy = 0; iy < height; iy++) {
         data = ((uint16)font_sky16_bitbuf[iy * 2] << 8) | font_sky16_bitbuf[iy * 2 + 1];
@@ -123,15 +178,68 @@ static void xl_font_sky16_drawChar(uint16 ch, int x, int y, uint16 color) {
     }
 }
 
+static void xl_font_sky12_drawChar(uint16 ch, int x, int y, uint16 color) {
+    extern void _DrawPoint(int16 x, int16 y, uint16 nativecolor);
+    int width, height;
+    int ix, iy;
+
+    mr_seek(font_sky12_f, ch * BYTES_PER_CHAR_12, 0);
+    mr_read(font_sky12_f, font_sky12_bitbuf, BYTES_PER_CHAR_12);
+    xl_font_sky12_charWidthHeight(ch, &width, &height);
+
+    if (ch < 128) {
+        // 英文：每行1字节，共12行，高8位在前（MSB为最左像素）
+        for (iy = 0; iy < height; iy++) {
+            uint8 data = font_sky12_bitbuf[iy];
+            for (ix = 0; ix < width; ix++) {
+                if (data & 0x80) {
+                    _DrawPoint(ix + x, iy + y, color);
+                }
+                data <<= 1;
+            }
+        }
+    } else {
+        // 中文：每行12位，每3字节存2行（高12位=第一行，低12位=第二行）
+        for (iy = 0; iy < height; iy++) {
+            int group = iy / 2;
+            uint32 val = ((uint32)font_sky12_bitbuf[group * 3] << 16) |
+                         ((uint32)font_sky12_bitbuf[group * 3 + 1] << 8) |
+                         font_sky12_bitbuf[group * 3 + 2];
+            uint16 data;
+            if (iy % 2 == 0) {
+                data = (val >> 12) & 0xFFF;
+            } else {
+                data = val & 0xFFF;
+            }
+            for (ix = 0; ix < width; ix++) {
+                if (data & (1 << 11)) {
+                    _DrawPoint(ix + x, iy + y, color);
+                }
+                data <<= 1;
+            }
+        }
+    }
+}
+
 //获取一个文字的宽高
 static void xl_font_sky16_charWidthHeight(uint16 id, int32 *width, int32 *height) {
     if (id < 128) {
-        if (width) *width = EN_CHAR_W;
-        if (height) *height = CHAR_H;
+        if (width) *width = EN_CHAR_W_16;
+        if (height) *height = CHAR_H_16;
         return;
     }
-    if (width) *width = CN_CHAR_W;
-    if (height) *height = CHAR_H;
+    if (width) *width = CN_CHAR_W_16;
+    if (height) *height = CHAR_H_16;
+}
+
+static void xl_font_sky12_charWidthHeight(uint16 id, int32 *width, int32 *height) {
+    if (id < 128) {
+        if (width) *width = EN_CHAR_W_12;
+        if (height) *height = CHAR_H_12;
+        return;
+    }
+    if (width) *width = CN_CHAR_W_12;
+    if (height) *height = CHAR_H_12;
 }
 
 int32 mr_exit(void) {
@@ -140,6 +248,7 @@ int32 mr_exit(void) {
         return MR_SUCCESS;
     }
     xl_font_sky16_close();
+    xl_font_sky12_close();
     dsmInFuncs->exit();
     return MR_SUCCESS;
 }
@@ -375,6 +484,11 @@ int32 mr_open(const char *filename, uint32 mode) {
     char fullpathname[DSM_MAX_FILE_LEN];
     int32 ret = dsmInFuncs->open(get_filename(fullpathname, filename), mode);
     LOGI("mr_open(%s,%d) fd is: %d", fullpathname, mode, ret);
+    // 应用打开gb12_uc2.adl表示激活gb12字体用于MR_FONT_MEDIUM
+    if (ret > 0 && strstr2(filename, "gb12_uc2.adl")) {
+        font_medium_use_12 = 1;
+        LOGI("gb12 font activated for MR_FONT_MEDIUM");
+    }
     return ret;
 }
 
@@ -506,12 +620,23 @@ void mr_drawBitmap(uint16 *bmp, int16 x, int16 y, uint16 w, uint16 h) {
 }
 
 const char *mr_getCharBitmap(uint16 ch, uint16 fontSize, int *width, int *height) {
+    // 记录当前字体大小，供mr_platDrawChar使用
+    current_font_size = fontSize;
+    if (xl_font_should_use_12(fontSize)) {
+        xl_font_sky12_charWidthHeight(ch, width, height);
+        return xl_font_sky12_getChar(ch);
+    }
     xl_font_sky16_charWidthHeight(ch, width, height);
     return xl_font_sky16_getChar(ch);
 }
 
 void mr_platDrawChar(uint16 ch, int32 x, int32 y, uint32 color) {
-    xl_font_sky16_drawChar(ch, x, y, (uint16)color);
+    // 根据mr_getCharBitmap设置的current_font_size选择字体
+    if (xl_font_should_use_12(current_font_size)) {
+        xl_font_sky12_drawChar(ch, x, y, (uint16)color);
+    } else {
+        xl_font_sky16_drawChar(ch, x, y, (uint16)color);
+    }
 }
 
 int32 mr_startShake(int32 ms) {
@@ -706,8 +831,8 @@ int32 mr_platEx(int32 code, uint8 *input, int32 input_len, uint8 **output, int32
             return dsmSwitchPath(input, input_len, output, output_len);
             // case MR_GET_FREE_SPACE:
 
-        case MR_CHARACTER_HEIGHT: {  // 1201
-            static int32 wordInfo = (CHAR_H << 24) | (EN_CHAR_W << 16) | (CHAR_H << 8) | (CN_CHAR_W);
+        case MR_CHARACTER_HEIGHT: {  // 1201，返回默认（中号/gb16）字体尺寸
+            static int32 wordInfo = (CHAR_H_16 << 24) | (EN_CHAR_W_16 << 16) | (CHAR_H_16 << 8) | (CN_CHAR_W_16);
             *output = (unsigned char *)&wordInfo;
             *output_len = 4;
             return MR_SUCCESS;
@@ -967,6 +1092,7 @@ void dsm_prepare(void) {
     dsmInFuncs->mkDir(DSM_DRIVE_B);
     dsmInFuncs->mkDir(DSM_DRIVE_X);
     xl_font_sky16_init();
+    xl_font_sky12_init();
     if (encode_init() == MR_FAILED) {
         LOGW("%s", "encode load fail");
     }
