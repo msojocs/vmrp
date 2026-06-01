@@ -5,6 +5,12 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall -DNETWORK_SUPPORT -DVMRP -funsigned-char")
 
+option(VMRP_BUILD_SHARED "Build libvmrp shared library (no SDL)" OFF)
+option(VMRP_BUILD_SHARED_ONLY "Only build the shared library, skip SDL/test/wasm targets" OFF)
+if(VMRP_BUILD_SHARED_ONLY)
+  set(VMRP_BUILD_SHARED ON CACHE BOOL "" FORCE)
+endif()
+
 # --- Unicorn (submodule) ---
 # 只编译 ARM 架构，静态链接，不构建示例和测试
 set(UNICORN_ARCH "arm" CACHE STRING "" FORCE)
@@ -12,15 +18,18 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(UNICORN_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
 set(UNICORN_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(UNICORN_INSTALL OFF CACHE BOOL "" FORCE)
-add_subdirectory(third_party/unicorn EXCLUDE_FROM_ALL)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn EXCLUDE_FROM_ALL)
 
-set(VMRP_COMMON_SOURCES
-  ./src/main.c
+set(VMRP_CORE_SOURCES
   ./src/vmrp.c
   ./src/utils.c
   ./src/rbtree.c
   ./src/network.c
   ./src/fileLib.c
+)
+
+set(VMRP_PLATFORM_SDL_SOURCES
+  ./src/main.c
 )
 
 set(VMRP_MYTHROAD_SOURCES
@@ -70,9 +79,11 @@ set(VMRP_MYTHROAD_SOURCES
 )
 set_source_files_properties(${VMRP_MYTHROAD_SOURCES} PROPERTIES COMPILE_OPTIONS "-UVMRP")
 
+if(NOT VMRP_BUILD_SHARED_ONLY)
 # --- Native 构建 ---
 add_executable(vmrp
-  ${VMRP_COMMON_SOURCES}
+  ${VMRP_PLATFORM_SDL_SOURCES}
+  ${VMRP_CORE_SOURCES}
   ./src/native_platform_memory.c
   ./src/native_dsm_funcs.c
   ./src/runtime_native_mythroad.c
@@ -80,7 +91,7 @@ add_executable(vmrp
   ${VMRP_MYTHROAD_SOURCES}
 )
 target_compile_definitions(vmrp PRIVATE VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
-target_include_directories(vmrp PRIVATE ${CMAKE_SOURCE_DIR}/third_party/unicorn/include)
+target_include_directories(vmrp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
 target_link_options(vmrp PRIVATE -Wl,--allow-multiple-definition)
 # --no-as-needed 确保 libm 不被 GNU ld 按需跳过——unicorn 的内部静态库
 # （arm-softmmu）在链接顺序上排在 -lm 之后，需要其中的 sqrtf 等符号
@@ -95,7 +106,8 @@ if(EMCC)
   set(VMRP_WASM_OUTPUT ${VMRP_WASM_OUTPUT_DIR}/vmrp.js)
 
   set(VMRP_WASM_SOURCES
-    ${VMRP_COMMON_SOURCES}
+    ${VMRP_PLATFORM_SDL_SOURCES}
+    ${VMRP_CORE_SOURCES}
     ./src/native_platform_memory.c
     ./src/native_dsm_funcs.c
     ./src/runtime_native_mythroad.c
@@ -116,9 +128,9 @@ if(EMCC)
       -DNETWORK_SUPPORT -DVMRP -DVMRP_NATIVE
       -DTARGET_MOD -DMTK_MOD -DMR_PLAT_DRAWTEXT -DDSM_FULL -DTRUST_BINARIES
       -funsigned-char
-      -I${CMAKE_SOURCE_DIR}/wasm/unicorn
+      -I${CMAKE_CURRENT_SOURCE_DIR}/wasm/unicorn
       ${VMRP_WASM_ABS_SOURCES}
-      ${CMAKE_SOURCE_DIR}/wasm/unicorn/libunicorn.a
+      ${CMAKE_CURRENT_SOURCE_DIR}/wasm/unicorn/libunicorn.a
       -s EXPORTED_FUNCTIONS="['_main','_malloc','_free']"
       -s ALLOW_MEMORY_GROWTH=1
       -s ALLOW_TABLE_GROWTH
@@ -128,7 +140,7 @@ if(EMCC)
       -s FORCE_FILESYSTEM=1
       -o ${VMRP_WASM_OUTPUT}
     DEPENDS ${VMRP_WASM_ABS_SOURCES}
-            ${CMAKE_SOURCE_DIR}/wasm/unicorn/libunicorn.a
+            ${CMAKE_CURRENT_SOURCE_DIR}/wasm/unicorn/libunicorn.a
     COMMENT "Building vmrp for WebAssembly with emcc"
     VERBATIM
   )
@@ -136,7 +148,28 @@ if(EMCC)
 else()
   message(STATUS "emcc not found, vmrp-wasm target disabled")
 endif()
+endif() # NOT VMRP_BUILD_SHARED_ONLY
 
+# --- Shared library (for Android/Flutter via dart:ffi) ---
+if(VMRP_BUILD_SHARED)
+  add_library(vmrp-shared SHARED
+    ./src/vmrp_api.c
+    ${VMRP_CORE_SOURCES}
+    ./src/native_platform_memory.c
+    ./src/native_dsm_funcs.c
+    ./src/runtime_native_mythroad.c
+    ./src/arm_ext_executor.c
+    ${VMRP_MYTHROAD_SOURCES}
+  )
+  target_compile_definitions(vmrp-shared PRIVATE VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
+  target_include_directories(vmrp-shared PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
+  target_link_options(vmrp-shared PRIVATE -Wl,--allow-multiple-definition)
+  target_link_libraries(vmrp-shared unicorn "-Wl,--no-as-needed" m z)
+  set_target_properties(vmrp-shared PROPERTIES OUTPUT_NAME "vmrp")
+  set_target_properties(vmrp-shared PROPERTIES C_VISIBILITY_PRESET hidden)
+endif()
+
+if(NOT VMRP_BUILD_SHARED_ONLY)
 # --- 测试 ---
 enable_testing()
 set(TEST_MYTHROAD_SOURCES ${VMRP_MYTHROAD_SOURCES})
@@ -156,3 +189,4 @@ add_test(NAME vmrp_unit_tests COMMAND test_vmrp)
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
+endif() # NOT VMRP_BUILD_SHARED_ONLY

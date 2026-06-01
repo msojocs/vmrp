@@ -140,10 +140,10 @@ void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
         for (int32_t i = 0; i < w; i++) {
             int32_t xx = x + i;
             int32_t yy = y + j;
-            if (xx < 0 || yy < 0 || xx >= SCREEN_WIDTH || yy >= SCREEN_HEIGHT) {
+            if (xx < 0 || yy < 0 || xx >= vmrp_config.screen_width || yy >= vmrp_config.screen_height) {
                 continue;
             }
-            uint16_t color = *(bmp + (xx + yy * SCREEN_WIDTH));
+            uint16_t color = *(bmp + (xx + yy * vmrp_config.screen_width));
             Uint32 *p = (Uint32 *)(((Uint8 *)surface->pixels) + surface->pitch * yy) + xx;
             *p = SDL_MapRGB(surface->format, PIXEL565R(color), PIXEL565G(color), PIXEL565B(color));
         }
@@ -502,7 +502,7 @@ int main(int argc, char *args[]) {
     }
     timerEventType = SDL_RegisterEvents(1);
 
-    window = SDL_CreateWindow("vmrp", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL);
+    window = SDL_CreateWindow("vmrp", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, vmrp_config.screen_width, vmrp_config.screen_height, SDL_WINDOW_OPENGL);
     if (window == NULL) {
         printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
         SDL_Quit();

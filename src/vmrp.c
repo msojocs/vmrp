@@ -33,6 +33,11 @@
 #include <emscripten.h>
 #endif
 
+VmrpConfig vmrp_config = {
+    .screen_width = DEFAULT_SCREEN_WIDTH,
+    .screen_height = DEFAULT_SCREEN_HEIGHT,
+};
+
 static VmrpRuntime runtime;
 
 typedef struct VmrpStartupConfig {
@@ -40,6 +45,7 @@ typedef struct VmrpStartupConfig {
     const char *mrp_arg;
     const char *ext_arg;
     const char *entry_arg;
+    const char *screen_arg;
     char cli_mrp_path[PATH_MAX];
 } VmrpStartupConfig;
 
@@ -47,12 +53,20 @@ static VmrpStartupConfig startup_config;
 
 void printVmrpUsage(const char *program) {
     const char *name = (program && *program) ? program : "vmrp";
-    printf("Usage: %s [MRP_PATH] [EXT_NAME] [ENTRY]\n", name);
+    printf("Usage: %s [OPTIONS] [MRP_PATH] [EXT_NAME] [ENTRY]\n", name);
     printf("       %s --help\n", name);
+    printf("\n");
+    printf("Options:\n");
+    printf("  --screen WxH   Set screen resolution (default: 240x320)\n");
+    printf("\n");
+    printf("Environment variables:\n");
+    printf("  VMRP_SCREEN_WIDTH   Screen width  (overridden by --screen)\n");
+    printf("  VMRP_SCREEN_HEIGHT  Screen height (overridden by --screen)\n");
     printf("\n");
     printf("Without arguments, vmrp keeps the old behavior and starts VMRP_MRP or dsm_gm.mrp.\n");
     printf("Examples:\n");
     printf("  %s /path/to/app.mrp\n", name);
+    printf("  %s --screen 176x220 /path/to/app.mrp\n", name);
     printf("  %s /path/to/app.mrp start.mr _dsm\n", name);
 }
 
@@ -87,17 +101,27 @@ static int resolve_cli_mrp_path(const char *input, char *output, size_t output_s
 }
 
 static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
-                                 const char **ext_arg, const char **entry_arg) {
+                                 const char **ext_arg, const char **entry_arg,
+                                 const char **screen_arg) {
     int positional = 0;
     int after_dashdash = 0;
     *mrp_arg = NULL;
     *ext_arg = NULL;
     *entry_arg = NULL;
+    *screen_arg = NULL;
 
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
         if (!after_dashdash && strcmp(arg, "--") == 0) {
             after_dashdash = 1;
+            continue;
+        }
+        if (!after_dashdash && strcmp(arg, "--screen") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "vmrp: --screen requires an argument (e.g. 176x220)\n");
+                return MR_FAILED;
+            }
+            *screen_arg = argv[++i];
             continue;
         }
         if (!after_dashdash && arg[0] == '-') {
@@ -122,13 +146,24 @@ static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
     return MR_SUCCESS;
 }
 
+static int parse_screen_size(const char *str, int *w, int *h) {
+    int tw = 0, th = 0;
+    if (sscanf(str, "%dx%d", &tw, &th) != 2 || tw <= 0 || th <= 0) {
+        return MR_FAILED;
+    }
+    *w = tw;
+    *h = th;
+    return MR_SUCCESS;
+}
+
 int prepareVmrpArgs(int argc, char *argv[]) {
     const char *mrp_arg = NULL;
     const char *ext_arg = NULL;
     const char *entry_arg = NULL;
+    const char *screen_arg = NULL;
 
     memset(&startup_config, 0, sizeof(startup_config));
-    if (parse_positional_args(argc, argv, &mrp_arg, &ext_arg, &entry_arg) != MR_SUCCESS) {
+    if (parse_positional_args(argc, argv, &mrp_arg, &ext_arg, &entry_arg, &screen_arg) != MR_SUCCESS) {
         return MR_FAILED;
     }
     if (mrp_arg && resolve_cli_mrp_path(mrp_arg, startup_config.cli_mrp_path,
@@ -136,9 +171,26 @@ int prepareVmrpArgs(int argc, char *argv[]) {
         return MR_FAILED;
     }
 
+    /* Screen size: CLI --screen > env vars > default */
+    if (screen_arg) {
+        int w, h;
+        if (parse_screen_size(screen_arg, &w, &h) != MR_SUCCESS) {
+            fprintf(stderr, "vmrp: invalid screen size '%s' (expected WxH, e.g. 176x220)\n", screen_arg);
+            return MR_FAILED;
+        }
+        vmrp_config.screen_width = w;
+        vmrp_config.screen_height = h;
+    } else {
+        const char *env_w = getenv("VMRP_SCREEN_WIDTH");
+        const char *env_h = getenv("VMRP_SCREEN_HEIGHT");
+        if (env_w && *env_w) vmrp_config.screen_width = atoi(env_w);
+        if (env_h && *env_h) vmrp_config.screen_height = atoi(env_h);
+    }
+
     startup_config.mrp_arg = mrp_arg;
     startup_config.ext_arg = ext_arg;
     startup_config.entry_arg = entry_arg;
+    startup_config.screen_arg = screen_arg;
     startup_config.prepared = 1;
     return MR_SUCCESS;
 }

@@ -1,25 +1,61 @@
 #include "./include/utils.h"
 
+#include <string.h>
 #include <sys/time.h>
 #include <time.h>
 
 #include "./include/fileLib.h"
+#include "./include/vmrp.h"
 
-// 只支持240*320大小
 void printScreen(char *filename, uint16_t *buf) {
-    // clang-format off
-    unsigned char bmpHeader[70] =
-    {
-        0x42, 0x4D, 0x48, 0x58, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46, 0x00, 0x00, 0x00, 0x38, 0x00, 
-        0x00, 0x00, 0xF0, 0x00, 0x00, 0x00, 0xC0, 0xFE, 0xFF, 0xFF, 0x01, 0x00, 0x10, 0x00, 0x03, 0x00, 
-        0x00, 0x00, 0x02, 0x58, 0x02, 0x00, 0x12, 0x0B, 0x00, 0x00, 0x12, 0x0B, 0x00, 0x00, 0x00, 0x00, 
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x00, 0x00, 0xE0, 0x07, 0x00, 0x00, 0x1F, 0x00, 
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    } ;
-    // clang-format on
+    int w = vmrp_config.screen_width;
+    int h = vmrp_config.screen_height;
+    uint32_t pixel_bytes = (uint32_t)(w * h * 2);
+    uint32_t file_size = 70 + pixel_bytes;
+    int32_t neg_h = -h;
+
+    unsigned char bmpHeader[70];
+    memset(bmpHeader, 0, sizeof(bmpHeader));
+    /* BM signature */
+    bmpHeader[0] = 0x42; bmpHeader[1] = 0x4D;
+    /* File size (little-endian) */
+    bmpHeader[2] = (file_size) & 0xFF;
+    bmpHeader[3] = (file_size >> 8) & 0xFF;
+    bmpHeader[4] = (file_size >> 16) & 0xFF;
+    bmpHeader[5] = (file_size >> 24) & 0xFF;
+    /* Data offset = 70 */
+    bmpHeader[10] = 0x46;
+    /* DIB header size = 56 (BITMAPV3INFOHEADER) */
+    bmpHeader[14] = 0x38;
+    /* Width */
+    bmpHeader[18] = w & 0xFF;
+    bmpHeader[19] = (w >> 8) & 0xFF;
+    /* Height (negative = top-down) */
+    bmpHeader[22] = neg_h & 0xFF;
+    bmpHeader[23] = (neg_h >> 8) & 0xFF;
+    bmpHeader[24] = (neg_h >> 16) & 0xFF;
+    bmpHeader[25] = (neg_h >> 24) & 0xFF;
+    /* Planes = 1, Bits per pixel = 16 */
+    bmpHeader[26] = 0x01;
+    bmpHeader[28] = 0x10;
+    /* Compression = BI_BITFIELDS (3) */
+    bmpHeader[30] = 0x03;
+    /* Image size */
+    bmpHeader[34] = pixel_bytes & 0xFF;
+    bmpHeader[35] = (pixel_bytes >> 8) & 0xFF;
+    bmpHeader[36] = (pixel_bytes >> 16) & 0xFF;
+    bmpHeader[37] = (pixel_bytes >> 24) & 0xFF;
+    /* X/Y pixels per meter */
+    bmpHeader[38] = 0x12; bmpHeader[39] = 0x0B;
+    bmpHeader[42] = 0x12; bmpHeader[43] = 0x0B;
+    /* RGB565 channel masks */
+    bmpHeader[54] = 0x00; bmpHeader[55] = 0xF8;  /* R: 0xF800 */
+    bmpHeader[58] = 0xE0; bmpHeader[59] = 0x07;  /* G: 0x07E0 */
+    bmpHeader[62] = 0x1F;                         /* B: 0x001F */
+
     int fh = my_open(filename, MR_FILE_CREATE | MR_FILE_RDWR);
     my_write(fh, bmpHeader, sizeof(bmpHeader));
-    my_write(fh, buf, 240 * 320 * 2);
+    my_write(fh, buf, pixel_bytes);
     uint16_t end = 0;
     my_write(fh, &end, sizeof(end));
     my_close(fh);
