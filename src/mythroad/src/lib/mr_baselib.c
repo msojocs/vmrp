@@ -7,7 +7,7 @@
 
 #define lbaselib_c
 
-
+#include <stdio.h>
 #include "../../include/mr_auxlib.h"
 #include "../../include/mr_lib.h"
 
@@ -285,7 +285,9 @@ static int mr_B_dofile (mrp_State *L) {
   int n = mrp_gettop(L);
   int status = mr_L_loadfile(L, fname);
   if (status != 0) mrp_error(L);
+  fprintf(stderr, "[B_dofile] '%s' calling mrp_call...\n", fname ? fname : "(null)"); fflush(stderr);
   mrp_call(L, 0, MRP_MULTRET);
+  fprintf(stderr, "[B_dofile] '%s' done\n", fname ? fname : "(null)"); fflush(stderr);
   return mrp_gettop(L) - n;
 }
 

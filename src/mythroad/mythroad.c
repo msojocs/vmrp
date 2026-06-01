@@ -1,4 +1,5 @@
 #include "./include/mythroad.h"
+#include <stdio.h>
 
 #include "./include/encode.h"
 #include "./include/fixR9.h"
@@ -3633,7 +3634,11 @@ static int32 _mr_intra_start(char* appExName, const char* entry) {
         return MR_FAILED;
     }
     MRDBGPRINTF("Total memory:%d", LG_mem_len);
+    fprintf(stderr, "[_mr_intra_start] mem_init OK, sizeof(ptrdiff_t)=%zu sizeof(void*)=%zu\n",
+            sizeof(ptrdiff_t), sizeof(void*)); fflush(stderr);
+    fprintf(stderr, "[_mr_intra_start] dsm_prepare...\n"); fflush(stderr);
     dsm_prepare();
+    fprintf(stderr, "[_mr_intra_start] dsm_prepare OK\n"); fflush(stderr);
 
     mr_event_function = NULL;
     mr_timer_function = NULL;
@@ -3681,6 +3686,7 @@ static int32 _mr_intra_start(char* appExName, const char* entry) {
     mr_bitmap[BITMAPMAX].h = mr_screen_h;
     mr_bitmap[BITMAPMAX].w = mr_screen_w;
 
+    fprintf(stderr, "[_mr_intra_start] screen alloc OK, buf=%p\n", (void*)mr_screenBuf); fflush(stderr);
     LUADBGPRINTF("mr_intra_start entry");
     vm_state = NULL;
     mr_timer_state = MR_TIMER_STATE_IDLE;
@@ -3700,15 +3706,23 @@ static int32 _mr_intra_start(char* appExName, const char* entry) {
         mr_tile[i].y2 = (int16)MR_SCREEN_H;
     }
 
+    fprintf(stderr, "[_mr_intra_start] mrp_open...\n"); fflush(stderr);
     vm_state = mrp_open();
     if (!vm_state) {
+        fprintf(stderr, "[_mr_intra_start] mrp_open FAILED\n"); fflush(stderr);
         return MR_FAILED;
     }
+    fprintf(stderr, "[_mr_intra_start] mrp_open OK, vm_state=%p\n", (void*)vm_state); fflush(stderr);
     LUADBGPRINTF("mr init ok");
+    fprintf(stderr, "[_mr_intra_start] mrp_open_base...\n"); fflush(stderr);
     mrp_open_base(vm_state);
+    fprintf(stderr, "[_mr_intra_start] mrp_open_string...\n"); fflush(stderr);
     mrp_open_string(vm_state);
+    fprintf(stderr, "[_mr_intra_start] mrp_open_table...\n"); fflush(stderr);
     mrp_open_table(vm_state);
+    fprintf(stderr, "[_mr_intra_start] mrp_open_file...\n"); fflush(stderr);
     mrp_open_file(vm_state);
+    fprintf(stderr, "[_mr_intra_start] lua libs OK\n"); fflush(stderr);
 
 #ifdef COMPATIBILITY01
     mr_store_open(vm_state);
@@ -3775,8 +3789,10 @@ static int32 _mr_intra_start(char* appExName, const char* entry) {
     mrp_register(vm_state, "TileLoad", MRF_TileLoad);
 #endif
 
+    fprintf(stderr, "[_mr_intra_start] register phonelib...\n"); fflush(stderr);
     LUADBGPRINTF("register");
     mr_L_openlib(vm_state, MRP_PHONELIBNAME, phonelib, 0);
+    fprintf(stderr, "[_mr_intra_start] phonelib OK, registering funcs...\n"); fflush(stderr);
     LUADBGPRINTF("lib loaded");
 
     mrp_register(vm_state, "_loadPack", LoadPack);
@@ -3843,6 +3859,7 @@ static int32 _mr_intra_start(char* appExName, const char* entry) {
     mrp_pushstring(vm_state, start_fileparameter);
     mrp_setglobal(vm_state, "_mr_param");
 
+    fprintf(stderr, "[_mr_intra_start] all registered, dofile('%s')...\n", appExName); fflush(stderr);
     LUADBGPRINTF("Before VM do file");
     MRDBGPRINTF("Used by VM(include screen buffer):%d bytes", LG_mem_len - LG_mem_left);
 

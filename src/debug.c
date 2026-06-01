@@ -52,7 +52,7 @@ static void dumpFile(uc_engine *uc, char *str) {
     char *lenStr = getSplitStr(str, ',', 3);
     uint32_t addr = toUint32(addrStr);
     uint32_t length = toUint32(lenStr);
-    writeFile(filename, getMrpMemPtr(addr), length);
+    vmrp_writeFile(filename, getMrpMemPtr(addr), length);
     free(filename);
     free(addrStr);
     free(lenStr);

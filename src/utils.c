@@ -1,7 +1,10 @@
 #include "./include/utils.h"
+#include "./include/compat_msvc.h"
 
 #include <string.h>
+#ifndef _MSC_VER
 #include <sys/time.h>
+#endif
 #include <time.h>
 
 #include "./include/fileLib.h"
@@ -166,7 +169,7 @@ retResult:
     return ret;
 }
 
-int wstrlen(char *txt) {
+static int vmrp_wstrlen(char *txt) {
     int i = 0;
     if (txt) {
         while (txt[i] || txt[i + 1]) i += 2;

@@ -1,12 +1,15 @@
 #include "./include/native_dsm_funcs.h"
+#include "./include/compat_msvc.h"
 
 #include <errno.h>
+#ifndef _MSC_VER
 #include <pthread.h>
+#include <unistd.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 #ifdef __linux__
 #include <sys/mman.h>
 #endif

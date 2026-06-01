@@ -3,7 +3,28 @@ project(vmrp VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall -DNETWORK_SUPPORT -DVMRP -funsigned-char")
+if(MSVC)
+  add_compile_options(/J /W3 /utf-8)
+  add_compile_definitions(VMRP _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE WIN32_LEAN_AND_MEAN)
+else()
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall -DNETWORK_SUPPORT -DVMRP -funsigned-char")
+endif()
+
+# --- zlib ---
+if(MSVC)
+  include(FetchContent)
+  FetchContent_Declare(
+    zlib
+    GIT_REPOSITORY https://github.com/madler/zlib.git
+    GIT_TAG v1.3.1
+    GIT_SHALLOW TRUE
+  )
+  set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(zlib)
+  # Make zlib headers findable for targets
+  target_include_directories(zlibstatic PUBLIC ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
+  add_library(ZLIB::ZLIB ALIAS zlibstatic)
+endif()
 
 option(VMRP_BUILD_SHARED "Build libvmrp shared library (no SDL)" OFF)
 option(VMRP_BUILD_SHARED_ONLY "Only build the shared library, skip SDL/test/wasm targets" OFF)
@@ -163,10 +184,15 @@ if(VMRP_BUILD_SHARED)
   )
   target_compile_definitions(vmrp-shared PRIVATE VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
   target_include_directories(vmrp-shared PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
-  target_link_options(vmrp-shared PRIVATE -Wl,--allow-multiple-definition)
-  target_link_libraries(vmrp-shared unicorn "-Wl,--no-as-needed" m z)
   set_target_properties(vmrp-shared PROPERTIES OUTPUT_NAME "vmrp")
-  set_target_properties(vmrp-shared PROPERTIES C_VISIBILITY_PRESET hidden)
+  if(MSVC)
+    target_link_options(vmrp-shared PRIVATE /FORCE:MULTIPLE)
+    target_link_libraries(vmrp-shared ZLIB::ZLIB unicorn ws2_32)
+  else()
+    target_link_options(vmrp-shared PRIVATE -Wl,--allow-multiple-definition)
+    target_link_libraries(vmrp-shared unicorn "-Wl,--no-as-needed" m z)
+    set_target_properties(vmrp-shared PROPERTIES C_VISIBILITY_PRESET hidden)
+  endif()
 endif()
 
 if(NOT VMRP_BUILD_SHARED_ONLY)
