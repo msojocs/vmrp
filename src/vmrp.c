@@ -357,7 +357,9 @@ int startVmrp(int argc, char *argv[]) {
         return MR_FAILED;
     }
 
+    fprintf(stderr, "[startVmrp] vmrp_runtime_init...\n"); fflush(stderr);
     if (vmrp_runtime_init(&runtime) != MR_SUCCESS) return MR_FAILED;
+    fprintf(stderr, "[startVmrp] vmrp_runtime_init OK\n"); fflush(stderr);
 
     const char *arm_ext_smoke = getenv("VMRP_ARM_EXT_SMOKE");
     if (arm_ext_smoke && *arm_ext_smoke) {
@@ -384,9 +386,10 @@ int startVmrp(int argc, char *argv[]) {
         return MR_FAILED;
     }
 
+    fprintf(stderr, "[startVmrp] vmrp_runtime_start_dsm('%s','%s','%s')...\n",
+            filename, extName, entry ? entry : ""); fflush(stderr);
     uint32_t ret = vmrp_runtime_start_dsm(&runtime, filename, extName, entry);
-    printf("vmrp_runtime_start_dsm('%s','%s','%s'): 0x%X\n",
-           filename, extName, entry ? entry : "", ret);
+    fprintf(stderr, "[startVmrp] vmrp_runtime_start_dsm returned 0x%X\n", ret); fflush(stderr);
     if (ret != MR_SUCCESS) {
         vmrp_runtime_destroy(&runtime);
         return MR_FAILED;

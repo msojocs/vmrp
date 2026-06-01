@@ -1,5 +1,6 @@
 #include "./include/mem.h"
 
+#include <stdio.h>
 #include "./include/fixR9.h"
 #include "./include/mythroad.h"
 /*
@@ -31,7 +32,9 @@ int32 _mr_mem_init(void) {
         return MR_FAILED;
     }
     MRDBGPRINTF("got Origin_LG_mem_len:%d", Origin_LG_mem_len);
-    LG_mem_base = (char*)((uint32)(Origin_LG_mem_base + 3) & (~3));
+    fprintf(stderr, "[mem_init] Origin_LG_mem_base=%p len=%u\n", (void*)Origin_LG_mem_base, Origin_LG_mem_len);
+    fflush(stderr);
+    LG_mem_base = (char*)(((uintptr_t)Origin_LG_mem_base + 3) & ~(uintptr_t)3);
     LG_mem_len = (Origin_LG_mem_len - (LG_mem_base - Origin_LG_mem_base)) & (~3);
     LG_mem_end = LG_mem_base + LG_mem_len;
     LG_mem_free.next = 0;
@@ -99,7 +102,7 @@ void mr_free(void* p, uint32 len) {
     len = (uint32)realLGmemSize(len);
     if (!len || !p || (char*)p < LG_mem_base || (char*)p >= LG_mem_end || (char*)p + len > LG_mem_end || (char*)p + len <= LG_mem_base) {
         MRDBGPRINTF("mr_free invalid");
-        MRDBGPRINTF("p=%d,l=%d,base=%d,LG_mem_end=%d", (int32)p, len, (int32)LG_mem_base, (int32)LG_mem_end);
+        MRDBGPRINTF("p=%p,l=%d,base=%p,LG_mem_end=%p", p, len, LG_mem_base, LG_mem_end);
         return;
     }
     free = &LG_mem_free;

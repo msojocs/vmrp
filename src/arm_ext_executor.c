@@ -1,4 +1,5 @@
 #include "./include/arm_ext_executor.h"
+#include "./include/compat_msvc.h"
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -6,8 +7,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h> /* for usleep in busy-wait detection */
+#ifndef _MSC_VER
+#include <unistd.h>
 #include <sys/mman.h>
+#else
+#include <windows.h>
+#endif
 #include <zlib.h>
 
 #include "./include/utils.h"
@@ -1691,6 +1696,17 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     if (!m) return MR_FAILED;
     /* 在 EXT_BASE_ADDR 固定地址分配 ARM 内存，使 ARM 虚拟地址等于宿主指针，
      * 与 unicorn 模式下 uc_mem_map_ptr 的行为一致——ext 返回的指针可被 Lua 直接使用 */
+#ifdef _MSC_VER
+    m->mem = VirtualAlloc((void *)(uintptr_t)EXT_BASE_ADDR, EXT_MEM_SIZE,
+                          MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    if (m->mem == NULL) {
+        m->mem = calloc(1, EXT_MEM_SIZE);
+        m->mem_is_mmap = 0;
+    } else {
+        m->mem_is_mmap = 1;
+        memset(m->mem, 0, EXT_MEM_SIZE);
+    }
+#else
     m->mem = mmap((void *)(uintptr_t)EXT_BASE_ADDR, EXT_MEM_SIZE,
                   PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
     if (m->mem == MAP_FAILED) {
@@ -1700,6 +1716,7 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
         m->mem_is_mmap = 1;
         memset(m->mem, 0, EXT_MEM_SIZE);
     }
+#endif
     if (!m->mem) goto fail;
     m->low_table = calloc(1, EXT_LOW_TABLE_SIZE);
     if (!m->low_table) goto fail;
@@ -1999,9 +2016,14 @@ void arm_ext_unload(ArmExtModule *m) {
     if (m->uc) uc_close(m->uc);
     free(m->last_file_copy);
     free(m->low_table);
-    if (m->mem_is_mmap)
+    if (m->mem_is_mmap) {
+#ifdef _MSC_VER
+        VirtualFree(m->mem, 0, MEM_RELEASE);
+#else
         munmap(m->mem, EXT_MEM_SIZE);
-    else
+#endif
+    } else {
         free(m->mem);
+    }
     free(m);
 }

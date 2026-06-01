@@ -94,6 +94,9 @@ VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h) {
 }
 
 VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char *entry) {
+    fprintf(stderr, "[vmrp_api] start('%s','%s','%s')\n", mrp_path ? mrp_path : "(null)",
+            ext ? ext : "(null)", entry ? entry : "(null)");
+    fflush(stderr);
     if (!mrp_path || !*mrp_path) return -1;
     if (!ext || !*ext) ext = "start.mr";
 
@@ -105,8 +108,12 @@ VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char
     if (entry && *entry) argv[argc++] = (char *)entry;
     argv[argc] = NULL;
 
+    fprintf(stderr, "[vmrp_api] prepareVmrpArgs...\n"); fflush(stderr);
     if (prepareVmrpArgs(argc, argv) != 0) return -1;
-    return startVmrp(argc, argv);
+    fprintf(stderr, "[vmrp_api] startVmrp...\n"); fflush(stderr);
+    int ret = startVmrp(argc, argv);
+    fprintf(stderr, "[vmrp_api] startVmrp returned %d\n", ret); fflush(stderr);
+    return ret;
 }
 
 VMRP_EXPORT void vmrp_api_destroy(void) {
