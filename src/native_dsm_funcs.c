@@ -214,10 +214,14 @@ static DSM_REQUIRE_FUNCS native_funcs = {
     .mr_editRelease = editRelease,
     .mr_editGetText = editGetText,
     .flags = NATIVE_DSM_FLAGS,
+    .screen_width = 0,
+    .screen_height = 0,
 };
 
 DSM_REQUIRE_FUNCS *native_dsm_funcs_get(void) {
     native_uptime_base = (uint64_t)get_uptime_ms();
+    native_funcs.screen_width = vmrp_config.screen_width;
+    native_funcs.screen_height = vmrp_config.screen_height;
     return &native_funcs;
 }
 

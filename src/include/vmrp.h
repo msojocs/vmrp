@@ -9,8 +9,15 @@
 
 #include "utils.h"
 
-#define SCREEN_WIDTH 240
-#define SCREEN_HEIGHT 320
+#define DEFAULT_SCREEN_WIDTH 240
+#define DEFAULT_SCREEN_HEIGHT 320
+
+typedef struct VmrpConfig {
+    int screen_width;
+    int screen_height;
+} VmrpConfig;
+
+extern VmrpConfig vmrp_config;
 
 int32_t event(int32_t code, int32_t p1, int32_t p2);
 int32_t timer();

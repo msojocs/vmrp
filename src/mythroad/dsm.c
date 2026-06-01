@@ -608,8 +608,10 @@ int32 mr_getLen(const char *filename) {
 
 int32 mr_getScreenInfo(mr_screeninfo *s) {
     if (s) {
-        s->width = SCREEN_WIDTH;
-        s->height = SCREEN_HEIGHT;
+        int32 w = dsmInFuncs->screen_width;
+        int32 h = dsmInFuncs->screen_height;
+        s->width = (w > 0) ? w : SCREEN_WIDTH;
+        s->height = (h > 0) ? h : SCREEN_HEIGHT;
         s->bit = 16;
     }
     return MR_SUCCESS;
