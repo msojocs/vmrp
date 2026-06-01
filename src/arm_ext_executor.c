@@ -694,6 +694,7 @@ static void leave_screen_context(ArmExtModule *m, uint16 *saved_screen) {
     }
 }
 
+
 static void cb_ret(ArmExtModule *m, uint32_t ret) {
     reg_write32(m->uc, UC_ARM_REG_R0, ret);
     uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
@@ -740,16 +741,15 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
         printf("arm_ext_executor: table[%u](0x%X,0x%X,0x%X,0x%X) lr=0x%X\n", idx, r0, r1, r2, r3, lr);
     }
-    if (idx != 33) {
+    /* mpc 退出路径的忙等循环交替调用 table[33](getTime)、table[31](timerStart)、
+     * table[32](timerStop)；若后两者重置 busy_wait_count，单次回调内忙等检测
+     * 永远达不到阈值，导致 ARM 执行无法被打断、回调永不返回。 */
+    if (idx != 33 && idx != 31 && idx != 32) {
         m->busy_wait_count = 0;
         m->busy_wait_start_ms = 0;
     }
-    /* 把"实质性 work"定义为：除了 mr_getTime(33)、arm_alloc(0)、arm_free(1)、
-     * mr_strlen(3)、整型 mul/div(132-134) 这些纯算/计时之外的 table 调用，
-     * 都视为产生了可观测副作用（UI 绘制、文件/网络、对话框等）。这条标志被
-     * 后面的 SP-in-code 崩溃分支用来区分"正常 UI 路径意外崩了"和"mpc 退出
-     * 路径的最终自旋崩了"。 */
-    if (idx != 33 && idx != 0 && idx != 1 && idx != 3 && idx != 132 && idx != 133 && idx != 134) {
+    /* timerStart/timerStop 不算 work——同上，退出自旋每轮穿插它们。 */
+    if (idx != 33 && idx != 0 && idx != 1 && idx != 3 && idx != 31 && idx != 32 && idx != 132 && idx != 133 && idx != 134) {
         m->event_did_work = 1;
     }
 
@@ -1499,6 +1499,9 @@ static void hook_screen_write(uc_engine *uc, uc_mem_type type, uint64_t address,
     ArmExtModule *m = (ArmExtModule *)user_data;
     m->screen_write_count++;
     m->screen_dirty = 1;
+    /* 直接写屏幕缓冲区（如 nes 游戏的逐像素渲染）也算"实质性 work"，
+     * 否则退出检测会把纯 ARM 渲染的游戏误判为退出自旋。 */
+    m->event_did_work = 1;
     if (getenv("VMRP_ARM_EXT_TRACE") && m->screen_write_count <= 20) {
         printf("arm_ext_executor: screen write #%u addr=0x%llX size=%d value=0x%llX\n",
                m->screen_write_count, (unsigned long long)address, size, (unsigned long long)value);
@@ -1881,6 +1884,7 @@ uint32 arm_ext_read_timer_queue(ArmExtModule *m) {
     return val;
 }
 
+
 int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval) {
     if (!m || !m->p_addr) return MR_FAILED;
     uint32_t nested_p = m->primary_p_addr ? m->primary_p_addr : 0;
@@ -1921,6 +1925,19 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     enter_screen_context(m, &saved_screenBuf);
     int ret = run_arm_with_sp(m, func, sp);
     leave_screen_context(m, saved_screenBuf);
+
+    /* wrapper 的 dispatch 函数执行后检查 ext_chunk[0x34]（退出标志位）。
+     * 游戏在确认退出的事件处理中设置此字段为非零值；wrapper 的 ARM 代码
+     * 检测到后会移除定时器节点，但不会主动调用 mr_exit。由宿主侧补上。 */
+    {
+        uint32_t exit_flag = 0;
+        if (arm_ptr(m, ext_chunk + 0x34))
+            memcpy(&exit_flag, arm_ptr(m, ext_chunk + 0x34), 4);
+        if (exit_flag) {
+            mr_exit();
+        }
+    }
+
     return ret;
 }
 
