@@ -67,8 +67,6 @@ uIntMap *uIntMap_search(struct rb_root *root, uint32_t key);
 int uIntMap_insert(struct rb_root *root, uIntMap *obj);
 uIntMap *uIntMap_delete(struct rb_root *root, uint32_t key);
 
-uint32_t copyWstrToMrp(char *str);
-uint32_t copyStrToMrp(char *str);
 void printScreen(char *filename, uint16_t *buf);
 
 int64_t get_uptime_ms(void);

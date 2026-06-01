@@ -10,8 +10,3 @@ void *my_mallocExt(uint32 len) {
 void my_freeExt(void *p) {
     if (p) free(((uint32 *)p) - 1);
 }
-
-void initMemoryManager(uint32_t baseAddress, uint32_t len) {
-    (void)baseAddress;
-    (void)len;
-}

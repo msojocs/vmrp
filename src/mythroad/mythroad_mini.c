@@ -14,9 +14,7 @@
 #include "./include/mythroad.h"
 #include "./include/string.h"
 #include "./include/encode.h"
-#ifdef VMRP_NATIVE
 #include "../include/arm_ext_executor.h"
-#endif
 
 #define MR_VERSION 2011
 
@@ -1585,7 +1583,6 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
 
 static int _mr_TestComC(int input0, char* input1, int32 len, int32 code) {
     int ret = 0;
-#ifdef VMRP_NATIVE
     static ArmExtModule* native_ext;
     switch (input0) {
         case 800: {
@@ -1593,7 +1590,6 @@ static int _mr_TestComC(int input0, char* input1, int32 len, int32 code) {
             native_ext = NULL;
             int32 ext_r0 = 0;
             int load_ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code, &ext_r0);
-            /* 将 ARM ext 代码的返回值传给调用者，与非 native 路径一致 */
             ret = (load_ret == MR_SUCCESS) ? ext_r0 : load_ret;
         }
             break;
@@ -1609,30 +1605,6 @@ static int _mr_TestComC(int input0, char* input1, int32 len, int32 code) {
             break;
     }
     return ret;
-#else
-    switch (input0) {
-        case 800: {
-            mr_load_c_function = (MR_LOAD_C_FUNCTION)(input1 + 8);
-            *((void**)(input1)) = (void*)_mr_c_function_table;
-            // extern int32 clean_arm9_dcache(uint32 addr, uint32 len);
-            // extern int32 invalidate_arm9_icache(int32 addr, int32 len);
-            // clean_arm9_dcache((uint32)((uint32)(input1)&(~0x0000001F)), ((len+0x0000001F*3)&(~0x0000001F)));
-            // invalidate_arm9_icache((uint32)((uint32)(input1)&(~0x0000001F)), ((len+0x0000001F*3)&(~0x0000001F)));
-            mr_printf("[WARN]_mr_TestComC mr_cacheSyncRaw 0x%p, %d", input1, len);
-            mr_cacheSync((void*)((uint32)(input1) & (~0x0000001F)), ((len + 0x0000001F * 3) & (~0x0000001F)));
-            MRDBGPRINTF("mr_load_c_function: 0x%X", mr_load_c_function);
-            fixR9_saveMythroad();
-            ret = mr_load_c_function(code);
-        } break;
-        case 801: {
-            int32 output_len = 0;
-            uint8* output = NULL;
-            fixR9_saveMythroad();
-            ret = mr_c_function(mr_c_function_P, code, (uint8*)input1, len, (uint8**)&output, &output_len);
-        } break;
-    }
-    return ret;
-#endif
 }
 
 typedef enum {
