@@ -4,8 +4,6 @@
 #include <time.h>
 
 #include "./include/fileLib.h"
-#include "./include/memory.h"
-#include "./include/vmrp.h"
 
 // 只支持240*320大小
 void printScreen(char *filename, uint16_t *buf) {
@@ -140,21 +138,6 @@ int wstrlen(char *txt) {
     return i;
 }
 
-uint32_t copyWstrToMrp(char *str) {
-    if (!str) return 0;
-    int len = wstrlen(str) + 2;
-    void *p = my_mallocExt(len);
-    memcpy(p, str, len);
-    return toMrpMemAddr(p);
-}
-
-uint32_t copyStrToMrp(char *str) {
-    if (!str) return 0;
-    uint32_t len = strlen(str) + 1;
-    void *p = my_mallocExt(len);
-    memcpy(p, str, len);
-    return toMrpMemAddr(p);
-}
 
 int64_t get_uptime_ms(void) {
     struct timespec ts;

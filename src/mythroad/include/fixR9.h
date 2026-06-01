@@ -10,11 +10,6 @@
 
 void fixR9_saveMythroad(void);
 
-#ifdef VMRP_NATIVE
-/*
- * Native Mythroad is not entered from ARM/RWPI code, so the r9/r10 saving
- * stubs used by the old ARM cfunction.ext bridge must become normal C calls.
- */
 #define getR9() NULL
 #define setR9(value) ((void)(value))
 #define getR10() NULL
@@ -168,17 +163,6 @@ void fixR9_saveMythroad(void);
 #define asm_mrp_dump mrp_dump
 #define asm_mrp_yield mrp_yield
 #define asm_mrp_resume mrp_resume
-#endif
-
-// 以下函数全部在汇编代码实现
-
-#ifndef VMRP_NATIVE
-extern void *getR9(void);
-extern void setR9(void *value);
-extern void *getR10(void);
-extern void setR10(void *value);
-extern void setR9R10(void *r9, void *r10);
-#endif
 
 extern void *asm_mr_malloc(uint32 len);
 extern void asm_mr_free(void *p, uint32 len);
