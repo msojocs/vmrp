@@ -1,5 +1,7 @@
 
+#ifndef _MSC_VER
 #include <pthread.h>
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -104,12 +106,14 @@ static void my_readLine(char* src, char* dst, size_t dstlen) {
     *dst = '\0';
 }
 
+#ifndef _MSC_VER
 typedef struct {
     pthread_t th;
     mSocket* s;
     uint32_t ip;
     uint16_t port;
 } connectData_t;
+#endif
 
 static int32 my_connectSync(SOCKET_T s, int32 ip, uint16 port) {
     struct sockaddr_in clientService;
@@ -127,6 +131,7 @@ static int32 my_connectSync(SOCKET_T s, int32 ip, uint16 port) {
     return MR_SUCCESS;
 }
 
+#ifndef _MSC_VER
 static void* my_connectAsync(void* arg) {
     connectData_t* data = (connectData_t*)arg;
     int32_t r = my_connectSync(data->s->s, data->ip, data->port);
@@ -139,6 +144,7 @@ static void* my_connectAsync(void* arg) {
     free(data);
     return NULL;
 }
+#endif
 /*
    MR_SUCCESS 成功
    MR_FAILED 失败
@@ -260,12 +266,14 @@ int32 my_closeNetwork(void) {
 #endif
 }
 
+#ifndef _MSC_VER
 typedef struct {
     MR_INIT_NETWORK_CB cb;
     void* userData;
     uc_engine* uc;
     pthread_t th;
 } initNetworkAsyncData_t;
+#endif
 
 static int32 my_initNetworkSync() {
 #ifdef WIN_PLAT
@@ -293,6 +301,7 @@ static int32 my_initNetworkSync() {
     return MR_SUCCESS;
 }
 
+#ifndef _MSC_VER
 static void* my_initNetworkAsync(void* arg) {
     initNetworkAsyncData_t* data = (initNetworkAsyncData_t*)arg;
     int32 r = my_initNetworkSync();
@@ -301,6 +310,7 @@ static void* my_initNetworkAsync(void* arg) {
     free(data);
     return NULL;
 }
+#endif
 
 /*  
    MR_SUCCESS 同步模式，初始化成功，不再调用cb
@@ -329,6 +339,7 @@ int32 my_initNetwork(uc_engine* uc, MR_INIT_NETWORK_CB cb, const char* mode, voi
 #endif
 }
 
+#ifndef _MSC_VER
 typedef struct {
     char* name;
     MR_GET_HOST_CB cb;
@@ -336,6 +347,7 @@ typedef struct {
     uc_engine* uc;
     pthread_t th;
 } getHostByNameAsyncData_t;
+#endif
 
 static int32 my_getHostByNameSync(const char* name) {
     int32 ret = MR_FAILED;
@@ -377,6 +389,7 @@ static int32 my_getHostByNameSync(const char* name) {
     return ret;
 }
 
+#ifndef _MSC_VER
 static void* my_getHostByNameAsync(void* arg) {
     getHostByNameAsyncData_t* data = (getHostByNameAsyncData_t*)arg;
     int32 r = my_getHostByNameSync(data->name);
@@ -386,6 +399,7 @@ static void* my_getHostByNameAsync(void* arg) {
     free(data);
     return NULL;
 }
+#endif
 
 /*
    MR_FAILED （立即感知的）失败，不再调用cb

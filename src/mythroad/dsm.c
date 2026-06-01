@@ -1,5 +1,6 @@
 #include "./include/dsm.h"
 
+#include <stdio.h>
 #include "./include/encode.h"
 #include "./include/fixR9.h"
 #include "./include/mem.h"
@@ -1088,16 +1089,21 @@ uint16 *mr_getScreenBuffer(void) {
 #endif
 
 void dsm_prepare(void) {
+    fprintf(stderr, "[dsm_prepare] mkDir...\n"); fflush(stderr);
     dsmInFuncs->mkDir(MYTHROAD_PATH);
     dsmInFuncs->mkDir(DSM_HIDE_DRIVE);
     dsmInFuncs->mkDir(DSM_DRIVE_A);
     dsmInFuncs->mkDir(DSM_DRIVE_B);
     dsmInFuncs->mkDir(DSM_DRIVE_X);
+    fprintf(stderr, "[dsm_prepare] xl_font_sky16_init...\n"); fflush(stderr);
     xl_font_sky16_init();
+    fprintf(stderr, "[dsm_prepare] xl_font_sky12_init...\n"); fflush(stderr);
     xl_font_sky12_init();
+    fprintf(stderr, "[dsm_prepare] encode_init...\n"); fflush(stderr);
     if (encode_init() == MR_FAILED) {
         LOGW("%s", "encode load fail");
     }
+    fprintf(stderr, "[dsm_prepare] done\n"); fflush(stderr);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////

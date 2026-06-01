@@ -1,8 +1,13 @@
 #include "./include/fileLib.h"
 #include "./include/utils.h"
+#include "./include/compat_msvc.h"
 
 #include <string.h>
+#ifdef _MSC_VER
+#include "./include/dirent_win.h"
+#else
 #include <dirent.h>
+#endif
 #include <fcntl.h>
 #include <malloc.h>
 #include <sys/stat.h>
@@ -199,7 +204,7 @@ int32_t my_closedir(int32_t f) {
     return MR_SUCCESS;
 }
 
-void writeFile(const char *filename, void *data, uint32 length) {
+void vmrp_writeFile(const char *filename, void *data, uint32 length) {
     int fh = my_open(filename, MR_FILE_CREATE | MR_FILE_RDWR);
     int32_t wLen = 0;
     char *ptr = (char *)data;
