@@ -1873,6 +1873,16 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
 
     if (call_ret != MR_SUCCESS) return MR_FAILED;
 
+    /* 同 arm_ext_call_dispatch 中的注释：ARM 代码可能在事件回调中直接
+     * 写 mr_state_slot 触发退出/重启，需同步到宿主侧。 */
+    if (m->mr_state_slot) {
+        uint32_t arm_state = 0;
+        memcpy(&arm_state, arm_ptr(m, m->mr_state_slot), 4);
+        if (arm_state >= 3) {
+            mr_exit();
+        }
+    }
+
     uint32_t arm_output = 0;
     uint32_t arm_output_len = 0;
     uc_mem_read(m->uc, outp_addr, &arm_output, 4);
@@ -1954,6 +1964,19 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
         if (arm_ptr(m, ext_chunk + 0x34))
             memcpy(&exit_flag, arm_ptr(m, ext_chunk + 0x34), 4);
         if (exit_flag) {
+            mr_exit();
+        }
+    }
+
+    /* ARM ext 的退出/重启逻辑（如 cfunction.ext 的 mr_restart_old_app 实现）
+     * 直接写 mr_state_slot 设置 MR_STATE_RESTART(3) 或 MR_STATE_STOP(4)。
+     * 真机上 ARM 代码与宿主共享同一内存，写 slot 等同于写全局变量；Unicorn
+     * 下 ARM 内存独立，宿主侧的 mr_state 不会自动同步。检测到 slot 变更后
+     * 调用宿主侧 mr_exit()，由其正常的 mr_restart_old_app 路径完成重启。 */
+    if (m->mr_state_slot) {
+        uint32_t arm_state = 0;
+        memcpy(&arm_state, arm_ptr(m, m->mr_state_slot), 4);
+        if (arm_state >= 3) {
             mr_exit();
         }
     }
