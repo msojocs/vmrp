@@ -538,11 +538,9 @@ MRPLIB_API int mr_L_loadfile (mrp_State *L, const char *filename) {
    LoadS ls;
    int filelen;
 
-   fprintf(stderr, "[loadfile] reading '%s'...\n", filename); fflush(stderr);
    LUADBGPRINTF("mr_L_loadfile sart");
    mrp_pushfstring(L, "@%s", filename);
    buff = _mr_readFile((const char *)filename, &filelen, 0);
-   fprintf(stderr, "[loadfile] _mr_readFile returned %p, len=%d\n", buff, filelen); fflush(stderr);
    if (!buff) {
      mrp_settop(L, fnameindex);
      LUADBGPRINTF("_mr_readFile Failed");
@@ -550,14 +548,9 @@ MRPLIB_API int mr_L_loadfile (mrp_State *L, const char *filename) {
    }
    ls.s = buff;
    ls.size = filelen;
-   fprintf(stderr, "[loadfile] mrp_load...\n"); fflush(stderr);
    status = mrp_load(L, getS, &ls, mrp_tostring(L, -1));
-   fprintf(stderr, "[loadfile] mrp_load returned %d\n", status); fflush(stderr);
-   fprintf(stderr, "[loadfile] mr_free(%p, %d)...\n", buff, filelen); fflush(stderr);
    mr_free(buff, filelen);
-   fprintf(stderr, "[loadfile] mrp_remove...\n"); fflush(stderr);
    mrp_remove(L, fnameindex);
-   fprintf(stderr, "[loadfile] loadfile done\n"); fflush(stderr);
    LUADBGPRINTF("mr_L_loadfile end");
    return status;
 }
@@ -598,7 +591,6 @@ static void callalert (mrp_State *L, int status) {
 
 
 static int mr_aux_do (mrp_State *L, int status) {
-  fprintf(stderr, "[mr_aux_do] status=%d, calling _mr_pcall...\n", status); fflush(stderr);
   LUADBGPRINTF("mr_aux_do start");
 #if 0
   if (status == 0) {  /* parse OK? */
@@ -610,7 +602,6 @@ static int mr_aux_do (mrp_State *L, int status) {
       _mr_pcall(0,MRP_MULTRET);
    }
 #endif
-  fprintf(stderr, "[mr_aux_do] _mr_pcall done\n"); fflush(stderr);
   LUADBGPRINTF("mr_aux_do end");
   return status;
 }
@@ -618,10 +609,7 @@ static int mr_aux_do (mrp_State *L, int status) {
 
 MRPLIB_API int mrp_dofile (mrp_State *L, const char *filename) {
   int st = mr_L_loadfile(L, filename);
-  fprintf(stderr, "[mrp_dofile] '%s' loadfile=%d, calling mr_aux_do...\n", filename, st); fflush(stderr);
-  int ret = mr_aux_do(L, st);
-  fprintf(stderr, "[mrp_dofile] '%s' mr_aux_do returned %d\n", filename, ret); fflush(stderr);
-  return ret;
+  return mr_aux_do(L, st);
 }
 
 

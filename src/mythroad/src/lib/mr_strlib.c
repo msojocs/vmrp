@@ -406,9 +406,10 @@ static int str_len (mrp_State *L) {
 }
 
 static int str_clen (mrp_State *L) {
-  int32 l;
-  int32 clen;
-  char * p = (char*)mr_L_checklstring(L, 1, (size_t*)&l);
+  size_t l_sz;
+  int32 l, clen;
+  char * p = (char*)mr_L_checklstring(L, 1, &l_sz);
+  l = (int32)l_sz;
   clen = STRLEN(p);
   l = (l > clen)? clen:l;
   mrp_pushnumber(L, (mrp_Number)l);
@@ -416,9 +417,10 @@ static int str_clen (mrp_State *L) {
 }
 
 static int str_wlen (mrp_State *L) {
-  int32 l;
-  int32 clen;
-  char * p = (char*)mr_L_checklstring(L, 1, (size_t*)&l);
+  size_t l_sz;
+  int32 l, clen;
+  char * p = (char*)mr_L_checklstring(L, 1, &l_sz);
+  l = (int32)l_sz;
   clen = mr_wstrlen(p);
   l = (l > clen)? clen:l;
   mrp_pushnumber(L, (mrp_Number)l);
@@ -426,9 +428,10 @@ static int str_wlen (mrp_State *L) {
 }
 
 static int str_cstr (mrp_State *L) {
-   int32 l;
-   int32 clen;
-   char * p = (char*)mr_L_checklstring(L, 1, (size_t*)&l);
+   size_t l_sz;
+   int32 l, clen;
+   char * p = (char*)mr_L_checklstring(L, 1, &l_sz);
+   l = (int32)l_sz;
    clen = STRLEN(p);
    l = (l > clen)? clen:l;
    mrp_pushlstring(L, p, l);
@@ -436,9 +439,10 @@ static int str_cstr (mrp_State *L) {
 }
 
 static int str_wstr (mrp_State *L) {
-   int32 l;
-   int32 clen;
-   char * p = (char*)mr_L_checklstring(L, 1, (size_t*)&l);
+   size_t l_sz;
+   int32 l, clen;
+   char * p = (char*)mr_L_checklstring(L, 1, &l_sz);
+   l = (int32)l_sz;
    clen = mr_wstrlen(p);
    l = (l > clen)? clen:l;
    mrp_pushlstring(L, p, l);
@@ -1032,8 +1036,10 @@ static int str_gsub (mrp_State *L) {
 
 
 static int str_subV (mrp_State *L) {
+  size_t l_sz;
   int32 l;
-  char * p = (char*)mr_L_checklstring(L, 1, (size_t*)&l);
+  char * p = (char*)mr_L_checklstring(L, 1, &l_sz);
+  l = (int32)l_sz;
   mrp_pushnumber(L, (mrp_Number)p);
   mrp_pushnumber(L, (mrp_Number)l);
   return 2;

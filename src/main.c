@@ -4,14 +4,21 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifdef _MSC_VER
+#include "./include/compat_msvc.h"
+#include "./include/dirent_win.h"
+#else
 #include <dirent.h>
 #include <unistd.h>
+#endif
 
 #include "./include/bridge.h"
 #include "./include/vmrp.h"
 #include "./include/memory.h"
 
-#ifdef _WIN32
+#ifdef _MSC_VER
+#include <SDL.h>
+#elif defined(_WIN32)
 // #ifdef __x86_64__
 // #include "./windows/SDL2-2.0.10/x86_64-w64-mingw32/include/SDL2/SDL.h"
 // #elif __i386__
@@ -477,7 +484,43 @@ void loop() {
     }
 }
 
+#ifdef _MSC_VER
+static void abort_handler(int sig) {
+    (void)sig;
+    fflush(stdout);
+    fprintf(stderr, "[CRASH] SIGABRT received - abort() was called\n");
+    fflush(stderr);
+    signal(SIGABRT, SIG_DFL);
+    raise(SIGABRT);
+}
+static LONG WINAPI win_exception_filter(EXCEPTION_POINTERS *ep) {
+    fprintf(stderr, "[CRASH] Unhandled exception: code=0x%08lX addr=%p\n",
+        ep->ExceptionRecord->ExceptionCode,
+        ep->ExceptionRecord->ExceptionAddress);
+    fflush(stderr);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+static void invalid_param_handler(const wchar_t *expr, const wchar_t *func,
+                                   const wchar_t *file, unsigned int line,
+                                   uintptr_t p) {
+    (void)p;
+    fflush(stdout);
+    fprintf(stderr, "[CRASH] Invalid CRT parameter: expr=%ls func=%ls file=%ls line=%u\n",
+            expr ? expr : L"(null)",
+            func ? func : L"(null)",
+            file ? file : L"(null)",
+            line);
+    fflush(stderr);
+    abort();
+}
+#endif
+
 int main(int argc, char *args[]) {
+#ifdef _MSC_VER
+    signal(SIGABRT, abort_handler);
+    SetUnhandledExceptionFilter(win_exception_filter);
+    _set_invalid_parameter_handler(invalid_param_handler);
+#endif
 #ifndef _WIN32
     signal(SIGPIPE, SIG_IGN);
     signal(SIGUSR1, sigusr1_handler);
