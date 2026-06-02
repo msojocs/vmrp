@@ -2949,9 +2949,11 @@ static int MRF_plat(mrp_State* L) {
 }
 
 static int MRF_platEx(mrp_State* L) {
-    int32 input_len, output_len, ret;
+    size_t input_size = 0;
+    int32 output_len, ret;
     int code = ((int)to_mr_tonumber(L, 1, 0));
-    uint8* input = (uint8*)mr_L_checklstring(L, 2, (size_t*)&input_len);
+    uint8* input = (uint8*)mr_L_checklstring(L, 2, &input_size);
+    int32 input_len = (int32)input_size;
     uint8* output = NULL;
     MR_PLAT_EX_CB cb = NULL;
     output_len = 0;
@@ -3619,10 +3621,10 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
 }
 
 static int TestCom1(mrp_State* L) {
-    int32 len = 0;
+    size_t len_sz = 0;
     int input0 = ((int)to_mr_tonumber(L, 1, 0));
-    char* input1 = ((char*)mr_L_checklstring(L, 2, (size_t*)&len));
-    return _mr_TestCom1(L, input0, input1, len);
+    char* input1 = ((char*)mr_L_checklstring(L, 2, &len_sz));
+    return _mr_TestCom1(L, input0, input1, (int32)len_sz);
 }
 
 static mr_L_reg phonelib[5];
