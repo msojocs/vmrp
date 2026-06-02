@@ -232,6 +232,7 @@ add_executable(test_vmrp
 )
 set_source_files_properties(${TEST_MYTHROAD_SOURCES} PROPERTIES COMPILE_OPTIONS "-UVMRP")
 target_compile_definitions(test_vmrp PRIVATE VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
+target_include_directories(test_vmrp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
 target_link_libraries(test_vmrp m pthread z)
 target_link_options(test_vmrp PRIVATE -Wl,--allow-multiple-definition)
 add_test(NAME vmrp_unit_tests COMMAND test_vmrp)

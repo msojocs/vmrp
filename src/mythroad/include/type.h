@@ -12,15 +12,8 @@ typedef long long int64;
 typedef unsigned long long uint64;
 
 
-#ifdef _MSC_VER
 #include <stddef.h>
 #include <stdint.h>
-#else
-typedef int ptrdiff_t;
-typedef unsigned int  size_t;
-typedef unsigned int  uintptr_t;
-typedef long long  intmax_t;
-#endif
 
 typedef int BOOL;
 
