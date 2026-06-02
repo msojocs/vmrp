@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.11)
 project(vmrp VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 11)
@@ -24,6 +24,15 @@ if(MSVC)
   # Make zlib headers findable for targets
   target_include_directories(zlibstatic PUBLIC ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
   add_library(ZLIB::ZLIB ALIAS zlibstatic)
+
+  # --- SDL2 (pre-built MSVC/VC package) ---
+  FetchContent_Declare(
+    SDL2_VC
+    URL "https://github.com/libsdl-org/SDL/releases/download/release-2.28.5/SDL2-devel-2.28.5-VC.zip"
+  )
+  FetchContent_MakeAvailable(SDL2_VC)
+  set(SDL2_DIR "${sdl2_vc_SOURCE_DIR}/cmake")
+  find_package(SDL2 REQUIRED CONFIG)
 endif()
 
 option(VMRP_BUILD_SHARED "Build libvmrp shared library (no SDL)" OFF)
@@ -113,10 +122,25 @@ add_executable(vmrp
 )
 target_compile_definitions(vmrp PRIVATE VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
 target_include_directories(vmrp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
-target_link_options(vmrp PRIVATE -Wl,--allow-multiple-definition)
-# --no-as-needed 确保 libm 不被 GNU ld 按需跳过——unicorn 的内部静态库
-# （arm-softmmu）在链接顺序上排在 -lm 之后，需要其中的 sqrtf 等符号
-target_link_libraries(vmrp unicorn "-Wl,--no-as-needed" SDL2main SDL2 m pthread z)
+if(MSVC)
+  target_link_options(vmrp PRIVATE /FORCE:MULTIPLE)
+  target_include_directories(vmrp PRIVATE ${SDL2_INCLUDE_DIRS})
+  target_link_libraries(vmrp unicorn ZLIB::ZLIB SDL2::SDL2main SDL2::SDL2 ws2_32)
+  # Copy SDL2.dll next to the executable after build
+  if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(_SDL2_DLL "${sdl2_vc_SOURCE_DIR}/lib/x64/SDL2.dll")
+  else()
+    set(_SDL2_DLL "${sdl2_vc_SOURCE_DIR}/lib/x86/SDL2.dll")
+  endif()
+  add_custom_command(TARGET vmrp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_SDL2_DLL}" $<TARGET_FILE_DIR:vmrp>
+  )
+else()
+  target_link_options(vmrp PRIVATE -Wl,--allow-multiple-definition)
+  # --no-as-needed 确保 libm 不被 GNU ld 按需跳过——unicorn 的内部静态库
+  # （arm-softmmu）在链接顺序上排在 -lm 之后，需要其中的 sqrtf 等符号
+  target_link_libraries(vmrp unicorn "-Wl,--no-as-needed" SDL2main SDL2 m pthread z)
+endif()
 
 # --- Wasm 构建（emcc）---
 # 用法: cmake --build build --target vmrp-wasm
