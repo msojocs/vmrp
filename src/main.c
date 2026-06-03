@@ -135,8 +135,11 @@ char *editGetText(int32 edit) {
 
 void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
     guiDrawBitmapCount++;
-    /* 第 5 次绘制时截屏，用于无显示器环境下验证画面 */
-    if (guiDrawBitmapCount == 5) {
+    /* 第 5 次绘制时截屏；设置 VMRP_PPM 后每 30 次再转储一次，使
+     * /tmp/vmrp_screen.ppm 始终反映最近实时画面，便于无显示器环境验证。
+     * （默认仅第 5 次转储，避免常态磁盘开销；SIGUSR1 截屏在 SDL 下不可靠。） */
+    if (guiDrawBitmapCount == 5 ||
+        (guiDrawBitmapCount % 30 == 0 && getenv("VMRP_PPM"))) {
         dump_screen_ppm("/tmp/vmrp_screen.ppm");
     }
     SDL_Surface *surface = SDL_GetWindowSurface(window);
@@ -320,21 +323,26 @@ static int autoClickThread(void *data) {
         /* 本次点击后的延迟：优先使用自定义值，否则用全局默认值 */
         Uint32 cur_delay = (autoClickList[i].delay_ms >= 0)
                            ? (Uint32)autoClickList[i].delay_ms : default_delay;
-        /* 约定：x = -1 表示发送一次 ESC（MR_KEY_POWER） */
-        if (autoClickList[i].x == -1) {
+        /* 约定：x<0 表示发送一次按键（用 y 不解释）。-1=ESC, -2=否/SOFTRIGHT,
+         * -3=是/SOFTLEFT, -4=SELECT/确认 */
+        if (autoClickList[i].x < 0) {
+            SDL_Keycode kc = SDLK_ESCAPE;
+            if (autoClickList[i].x == -2) kc = SDLK_MINUS;      /* 否 */
+            else if (autoClickList[i].x == -3) kc = SDLK_EQUALS; /* 是 */
+            else if (autoClickList[i].x == -4) kc = SDLK_RETURN; /* 确认 */
             SDL_Event ev;
             memset(&ev, 0, sizeof(ev));
             ev.type = SDL_KEYDOWN;
             ev.key.type = SDL_KEYDOWN;
             ev.key.state = SDL_PRESSED;
-            ev.key.keysym.sym = SDLK_ESCAPE;
+            ev.key.keysym.sym = kc;
             SDL_PushEvent(&ev);
             SDL_Delay(50);
             memset(&ev, 0, sizeof(ev));
             ev.type = SDL_KEYUP;
             ev.key.type = SDL_KEYUP;
             ev.key.state = SDL_RELEASED;
-            ev.key.keysym.sym = SDLK_ESCAPE;
+            ev.key.keysym.sym = kc;
             SDL_PushEvent(&ev);
             SDL_Delay(cur_delay);
             continue;
@@ -464,6 +472,10 @@ void loop() {
                     }
                     break;
                 case SDL_MOUSEBUTTONDOWN: {
+                    /* WSLg 等环境会把宿主光标的点击透传进窗口，自动化 PPM 验证时
+                     * 这些杂散点击会误触游戏菜单。设置 VMRP_NO_MOUSE 可屏蔽鼠标，
+                     * 配合 VMRP_AUTO_CLICKS 的按键注入做可复现的无人值守验证。 */
+                    if (getenv("VMRP_NO_MOUSE")) break;
                     uint32_t seq = ++clickSeq;
                     printf("[CLICK] #%u down x=%d y=%d\n", seq, ev.button.x, ev.button.y);
                     isMouseDown = true;
@@ -472,6 +484,7 @@ void loop() {
                     break;
                 }
                 case SDL_MOUSEBUTTONUP: {
+                    if (getenv("VMRP_NO_MOUSE")) break; /* 见 SDL_MOUSEBUTTONDOWN 注释 */
                     uint32_t seq = clickSeq;
                     printf("[CLICK] #%u up x=%d y=%d\n", seq, ev.button.x, ev.button.y);
                     isMouseDown = false;
@@ -544,6 +557,11 @@ int main(int argc, char *args[]) {
         return -1;
     }
     timerEventType = SDL_RegisterEvents(1);
+#ifndef _WIN32
+    /* SDL_Init 会重置 SIGUSR1 为默认处理（终止进程），导致截屏信号反而杀掉
+     * 进程。此处在 SDL_Init 之后重新安装 SIGUSR1 截屏处理，确保 PPM 转储可用。 */
+    signal(SIGUSR1, sigusr1_handler);
+#endif
 
     window = SDL_CreateWindow("vmrp", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, vmrp_config.screen_width, vmrp_config.screen_height, SDL_WINDOW_OPENGL);
     if (window == NULL) {

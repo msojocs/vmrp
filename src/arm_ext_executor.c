@@ -91,11 +91,13 @@ extern int wstrlen(char *txt);
 #define EXT_MEM_SIZE  (16u * 1024u * 1024u)
 #define EXT_TABLE_ADDR EXT_BASE_ADDR
 #define EXT_TABLE_COUNT 150u
-#define EXT_CODE_ADDR 0x00080000u
-#define EXT_STACK_ADDR 0x00180000u
-#define EXT_STACK_SIZE (512u * 1024u)
-#define EXT_HEAP_ADDR 0x00200000u
 #define EXT_STOP_ADDR 0x0007FFF0u
+#define EXT_HEAP_ADDR 0x00200000u
+/* ext code 和 stack 放在高地址，防止 wrapper 的 SP = P + 0x20000 栈
+ * 切换落入代码段。heap 在低地址向上增长，code 在高地址，两者不重叠。 */
+#define EXT_STACK_ADDR 0x00E00000u
+#define EXT_STACK_SIZE (512u * 1024u)
+#define EXT_CODE_ADDR  0x00E80000u
 #define EXT_WRAPPER_STACK_SIZE 0x20000u
 /* 部分 ARM ext 会跳转到 0x1000 等超出原 0x1000 边界的地址，
  * 扩大低地址映射以覆盖这些跳转目标。 */
@@ -694,10 +696,12 @@ static void leave_screen_context(ArmExtModule *m, uint16 *saved_screen) {
         memcpy(saved_screen, arm_ptr(m, m->screen_addr), m->screen_len);
     }
     mr_screenBuf = saved_screen;
-    if (m->screen_dirty && saved_screen) {
+    /* 真机上 ext 写屏幕缓冲区后由 OS 的 VSync/刷新机制送显。模拟器里
+     * ARM 缓冲区已 memcpy 到宿主 screenBuf，直接调 mr_drawBitmap 送显。 */
+    if (saved_screen) {
         mr_drawBitmap(saved_screen, 0, 0, (uint16)m->screen_w, (uint16)m->screen_h);
-        m->screen_dirty = 0;
     }
+    m->screen_dirty = 0;
 }
 
 
@@ -863,7 +867,11 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             uint32_t p_addr = nested ? m->nested_p_addr : 0;
             int reuse_nested_p = p_addr && r1 == sizeof(mr_c_function_P_t) && arm_ptr(m, p_addr);
             uint32_t p_len = r1;
-            if (!nested && p_len >= 0x2000u && p_len < EXT_WRAPPER_STACK_SIZE + sizeof(mr_c_function_P_t)) {
+            /* wrapper ext 的 dispatch 入口会将 SP 设为 P + 0x20000（见 gxdzc 的
+             * 0x800FC: mov sp, P+0x20000），无论 ext 请求的 P 大小是多少都假定
+             * 有 128KB 栈空间。确保分配至少 EXT_WRAPPER_STACK_SIZE 避免栈溢出
+             * 到代码段导致数据损坏。 */
+            if (!nested && p_len < EXT_WRAPPER_STACK_SIZE + sizeof(mr_c_function_P_t)) {
                 p_len = EXT_WRAPPER_STACK_SIZE + sizeof(mr_c_function_P_t);
             }
             if (!p_addr || r1 != sizeof(mr_c_function_P_t) || !arm_ptr(m, p_addr)) {
@@ -951,25 +959,11 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             break;
         case 33: {
             ret = mr_getTime();
-            /*
-             * 部分 .mrp（如 mpc.mrp 的菜单切换、退出动画）会进入忙等循环，反复
-             * 调用 mr_getTime() 等待真实时间流逝。在真机上 OS 抢占允许定时器/
-             * 事件穿插进来；在本模拟器里若不让出 CPU，宿主线程的时钟也无法及
-             * 时推进，导致这种合法的"实时延时"看上去像死锁。
-             *
-             * 策略分两段：
-             *  1) 一旦连续 200 次 mr_getTime 调用都没有夹杂其它 table 调用，
-             *     就 usleep 5ms 让宿主真实时间推进。这样大多数 UI 动画 /
-             *     短延时循环会因 mr_getTime() 返回值变化而自然退出。
-             *  2) 如果忙等已经持续了一个"明显超出任何合理 UI 动画"的真实
-             *     时长（这里取 3s），说明循环并不是单纯等时间——很可能是
-             *     mpc 退出流程里的最终自旋，对应代码本应在循环结束后调用
-             *     mr_exit。但我们的仿真器在那之前往往会因为栈漂移而崩溃，
-             *     根本到不了 mr_exit。这种情况下主动调用 mr_exit() 帮它把
-             *     进程收尾，复刻早期 a5ca8ab/6f0ca40 修复"无法退出 mpc"的
-             *     效果，同时阈值足够大不会误伤正常的菜单切换动画（实测约
-             *     1~1.5s 即可完成）。
-             */
+            /* 部分 ext 用忙等循环反复调 mr_getTime() 等待真实时间流逝（如
+             * 菜单切换动画、定时器主循环）。真机上 OS 抢占让时钟自然推进；
+             * 模拟器里需 usleep 让宿主时间走动。连续 200 次无其它 table 调
+             * 用即视为忙等，每轮 usleep 5ms；超 3 秒强制停止 ARM 执行，
+             * 让宿主侧定时器有机会触发再重新进入。 */
             m->busy_wait_count++;
             if (m->busy_wait_count == 1) {
                 m->busy_wait_start_ms = ret;
@@ -977,24 +971,12 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             if (m->busy_wait_count >= 200) {
                 usleep(5 * 1000);
                 m->busy_wait_count = 100;
-                /* ret 是刚拿到的 mr_getTime() 返回值，单位 ms。 */
                 uint32_t elapsed_ms = ret - m->busy_wait_start_ms;
                 if (elapsed_ms >= 3000) {
                     m->busy_wait_count = 0;
                     m->busy_wait_start_ms = 0;
-                    if (m->event_did_work) {
-                        /* ext 做了实质性 work（加载资源/绘制等）后进入忙等，
-                         * 说明它在等定时器驱动主循环。强制停止 ARM 执行，
-                         * 让调用方有机会启动定时器再重新进入。 */
-                        reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
-                        uc_emu_stop(m->uc);
-                    } else {
-                        printf("[arm_ext_executor] mr_getTime busy-wait exceeded %ums, assuming app is exiting -> mr_exit\n",
-                               elapsed_ms);
-                        reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
-                        uc_emu_stop(m->uc);
-                        mr_exit();
-                    }
+                    reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
+                    uc_emu_stop(m->uc);
                 }
             }
         } break;
@@ -1812,7 +1794,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     m->event_did_work = 0;
     m->busy_wait_count = 0;
     m->busy_wait_start_ms = 0;
-
     uint32_t input_addr = 0;
     if (input != NULL) {
         if (input == m->host_code) {
@@ -1951,19 +1932,61 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     uint32_t stack_args[8] = {0};
     uc_mem_write(m->uc, sp, stack_args, sizeof(stack_args));
     reg_write32(m->uc, UC_ARM_REG_SP, sp);
+
+    /* dispatch 走 wrapper 代码，wrapper 内部会通过 table[31/32] 调用
+     * timerStart/timerStop。若 nested ext 已将 table[31/32] 覆盖为自己
+     * 的 dispatch 函数，wrapper 的 blx table[31] 不会触发宿主 hook，
+     * 导致 SDL 定时器不启动、屏幕不刷新。临时恢复为 hook 地址。 */
+    uint32_t t31a = EXT_TABLE_ADDR + 31 * 4;
+    uint32_t t32a = EXT_TABLE_ADDR + 32 * 4;
+    uint32_t saved_t31 = 0, saved_t32 = 0;
+    memcpy(&saved_t31, arm_ptr(m, t31a), 4);
+    memcpy(&saved_t32, arm_ptr(m, t32a), 4);
+    if (saved_t31 != t31a) memcpy(arm_ptr(m, t31a), &t31a, 4);
+    if (saved_t32 != t32a) memcpy(arm_ptr(m, t32a), &t32a, 4);
+
     uint16 *saved_screenBuf = NULL;
     enter_screen_context(m, &saved_screenBuf);
     int ret = run_arm_with_sp(m, func, sp);
     leave_screen_context(m, saved_screenBuf);
 
-    /* wrapper 的 dispatch 函数执行后检查 ext_chunk[0x34]（退出标志位）。
-     * 游戏在确认退出的事件处理中设置此字段为非零值；wrapper 的 ARM 代码
-     * 检测到后会移除定时器节点，但不会主动调用 mr_exit。由宿主侧补上。 */
+    /* 恢复 nested ext 的 dispatch 函数地址 */
+    memcpy(arm_ptr(m, t31a), &saved_t31, 4);
+    memcpy(arm_ptr(m, t32a), &saved_t32, 4);
+
+    /* 注意：ext_chunk[0x34] 不是“退出标志”，而是 wrapper 的 pause/suspend 嵌套
+     * 计数器（反汇编实证）：
+     *   - wrapper 的 suspend 函数 0xE831A4：[0x34]++，若变为 1 则把自己的定时器
+     *     节点 [0x24] 从活动链表摘除（0xE838A8），并向内层 app 派发事件 4
+     *     (pauseApp)。
+     *   - wrapper 的 resume 函数 0xE83220：[0x34]--，若回到 0 则重新挂回定时器
+     *     节点（0xE83908），并派发事件 5 (resumeApp)。
+     * 即 [0x34]>0 表示“当前正处于一层模态/挂起中”。任何弹出 wrapper 模态框的
+     * 操作都会把它置 1：mpc 的“确定退出?”确认框、gxdzc 资源部的“下载提示”提示
+     * 框都会触发。早期把 [0x34]!=0 当作退出标志直接 mr_exit，会在 gxdzc 弹出
+     * 下载提示框的瞬间杀掉进程，导致无法进入资源部下载界面。pause/resume 本身
+     * 完全由 wrapper 内部维护并向内层 app 派发，宿主不应仅凭 [0x34]!=0 就退出。
+     *
+     * 真正区分“弹个模态框继续跑”与“退出/返回上层”的精确状态判据（非时间启发式）：
+     *   - [0x34]>0 表示 app 已自我挂起；
+     *   - 且 mr_timer_state==MR_TIMER_STATE_IDLE 表示 app 在本次 dispatch 里没有
+     *     重挂自己的定时器，即它的运行循环已经结束。
+     * 二者同时成立，说明 app 已挂起且不再自驱——它把控制权交还给了上层 launcher
+     * （skymobi 游戏中心 / dsm_gm）。实测：mpc 应用内“退出”正走此路径（挂起+停表，
+     * mr_timer_state=IDLE），而 gxdzc“下载提示”等活动模态框每个 tick 都持续重挂
+     * 定时器（mr_timer_state=RUNNING），因此不会被误判。
+     * 交给 mr_exit 统一处理即真机“返回 launcher”语义：存在上层应用 (old_pack) 时
+     * mr_restart_old_app 返回上层；独立启动时真正退出进程。其它写 mr_state_slot
+     * 或调 table[54] 的显式退出/重启仍由下面与 case 54 负责。 */
     {
-        uint32_t exit_flag = 0;
+        /* mythroad.h 中 MR_TIMER_STATE_IDLE 为枚举首项=0；本文件不引入该头文件，
+         * 此处按其定义直接比较 0（IDLE）。 */
+        enum { MR_TIMER_STATE_IDLE = 0 };
+        extern int32 mr_timer_state;
+        uint32_t suspend_depth = 0;
         if (arm_ptr(m, ext_chunk + 0x34))
-            memcpy(&exit_flag, arm_ptr(m, ext_chunk + 0x34), 4);
-        if (exit_flag) {
+            memcpy(&suspend_depth, arm_ptr(m, ext_chunk + 0x34), 4);
+        if (suspend_depth > 0 && mr_timer_state == MR_TIMER_STATE_IDLE) {
             mr_exit();
         }
     }
