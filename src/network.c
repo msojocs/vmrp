@@ -156,9 +156,11 @@ int32 my_connect(int32 s, int32 ip, uint16 port, int32 type) {
 #ifdef NETWORK_SUPPORT
     uIntMap* obj = uIntMap_search(&sockets, (uint32_t)s);
     mSocket* data = (mSocket*)obj->data;
-    if (ip == 0x0A0000AC) {        // 10.0.0.172 cmwap代理地址
-        data->state = MR_SUCCESS;  // cmwap下设置一个伪状态
-        return MR_SUCCESS;
+    if (ip == 0x0A0000AC) {
+        // 10.0.0.172 是 CMWAP 代理地址，桌面端不存在该代理，直接返回失败
+        data->state = MR_FAILED;
+        data->realState = MR_FAILED;
+        return MR_FAILED;
     }
     printf("my_connect() type: %s\n", type == MR_SOCKET_BLOCK ? "block" : "async");
     if (type == MR_SOCKET_NONBLOCK) {

@@ -233,6 +233,8 @@ extern int32 mr_socket(int32 type, int32 protocol);
 extern int32 mr_connect(int32 s, int32 ip, uint16 port, int32 type);
 extern int32 mr_closeSocket(int32 s);
 extern int32 mr_getSocketState(int32 s);
+typedef int32 (*MR_INIT_NETWORK_CB_t)(int32 result);
+extern int32 mr_initNetwork(MR_INIT_NETWORK_CB_t cb, const char *mode);
 extern int32 mr_recv(int32 s, char *buf, int len);
 extern int32 mr_recvfrom(int32 s, char *buf, int len, int32 *ip, uint16 *port);
 extern int32 mr_send(int32 s, const char *buf, int len);
@@ -1235,10 +1237,13 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 60: mr_call(arm_str(m, r0)); ret = MR_SUCCESS; break;
         /* table[61] mr_getNetworkID()：返回 0 表示移动网络（MR_NET_ID_MOBILE） */
         case 61: ret = 0; break;
-        /* table[81] mr_initNetwork(cb, mode)：同步返回成功，与 reference
-         * 实现（temp/jni/src/network.c）一致。桌面端没有真实网络，但 ARM
-         * 代码只关心初始化是否成功以决定后续流程 */
-        case 81: ret = MR_SUCCESS; break;
+        /* table[81] mr_initNetwork(cb, mode)：读取 mode 并设置 isCMWAP 标志，
+         * 同步返回成功。桌面端没有真实 GPRS 网络，但需要 isCMWAP 控制后续
+         * send/recv 的代理模拟逻辑。 */
+        case 81: {
+            const char *mode_str = arm_str(m, r1);
+            ret = mr_initNetwork(NULL, mode_str);
+        } break;
         /* table[82] mr_closeNetwork()：return success，跟 mr_initNetwork 配对。 */
         case 82: ret = MR_SUCCESS; break;
         case 83: ret = MR_FAILED; break; /* mr_getHostByName: 回调机制不适用于 Unicorn，暂返回失败 */
