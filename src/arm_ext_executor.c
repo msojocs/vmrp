@@ -209,6 +209,9 @@ struct ArmExtModule {
     uint32_t dispatch_timer_start;
     uint32_t dispatch_timer_stop;
     int in_dispatch; /* 防止 dispatch -> wrapper -> table[31/32] -> dispatch 重入 */
+    /* wrapper 进入模态框时 game 的 timer 链表头被清零（dispatch 中检测到），
+     * 保存清零前的值以便 cancel 时恢复。 */
+    uint32_t saved_game_timer_head;
     uc_hook hook;
     /* MRP 文件缓存：避免 ARM ext 在 Unicorn 下做极慢的 MRP 索引扫描 */
     MrpCacheEntry mrp_cache[MRP_CACHE_MAX];
@@ -226,6 +229,14 @@ extern void *mr_readFile_from_ram(const char *filename, int *filelen, int lookfo
 extern int32 mr_registerAPP(uint8 *p, int32 len, int32 index);
 extern int _mr_TestCom(void *L, int input0, int input1);
 extern int _mr_TestCom1(void *L, int input0, char *input1, int32 len);
+extern int32 mr_socket(int32 type, int32 protocol);
+extern int32 mr_connect(int32 s, int32 ip, uint16 port, int32 type);
+extern int32 mr_closeSocket(int32 s);
+extern int32 mr_getSocketState(int32 s);
+extern int32 mr_recv(int32 s, char *buf, int len);
+extern int32 mr_recvfrom(int32 s, char *buf, int len, int32 *ip, uint16 *port);
+extern int32 mr_send(int32 s, const char *buf, int len);
+extern int32 mr_sendto(int32 s, const char *buf, int len, int32 ip, uint16 port);
 
 static void *arm_ptr(ArmExtModule *m, uint32_t addr) {
     if (addr < EXT_BASE_ADDR || addr >= EXT_BASE_ADDR + EXT_MEM_SIZE) return NULL;
@@ -893,6 +904,17 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                     m->primary_helper_addr = r0;
                     m->primary_p_addr = p_addr;
                     m->primary_file_addr = m->last_file_addr;
+                    /* wrapper 的 suspend/resume 通过 extChunk[8] 向 game
+                     * 派发 pauseApp/resumeApp。真机上 wrapper 在加载 nested
+                     * ext 时设置此字段，VMRP 下可能未被初始化（保持为 0），
+                     * 导致 suspend/resume 的 blx extChunk[8] 跳转到 0。
+                     * 此处在首次设置 primary_helper 时补写。 */
+                    uint32_t np = p_addr;
+                    uint32_t ec = 0;
+                    if (np && arm_ptr(m, np + 12))
+                        memcpy(&ec, arm_ptr(m, np + 12), 4);
+                    /* （extChunk[8] 修复移到 modal soft key 检测中动态执行，
+                     * 因为 wrapper ARM 代码会在运行中覆盖此字段） */
                 } else if (m->primary_file_addr) {
                     memcpy(arm_ptr(m, m->primary_file_addr + 4), &p_addr, 4);
                 }
@@ -1219,6 +1241,19 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 81: ret = MR_SUCCESS; break;
         /* table[82] mr_closeNetwork()：return success，跟 mr_initNetwork 配对。 */
         case 82: ret = MR_SUCCESS; break;
+        case 83: ret = MR_FAILED; break; /* mr_getHostByName: 回调机制不适用于 Unicorn，暂返回失败 */
+        case 84: ret = mr_socket((int32)r0, (int32)r1); break;
+        case 85: ret = mr_connect((int32)r0, (int32)r1, (uint16)r2, (int32)r3); break;
+        case 86: ret = mr_closeSocket((int32)r0); break;
+        case 87: ret = mr_recv((int32)r0, arm_ptr(m, r1), (int)r2); break;
+        case 88: { uint32_t a4 = arg_read(m, 4);
+                   ret = mr_recvfrom((int32)r0, arm_ptr(m, r1), (int)r2,
+                                    (int32 *)arm_ptr(m, r3), (uint16 *)arm_ptr(m, a4));
+                 } break;
+        case 89: ret = mr_send((int32)r0, arm_ptr(m, r1), (int)r2); break;
+        case 90: { uint32_t a4 = arg_read(m, 4);
+                   ret = mr_sendto((int32)r0, arm_ptr(m, r1), (int)r2, (int32)r3, (uint16)a4);
+                 } break;
         case 69: ret = mr_dialogCreate(arm_str(m, r0), arm_str(m, r1), (int32)r2); break;
         case 70: ret = mr_dialogRelease((int32)r0); break;
         case 71: ret = mr_dialogRefresh((int32)r0, arm_str(m, r1), arm_str(m, r2), (int32)r3); break;
@@ -1817,6 +1852,109 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     // Lifecycle/event calls belong to the app EXT, not later helper EXT modules.
     uint32_t call_p_addr = (code >= 0 && code <= 5 && m->primary_p_addr) ? m->primary_p_addr : (m->active_p_addr ? m->active_p_addr : m->p_addr);
     uint32_t call_helper_addr = (code >= 0 && code <= 5 && m->primary_helper_addr) ? m->primary_helper_addr : (m->active_helper_addr ? m->active_helper_addr : m->helper_addr);
+
+    /* wrapper 模态框（extChunk[0x34]>0）活动时，将事件路由到 wrapper helper。
+     * 真机上事件先经 wrapper helper，wrapper 在模态框期间拦截 SOFTRIGHT 并
+     * 调用 resume（0xE83220）关闭模态框恢复前一页。VMRP 的 primary helper
+     * 优先路由跳过了 wrapper，导致取消键被 game helper 静默吞掉（反汇编
+     * 0x66326C：不检查键码始终返回 0）。此处仅在模态框活动时覆写路由目标，
+     * 非模态状态不干预。同时将软键区鼠标点击转为对应功能键，模拟真机平台行为。 */
+    if (code == 1 && m->primary_p_addr &&
+        m->helper_addr && m->helper_addr != m->primary_helper_addr) {
+        uint32_t _np = m->primary_p_addr;
+        uint32_t _ec = 0, _sd = 0;
+        if (arm_ptr(m, _np + 12))
+            memcpy(&_ec, arm_ptr(m, _np + 12), 4);
+        if (_ec && arm_ptr(m, _ec + 0x34))
+            memcpy(&_sd, arm_ptr(m, _ec + 0x34), 4);
+        /* DEBUG: dump extChunk 完整内容（首次模态时） */
+        static int _ec_dumped = 0;
+        if (_sd > 0 && !_ec_dumped && _ec) {
+            _ec_dumped = 1;
+            printf("[EC_DUMP] extChunk at 0x%X:\n", _ec);
+            for (int off = 0; off < 0x40; off += 4) {
+                uint32_t v = 0;
+                if (arm_ptr(m, _ec + off)) memcpy(&v, arm_ptr(m, _ec + off), 4);
+                printf("  [0x%02X] = 0x%08X\n", off, v);
+            }
+        }
+        if (_sd > 0) {
+            /* 模态框活动时检测软键区事件。
+             * - 取消（SOFTRIGHT / 右 1/3）：手动调 wrapper resume + 恢复
+             *   game timer head 返回前一页。extChunk[8]=0 时 blx 无害。
+             * - 确认（SOFTLEFT / 左 1/3）：路由到 wrapper helper 触发下载
+             *   回调。不修复 extChunk[8]（避免嵌套调用），不恢复 state[8]
+             *  （避免 game timer 抢绘覆盖 wrapper UI）。 */
+            int resolved_key = -1;
+            if (input_len >= 12 && input_addr) {
+                extern VmrpConfig vmrp_config;
+                int32_t ev[3];
+                memcpy(ev, arm_ptr(m, input_addr), 12);
+                if (ev[0] == 0 && ev[1] == 17) resolved_key = 17;
+                if (ev[0] == 0 && ev[1] == 18) resolved_key = 18;
+                if ((ev[0] == 2 || ev[0] == 3) &&
+                    ev[2] >= vmrp_config.screen_height - 20) {
+                    if (ev[1] < vmrp_config.screen_width / 3) resolved_key = 17;
+                    else if (ev[1] >= vmrp_config.screen_width * 2 / 3) resolved_key = 18;
+                }
+            }
+
+            if (resolved_key == 18) {
+                /* 取消：手动调 wrapper resume + 恢复 game timer head */
+                uint32_t resume_func = EXT_CODE_ADDR + 0x3220 + 1;
+                uint32_t wrapper_rw = 0;
+                memcpy(&wrapper_rw, arm_ptr(m, m->p_addr), 4);
+                if (wrapper_rw) {
+                    reg_write32(m->uc, UC_ARM_REG_R9, wrapper_rw);
+                    reg_write32(m->uc, UC_ARM_REG_R0, _ec);
+                    uint32_t sp2 = EXT_STACK_ADDR + EXT_STACK_SIZE - 32;
+                    uint32_t zero_args[8] = {0};
+                    uc_mem_write(m->uc, sp2, zero_args, sizeof(zero_args));
+                    reg_write32(m->uc, UC_ARM_REG_SP, sp2);
+                    uint32_t t31a = EXT_TABLE_ADDR + 31 * 4;
+                    uint32_t t32a = EXT_TABLE_ADDR + 32 * 4;
+                    uint32_t s31 = 0, s32 = 0;
+                    memcpy(&s31, arm_ptr(m, t31a), 4);
+                    memcpy(&s32, arm_ptr(m, t32a), 4);
+                    if (s31 != t31a) memcpy(arm_ptr(m, t31a), &t31a, 4);
+                    if (s32 != t32a) memcpy(arm_ptr(m, t32a), &t32a, 4);
+                    uint16 *saved2 = NULL;
+                    enter_screen_context(m, &saved2);
+                    run_arm_with_sp(m, resume_func, sp2);
+                    leave_screen_context(m, saved2);
+                    memcpy(arm_ptr(m, t31a), &s31, 4);
+                    memcpy(arm_ptr(m, t32a), &s32, 4);
+                }
+                if (m->saved_game_timer_head) {
+                    uint32_t grw2 = 0;
+                    memcpy(&grw2, arm_ptr(m, m->primary_p_addr), 4);
+                    if (grw2 && arm_ptr(m, grw2 + 0x8C))
+                        memcpy(arm_ptr(m, grw2 + 0x8C), &m->saved_game_timer_head, 4);
+                    m->saved_game_timer_head = 0;
+                }
+            }
+
+            if (resolved_key == 17) {
+                /* 确认：路由到 wrapper helper 触发下载回调。
+                 * 不修复 extChunk[8]，不恢复 state[8]。
+                 * 鼠标事件转 SOFTLEFT 键盘事件。 */
+                if (input_len >= 12 && input_addr) {
+                    int32_t ev[3];
+                    memcpy(ev, arm_ptr(m, input_addr), 12);
+                    if (ev[0] == 2 || ev[0] == 3) {
+                        int32_t patched[3] = {(ev[0] == 2) ? 0 : 1, 17, 0};
+                        memcpy(arm_ptr(m, input_addr), patched, 12);
+                    }
+                }
+                call_p_addr = m->p_addr;
+                /* 路由到 wrapper ARM 入口（0xE800B0），由 ARM 跳板设置
+                 * R7/R8/R10/R11 后再 blx 进 Thumb 核心。直接调 Thumb
+                 * 核心（0xE82A45）会跳过寄存器搬运导致事件静默丢失。 */
+                call_helper_addr = m->helper_addr;
+            }
+        }
+    }
+
     uint32_t rw_base = 0;
     memcpy(&rw_base, arm_ptr(m, call_p_addr), 4);
     if (rw_base) reg_write32(m->uc, UC_ARM_REG_R9, rw_base);
@@ -1829,7 +1967,9 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     uc_mem_write(m->uc, sp, helper_args, sizeof(helper_args));
     reg_write32(m->uc, UC_ARM_REG_SP, sp);
 
-    int patch_primary_table = call_helper_addr == m->primary_helper_addr &&
+    /* 存在嵌套 ext 时 table[31/32] 被覆盖为 dispatch 地址，调用任一
+     * helper 前都需临时恢复为 hook 以保证 timerStart/Stop 触发宿主侧。 */
+    int patch_primary_table = m->primary_helper_addr &&
                               m->primary_helper_addr != m->helper_addr;
     uint32_t table31_addr = EXT_TABLE_ADDR + 31 * 4;
     uint32_t table32_addr = EXT_TABLE_ADDR + 32 * 4;
@@ -1842,10 +1982,26 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         memcpy(arm_ptr(m, table32_addr), &table32_addr, 4);
     }
 
+    /* 保存 arm_ext_call 前的 game state[8] */
+    uint32_t _ac_grw = 0, _ac_s8_pre = 0;
+    if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
+        memcpy(&_ac_grw, arm_ptr(m, m->primary_p_addr), 4);
+    if (_ac_grw && arm_ptr(m, _ac_grw + 0x8C))
+        memcpy(&_ac_s8_pre, arm_ptr(m, _ac_grw + 0x8C), 4);
+
     uint16 *saved_screenBuf = NULL;
     enter_screen_context(m, &saved_screenBuf);
     int call_ret = run_arm_with_sp(m, call_helper_addr, sp);
     leave_screen_context(m, saved_screenBuf);
+
+    /* arm_ext_call 后检查 state[8] 变化 */
+    if (_ac_grw && _ac_s8_pre) {
+        uint32_t _ac_s8_post = 0;
+        memcpy(&_ac_s8_post, arm_ptr(m, _ac_grw + 0x8C), 4);
+        if (_ac_s8_post == 0) {
+            m->saved_game_timer_head = _ac_s8_pre;
+        }
+    }
 
     if (patch_primary_table) {
         memcpy(arm_ptr(m, table31_addr), &saved_t31, 4);
@@ -1945,10 +2101,31 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     if (saved_t31 != t31a) memcpy(arm_ptr(m, t31a), &t31a, 4);
     if (saved_t32 != t32a) memcpy(arm_ptr(m, t32a), &t32a, 4);
 
+    /* 保存 dispatch 前的 game timer head，用于模态框取消时恢复 */
+    uint32_t _game_rw = 0, _s8_pre = 0;
+    if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
+        memcpy(&_game_rw, arm_ptr(m, m->primary_p_addr), 4);
+    if (_game_rw && arm_ptr(m, _game_rw + 0x8C))
+        memcpy(&_s8_pre, arm_ptr(m, _game_rw + 0x8C), 4);
+
     uint16 *saved_screenBuf = NULL;
     enter_screen_context(m, &saved_screenBuf);
     int ret = run_arm_with_sp(m, func, sp);
     leave_screen_context(m, saved_screenBuf);
+
+    /* wrapper dispatch 可能清零 game timer head（模态框进入时），保存旧值 */
+    /* dispatch 后重新读 game_rw（ARM 代码可能修改了 primary_p_addr[0]） */
+    {
+        uint32_t _grw2 = 0;
+        if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
+            memcpy(&_grw2, arm_ptr(m, m->primary_p_addr), 4);
+        uint32_t _s8_post = 0;
+        if (_grw2 && arm_ptr(m, _grw2 + 0x8C))
+            memcpy(&_s8_post, arm_ptr(m, _grw2 + 0x8C), 4);
+        if (_s8_post == 0 && _s8_pre != 0) {
+            m->saved_game_timer_head = _s8_pre;
+        }
+    }
 
     /* 恢复 nested ext 的 dispatch 函数地址 */
     memcpy(arm_ptr(m, t31a), &saved_t31, 4);
