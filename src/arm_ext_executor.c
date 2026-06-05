@@ -212,6 +212,11 @@ struct ArmExtModule {
     /* wrapper 进入模态框时 game 的 timer 链表头被清零（dispatch 中检测到），
      * 保存清零前的值以便 cancel 时恢复。 */
     uint32_t saved_game_timer_head;
+    /* gxdzc 的 wrapper 模态框直接画到同一 framebuffer 上；cancel/resume
+     * 不会触发底层页面重绘，所以保存进入 suspend 前的画面用于精确恢复。 */
+    uint8_t *modal_screen_snapshot;
+    uint32_t modal_screen_snapshot_len;
+    int modal_screen_snapshot_valid;
     uc_hook hook;
     /* MRP 文件缓存：避免 ARM ext 在 Unicorn 下做极慢的 MRP 索引扫描 */
     MrpCacheEntry mrp_cache[MRP_CACHE_MAX];
@@ -1826,6 +1831,35 @@ fail:
     return MR_FAILED;
 }
 
+static int arm_ext_is_gxdzc_pack(void) {
+    const char *pack = mr_get_pack_filename();
+    if (!pack) return 0;
+    const char *slash = strrchr(pack, '/');
+    const char *name = slash ? slash + 1 : pack;
+    return strcmp(name, "gxdzc.mrp") == 0;
+}
+
+static int arm_ext_save_gxdzc_modal_screen_snapshot(ArmExtModule *m) {
+    if (!m || !arm_ext_is_gxdzc_pack() ||
+        !m->screen_addr || !m->screen_len || !arm_ptr(m, m->screen_addr)) {
+        return 0;
+    }
+    if (m->modal_screen_snapshot_len != m->screen_len) {
+        free(m->modal_screen_snapshot);
+        m->modal_screen_snapshot = NULL;
+        m->modal_screen_snapshot_len = 0;
+        m->modal_screen_snapshot_valid = 0;
+    }
+    if (!m->modal_screen_snapshot) {
+        m->modal_screen_snapshot = (uint8_t *)malloc(m->screen_len);
+        if (m->modal_screen_snapshot) m->modal_screen_snapshot_len = m->screen_len;
+    }
+    if (!m->modal_screen_snapshot) return 0;
+    memcpy(m->modal_screen_snapshot, arm_ptr(m, m->screen_addr), m->screen_len);
+    m->modal_screen_snapshot_valid = 0;
+    return 1;
+}
+
 int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_len,
                  uint8 **output, int32 *output_len) {
     if (output) *output = NULL;
@@ -1857,6 +1891,16 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     // Lifecycle/event calls belong to the app EXT, not later helper EXT modules.
     uint32_t call_p_addr = (code >= 0 && code <= 5 && m->primary_p_addr) ? m->primary_p_addr : (m->active_p_addr ? m->active_p_addr : m->p_addr);
     uint32_t call_helper_addr = (code >= 0 && code <= 5 && m->primary_helper_addr) ? m->primary_helper_addr : (m->active_helper_addr ? m->active_helper_addr : m->helper_addr);
+    int wrapper_modal_event_routed = 0;
+    int32_t wrapper_modal_event[3] = {0};
+    int gxdzc_modal_cancel_release = 0;
+    int restore_game_timer_after_modal_cancel = 0;
+    uint32_t modal_ext_chunk = 0;
+    uint32_t modal_suspend_depth_pre = 0;
+    if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr + 12))
+        memcpy(&modal_ext_chunk, arm_ptr(m, m->primary_p_addr + 12), 4);
+    if (modal_ext_chunk && arm_ptr(m, modal_ext_chunk + 0x34))
+        memcpy(&modal_suspend_depth_pre, arm_ptr(m, modal_ext_chunk + 0x34), 4);
 
     /* wrapper 模态框（extChunk[0x34]>0）活动时，将事件路由到 wrapper helper。
      * 真机上事件先经 wrapper helper，wrapper 在模态框期间拦截 SOFTRIGHT 并
@@ -1866,96 +1910,40 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
      * 非模态状态不干预。同时将软键区鼠标点击转为对应功能键，模拟真机平台行为。 */
     if (code == 1 && m->primary_p_addr &&
         m->helper_addr && m->helper_addr != m->primary_helper_addr) {
-        uint32_t _np = m->primary_p_addr;
-        uint32_t _ec = 0, _sd = 0;
-        if (arm_ptr(m, _np + 12))
-            memcpy(&_ec, arm_ptr(m, _np + 12), 4);
-        if (_ec && arm_ptr(m, _ec + 0x34))
-            memcpy(&_sd, arm_ptr(m, _ec + 0x34), 4);
-        /* DEBUG: dump extChunk 完整内容（首次模态时） */
-        static int _ec_dumped = 0;
-        if (_sd > 0 && !_ec_dumped && _ec) {
-            _ec_dumped = 1;
-            printf("[EC_DUMP] extChunk at 0x%X:\n", _ec);
-            for (int off = 0; off < 0x40; off += 4) {
-                uint32_t v = 0;
-                if (arm_ptr(m, _ec + off)) memcpy(&v, arm_ptr(m, _ec + off), 4);
-                printf("  [0x%02X] = 0x%08X\n", off, v);
-            }
-        }
+        uint32_t _ec = modal_ext_chunk;
+        uint32_t _sd = modal_suspend_depth_pre;
         if (_sd > 0) {
-            /* 模态框活动时检测软键区事件。
-             * - 取消（SOFTRIGHT / 右 1/3）：手动调 wrapper resume + 恢复
-             *   game timer head 返回前一页。extChunk[8]=0 时 blx 无害。
-             * - 确认（SOFTLEFT / 左 1/3）：路由到 wrapper helper 触发下载
-             *   回调。不修复 extChunk[8]（避免嵌套调用），不恢复 state[8]
-             *  （避免 game timer 抢绘覆盖 wrapper UI）。 */
-            int resolved_key = -1;
+            /* wrapper resume(0xE83220) 会通过 extChunk[8] 向 game 派发
+             * resumeApp。gxdzc 的 cfunction.ext 会把该槽位覆盖成 0，
+             * 因此在把 SOFTRIGHT 交给 wrapper 前恢复为 primary helper。 */
+            if (_ec && m->primary_helper_addr && arm_ptr(m, _ec + 8)) {
+                memcpy(arm_ptr(m, _ec + 8), &m->primary_helper_addr, 4);
+            }
             if (input_len >= 12 && input_addr) {
+                memcpy(wrapper_modal_event, arm_ptr(m, input_addr), 12);
                 extern VmrpConfig vmrp_config;
-                int32_t ev[3];
-                memcpy(ev, arm_ptr(m, input_addr), 12);
-                if (ev[0] == 0 && ev[1] == 17) resolved_key = 17;
-                if (ev[0] == 0 && ev[1] == 18) resolved_key = 18;
-                if ((ev[0] == 2 || ev[0] == 3) &&
-                    ev[2] >= vmrp_config.screen_height - 20) {
-                    if (ev[1] < vmrp_config.screen_width / 3) resolved_key = 17;
-                    else if (ev[1] >= vmrp_config.screen_width * 2 / 3) resolved_key = 18;
-                }
-            }
-
-            if (resolved_key == 18) {
-                /* 取消：手动调 wrapper resume + 恢复 game timer head */
-                uint32_t resume_func = EXT_CODE_ADDR + 0x3220 + 1;
-                uint32_t wrapper_rw = 0;
-                memcpy(&wrapper_rw, arm_ptr(m, m->p_addr), 4);
-                if (wrapper_rw) {
-                    reg_write32(m->uc, UC_ARM_REG_R9, wrapper_rw);
-                    reg_write32(m->uc, UC_ARM_REG_R0, _ec);
-                    uint32_t sp2 = EXT_STACK_ADDR + EXT_STACK_SIZE - 32;
-                    uint32_t zero_args[8] = {0};
-                    uc_mem_write(m->uc, sp2, zero_args, sizeof(zero_args));
-                    reg_write32(m->uc, UC_ARM_REG_SP, sp2);
-                    uint32_t t31a = EXT_TABLE_ADDR + 31 * 4;
-                    uint32_t t32a = EXT_TABLE_ADDR + 32 * 4;
-                    uint32_t s31 = 0, s32 = 0;
-                    memcpy(&s31, arm_ptr(m, t31a), 4);
-                    memcpy(&s32, arm_ptr(m, t32a), 4);
-                    if (s31 != t31a) memcpy(arm_ptr(m, t31a), &t31a, 4);
-                    if (s32 != t32a) memcpy(arm_ptr(m, t32a), &t32a, 4);
-                    uint16 *saved2 = NULL;
-                    enter_screen_context(m, &saved2);
-                    run_arm_with_sp(m, resume_func, sp2);
-                    leave_screen_context(m, saved2);
-                    memcpy(arm_ptr(m, t31a), &s31, 4);
-                    memcpy(arm_ptr(m, t32a), &s32, 4);
-                }
-                if (m->saved_game_timer_head) {
-                    uint32_t grw2 = 0;
-                    memcpy(&grw2, arm_ptr(m, m->primary_p_addr), 4);
-                    if (grw2 && arm_ptr(m, grw2 + 0x8C))
-                        memcpy(arm_ptr(m, grw2 + 0x8C), &m->saved_game_timer_head, 4);
-                    m->saved_game_timer_head = 0;
-                }
-            }
-
-            if (resolved_key == 17) {
-                /* 确认：路由到 wrapper helper 触发下载回调。
-                 * 不修复 extChunk[8]，不恢复 state[8]。
-                 * 鼠标事件转 SOFTLEFT 键盘事件。 */
-                if (input_len >= 12 && input_addr) {
-                    int32_t ev[3];
-                    memcpy(ev, arm_ptr(m, input_addr), 12);
-                    if (ev[0] == 2 || ev[0] == 3) {
-                        int32_t patched[3] = {(ev[0] == 2) ? 0 : 1, 17, 0};
-                        memcpy(arm_ptr(m, input_addr), patched, 12);
+                if ((wrapper_modal_event[0] == 2 || wrapper_modal_event[0] == 3) &&
+                    wrapper_modal_event[2] >= vmrp_config.screen_height - 20) {
+                    int key = 0;
+                    if (wrapper_modal_event[1] < vmrp_config.screen_width / 3) key = 17;
+                    else if (wrapper_modal_event[1] >= vmrp_config.screen_width * 2 / 3) key = 18;
+                    if (key) {
+                        /* 底部软键区在真机上以 SOFTLEFT/SOFTRIGHT 进入
+                         * wrapper 控件树；直接使用鼠标坐标只会关闭控件外壳，
+                         * 不会走 gxdzc 绑定的按钮回调。 */
+                        wrapper_modal_event[0] = (wrapper_modal_event[0] == 2) ? 0 : 1;
+                        wrapper_modal_event[1] = key;
+                        wrapper_modal_event[2] = 0;
                     }
                 }
+                if (wrapper_modal_event[0] == 1 && wrapper_modal_event[1] == 18) {
+                    gxdzc_modal_cancel_release = 1;
+                }
+                memcpy(arm_ptr(m, input_addr), wrapper_modal_event, 12);
                 call_p_addr = m->p_addr;
-                /* 路由到 wrapper ARM 入口（0xE800B0），由 ARM 跳板设置
-                 * R7/R8/R10/R11 后再 blx 进 Thumb 核心。直接调 Thumb
-                 * 核心（0xE82A45）会跳过寄存器搬运导致事件静默丢失。 */
                 call_helper_addr = m->helper_addr;
+                wrapper_modal_event_routed = 1;
+                restore_game_timer_after_modal_cancel = 1;
             }
         }
     }
@@ -1993,6 +1981,13 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         memcpy(&_ac_grw, arm_ptr(m, m->primary_p_addr), 4);
     if (_ac_grw && arm_ptr(m, _ac_grw + 0x8C))
         memcpy(&_ac_s8_pre, arm_ptr(m, _ac_grw + 0x8C), 4);
+    int call_modal_snapshot_candidate = 0;
+    /* gxdzc 的下载提示可能在普通事件回调或 primary timer(code=2) 中
+     * 直接触发 wrapper suspend，而不是等到 wrapper dispatch；回调前
+     * 保存，回调后确认 [0x34] 0->1 才允许 cancel 使用这张底层页面截图。 */
+    if ((code == 1 || code == 2) && modal_suspend_depth_pre == 0 && _ac_s8_pre != 0) {
+        call_modal_snapshot_candidate = arm_ext_save_gxdzc_modal_screen_snapshot(m);
+    }
 
     uint16 *saved_screenBuf = NULL;
     enter_screen_context(m, &saved_screenBuf);
@@ -2007,6 +2002,13 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
             m->saved_game_timer_head = _ac_s8_pre;
         }
     }
+    uint32_t modal_suspend_depth_post = modal_suspend_depth_pre;
+    if (modal_ext_chunk && arm_ptr(m, modal_ext_chunk + 0x34))
+        memcpy(&modal_suspend_depth_post, arm_ptr(m, modal_ext_chunk + 0x34), 4);
+    if (modal_suspend_depth_pre == 0 && modal_suspend_depth_post > 0 &&
+        call_modal_snapshot_candidate) {
+        m->modal_screen_snapshot_valid = 1;
+    }
 
     if (patch_primary_table) {
         memcpy(arm_ptr(m, table31_addr), &saved_t31, 4);
@@ -2014,6 +2016,58 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     }
 
     if (call_ret != MR_SUCCESS) return MR_FAILED;
+
+    if (restore_game_timer_after_modal_cancel && m->saved_game_timer_head) {
+        uint32_t ec = 0, sd = 0, grw = 0;
+        if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr + 12))
+            memcpy(&ec, arm_ptr(m, m->primary_p_addr + 12), 4);
+        if (ec && arm_ptr(m, ec + 0x34))
+            memcpy(&sd, arm_ptr(m, ec + 0x34), 4);
+        if (sd == 0 && m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
+            memcpy(&grw, arm_ptr(m, m->primary_p_addr), 4);
+        if (grw && arm_ptr(m, grw + 0x8C))
+            memcpy(arm_ptr(m, grw + 0x8C), &m->saved_game_timer_head, 4);
+        if (sd == 0) {
+            if (gxdzc_modal_cancel_release && arm_ext_is_gxdzc_pack() &&
+                grw && arm_ptr(m, grw + 0x1A37)) {
+                uint32_t resource_state = 0x53;
+                uint8_t zero_byte = 0;
+                /* gxdzc game.ext 反汇编定位：
+                 *   0x667C80 进入未完成下载：rw+0x03C8=5, rw+0x0388=1,
+                 *   rw+0x1A34 描述块写入 pending 标志/参数，rw+0x0DC1=1；
+                 *   0x6644D4 填充 rw+0x09F4 的异步请求块。
+                 * wrapper 的取消只关闭外层模态框，不会调用 game 的取消路径；
+                 * 保留这些 pending 字段会让下一次点击被认为已有下载在进行。
+                 * 这里只复位这些“未完成下载”字段，不调用会把状态转成 0x0C
+                 * 的 0x667BF8 完成/失败回调。 */
+                if (arm_ptr(m, grw + 0x09F4 + 0x7F))
+                    memset(arm_ptr(m, grw + 0x09F4), 0, 0x80);
+                memcpy(arm_ptr(m, grw + 0x03C8), &resource_state, 4);
+                memcpy(arm_ptr(m, grw + 0x0388), &zero_byte, 1);
+                if (arm_ptr(m, grw + 0x1A34 + 0x17))
+                    memset(arm_ptr(m, grw + 0x1A34), 0, 0x18);
+                memcpy(arm_ptr(m, grw + 0x0DC1), &zero_byte, 1);
+                /* wrapper 反汇编显示 suspend 会摘掉 game timer 后绘制模态层；
+                 * VMRP 不能像真机窗口系统那样自动露出下面的 framebuffer。
+                 * 在 cancel/resume 后恢复 suspend 前保存的 framebuffer，才会
+                 * 看到进入下载提示前的主菜单画面。 */
+                if (m->modal_screen_snapshot_valid &&
+                    m->modal_screen_snapshot &&
+                    m->modal_screen_snapshot_len == m->screen_len &&
+                    m->screen_addr && arm_ptr(m, m->screen_addr)) {
+                    memcpy(arm_ptr(m, m->screen_addr), m->modal_screen_snapshot, m->screen_len);
+                    if (mr_screenBuf) {
+                        memcpy(mr_screenBuf, m->modal_screen_snapshot, m->screen_len);
+                        mr_drawBitmap(mr_screenBuf, 0, 0, (uint16)m->screen_w, (uint16)m->screen_h);
+                    }
+                    m->modal_screen_snapshot_valid = 0;
+                }
+            }
+            m->saved_game_timer_head = 0;
+            m->active_helper_addr = m->primary_helper_addr;
+            m->active_p_addr = m->primary_p_addr;
+        }
+    }
 
     /* 同 arm_ext_call_dispatch 中的注释：ARM 代码可能在事件回调中直接
      * 写 mr_state_slot 触发退出/重启，需同步到宿主侧。 */
@@ -2032,6 +2086,9 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if (output_len) *output_len = (int32)arm_output_len;
     if (output) *output = arm_output ? (uint8 *)arm_ptr(m, arm_output) : NULL;
 
+    /* 模态层的原始事件已经由 wrapper 控件树处理。这里向宿主返回
+     * MR_SUCCESS，避免同一个 mouse-up 在模态关闭后继续落到 game 菜单。 */
+    if (wrapper_modal_event_routed) return MR_SUCCESS;
     return (int32_t)reg_read32(m->uc, UC_ARM_REG_R0);
 }
 
@@ -2112,6 +2169,16 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
         memcpy(&_game_rw, arm_ptr(m, m->primary_p_addr), 4);
     if (_game_rw && arm_ptr(m, _game_rw + 0x8C))
         memcpy(&_s8_pre, arm_ptr(m, _game_rw + 0x8C), 4);
+    uint32_t suspend_depth_pre = 0;
+    if (arm_ptr(m, ext_chunk + 0x34))
+        memcpy(&suspend_depth_pre, arm_ptr(m, ext_chunk + 0x34), 4);
+    int modal_snapshot_candidate = 0;
+    /* cfunction.ext 的 suspend(0xE831A4) 在同一次 dispatch 内把
+     * extChunk[0x34] 从 0 加到 1 并绘制模态层。这里只在尚未 suspend
+     * 时抓取 framebuffer，dispatch 后确认 0->1 再标记为可用于 cancel 恢复。 */
+    if (suspend_depth_pre == 0 && _s8_pre != 0) {
+        modal_snapshot_candidate = arm_ext_save_gxdzc_modal_screen_snapshot(m);
+    }
 
     uint16 *saved_screenBuf = NULL;
     enter_screen_context(m, &saved_screenBuf);
@@ -2129,6 +2196,12 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
             memcpy(&_s8_post, arm_ptr(m, _grw2 + 0x8C), 4);
         if (_s8_post == 0 && _s8_pre != 0) {
             m->saved_game_timer_head = _s8_pre;
+        }
+        uint32_t suspend_depth_post = 0;
+        if (arm_ptr(m, ext_chunk + 0x34))
+            memcpy(&suspend_depth_post, arm_ptr(m, ext_chunk + 0x34), 4);
+        if (suspend_depth_pre == 0 && suspend_depth_post > 0 && modal_snapshot_candidate) {
+            m->modal_screen_snapshot_valid = 1;
         }
     }
 
@@ -2152,11 +2225,12 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
      * 真正区分“弹个模态框继续跑”与“退出/返回上层”的精确状态判据（非时间启发式）：
      *   - [0x34]>0 表示 app 已自我挂起；
      *   - 且 mr_timer_state==MR_TIMER_STATE_IDLE 表示 app 在本次 dispatch 里没有
-     *     重挂自己的定时器，即它的运行循环已经结束。
-     * 二者同时成立，说明 app 已挂起且不再自驱——它把控制权交还给了上层 launcher
-     * （skymobi 游戏中心 / dsm_gm）。实测：mpc 应用内“退出”正走此路径（挂起+停表，
-     * mr_timer_state=IDLE），而 gxdzc“下载提示”等活动模态框每个 tick 都持续重挂
-     * 定时器（mr_timer_state=RUNNING），因此不会被误判。
+     *     重挂自己的定时器；
+     *   - 且 dispatch 前没有保存到 game timer head。若 saved_game_timer_head
+     *     非 0，说明 wrapper 只是临时摘除了 game 的定时器节点（gxdzc 下载提示
+     *     就是该路径），取消时还要把它挂回，不能当成退出。
+     * 三者同时成立，说明 app 已挂起且不再自驱——它把控制权交还给了上层 launcher
+     * （skymobi 游戏中心 / dsm_gm）。实测：mpc 应用内“退出”正走此路径。
      * 交给 mr_exit 统一处理即真机“返回 launcher”语义：存在上层应用 (old_pack) 时
      * mr_restart_old_app 返回上层；独立启动时真正退出进程。其它写 mr_state_slot
      * 或调 table[54] 的显式退出/重启仍由下面与 case 54 负责。 */
@@ -2168,7 +2242,9 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
         uint32_t suspend_depth = 0;
         if (arm_ptr(m, ext_chunk + 0x34))
             memcpy(&suspend_depth, arm_ptr(m, ext_chunk + 0x34), 4);
-        if (suspend_depth > 0 && mr_timer_state == MR_TIMER_STATE_IDLE) {
+        if (suspend_depth > 0 &&
+            mr_timer_state == MR_TIMER_STATE_IDLE &&
+            m->saved_game_timer_head == 0) {
             mr_exit();
         }
     }
@@ -2243,6 +2319,7 @@ void arm_ext_unload(ArmExtModule *m) {
     mrp_cache_free(m);
     if (m->uc) uc_close(m->uc);
     free(m->last_file_copy);
+    free(m->modal_screen_snapshot);
     free(m->low_table);
     if (m->mem_is_mmap) {
 #ifdef _MSC_VER
