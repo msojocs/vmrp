@@ -741,6 +741,14 @@ static int32 native_textRefresh(int32 handle, const char *title, const char *tex
     return MR_FAILED;
 }
 
+static void native_drawBitmap(uint16 *bmp, int16 x, int16 y, uint16 w, uint16 h) {
+    guiDrawBitmap(bmp, x, y, w, h);
+}
+
+static const char *native_editGetText(int32 edit) {
+    return editGetText(edit);
+}
+
 #if defined(__EMSCRIPTEN__)
 #define NATIVE_DSM_FLAGS FLAG_USE_UTF8_FS
 #elif defined(_WIN32)
@@ -776,7 +784,7 @@ static DSM_REQUIRE_FUNCS native_funcs = {
     .readdir = native_readdir,
     .closedir = my_closedir,
     .getLen = my_getLen,
-    .drawBitmap = guiDrawBitmap,
+    .drawBitmap = native_drawBitmap,
     .getHostByName = native_getHostByName,
     .initNetwork = native_initNetwork,
     .mr_closeNetwork = my_closeNetwork,
@@ -800,7 +808,7 @@ static DSM_REQUIRE_FUNCS native_funcs = {
     .mr_textRefresh = native_textRefresh,
     .mr_editCreate = editCreate,
     .mr_editRelease = editRelease,
-    .mr_editGetText = editGetText,
+    .mr_editGetText = native_editGetText,
     .flags = NATIVE_DSM_FLAGS,
     .screen_width = 0,
     .screen_height = 0,
