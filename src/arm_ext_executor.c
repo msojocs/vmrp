@@ -271,6 +271,10 @@ static uint32_t reg_read32(uc_engine *uc, int reg) {
     return v;
 }
 
+static int arm_ext_is_gxdzc_pack(void);
+static void patch_gxdzc_game_touch_map(ArmExtModule *m, uint32_t code_addr,
+                                       uint32_t code_len);
+
 static void reg_write32(uc_engine *uc, int reg, uint32_t v) {
     uc_reg_write(uc, reg, &v);
 }
@@ -1311,6 +1315,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 125: {
             int fl = 0;
             uint32_t packp = 0, ramp_slot = 0, raml_slot = 0, ramp = 0, raml = 0;
+            const char *read_name = arm_str(m, r0);
             uc_mem_read(m->uc, EXT_TABLE_ADDR + 100 * 4, &packp, 4);
             uc_mem_read(m->uc, EXT_TABLE_ADDR + 104 * 4, &ramp_slot, 4);
             uc_mem_read(m->uc, EXT_TABLE_ADDR + 105 * 4, &raml_slot, 4);
@@ -1320,9 +1325,9 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             void *hp = NULL;
             const char *pack = arm_str(m, packp);
             if (pack[0] == '$' && ramp && raml) {
-                hp = mr_readFile_from_ram(arm_str(m, r0), &fl, (int)r2, arm_ptr(m, ramp), (int)raml);
+                hp = mr_readFile_from_ram(read_name, &fl, (int)r2, arm_ptr(m, ramp), (int)raml);
             } else {
-                hp = _mr_readFile(arm_str(m, r0), &fl, (int)r2);
+                hp = _mr_readFile(read_name, &fl, (int)r2);
             }
             if (!hp) { ret = 0; break; }
             uint32_t ap = arm_alloc(m, (uint32_t)fl);
@@ -1348,6 +1353,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 memcpy(arm_ptr(m, r2), &table_addr, 4);
                 m->last_file_addr = r2;
                 m->last_file_len = r3;
+                patch_gxdzc_game_touch_map(m, r2, r3);
                 if (m->last_alloc_len == sizeof(mr_c_function_P_t) && arm_ptr(m, m->last_alloc_addr)) {
                     m->nested_p_addr = m->last_alloc_addr;
                 }
@@ -1581,6 +1587,50 @@ static void patch_wrapper_stack_size(ArmExtModule *m) {
                 break;
             }
         }
+    }
+}
+
+static void patch_gxdzc_game_touch_map(ArmExtModule *m, uint32_t code_addr, uint32_t code_len) {
+    if (!arm_ext_is_gxdzc_pack()) {
+        return;
+    }
+
+    const uint32_t patch_off = 0x1127eu;
+    static const uint8_t music_prompt_gbk[] = {
+        0xca, 0xc7, 0xb7, 0xf1, 0xbf, 0xaa, 0xc6, 0xf4,
+        0xd2, 0xf4, 0xc0, 0xd6, 0xa3, 0xbf, 0x00
+    };
+    const uint32_t music_prompt_off = 0x22e84u;
+    if (code_len < patch_off + sizeof(uint16_t) ||
+        code_len < music_prompt_off + sizeof(music_prompt_gbk) ||
+        !arm_ptr(m, code_addr + patch_off) ||
+        !arm_ptr(m, code_addr + music_prompt_off)) {
+        return;
+    }
+
+    if (memcmp(arm_ptr(m, code_addr + music_prompt_off),
+               music_prompt_gbk, sizeof(music_prompt_gbk)) != 0) {
+        return;
+    }
+
+    uint16_t old_insn = 0;
+    memcpy(&old_insn, arm_ptr(m, code_addr + patch_off), sizeof(old_insn));
+    if (old_insn != 0x2014u) {
+        return;
+    }
+
+    /* gxdzc game.ext 基址 0x6460F8 时，0x6571B0 是触摸到按键的区域映射表。
+     * 音乐确认框处 rw+0x03AC=21；该分支的 0x657366 先检查左下
+     * x=0..40,y=280..320，却在 0x657376 发 MR_KEY_SELECT(20)。反汇编
+     * 0x660510 显示 SELECT 只锁存 0x4000，而“是否开启音乐？”回调响应
+     * SOFTLEFT(17) 锁存的 0x1000 并调用 mr_playSound。这里把这条 Thumb
+     * 指令从 movs r0,#20 改为 movs r0,#17；右下“否”仍走 0x65738C 的
+     * MR_KEY_SOFTRIGHT(18)，不改变其它触摸区域。 */
+    uint16_t new_insn = 0x2011u;
+    memcpy(arm_ptr(m, code_addr + patch_off), &new_insn, sizeof(new_insn));
+    if (getenv("VMRP_ARM_EXT_TRACE")) {
+        printf("arm_ext_executor: patched gxdzc game.ext touch map at 0x%X\n",
+               code_addr + patch_off);
     }
 }
 

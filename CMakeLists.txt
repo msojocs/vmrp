@@ -120,7 +120,7 @@ add_executable(vmrp
   ./src/arm_ext_executor.c
   ${VMRP_MYTHROAD_SOURCES}
 )
-target_compile_definitions(vmrp PRIVATE VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
+target_compile_definitions(vmrp PRIVATE VMRP_NATIVE VMRP_SDL_AUDIO TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
 target_include_directories(vmrp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
 if(MSVC)
   target_link_options(vmrp PRIVATE /FORCE:MULTIPLE)
@@ -170,7 +170,7 @@ if(EMCC)
     OUTPUT ${VMRP_WASM_OUTPUT}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${VMRP_WASM_OUTPUT_DIR}
     COMMAND ${EMCC} -Os -Wall
-      -DNETWORK_SUPPORT -DVMRP -DVMRP_NATIVE
+      -DNETWORK_SUPPORT -DVMRP -DVMRP_NATIVE -DVMRP_SDL_AUDIO
       -DTARGET_MOD -DMTK_MOD -DMR_PLAT_DRAWTEXT -DDSM_FULL -DTRUST_BINARIES
       -funsigned-char
       -I${CMAKE_CURRENT_SOURCE_DIR}/wasm/unicorn
