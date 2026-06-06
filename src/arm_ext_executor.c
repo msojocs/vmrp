@@ -272,6 +272,7 @@ static uint32_t reg_read32(uc_engine *uc, int reg) {
 }
 
 static int arm_ext_is_gxdzc_pack(void);
+static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk);
 static void patch_gxdzc_game_touch_map(ArmExtModule *m, uint32_t code_addr,
                                        uint32_t code_len);
 
@@ -1889,6 +1890,49 @@ static int arm_ext_is_gxdzc_pack(void) {
     return strcmp(name, "gxdzc.mrp") == 0;
 }
 
+static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk) {
+    if (!m) return 0;
+
+    /* ARM ext 的退出/重启逻辑会直接写 mr_state_slot 设置
+     * MR_STATE_RESTART(3) 或 MR_STATE_STOP(4)。真机上 ARM 代码与宿主共享
+     * 同一全局变量；Unicorn 下 ARM 内存独立，所以回调结束后要同步一次。 */
+    if (m->mr_state_slot) {
+        uint32_t arm_state = 0;
+        memcpy(&arm_state, arm_ptr(m, m->mr_state_slot), 4);
+        if (arm_state >= 3) {
+            mr_exit();
+            return 1;
+        }
+    }
+
+    if (!ext_chunk || !arm_ptr(m, ext_chunk + 0x34)) {
+        return 0;
+    }
+
+    /* wrapper 反汇编确认 extChunk[0x34] 是 suspend 深度：
+     *   0xE831A4 suspend: [0x34]++，首次进入时摘掉 wrapper timer 节点
+     *   0xE83220 resume:  [0x34]--，回到 0 时重新挂回 timer 节点
+     * 普通 wrapper 模态/子流程会把 active_helper_addr 切到后加载的子模块，
+     * 由该前台子模块继续处理用户选择；真正的“返回上层/停止自驱”路径则
+     * 只挂起 primary app，没有新的前台 helper 接管。模拟器没有真机平台
+     * 的上层调度器，因此要在这种无前台子模块且宿主定时器空闲的状态下
+     * 调用 mr_exit()，把 wrapper 状态同步到宿主平台层。 */
+    enum { MR_TIMER_STATE_IDLE = 0 };
+    uint32_t suspend_depth = 0;
+    memcpy(&suspend_depth, arm_ptr(m, ext_chunk + 0x34), 4);
+    int foreground_child =
+        m->primary_helper_addr &&
+        m->active_helper_addr &&
+        m->active_helper_addr != m->primary_helper_addr;
+    if (suspend_depth > 0 &&
+        mr_timer_state == MR_TIMER_STATE_IDLE &&
+        !foreground_child) {
+        mr_exit();
+        return 1;
+    }
+    return 0;
+}
+
 static int arm_ext_save_gxdzc_modal_screen_snapshot(ArmExtModule *m) {
     if (!m || !arm_ext_is_gxdzc_pack() ||
         !m->screen_addr || !m->screen_len || !arm_ptr(m, m->screen_addr)) {
@@ -2119,14 +2163,10 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         }
     }
 
-    /* 同 arm_ext_call_dispatch 中的注释：ARM 代码可能在事件回调中直接
-     * 写 mr_state_slot 触发退出/重启，需同步到宿主侧。 */
-    if (m->mr_state_slot) {
-        uint32_t arm_state = 0;
-        memcpy(&arm_state, arm_ptr(m, m->mr_state_slot), 4);
-        if (arm_state >= 3) {
-            mr_exit();
-        }
+    if (arm_ext_finish_callback_state(m, modal_ext_chunk)) {
+        /* mr_exit() 在存在 old app 时会重启上层并返回；当前 ARM 回调的
+         * 控制权已经交给平台层，不能继续读取旧 helper 的 output/R0。 */
+        return MR_SUCCESS;
     }
 
     uint32_t arm_output = 0;
@@ -2259,57 +2299,10 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     memcpy(arm_ptr(m, t31a), &saved_t31, 4);
     memcpy(arm_ptr(m, t32a), &saved_t32, 4);
 
-    /* 注意：ext_chunk[0x34] 不是“退出标志”，而是 wrapper 的 pause/suspend 嵌套
-     * 计数器（反汇编实证）：
-     *   - wrapper 的 suspend 函数 0xE831A4：[0x34]++，若变为 1 则把自己的定时器
-     *     节点 [0x24] 从活动链表摘除（0xE838A8），并向内层 app 派发事件 4
-     *     (pauseApp)。
-     *   - wrapper 的 resume 函数 0xE83220：[0x34]--，若回到 0 则重新挂回定时器
-     *     节点（0xE83908），并派发事件 5 (resumeApp)。
-     * 即 [0x34]>0 表示“当前正处于一层模态/挂起中”。任何弹出 wrapper 模态框的
-     * 操作都会把它置 1：mpc 的“确定退出?”确认框、gxdzc 资源部的“下载提示”提示
-     * 框都会触发。早期把 [0x34]!=0 当作退出标志直接 mr_exit，会在 gxdzc 弹出
-     * 下载提示框的瞬间杀掉进程，导致无法进入资源部下载界面。pause/resume 本身
-     * 完全由 wrapper 内部维护并向内层 app 派发，宿主不应仅凭 [0x34]!=0 就退出。
-     *
-     * 真正区分“弹个模态框继续跑”与“退出/返回上层”的精确状态判据（非时间启发式）：
-     *   - [0x34]>0 表示 app 已自我挂起；
-     *   - 且 mr_timer_state==MR_TIMER_STATE_IDLE 表示 app 在本次 dispatch 里没有
-     *     重挂自己的定时器；
-     *   - 且 dispatch 前没有保存到 game timer head。若 saved_game_timer_head
-     *     非 0，说明 wrapper 只是临时摘除了 game 的定时器节点（gxdzc 下载提示
-     *     就是该路径），取消时还要把它挂回，不能当成退出。
-     * 三者同时成立，说明 app 已挂起且不再自驱——它把控制权交还给了上层 launcher
-     * （skymobi 游戏中心 / dsm_gm）。实测：mpc 应用内“退出”正走此路径。
-     * 交给 mr_exit 统一处理即真机“返回 launcher”语义：存在上层应用 (old_pack) 时
-     * mr_restart_old_app 返回上层；独立启动时真正退出进程。其它写 mr_state_slot
-     * 或调 table[54] 的显式退出/重启仍由下面与 case 54 负责。 */
-    {
-        /* mythroad.h 中 MR_TIMER_STATE_IDLE 为枚举首项=0；本文件不引入该头文件，
-         * 此处按其定义直接比较 0（IDLE）。 */
-        enum { MR_TIMER_STATE_IDLE = 0 };
-        extern int32 mr_timer_state;
-        uint32_t suspend_depth = 0;
-        if (arm_ptr(m, ext_chunk + 0x34))
-            memcpy(&suspend_depth, arm_ptr(m, ext_chunk + 0x34), 4);
-        if (suspend_depth > 0 &&
-            mr_timer_state == MR_TIMER_STATE_IDLE &&
-            m->saved_game_timer_head == 0) {
-            mr_exit();
-        }
-    }
-
-    /* ARM ext 的退出/重启逻辑（如 cfunction.ext 的 mr_restart_old_app 实现）
-     * 直接写 mr_state_slot 设置 MR_STATE_RESTART(3) 或 MR_STATE_STOP(4)。
-     * 真机上 ARM 代码与宿主共享同一内存，写 slot 等同于写全局变量；Unicorn
-     * 下 ARM 内存独立，宿主侧的 mr_state 不会自动同步。检测到 slot 变更后
-     * 调用宿主侧 mr_exit()，由其正常的 mr_restart_old_app 路径完成重启。 */
-    if (m->mr_state_slot) {
-        uint32_t arm_state = 0;
-        memcpy(&arm_state, arm_ptr(m, m->mr_state_slot), 4);
-        if (arm_state >= 3) {
-            mr_exit();
-        }
+    if (arm_ext_finish_callback_state(m, ext_chunk)) {
+        /* dispatch 已经触发平台退出/重启语义；返回成功让外层停止继续解释
+         * 本次 wrapper timer 的旧返回值。 */
+        return MR_SUCCESS;
     }
 
     return ret;
