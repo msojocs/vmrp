@@ -4209,12 +4209,15 @@ int32 mr_timer(void) {
             return status;
     }
     if (native_ext) {
-        int32 status = native_ext_void_event(2);
         if (arm_ext_primary_helper(native_ext)) {
-            arm_ext_call_dispatch(native_ext, 0, 50);
+            int32 status = arm_ext_call_dispatch(native_ext, 0, 50);
+            if (status != MR_IGNORE)
+                return status;
+        } else {
+            int32 status = native_ext_void_event(2);
+            if (status != MR_IGNORE)
+                return status;
         }
-        if (status != MR_IGNORE)
-            return status;
     }
 
     mrp_getglobal(vm_state, (char*)mr_timer_p);
