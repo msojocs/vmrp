@@ -27,6 +27,7 @@ extern void mr_free(void *p, uint32 len);
 extern int32 mr_mem_get(char **mem_base, uint32 *mem_len);
 extern int32 mr_timerStart(uint16 t);
 extern int32 mr_timerStop(void);
+extern int32 mr_state;
 extern int32 mr_timer_state;
 extern int32 mr_stop_ex(int16 freemem);
 extern uint32 mr_getTime(void);
@@ -178,9 +179,12 @@ struct ArmExtModule {
     uint32_t nested_p_addr;
     uint32_t active_p_addr;
     uint32_t active_helper_addr;
+    uint32_t current_p_addr;
+    uint32_t current_helper_addr;
     uint32_t primary_p_addr;       // First nested EXT is the app logic; later nested EXTs can be helpers.
     uint32_t primary_helper_addr;
     uint32_t primary_file_addr;    // Code base of the first nested EXT (for code[4] updates).
+    uint32_t primary_file_len;
     uint32_t outer_r9;
     uint32_t nested_return_addr;
     uint32_t screen_write_count;
@@ -189,16 +193,9 @@ struct ArmExtModule {
     uint32_t cpsr_ring[EXT_TRACE_PC_RING];
     uint32_t pc_ring_pos;
     uint32_t busy_wait_count;
-    /* 忙等开始时的真实 mr_getTime 返回值；用于在合法实时延时不能自然完成时
-     * 识别"卡死"并触发 mr_exit。 */
+    /* 忙等开始时的真实 mr_getTime 返回值；用于在 ARM 侧连续轮询时间时
+     * 让宿主时钟推进，并在长时间等待后把控制权还给宿主调度器。 */
     uint32_t busy_wait_start_ms;
-    /* 当前 ARM 事件 / 回调中是否做过"真实工作"（除了 mr_getTime 与 arm_alloc
-     * 之外的 table 调用，例如绘图、文件 IO 等）。用于区分两种 SP 漂移崩溃
-     * 场景：
-     *   a) 正常的菜单切换：会先大量绘制后才进入计时器忙等 ⇒ event_did_work=1
-     *   b) mpc 的退出路径：跳过 UI 渲染直接进入计时器自旋 ⇒ event_did_work=0
-     * 在 (b) 上把 SP-in-code 崩溃当作"应当退出"，调用 mr_exit() 收尾。 */
-    int event_did_work;
     int nested_loading;
     int screen_dirty;
     int mem_is_mmap;
@@ -208,6 +205,9 @@ struct ArmExtModule {
     /* 嵌套 ext 覆盖 table[31/32] 的 dispatch 函数地址 */
     uint32_t dispatch_timer_start;
     uint32_t dispatch_timer_stop;
+    uint32_t timer_p_addr;
+    uint32_t timer_helper_addr;
+    int host_timer_pending;
     int in_dispatch; /* 防止 dispatch -> wrapper -> table[31/32] -> dispatch 重入 */
     /* wrapper 进入模态框时 game 的 timer 链表头被清零（dispatch 中检测到），
      * 保存清零前的值以便 cancel 时恢复。 */
@@ -273,6 +273,7 @@ static uint32_t reg_read32(uc_engine *uc, int reg) {
 
 static int arm_ext_is_gxdzc_pack(void);
 static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk);
+static void capture_timer_dispatches(ArmExtModule *m);
 static void patch_gxdzc_game_touch_map(ArmExtModule *m, uint32_t code_addr,
                                        uint32_t code_len);
 
@@ -359,32 +360,10 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
         uint32_t cur_sp = reg_read32(m->uc, UC_ARM_REG_SP);
         if (err == UC_ERR_INSN_INVALID && pc >= EXT_CODE_ADDR && pc < EXT_CODE_ADDR + m->code_len) {
             /*
-             * ARM 侧栈漂进了代码段——通常是反复忙等导致栈被破坏。这种崩溃
-             * 不可恢复，但应当怎么收尾要看回调里之前都做了什么：
-             *
-             *   • event_did_work == 1：本次事件先完成了真实工作（绘图/IO/
-             *     对话框等），然后才在结尾的计时器自旋里崩了。这种属于"正
-             *     常 UI 路径"——例如 mpc 的菜单切换、对话框打开等动画；
-             *     调用方期望事件回调返回后 app 继续运行。沿用既有的静默
-             *     清退处理。
-             *
-             *   • event_did_work == 0 且确实进入过 mr_getTime 忙等
-             *     （busy_wait_count > 0）：本次事件跳过所有渲染，进来就一头
-             *     扎进自旋等待。这种是 mpc 的退出回调，原始 ARM 代码期望
-             *     在自旋"完成"后调用 mr_exit() 结束进程；在我们的仿真器里
-             *     自旋走不到那一步就崩了，因此这里替它把 mr_exit() 补上，
-             *     恢复历史上 a5ca8ab "无法退出 mpc" 修复时点的体验。
+             * ARM 侧栈漂进了代码段后无法继续安全解释。这里只结束当前
+             * callback，让平台层保持原状态继续调度；退出/重启必须来自
+             * ARM 程序自己的 mr_exit/mr_state 路径，不能在异常处理里推断。
              */
-            int is_exit_spin = (m->event_did_work == 0 && m->busy_wait_count > 0);
-            if (is_exit_spin) {
-                printf("arm_ext_executor: code stack reached executable area pc=0x%X sp=0x%X (no UI work seen, treating as mpc exit) -> mr_exit\n", pc, cur_sp);
-                if (getenv("VMRP_ARM_EXT_TRACE")) dump_pc_ring(m);
-                reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
-                m->busy_wait_count = 0;
-                m->busy_wait_start_ms = 0;
-                mr_exit();
-                return MR_SUCCESS;
-            }
             if (getenv("VMRP_ARM_EXT_TRACE")) {
                 printf("arm_ext_executor: ARM callback stopped at non-instruction pc=0x%X sp=0x%X\n", pc, cur_sp);
                 dump_pc_ring(m);
@@ -688,6 +667,65 @@ static void internal_slot_write(ArmExtModule *m, uint32_t slot, uint32_t value) 
     if (slot) memcpy(arm_ptr(m, slot), &value, 4);
 }
 
+static int internal_slot_read(ArmExtModule *m, uint32_t slot, uint32_t *value) {
+    if (!m || !slot || !value || !arm_ptr(m, slot)) return 0;
+    memcpy(value, arm_ptr(m, slot), 4);
+    return 1;
+}
+
+static void sync_internal_state_to_arm(ArmExtModule *m) {
+    if (!m) return;
+    internal_slot_write(m, m->mr_state_slot, (uint32_t)mr_state);
+    internal_slot_write(m, m->mr_timer_state_slot, (uint32_t)mr_timer_state);
+}
+
+static void sync_timer_state_from_arm(ArmExtModule *m) {
+    enum { ARM_TIMER_IDLE = 0, ARM_TIMER_RUNNING = 1 };
+    uint32_t arm_timer_state = 0;
+    if (!internal_slot_read(m, m ? m->mr_timer_state_slot : 0, &arm_timer_state)) {
+        return;
+    }
+    if (arm_timer_state <= 3) {
+        if (m->host_timer_pending &&
+            mr_timer_state == ARM_TIMER_RUNNING &&
+            arm_timer_state == ARM_TIMER_IDLE) {
+            internal_slot_write(m, m->mr_timer_state_slot, ARM_TIMER_RUNNING);
+            return;
+        }
+        mr_timer_state = (int32)arm_timer_state;
+        if (mr_timer_state != ARM_TIMER_RUNNING) {
+            m->host_timer_pending = 0;
+        }
+    }
+}
+
+static void arm_ext_record_timer_owner(ArmExtModule *m) {
+    if (!m) return;
+    uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR) & ~1u;
+    uint32_t owner_p = 0;
+    uint32_t owner_helper = 0;
+
+    if (lr >= EXT_CODE_ADDR && lr < EXT_CODE_ADDR + m->code_len) {
+        owner_p = m->p_addr;
+        owner_helper = m->helper_addr;
+    } else if (m->primary_file_addr && m->primary_file_len &&
+               lr >= m->primary_file_addr &&
+               lr < m->primary_file_addr + m->primary_file_len) {
+        owner_p = m->primary_p_addr;
+        owner_helper = m->primary_helper_addr;
+    } else {
+        owner_p = m->current_p_addr ? m->current_p_addr :
+                  (m->active_p_addr ? m->active_p_addr : m->p_addr);
+        owner_helper = m->current_helper_addr ? m->current_helper_addr :
+                       (m->active_helper_addr ? m->active_helper_addr : m->helper_addr);
+    }
+
+    if (owner_p && owner_helper) {
+        m->timer_p_addr = owner_p;
+        m->timer_helper_addr = owner_helper;
+    }
+}
+
 /* origin_mem 池由 ext 自身的 ARM 内存管理器维护，ext 直接更新
  * table[111/135/136] 对应的 slot 值。宿主侧不应覆写这些 slot，
  * 否则 ext 读到的 origin_mem_left 等统计会与实际不符。
@@ -727,6 +765,45 @@ static void leave_screen_context(ArmExtModule *m, uint16 *saved_screen) {
     m->screen_dirty = 0;
 }
 
+static void capture_timer_dispatches(ArmExtModule *m) {
+    if (!m || !m->primary_helper_addr) return;
+    uint32_t t31a = EXT_TABLE_ADDR + 31 * 4;
+    uint32_t t32a = EXT_TABLE_ADDR + 32 * 4;
+    uint32_t t31v = 0, t32v = 0;
+    memcpy(&t31v, arm_ptr(m, t31a), 4);
+    memcpy(&t32v, arm_ptr(m, t32a), 4);
+    uint32_t primary_start = m->primary_file_addr;
+    uint32_t primary_end = primary_start + m->primary_file_len;
+    int t31_primary = primary_start && t31v >= primary_start && t31v < primary_end;
+    int t32_primary = primary_start && t32v >= primary_start && t32v < primary_end;
+
+    if (t31v != t31a && arm_ptr(m, t31v)) {
+        /* 嵌套 EXT 会把 SDK 的 timerStart 表项改成自己的 dispatch veneer
+         * （mpc/game.ext 反汇编为 str ..., [table,#0x7c]）。模拟器必须保留
+         * table hook，同时记录真实 veneer，用 wrapper R9 转调。 */
+        int captured = (!m->dispatch_timer_start || t31_primary);
+        if (captured) {
+            m->dispatch_timer_start = t31v;
+        }
+        memcpy(arm_ptr(m, t31a), &t31a, 4);
+        if (getenv("VMRP_ARM_EXT_TRACE")) {
+            printf("arm_ext_executor: %s timerStart dispatch=0x%X\n",
+                   captured ? "captured" : "ignored", t31v);
+        }
+    }
+    if (t32v != t32a && arm_ptr(m, t32v)) {
+        /* 同上，timerStop 也可能被嵌套 EXT 替换为 stop dispatch veneer。 */
+        int captured = (!m->dispatch_timer_stop || t32_primary);
+        if (captured) {
+            m->dispatch_timer_stop = t32v;
+        }
+        memcpy(arm_ptr(m, t32a), &t32a, 4);
+        if (getenv("VMRP_ARM_EXT_TRACE")) {
+            printf("arm_ext_executor: %s timerStop dispatch=0x%X\n",
+                   captured ? "captured" : "ignored", t32v);
+        }
+    }
+}
 
 static void cb_ret(ArmExtModule *m, uint32_t ret) {
     reg_write32(m->uc, UC_ARM_REG_R0, ret);
@@ -767,6 +844,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
     ArmExtModule *m = (ArmExtModule *)user_data;
     if (address < EXT_TABLE_ADDR || address >= EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4) return;
     uint32_t idx = (uint32_t)((address - EXT_TABLE_ADDR) / 4);
+    capture_timer_dispatches(m);
     uint32_t r0 = arg_read(m, 0), r1 = arg_read(m, 1), r2 = arg_read(m, 2), r3 = arg_read(m, 3);
     uint32_t ret = MR_SUCCESS;
     int trace_table = getenv("VMRP_ARM_EXT_TRACE") != NULL;
@@ -774,16 +852,11 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
         printf("arm_ext_executor: table[%u](0x%X,0x%X,0x%X,0x%X) lr=0x%X\n", idx, r0, r1, r2, r3, lr);
     }
-    /* mpc 退出路径的忙等循环交替调用 table[33](getTime)、table[31](timerStart)、
-     * table[32](timerStop)；若后两者重置 busy_wait_count，单次回调内忙等检测
-     * 永远达不到阈值，导致 ARM 执行无法被打断、回调永不返回。 */
+    /* ARM ext 常用 mr_getTime 忙等等待动画/定时器间隔。timerStart/Stop
+     * 可能夹在同一段等待循环里，因此与 getTime 一起保留连续计数。 */
     if (idx != 33 && idx != 31 && idx != 32) {
         m->busy_wait_count = 0;
         m->busy_wait_start_ms = 0;
-    }
-    /* timerStart/timerStop 不算 work——同上，退出自旋每轮穿插它们。 */
-    if (idx != 33 && idx != 0 && idx != 1 && idx != 3 && idx != 31 && idx != 32 && idx != 132 && idx != 133 && idx != 134) {
-        m->event_did_work = 1;
     }
 
     switch (idx) {
@@ -883,6 +956,9 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             ret = mr_stop_ex((int16)r0);
             internal_slot_write(m, m->mr_state_slot, 0);
             internal_slot_write(m, m->mr_timer_state_slot, 0);
+            m->host_timer_pending = 0;
+            m->timer_p_addr = 0;
+            m->timer_helper_addr = 0;
             break;
         case 25: {
             uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
@@ -916,6 +992,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                     m->primary_helper_addr = r0;
                     m->primary_p_addr = p_addr;
                     m->primary_file_addr = m->last_file_addr;
+                    m->primary_file_len = m->last_file_len;
                     /* wrapper 的 suspend/resume 通过 extChunk[8] 向 game
                      * 派发 pauseApp/resumeApp。真机上 wrapper 在加载 nested
                      * ext 时设置此字段，VMRP 下可能未被初始化（保持为 0），
@@ -985,11 +1062,16 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             ret = mr_timerStart((uint16)r0);
             internal_slot_write(m, m->mr_timer_state_slot, 1);
             mr_timer_state = 1;
+            m->host_timer_pending = 1;
+            arm_ext_record_timer_owner(m);
             break;
         case 32:
             ret = mr_timerStop();
             internal_slot_write(m, m->mr_timer_state_slot, 0);
             mr_timer_state = 0;
+            m->host_timer_pending = 0;
+            m->timer_p_addr = 0;
+            m->timer_helper_addr = 0;
             break;
         case 33: {
             ret = mr_getTime();
@@ -1541,9 +1623,6 @@ static void hook_screen_write(uc_engine *uc, uc_mem_type type, uint64_t address,
     ArmExtModule *m = (ArmExtModule *)user_data;
     m->screen_write_count++;
     m->screen_dirty = 1;
-    /* 直接写屏幕缓冲区（如 nes 游戏的逐像素渲染）也算"实质性 work"，
-     * 否则退出检测会把纯 ARM 渲染的游戏误判为退出自旋。 */
-    m->event_did_work = 1;
     if (getenv("VMRP_ARM_EXT_TRACE") && m->screen_write_count <= 20) {
         printf("arm_ext_executor: screen write #%u addr=0x%llX size=%d value=0x%llX\n",
                m->screen_write_count, (unsigned long long)address, size, (unsigned long long)value);
@@ -1856,22 +1935,7 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     int load_ret = run_arm(m, EXT_CODE_ADDR + 8);
     leave_screen_context(m, saved_screenBuf);
     if (load_ret != MR_SUCCESS) goto fail;
-    /* 嵌套 ext 可能在 mr_c_function_load 期间就被加载（如 dota.mrp 的
-     * cfunction.ext 在 load 阶段就加载 game.ext），此时 table[31/32]
-     * 已被覆盖为 dispatch 地址。提前捕获并恢复为 hook。 */
-    if (m->primary_helper_addr && m->primary_helper_addr != m->helper_addr) {
-        uint32_t t31v = 0, t32v = 0;
-        memcpy(&t31v, arm_ptr(m, EXT_TABLE_ADDR + 31 * 4), 4);
-        memcpy(&t32v, arm_ptr(m, EXT_TABLE_ADDR + 32 * 4), 4);
-        if (t31v != EXT_TABLE_ADDR + 31 * 4) {
-            uint32_t hook = EXT_TABLE_ADDR + 31 * 4;
-            memcpy(arm_ptr(m, EXT_TABLE_ADDR + 31 * 4), &hook, 4);
-        }
-        if (t32v != EXT_TABLE_ADDR + 32 * 4) {
-            uint32_t hook = EXT_TABLE_ADDR + 32 * 4;
-            memcpy(arm_ptr(m, EXT_TABLE_ADDR + 32 * 4), &hook, 4);
-        }
-    }
+    capture_timer_dispatches(m);
     /* 将 ARM 代码 mr_c_function_load() 的返回值 (R0) 传给调用者，
      * 与非 native 路径中 mr_load_c_function(code) 的返回值语义一致 */
     if (ext_ret) *ext_ret = (int32_t)reg_read32(m->uc, UC_ARM_REG_R0);
@@ -1959,7 +2023,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if (output) *output = NULL;
     if (output_len) *output_len = 0;
     if (!m || !m->helper_addr || !m->p_addr) return MR_FAILED;
-    m->event_did_work = 0;
     m->busy_wait_count = 0;
     m->busy_wait_start_ms = 0;
     uint32_t input_addr = 0;
@@ -1985,6 +2048,10 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     // Lifecycle/event calls belong to the app EXT, not later helper EXT modules.
     uint32_t call_p_addr = (code >= 0 && code <= 5 && m->primary_p_addr) ? m->primary_p_addr : (m->active_p_addr ? m->active_p_addr : m->p_addr);
     uint32_t call_helper_addr = (code >= 0 && code <= 5 && m->primary_helper_addr) ? m->primary_helper_addr : (m->active_helper_addr ? m->active_helper_addr : m->helper_addr);
+    if (code == 2 && m->timer_p_addr && m->timer_helper_addr) {
+        call_p_addr = m->timer_p_addr;
+        call_helper_addr = m->timer_helper_addr;
+    }
     int wrapper_modal_event_routed = 0;
     int32_t wrapper_modal_event[3] = {0};
     int gxdzc_modal_cancel_release = 0;
@@ -2054,21 +2121,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     uc_mem_write(m->uc, sp, helper_args, sizeof(helper_args));
     reg_write32(m->uc, UC_ARM_REG_SP, sp);
 
-    /* 存在嵌套 ext 时 table[31/32] 被覆盖为 dispatch 地址，调用任一
-     * helper 前都需临时恢复为 hook 以保证 timerStart/Stop 触发宿主侧。 */
-    int patch_primary_table = m->primary_helper_addr &&
-                              m->primary_helper_addr != m->helper_addr;
-    uint32_t table31_addr = EXT_TABLE_ADDR + 31 * 4;
-    uint32_t table32_addr = EXT_TABLE_ADDR + 32 * 4;
-    uint32_t saved_t31 = 0, saved_t32 = 0;
-    if (patch_primary_table) {
-        /* nested ext 会覆盖 table[31/32]，调用 primary helper 时临时恢复 hook 以保持正确 R9/context。 */
-        memcpy(&saved_t31, arm_ptr(m, table31_addr), 4);
-        memcpy(&saved_t32, arm_ptr(m, table32_addr), 4);
-        memcpy(arm_ptr(m, table31_addr), &table31_addr, 4);
-        memcpy(arm_ptr(m, table32_addr), &table32_addr, 4);
-    }
-
     /* 保存 arm_ext_call 前的 game state[8] */
     uint32_t _ac_grw = 0, _ac_s8_pre = 0;
     if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
@@ -2085,8 +2137,22 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
 
     uint16 *saved_screenBuf = NULL;
     enter_screen_context(m, &saved_screenBuf);
+    sync_internal_state_to_arm(m);
+    int was_host_timer_pending = m->host_timer_pending;
+    if (code == 2) {
+        m->host_timer_pending = 0;
+    }
+    m->current_p_addr = call_p_addr;
+    m->current_helper_addr = call_helper_addr;
     int call_ret = run_arm_with_sp(m, call_helper_addr, sp);
+    m->current_p_addr = 0;
+    m->current_helper_addr = 0;
+    sync_timer_state_from_arm(m);
+    if (code == 2 && was_host_timer_pending && m->host_timer_pending) {
+        internal_slot_write(m, m->mr_timer_state_slot, (uint32_t)mr_timer_state);
+    }
     leave_screen_context(m, saved_screenBuf);
+    capture_timer_dispatches(m);
 
     /* arm_ext_call 后检查 state[8] 变化 */
     if (_ac_grw && _ac_s8_pre) {
@@ -2102,11 +2168,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if (modal_suspend_depth_pre == 0 && modal_suspend_depth_post > 0 &&
         call_modal_snapshot_candidate) {
         m->modal_screen_snapshot_valid = 1;
-    }
-
-    if (patch_primary_table) {
-        memcpy(arm_ptr(m, table31_addr), &saved_t31, 4);
-        memcpy(arm_ptr(m, table32_addr), &saved_t32, 4);
     }
 
     if (call_ret != MR_SUCCESS) return MR_FAILED;
@@ -2188,7 +2249,28 @@ uint32 arm_ext_helper_addr(ArmExtModule *m) {
 
 uint32 arm_ext_primary_helper(ArmExtModule *m) {
     if (!m) return 0;
-    return (m->primary_helper_addr && m->primary_helper_addr != m->helper_addr)
+    if (m->timer_p_addr && m->timer_helper_addr) {
+        return 0;
+    }
+    if (!(m->primary_helper_addr && m->primary_helper_addr != m->helper_addr)) {
+        return 0;
+    }
+    if (!m->primary_p_addr || !arm_ptr(m, m->primary_p_addr + 12)) {
+        return 0;
+    }
+    uint32_t ext_chunk = 0, dispatch = 0;
+    memcpy(&ext_chunk, arm_ptr(m, m->primary_p_addr + 12), 4);
+    if (ext_chunk && arm_ptr(m, ext_chunk + 0x28)) {
+        memcpy(&dispatch, arm_ptr(m, ext_chunk + 0x28), 4);
+    }
+    uint32_t dispatch_addr = dispatch & ~1u;
+    /* 只有指向外层 wrapper 代码段的 wrapper-style extChunk dispatch 才需要
+     * 宿主 timer 额外驱动。mpc/game.ext 的 extChunk[0x28] 可指向后续嵌套
+     * EXT 的 code dispatcher；它的 timer 已通过 table[31]/[32] veneer 接入，
+     * 不能按 wrapper tick 调用。 */
+    return (dispatch && (dispatch & 1u) &&
+            dispatch_addr >= EXT_CODE_ADDR &&
+            dispatch_addr < EXT_CODE_ADDR + m->code_len)
            ? m->primary_helper_addr : 0;
 }
 
@@ -2230,6 +2312,7 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
      * 不初始化 R9，导致 P[0]=0。此时 dispatch 无法正确访问 wrapper 数据，
      * 跳过即可——primary ext 的定时器仍可通过 arm_ext_call(code=2) 驱动。 */
     if (!wrapper_rw) return MR_FAILED;
+
     reg_write32(m->uc, UC_ARM_REG_R9, wrapper_rw);
     reg_write32(m->uc, UC_ARM_REG_R0, ext_chunk);
     reg_write32(m->uc, UC_ARM_REG_R1, (uint32_t)is_stop);
@@ -2240,18 +2323,6 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     uint32_t stack_args[8] = {0};
     uc_mem_write(m->uc, sp, stack_args, sizeof(stack_args));
     reg_write32(m->uc, UC_ARM_REG_SP, sp);
-
-    /* dispatch 走 wrapper 代码，wrapper 内部会通过 table[31/32] 调用
-     * timerStart/timerStop。若 nested ext 已将 table[31/32] 覆盖为自己
-     * 的 dispatch 函数，wrapper 的 blx table[31] 不会触发宿主 hook，
-     * 导致 SDL 定时器不启动、屏幕不刷新。临时恢复为 hook 地址。 */
-    uint32_t t31a = EXT_TABLE_ADDR + 31 * 4;
-    uint32_t t32a = EXT_TABLE_ADDR + 32 * 4;
-    uint32_t saved_t31 = 0, saved_t32 = 0;
-    memcpy(&saved_t31, arm_ptr(m, t31a), 4);
-    memcpy(&saved_t32, arm_ptr(m, t32a), 4);
-    if (saved_t31 != t31a) memcpy(arm_ptr(m, t31a), &t31a, 4);
-    if (saved_t32 != t32a) memcpy(arm_ptr(m, t32a), &t32a, 4);
 
     /* 保存 dispatch 前的 game timer head，用于模态框取消时恢复 */
     uint32_t _game_rw = 0, _s8_pre = 0;
@@ -2272,8 +2343,15 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
 
     uint16 *saved_screenBuf = NULL;
     enter_screen_context(m, &saved_screenBuf);
+    sync_internal_state_to_arm(m);
+    m->current_p_addr = m->p_addr;
+    m->current_helper_addr = m->helper_addr;
     int ret = run_arm_with_sp(m, func, sp);
+    m->current_p_addr = 0;
+    m->current_helper_addr = 0;
+    sync_timer_state_from_arm(m);
     leave_screen_context(m, saved_screenBuf);
+    capture_timer_dispatches(m);
 
     /* wrapper dispatch 可能清零 game timer head（模态框进入时），保存旧值 */
     /* dispatch 后重新读 game_rw（ARM 代码可能修改了 primary_p_addr[0]） */
@@ -2295,10 +2373,6 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
         }
     }
 
-    /* 恢复 nested ext 的 dispatch 函数地址 */
-    memcpy(arm_ptr(m, t31a), &saved_t31, 4);
-    memcpy(arm_ptr(m, t32a), &saved_t32, 4);
-
     if (arm_ext_finish_callback_state(m, ext_chunk)) {
         /* dispatch 已经触发平台退出/重启语义；返回成功让外层停止继续解释
          * 本次 wrapper timer 的旧返回值。 */
@@ -2312,9 +2386,6 @@ int arm_ext_invoke0(ArmExtModule *m, uint32 func, int32 *ret_out) {
     if (ret_out) *ret_out = MR_FAILED;
     if (!m || !func) return MR_FAILED;
 
-    /* 每次进入 ARM 事件 / 定时器回调前清空"是否做过实质工作"的标志，便于
-     * 在 SP 漂移崩溃时判断该回调走的是哪条路径（参见 ArmExtModule 注释）。 */
-    m->event_did_work = 0;
     m->busy_wait_count = 0;
     m->busy_wait_start_ms = 0;
     restore_ext_r9(m);
@@ -2325,7 +2396,13 @@ int arm_ext_invoke0(ArmExtModule *m, uint32 func, int32 *ret_out) {
 
     uint16 *saved_screenBuf = NULL;
     enter_screen_context(m, &saved_screenBuf);
+    sync_internal_state_to_arm(m);
+    m->current_p_addr = m->active_p_addr ? m->active_p_addr : m->p_addr;
+    m->current_helper_addr = func;
     int call_ret = run_arm(m, func);
+    m->current_p_addr = 0;
+    m->current_helper_addr = 0;
+    sync_timer_state_from_arm(m);
     leave_screen_context(m, saved_screenBuf);
     if (call_ret != MR_SUCCESS) return MR_FAILED;
 
@@ -2338,8 +2415,6 @@ int arm_ext_invoke3(ArmExtModule *m, uint32 func, uint32 arg0, uint32 arg1,
     if (ret_out) *ret_out = MR_FAILED;
     if (!m || !func) return MR_FAILED;
 
-    /* 见 arm_ext_invoke0 中的同名注释。 */
-    m->event_did_work = 0;
     m->busy_wait_count = 0;
     m->busy_wait_start_ms = 0;
     restore_ext_r9(m);
@@ -2349,7 +2424,13 @@ int arm_ext_invoke3(ArmExtModule *m, uint32 func, uint32 arg0, uint32 arg1,
 
     uint16 *saved_screenBuf = NULL;
     enter_screen_context(m, &saved_screenBuf);
+    sync_internal_state_to_arm(m);
+    m->current_p_addr = m->active_p_addr ? m->active_p_addr : m->p_addr;
+    m->current_helper_addr = func;
     int call_ret = run_arm(m, func);
+    m->current_p_addr = 0;
+    m->current_helper_addr = 0;
+    sync_timer_state_from_arm(m);
     leave_screen_context(m, saved_screenBuf);
     if (call_ret != MR_SUCCESS) return MR_FAILED;
 
