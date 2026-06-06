@@ -1,5 +1,6 @@
 #include "./include/mythroad.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "./include/encode.h"
 #include "./include/fixR9.h"
