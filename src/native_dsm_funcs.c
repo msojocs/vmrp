@@ -155,7 +155,11 @@ static uint32 native_get_uptime_ms(void) {
 }
 
 static int32 native_sleep(uint32 ms) {
+#ifdef _MSC_VER
+    Sleep(ms);
+#else
     usleep(ms * 1000);
+#endif
     return MR_SUCCESS;
 }
 
