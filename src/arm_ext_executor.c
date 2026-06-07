@@ -277,8 +277,6 @@ static uint32_t reg_read32(uc_engine *uc, int reg) {
 static int arm_ext_is_gxdzc_pack(void);
 static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk);
 static void capture_timer_dispatches(ArmExtModule *m);
-static void patch_gxdzc_game_touch_map(ArmExtModule *m, uint32_t code_addr,
-                                       uint32_t code_len);
 
 static void reg_write32(uc_engine *uc, int reg, uint32_t v) {
     uc_reg_write(uc, reg, &v);
@@ -1005,7 +1003,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                     uint32_t ec = 0;
                     if (np && arm_ptr(m, np + 12))
                         memcpy(&ec, arm_ptr(m, np + 12), 4);
-                    /* （extChunk[8] 修复移到 modal soft key 检测中动态执行，
+                    /* （extChunk[8] 修复移到 modal dispatch 路由中动态执行，
                      * 因为 wrapper ARM 代码会在运行中覆盖此字段） */
                 } else if (m->primary_file_addr) {
                     memcpy(arm_ptr(m, m->primary_file_addr + 4), &p_addr, 4);
@@ -1454,7 +1452,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 memcpy(arm_ptr(m, r2), &table_addr, 4);
                 m->last_file_addr = r2;
                 m->last_file_len = r3;
-                patch_gxdzc_game_touch_map(m, r2, r3);
                 if (m->last_alloc_len == sizeof(mr_c_function_P_t) && arm_ptr(m, m->last_alloc_addr)) {
                     m->nested_p_addr = m->last_alloc_addr;
                 }
@@ -1685,50 +1682,6 @@ static void patch_wrapper_stack_size(ArmExtModule *m) {
                 break;
             }
         }
-    }
-}
-
-static void patch_gxdzc_game_touch_map(ArmExtModule *m, uint32_t code_addr, uint32_t code_len) {
-    if (!arm_ext_is_gxdzc_pack()) {
-        return;
-    }
-
-    const uint32_t patch_off = 0x1127eu;
-    static const uint8_t music_prompt_gbk[] = {
-        0xca, 0xc7, 0xb7, 0xf1, 0xbf, 0xaa, 0xc6, 0xf4,
-        0xd2, 0xf4, 0xc0, 0xd6, 0xa3, 0xbf, 0x00
-    };
-    const uint32_t music_prompt_off = 0x22e84u;
-    if (code_len < patch_off + sizeof(uint16_t) ||
-        code_len < music_prompt_off + sizeof(music_prompt_gbk) ||
-        !arm_ptr(m, code_addr + patch_off) ||
-        !arm_ptr(m, code_addr + music_prompt_off)) {
-        return;
-    }
-
-    if (memcmp(arm_ptr(m, code_addr + music_prompt_off),
-               music_prompt_gbk, sizeof(music_prompt_gbk)) != 0) {
-        return;
-    }
-
-    uint16_t old_insn = 0;
-    memcpy(&old_insn, arm_ptr(m, code_addr + patch_off), sizeof(old_insn));
-    if (old_insn != 0x2014u) {
-        return;
-    }
-
-    /* gxdzc game.ext 基址 0x6460F8 时，0x6571B0 是触摸到按键的区域映射表。
-     * 音乐确认框处 rw+0x03AC=21；该分支的 0x657366 先检查左下
-     * x=0..40,y=280..320，却在 0x657376 发 MR_KEY_SELECT(20)。反汇编
-     * 0x660510 显示 SELECT 只锁存 0x4000，而“是否开启音乐？”回调响应
-     * SOFTLEFT(17) 锁存的 0x1000 并调用 mr_playSound。这里把这条 Thumb
-     * 指令从 movs r0,#20 改为 movs r0,#17；右下“否”仍走 0x65738C 的
-     * MR_KEY_SOFTRIGHT(18)，不改变其它触摸区域。 */
-    uint16_t new_insn = 0x2011u;
-    memcpy(arm_ptr(m, code_addr + patch_off), &new_insn, sizeof(new_insn));
-    if (getenv("VMRP_ARM_EXT_TRACE")) {
-        printf("arm_ext_executor: patched gxdzc game.ext touch map at 0x%X\n",
-               code_addr + patch_off);
     }
 }
 
@@ -2128,7 +2081,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
      * 调用 resume（0xE83220）关闭模态框恢复前一页。VMRP 的 primary helper
      * 优先路由跳过了 wrapper，导致取消键被 game helper 静默吞掉（反汇编
      * 0x66326C：不检查键码始终返回 0）。此处仅在模态框活动时覆写路由目标，
-     * 非模态状态不干预。同时将软键区鼠标点击转为对应功能键，模拟真机平台行为。 */
+     * 非模态状态不干预。 */
     if (code == 1 && m->primary_p_addr &&
         m->helper_addr && m->helper_addr != m->primary_helper_addr) {
         uint32_t _ec = modal_ext_chunk;
@@ -2142,21 +2095,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
             }
             if (input_len >= 12 && input_addr) {
                 memcpy(wrapper_modal_event, arm_ptr(m, input_addr), 12);
-                extern VmrpConfig vmrp_config;
-                if ((wrapper_modal_event[0] == 2 || wrapper_modal_event[0] == 3) &&
-                    wrapper_modal_event[2] >= vmrp_config.screen_height - 20) {
-                    int key = 0;
-                    if (wrapper_modal_event[1] < vmrp_config.screen_width / 3) key = 17;
-                    else if (wrapper_modal_event[1] >= vmrp_config.screen_width * 2 / 3) key = 18;
-                    if (key) {
-                        /* 底部软键区在真机上以 SOFTLEFT/SOFTRIGHT 进入
-                         * wrapper 控件树；直接使用鼠标坐标只会关闭控件外壳，
-                         * 不会走 gxdzc 绑定的按钮回调。 */
-                        wrapper_modal_event[0] = (wrapper_modal_event[0] == 2) ? 0 : 1;
-                        wrapper_modal_event[1] = key;
-                        wrapper_modal_event[2] = 0;
-                    }
-                }
                 if (wrapper_modal_event[0] == 1 && wrapper_modal_event[1] == 18) {
                     gxdzc_modal_cancel_release = 1;
                 }
