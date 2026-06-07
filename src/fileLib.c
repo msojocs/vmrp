@@ -13,6 +13,12 @@
 #include <sys/stat.h>
 #include <zlib.h>
 
+#ifdef _WIN32
+#define VMRP_OPEN_PERMS (_S_IREAD | _S_IWRITE)
+#else
+#define VMRP_OPEN_PERMS (S_IRWXU | S_IRWXG | S_IRWXO)
+#endif
+
 // mrc_open需要返回0表示失败
 static struct rb_root filef_map = RB_ROOT;
 static uint32_t filef_count = 0;
@@ -34,7 +40,7 @@ int32_t my_open(const char *filename, uint32_t mode) {
     new_mode |= O_RAW;
 #endif
 
-    f = open((char *)filename, new_mode, S_IRWXU | S_IRWXG | S_IRWXO);
+    f = open((char *)filename, new_mode, VMRP_OPEN_PERMS);
     if (f == -1) {
         return 0;
     }
@@ -109,6 +115,16 @@ int32_t my_rename(const char *oldname, const char *newname) {
 
 int32_t my_remove(const char *filename) {
     int ret = remove(filename);
+#ifdef _WIN32
+    if (ret != 0) {
+        DWORD attrs = GetFileAttributesA(filename);
+        if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_READONLY) &&
+            !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+            SetFileAttributesA(filename, attrs & ~FILE_ATTRIBUTE_READONLY);
+            ret = remove(filename);
+        }
+    }
+#endif
     if (ret != 0) {
         return MR_FAILED;
     }
