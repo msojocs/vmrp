@@ -5,6 +5,7 @@
 #include "bridge.h"
 
 int32 my_closeNetwork(void);
+int32 my_configureDnsMap(const char *map);
 int32 my_initNetwork(uc_engine *uc, MR_INIT_NETWORK_CB cb, const char *mode, void *userData);
 int32 my_getHostByName(uc_engine *uc, const char *name, MR_GET_HOST_CB cb, void *userData);
 int32 my_socket(int32 type, int32 protocol);

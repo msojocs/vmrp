@@ -48,6 +48,14 @@ VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h);
 VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char *entry);
 VMRP_EXPORT void vmrp_api_destroy(void);
 
+/*
+ * DNS mapping: when MRP resolves original_domain, VMRP resolves fake_domain
+ * instead and returns fake_domain's IPv4 result. Format:
+ *   original_domain->fake_domain
+ * Multiple entries can be separated by comma, semicolon, or newline.
+ */
+VMRP_EXPORT int vmrp_api_set_dns_map(const char *map);
+
 /* Input events */
 VMRP_EXPORT int vmrp_api_event(int code, int p0, int p1);
 
