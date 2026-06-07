@@ -26,9 +26,9 @@
 
 这些逻辑的共性是：它们把“平台应如何分发输入和恢复 UI/定时器状态”的问题，降级成“某个包的某个状态字段该怎么改”。短期能修样本，长期会让新样本兼容性依赖历史 workaround。
 
-### `dsm.c` 中的包名特判
+### `dsm.c` 中已移除的包名特判
 
-`src/mythroad/dsm.c:487` 开始的 `netpay_blocked_for_current_pack()` 也是同类问题：它将 `gxdzc` 对 `netpay.mrp` 的访问直接伪装成文件不存在。这个问题和触摸映射不同，背后是支付/联网插件不可用，但仍然应收敛成可配置、可解释的插件/网络模拟策略，而不是硬编码某个包名。
+`src/mythroad/dsm.c` 曾存在 `netpay_blocked_for_current_pack()`：它将 `gxdzc` 对 `netpay.mrp` 的访问直接伪装成文件不存在。这个特判已移除，DSM 文件层现在按实际文件系统结果处理 `netpay.mrp` 是否存在。这个问题和触摸映射不同，背后是支付/联网插件不可用，后续仍应收敛成可配置、可解释的插件/网络模拟策略，而不是硬编码某个包名。
 
 ## Mythroad 平台源码提供的直接证据
 
@@ -117,7 +117,7 @@
 | cancel 后恢复 framebuffer | `arm_ext_save_gxdzc_modal_screen_snapshot()` | 通用屏幕层/窗口层：模态层关闭后露出底层 framebuffer 或触发底层重绘 |
 | cancel 后恢复 game timer head | `saved_game_timer_head` + gxdzc 状态清理 | 通用 timer/suspend 状态机：wrapper suspend/resume 对子模块 timer 的影响应可被建模 |
 | 清理 `rw+0x03C8`、`rw+0x0388` 等下载 pending 字段 | gxdzc 专用 offset | 不应作为模拟器通用行为；只能作为反汇编研究记录，不能进入核心通用路径 |
-| 屏蔽 `netpay.mrp` | `netpay_blocked_for_current_pack()` | 可配置插件/网络/支付模拟策略，按能力和资源配置决定，不按游戏包名决定 |
+| 屏蔽 `netpay.mrp` | 已移除的 `netpay_blocked_for_current_pack()` | 可配置插件/网络/支付模拟策略，按能力和资源配置决定，不按游戏包名决定 |
 
 ## 建议的通用化准则
 
