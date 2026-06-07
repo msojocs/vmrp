@@ -128,6 +128,10 @@ VMRP_EXPORT void vmrp_api_destroy(void) {
     edit_active = 0;
 }
 
+VMRP_EXPORT int vmrp_api_set_dns_map(const char *map) {
+    return configureVmrpDnsMap(map) == 0 ? 0 : -1;
+}
+
 VMRP_EXPORT int vmrp_api_event(int code, int p0, int p1) {
     return event((int32_t)code, (int32_t)p0, (int32_t)p1);
 }

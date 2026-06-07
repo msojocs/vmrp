@@ -316,6 +316,8 @@ if(VMRP_BUILD_TESTS)
     test/test_main.c
     test/test_got_snapshot.c
     test/test_parser.c
+    test/test_dns_map.c
+    ./src/network.c
     test/stubs.c
     ${TEST_MYTHROAD_SOURCES}
   )

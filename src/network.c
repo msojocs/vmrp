@@ -2,7 +2,9 @@
 #ifndef _MSC_VER
 #include <pthread.h>
 #endif
+#include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
@@ -47,6 +49,129 @@ typedef struct {
 
 static int isCMWAP = FALSE;
 static struct rb_root sockets = RB_ROOT;
+
+#define VMRP_DNS_MAP_MAX 32
+#define VMRP_DNS_NAME_MAX 255
+
+typedef struct {
+    char original[VMRP_DNS_NAME_MAX + 1];
+    char fake[VMRP_DNS_NAME_MAX + 1];
+} DnsMapEntry;
+
+static DnsMapEntry dnsMap[VMRP_DNS_MAP_MAX];
+static int dnsMapCount = 0;
+
+static char* trimSpaces(char* s) {
+    char* end;
+    while (*s && isspace((unsigned char)*s)) s++;
+    end = s + strlen(s);
+    while (end > s && isspace((unsigned char)*(end - 1))) end--;
+    *end = '\0';
+    return s;
+}
+
+static int copyNormalizedDomain(char* dst, size_t dstSize, const char* src) {
+    size_t len;
+    if (!dst || dstSize == 0 || !src) return MR_FAILED;
+    while (*src && isspace((unsigned char)*src)) src++;
+    len = strlen(src);
+    while (len > 0 && isspace((unsigned char)src[len - 1])) len--;
+    while (len > 0 && src[len - 1] == '.') len--;
+    if (len == 0 || len >= dstSize) return MR_FAILED;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char ch = (unsigned char)src[i];
+        if (isspace(ch)) return MR_FAILED;
+        dst[i] = (char)tolower(ch);
+    }
+    dst[len] = '\0';
+    return MR_SUCCESS;
+}
+
+static int parseDnsMapEntry(char* entry) {
+    char* sep;
+    char* original;
+    char* fake;
+    char originalNorm[VMRP_DNS_NAME_MAX + 1];
+    char fakeNorm[VMRP_DNS_NAME_MAX + 1];
+
+    entry = trimSpaces(entry);
+    if (!*entry) return MR_SUCCESS;
+
+    sep = strstr(entry, "->");
+    if (sep) {
+        *sep = '\0';
+        fake = sep + 2;
+    } else {
+        sep = strchr(entry, '=');
+        if (!sep) return MR_FAILED;
+        *sep = '\0';
+        fake = sep + 1;
+    }
+
+    original = trimSpaces(entry);
+    fake = trimSpaces(fake);
+    if (copyNormalizedDomain(originalNorm, sizeof(originalNorm), original) != MR_SUCCESS ||
+        copyNormalizedDomain(fakeNorm, sizeof(fakeNorm), fake) != MR_SUCCESS) {
+        return MR_FAILED;
+    }
+    if (dnsMapCount >= VMRP_DNS_MAP_MAX) return MR_FAILED;
+
+    strcpy(dnsMap[dnsMapCount].original, originalNorm);
+    strcpy(dnsMap[dnsMapCount].fake, fakeNorm);
+    dnsMapCount++;
+    return MR_SUCCESS;
+}
+
+int32 my_configureDnsMap(const char* map) {
+    char* buf;
+    char* entry;
+    char* next;
+
+    dnsMapCount = 0;
+    if (!map || !*map) return MR_SUCCESS;
+
+    buf = malloc(strlen(map) + 1);
+    if (!buf) return MR_FAILED;
+    strcpy(buf, map);
+
+    entry = buf;
+    while (entry && *entry) {
+        next = entry;
+        while (*next && *next != ',' && *next != ';' && *next != '\n' && *next != '\r') {
+            next++;
+        }
+        if (*next) {
+            *next = '\0';
+            next++;
+        } else {
+            next = NULL;
+        }
+        if (parseDnsMapEntry(entry) != MR_SUCCESS) {
+            free(buf);
+            dnsMapCount = 0;
+            return MR_FAILED;
+        }
+        entry = next;
+    }
+
+    free(buf);
+    return MR_SUCCESS;
+}
+
+static const char* getDnsLookupName(const char* name, char* mappedName, size_t mappedNameSize) {
+    char normalized[VMRP_DNS_NAME_MAX + 1];
+    if (copyNormalizedDomain(normalized, sizeof(normalized), name) != MR_SUCCESS) {
+        return name;
+    }
+    for (int i = dnsMapCount - 1; i >= 0; i--) {
+        if (strcmp(dnsMap[i].original, normalized) == 0) {
+            snprintf(mappedName, mappedNameSize, "%s", dnsMap[i].fake);
+            printf("dns map: %s -> %s\n", name, mappedName);
+            return mappedName;
+        }
+    }
+    return name;
+}
 
 static int parseHostPort(char* str, char* outHost, int outHostLen, uint16_t* outPort) {
     int i;
@@ -353,14 +478,13 @@ typedef struct {
 
 static int32 my_getHostByNameSync(const char* name) {
     int32 ret = MR_FAILED;
+    char mappedName[VMRP_DNS_NAME_MAX + 1];
+    const char* lookupName = getDnsLookupName(name, mappedName, sizeof(mappedName));
 
 #if 1
     struct addrinfo *result, *res;
-    printf("getaddrinfo of %s\n", name);
-    if (strcmp("wap.skmeg.com", name) == 0) {
-        return 0x7F000001;
-    }
-    if (getaddrinfo(name, NULL, NULL, &result) != 0) {
+    printf("getaddrinfo of %s\n", lookupName);
+    if (getaddrinfo(lookupName, NULL, NULL, &result) != 0) {
         printf("getaddrinfo failed!\n");
         return ret;
     }
