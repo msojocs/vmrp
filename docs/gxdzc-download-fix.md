@@ -107,13 +107,14 @@ table[85] mr_connect(s=1, ip=10.0.0.172, port=80)    ← 连接下载服务器
 
 1. 读取 `extChunk[0x34]`（suspend depth）
 2. 若 `_sd > 0`（模态框活动）：
-   - 检测软键区鼠标点击（底部 20px）或键盘 SOFTLEFT/SOFTRIGHT
-   - **取消（SOFTRIGHT / 右 1/3）**：
+   - 将事件路由到 wrapper helper，而不是直接交给 game helper。
+   - 普通触屏坐标继续保持为 `MR_MOUSE_*`，不再按底部 20px 自动转换为软键。否则会出现应用未显示左右软键按钮时，左右下角隐形触发软键的错误行为。
+   - **取消（键盘/平台 SOFTRIGHT）**：
      - 手动调用 wrapper resume 函数（Thumb `0xE83221`）
      - 恢复 `saved_game_timer_head` 到 `state[8]`
      - game timer 重新运行，绘制前一页
-   - **确认（SOFTLEFT / 左 1/3）**：
-     - 将鼠标事件转为 `MR_KEY_PRESS(SOFTLEFT)` 写入事件缓冲
+   - **确认（键盘/平台 SOFTLEFT）**：
+     - 将 `MR_KEY_PRESS(SOFTLEFT)` 写入事件缓冲
      - 路由到 wrapper Thumb 核心函数（`0xE82A45`）
      - **不恢复 state[8]**（避免 game timer 抢绘覆盖 wrapper UI）
      - **不修复 extChunk[8]**（避免 wrapper resume 内嵌套调用 game handler 导致 Unicorn 状态损坏）

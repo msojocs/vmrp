@@ -42,7 +42,6 @@
 static SDL_TimerID timeId = 0;
 static SDL_Window *window;
 static bool isMouseDown = false;
-static int32_t softMouseKeyDown = 0;
 
 /* PPM 截屏：收到 SIGUSR1 时将当前 SDL surface 转储为 PPM 文件，
  * 用于在无显示器环境下验证画面是否正常渲染。 */
@@ -295,15 +294,6 @@ static void keyEvent(int16 type, SDL_Keycode code) {
     }
 }
 
-static int32_t mouseSoftKeyAt(int x, int y) {
-    /* 真机底部软键栏是平台按键区，不是应用内容触摸区。把该区域映射为
-     * SOFTLEFT/SOFTRIGHT，避免要求每个 MRP 自己按文字像素宽度命中软键。 */
-    if (y < vmrp_config.screen_height - 20) return 0;
-    if (x < vmrp_config.screen_width / 3) return MR_KEY_SOFTLEFT;
-    if (x >= vmrp_config.screen_width * 2 / 3) return MR_KEY_SOFTRIGHT;
-    return 0;
-}
-
 /*
  * 自动点击注入：通过环境变量 VMRP_AUTO_CLICKS 触发一连串模拟点击，便于在没有
  * 真实交互的情况下复现 UI 路径上的 Bug。格式为 "x1,y1;x2,y2;..."，每个点击之间
@@ -488,13 +478,6 @@ void loop() {
                     if (getenv("VMRP_NO_MOUSE")) break;
                     uint32_t seq = ++clickSeq;
                     printf("[CLICK] #%u down x=%d y=%d\n", seq, ev.button.x, ev.button.y);
-                    int32_t soft_key = mouseSoftKeyAt(ev.button.x, ev.button.y);
-                    if (soft_key) {
-                        softMouseKeyDown = soft_key;
-                        int32_t ret = event(MR_KEY_PRESS, soft_key, 0);
-                        printf("[CLICK] #%u softkey down key=%d ret=%d\n", seq, soft_key, ret);
-                        break;
-                    }
                     isMouseDown = true;
                     int32_t ret = event(MR_MOUSE_DOWN, ev.button.x, ev.button.y);
                     printf("[CLICK] #%u down ret=%d\n", seq, ret);
@@ -504,13 +487,6 @@ void loop() {
                     if (getenv("VMRP_NO_MOUSE")) break; /* 见 SDL_MOUSEBUTTONDOWN 注释 */
                     uint32_t seq = clickSeq;
                     printf("[CLICK] #%u up x=%d y=%d\n", seq, ev.button.x, ev.button.y);
-                    if (softMouseKeyDown) {
-                        int32_t soft_key = softMouseKeyDown;
-                        softMouseKeyDown = 0;
-                        int32_t ret = event(MR_KEY_RELEASE, soft_key, 0);
-                        printf("[CLICK] #%u softkey up key=%d ret=%d\n", seq, soft_key, ret);
-                        break;
-                    }
                     isMouseDown = false;
                     int32_t ret = event(MR_MOUSE_UP, ev.button.x, ev.button.y);
                     printf("[CLICK] #%u up ret=%d\n", seq, ret);
