@@ -481,27 +481,8 @@ char *get_filename(char *outputbuf, const char *filename) {
     return outputbuf;
 }
 
-/* 见 mythroad.c：当前运行的 .mrp 包路径，用于把干预限定到特定游戏。 */
-extern const char *mr_get_pack_filename(void);
-
-/* gxdzc(侠盗之城) 依赖 skymobi 在线付费插件 netpay.mrp，其付费校验需联网到已
- * 下线的 rop.skymobiapp.com，桌面模拟器无法完成，导致游戏在付费校验处永久
- * 等待、画面卡成花屏。物理删除 netpay.mrp 后 gxdzc 走“无 netpay”分支正常进
- * 游戏。这里在文件层把 gxdzc 对 netpay.mrp 的访问当作“文件不存在”，等效删除
- * 该插件但不动磁盘文件，且仅限 gxdzc——gghjt 等其它用到 netpay 的包不受影响。 */
-static int netpay_blocked_for_current_pack(const char *filename) {
-    const char *pack;
-    if (!filename || !strstr2((char *)filename, "netpay.mrp")) return 0;
-    pack = mr_get_pack_filename();
-    return pack && strstr2((char *)pack, "gxdzc") != NULL;
-}
-
 int32 mr_open(const char *filename, uint32 mode) {
     char fullpathname[DSM_MAX_FILE_LEN];
-    if (netpay_blocked_for_current_pack(filename)) {
-        LOGW("netpay.mrp 对 gxdzc 屏蔽（在线付费插件桌面端无法完成），按文件不存在处理");
-        return 0;  /* 文件缺失时底层 open 返回 0（mr_open 以 ret>0 判定成功） */
-    }
     int32 ret = dsmInFuncs->open(get_filename(fullpathname, filename), mode);
     LOGI("mr_open(%s,%d) fd is: %d", fullpathname, mode, ret);
     // 应用打开gb12_uc2.adl表示激活gb12字体用于MR_FONT_MEDIUM
@@ -534,7 +515,6 @@ int32 mr_seek(int32 f, int32 pos, int method) {
 
 int32 mr_info(const char *filename) {
     char fullpathname[DSM_MAX_FILE_LEN];
-    if (netpay_blocked_for_current_pack(filename)) return MR_IS_INVALID;
     return dsmInFuncs->info(get_filename(fullpathname, filename));
 }
 
