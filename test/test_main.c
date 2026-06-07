@@ -6,6 +6,7 @@
 extern void test_dsm_init(void);
 extern int test_got_snapshot_run_all(void);
 extern int test_parser_run_all(void);
+extern int test_dns_map_run_all(void);
 
 int main(void) {
     int total_failures = 0;
@@ -18,6 +19,9 @@ int main(void) {
 
     printf("\n=== Parser Tests ===\n");
     total_failures += test_parser_run_all();
+
+    printf("\n=== DNS Map Tests ===\n");
+    total_failures += test_dns_map_run_all();
 
     printf("\n");
     if (total_failures == 0) {

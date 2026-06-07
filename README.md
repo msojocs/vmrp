@@ -90,6 +90,13 @@ cmake --build build-native
 ./build-native/vmrp /path/to/xxx.mrp start.mr _dsm
 ```
 
+DNS 解析可按域名映射覆盖：当 MRP 请求解析 `original_domain` 时，模拟器实际解析 `fake_domain`，并把 `fake_domain` 的 IPv4 结果返回给应用。可用 `--dns-map` 或 `VMRP_DNS_MAP` 配置，多条用逗号、分号或换行分隔：
+
+```bash
+./build-native/vmrp --dns-map "old.example->new.example" /path/to/xxx.mrp
+VMRP_DNS_MAP="old.example->new.example;api.old.example=api.new.example" ./build-native/vmrp /path/to/xxx.mrp
+```
+
 调试时仍可用环境变量覆盖：
 
 ```bash
