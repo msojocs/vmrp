@@ -118,6 +118,7 @@ typedef struct mr_c_function_P_t {
 #define MRP_CACHE_MAX 16
 #define MRP_VFD_MAX 4
 #define MRP_VFD_BASE 0x7FFF0000u
+#define ARM_EXT_NESTED_MODULE_MAX 64
 
 typedef struct MrpCacheEntry {
     char name[128];
@@ -132,6 +133,13 @@ typedef struct MrpVirtualFd {
     uint32_t data_len;
     uint32_t pos;
 } MrpVirtualFd;
+
+typedef struct ArmExtNestedModule {
+    uint32_t file_addr;
+    uint32_t file_len;
+    uint32_t p_addr;
+    uint32_t helper_addr;
+} ArmExtNestedModule;
 
 struct ArmExtModule {
     uc_engine *uc;
@@ -185,6 +193,14 @@ struct ArmExtModule {
     uint32_t primary_helper_addr;
     uint32_t primary_file_addr;    // Code base of the first nested EXT (for code[4] updates).
     uint32_t primary_file_len;
+    uint32_t wrapper_timer_dispatch_addr;
+    /* gxdzc 付费路径的 cfunction.ext 反汇编显示，wrapper dispatch 会在
+     * 0xE83B40 BLX 到队列里的回调；该回调可能属于较早加载的 smsend.ext，
+     * 而 active_helper_addr 已经被后续插件覆盖。记录每个 nested EXT 的
+     * 代码范围和 P，使 R9 按实际执行 PC 切换。兼容性：只影响已登记的
+     * nested EXT 代码，验证 test/gxdzc/pay.sh 进入付费界面并运行 ctest。 */
+    ArmExtNestedModule nested_modules[ARM_EXT_NESTED_MODULE_MAX];
+    int nested_module_count;
     uint32_t outer_r9;
     uint32_t nested_return_addr;
     uint32_t screen_write_count;
@@ -295,6 +311,178 @@ static void set_arm_mode_for_addr(ArmExtModule *m, uint32_t addr) {
 static uint32_t arm_exec_addr(uint32_t addr) {
     // Keep bit 0 so Unicorn enters Thumb mode for Thumb entry points.
     return addr;
+}
+
+static ArmExtNestedModule *arm_ext_find_nested_module(ArmExtModule *m, uint32_t addr) {
+    if (!m) return NULL;
+    for (int i = m->nested_module_count - 1; i >= 0; --i) {
+        ArmExtNestedModule *mod = &m->nested_modules[i];
+        if (mod->file_addr && mod->file_len &&
+            addr >= mod->file_addr && addr < mod->file_addr + mod->file_len) {
+            return mod;
+        }
+    }
+    return NULL;
+}
+
+static void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
+                                         uint32_t file_len, uint32_t p_addr,
+                                         uint32_t helper_addr) {
+    if (!m || !file_addr || !file_len || !p_addr || !helper_addr) return;
+
+    for (int i = 0; i < m->nested_module_count; ++i) {
+        ArmExtNestedModule *mod = &m->nested_modules[i];
+        if (mod->file_addr == file_addr && mod->file_len == file_len) {
+            mod->p_addr = p_addr;
+            mod->helper_addr = helper_addr;
+            return;
+        }
+    }
+
+    if (m->nested_module_count >= ARM_EXT_NESTED_MODULE_MAX) {
+        if (getenv("VMRP_ARM_EXT_TRACE")) {
+            printf("arm_ext_executor: nested module registry full, file=0x%X len=%u\n",
+                   file_addr, file_len);
+        }
+        return;
+    }
+
+    ArmExtNestedModule *slot = &m->nested_modules[m->nested_module_count++];
+    slot->file_addr = file_addr;
+    slot->file_len = file_len;
+    slot->p_addr = p_addr;
+    slot->helper_addr = helper_addr;
+}
+
+static int arm_ext_ranges_overlap(uint32_t a, uint32_t a_len,
+                                  uint32_t b, uint32_t b_len) {
+    uint64_t a_start = a;
+    uint64_t a_end = a_start + a_len;
+    uint64_t b_start = b;
+    uint64_t b_end = b_start + b_len;
+    return a_start < b_end && b_start < a_end;
+}
+
+static int arm_ext_range_contains(uint32_t outer, uint32_t outer_len,
+                                  uint32_t inner, uint32_t inner_len) {
+    uint64_t outer_start = outer;
+    uint64_t outer_end = outer_start + outer_len;
+    uint64_t inner_start = inner;
+    uint64_t inner_end = inner_start + inner_len;
+    return outer_start <= inner_start && inner_end <= outer_end;
+}
+
+static void arm_ext_restore_primary_mapping_after_dump0(ArmExtModule *m,
+                                                       uint32_t read_addr,
+                                                       uint32_t read_len) {
+    if (!m || !m->primary_file_addr || !m->primary_file_len ||
+        !m->primary_p_addr || !m->primary_helper_addr) {
+        return;
+    }
+    if (!arm_ext_range_contains(read_addr, read_len,
+                                m->primary_file_addr, m->primary_file_len)) {
+        return;
+    }
+    /*
+     * gxdzc/netpay 取消路径反汇编定位：
+     *   0xE836A7 通过 table[44] 把 plugins/dump0 读回 0x6460D4，长度 0x96000；
+     *   随后 game.ext 在 0x6643CD/0x6643D7 重新 stop/start 自己的 timer。
+     * 读回 dump0 会把 0x6460F8 上临时加载的 netpay.ext 覆盖回 game.ext，
+     * 但执行器的 nested_modules 仍把同一地址范围登记为 netpay，导致
+     * table[31] 把 timer owner 记录成 netpay helper(0x64D531)，下一次
+     * code=2 进入已被覆盖的插件，最终在 wrapper 队列 0xE83B48..0xE83B56
+     * 弹出坏 PC=0x9A000004。这里按真实内存恢复结果重建代码归属，不在
+     * run_arm_with_sp() 里吞异常；兼容性：只在大块读回完整覆盖 primary
+     * ext 映像时触发，普通插件 staging 仍由 table[131]/mr_cacheSync 处理。
+     * 验证：test/gxdzc/pay-cancel.sh 不再打印 invalid memory，ctest 通过。
+     */
+    int out = 0;
+    for (int i = 0; i < m->nested_module_count; ++i) {
+        ArmExtNestedModule mod = m->nested_modules[i];
+        int is_primary = mod.file_addr == m->primary_file_addr &&
+                         mod.file_len == m->primary_file_len &&
+                         mod.helper_addr == m->primary_helper_addr;
+        if (!is_primary &&
+            arm_ext_ranges_overlap(mod.file_addr, mod.file_len, read_addr, read_len)) {
+            continue;
+        }
+        m->nested_modules[out++] = mod;
+    }
+    m->nested_module_count = out;
+    arm_ext_record_nested_module(m, m->primary_file_addr, m->primary_file_len,
+                                 m->primary_p_addr, m->primary_helper_addr);
+
+    if (m->active_helper_addr &&
+        m->active_helper_addr != m->primary_helper_addr &&
+        arm_ext_range_contains(read_addr, read_len, m->active_helper_addr & ~1u, 2)) {
+        m->active_helper_addr = m->primary_helper_addr;
+        m->active_p_addr = m->primary_p_addr;
+    }
+    if (m->timer_helper_addr &&
+        m->timer_helper_addr != m->primary_helper_addr &&
+        arm_ext_range_contains(read_addr, read_len, m->timer_helper_addr & ~1u, 2)) {
+        m->timer_helper_addr = m->primary_helper_addr;
+        m->timer_p_addr = m->primary_p_addr;
+    }
+    if (m->dispatch_timer_start &&
+        arm_ext_range_contains(read_addr, read_len, m->dispatch_timer_start & ~1u, 2)) {
+        m->dispatch_timer_start = 0;
+    }
+    if (m->dispatch_timer_stop &&
+        arm_ext_range_contains(read_addr, read_len, m->dispatch_timer_stop & ~1u, 2)) {
+        m->dispatch_timer_stop = 0;
+    }
+}
+
+static uint32_t arm_ext_p_for_code_addr(ArmExtModule *m, uint32_t addr,
+                                        uint32_t *helper_addr) {
+    uint32_t pc = addr & ~1u;
+    if (helper_addr) *helper_addr = 0;
+    if (!m) return 0;
+
+    if (pc >= EXT_CODE_ADDR && pc < EXT_CODE_ADDR + m->code_len) {
+        if (helper_addr) *helper_addr = m->helper_addr;
+        return m->p_addr;
+    }
+
+    ArmExtNestedModule *mod = arm_ext_find_nested_module(m, pc);
+    if (mod) {
+        if (helper_addr) *helper_addr = mod->helper_addr;
+        return mod->p_addr;
+    }
+
+    return 0;
+}
+
+static void arm_ext_sync_r9_for_code_addr(ArmExtModule *m, uint32_t addr) {
+    uint32_t pc = addr & ~1u;
+    uint32_t p_addr = 0;
+    if (pc >= EXT_CODE_ADDR && pc < EXT_CODE_ADDR + m->code_len) {
+        uint32_t current_r9 = reg_read32(m->uc, UC_ARM_REG_R9);
+        for (int i = 0; i < m->nested_module_count; ++i) {
+            uint32_t nested_rw = 0;
+            if (arm_ptr(m, m->nested_modules[i].p_addr)) {
+                memcpy(&nested_rw, arm_ptr(m, m->nested_modules[i].p_addr), 4);
+            }
+            if (nested_rw && current_r9 == nested_rw) {
+                p_addr = m->p_addr;
+                break;
+            }
+        }
+    } else {
+        ArmExtNestedModule *mod = arm_ext_find_nested_module(m, pc);
+        if (mod) p_addr = mod->p_addr;
+    }
+    if (!p_addr || !arm_ptr(m, p_addr)) return;
+
+    uint32_t rw_base = 0;
+    memcpy(&rw_base, arm_ptr(m, p_addr), 4);
+    if (!rw_base) return;
+
+    uint32_t current_r9 = reg_read32(m->uc, UC_ARM_REG_R9);
+    if (current_r9 != rw_base) {
+        reg_write32(m->uc, UC_ARM_REG_R9, rw_base);
+    }
 }
 
 static void trace_pc(uc_engine *uc, uint64_t address, uint32_t size, void *user_data) {
@@ -706,15 +894,14 @@ static void arm_ext_record_timer_owner(ArmExtModule *m) {
     uint32_t owner_p = 0;
     uint32_t owner_helper = 0;
 
-    if (lr >= EXT_CODE_ADDR && lr < EXT_CODE_ADDR + m->code_len) {
-        owner_p = m->p_addr;
-        owner_helper = m->helper_addr;
-    } else if (m->primary_file_addr && m->primary_file_len &&
-               lr >= m->primary_file_addr &&
-               lr < m->primary_file_addr + m->primary_file_len) {
-        owner_p = m->primary_p_addr;
-        owner_helper = m->primary_helper_addr;
-    } else {
+    owner_p = arm_ext_p_for_code_addr(m, lr, &owner_helper);
+    if (!owner_p || !owner_helper) {
+        /*
+         * table[31] owner is normally identified from LR's code range. The
+         * current/active path is kept for host-synthetic entries whose LR is
+         * outside every loaded EXT image. Verification: test/gxdzc/pay.sh and
+         * ctest.
+         */
         owner_p = m->current_p_addr ? m->current_p_addr :
                   (m->active_p_addr ? m->active_p_addr : m->p_addr);
         owner_helper = m->current_helper_addr ? m->current_helper_addr :
@@ -989,6 +1176,8 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 }
                 m->active_helper_addr = r0;
                 m->active_p_addr = p_addr;
+                arm_ext_record_nested_module(m, m->last_file_addr,
+                                             m->last_file_len, p_addr, r0);
                 if (!m->primary_helper_addr) {
                     m->primary_helper_addr = r0;
                     m->primary_p_addr = p_addr;
@@ -1290,6 +1479,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             if ((int32_t)ret > 0 && (uint32_t)ret > 0x1000) {
                 /* 仅在 dump0 恢复时（目标地址匹配）才恢复间隙数据 */
                 uc_ctl_remove_cache(m->uc, r1, r1 + (uint32_t)ret);
+                arm_ext_restore_primary_mapping_after_dump0(m, r1, (uint32_t)ret);
                 /* 修复 GOT：只恢复已记录的 bridge 函数指针 */
                 if (m->got_snapshot_base) {
                     uint32_t got_base = m->got_snapshot_base;
@@ -1655,7 +1845,45 @@ static void hook_restore_r9(uc_engine *uc, uint64_t address, uint32_t size, void
         }
         m->outer_r9 = 0;
         m->nested_return_addr = 0;
+        return;
     }
+    /*
+     * wrapper dispatch can BLX into callbacks retained by older nested EXTs
+     * (gxdzc netpay: 0xE83B40 -> smsend.ext 0x66FFBD). Those callbacks use
+     * R9-relative globals, so R9 must follow the code range currently being
+     * executed rather than the last active helper. The hook runs per basic
+     * block and only writes R9 when PC enters a known EXT image. Verification:
+     * test/gxdzc/pay.sh reaches the payment UI and ctest stays green.
+     */
+    arm_ext_sync_r9_for_code_addr(m, (uint32_t)address);
+}
+
+static uint32_t find_wrapper_timer_dispatch(const uint8_t *code, uint32_t len) {
+    static const uint8_t pat[] = {
+        0x00, 0x48, 0xF8, 0xB5, 0x78, 0x44, 0x80, 0x6B,
+        0x80, 0x30, 0x40, 0x68, 0x80, 0x47, 0x00, 0x25,
+        0x00, 0x4E, 0x4E, 0x44, 0x71, 0x69, 0x75, 0x61,
+        0x41, 0x1A, 0xF0, 0x68, 0x0B, 0x1C, 0x00, 0x28,
+    };
+
+    if (!code || len < sizeof(pat)) return 0;
+    for (uint32_t off = 0; off + sizeof(pat) <= len; off += 2) {
+        int match = 1;
+        for (uint32_t i = 0; i < sizeof(pat); ++i) {
+            /* gxdzc cfunction.ext 反汇编确认 0xE83A80 是 wrapper timer
+             * queue dispatcher：它从 wrapper RW+0x1FC 取队列并在 0xE83B46
+             * BLX 节点回调。Thumb LDR literal 的立即数字段随代码布局变，
+             * 其余指令序列稳定。兼容性：只在扫描到该队列消费函数时启用
+             * wrapper timer dispatch；验证 test/gxdzc/pay.sh 与 ctest。 */
+            if (i == 0 || i == 16) continue;
+            if (code[off + i] != pat[i]) {
+                match = 0;
+                break;
+            }
+        }
+        if (match) return EXT_CODE_ADDR + off + 1u;
+    }
+    return 0;
 }
 
 static void patch_wrapper_stack_size(ArmExtModule *m) {
@@ -1865,6 +2093,7 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     void *code_dst = arm_ptr(m, EXT_CODE_ADDR);
     if (!code_dst) goto fail;
     memcpy(code_dst, code, len);
+    m->wrapper_timer_dispatch_addr = find_wrapper_timer_dispatch(code, len);
     patch_wrapper_stack_size(m);
     uint32_t table = EXT_TABLE_ADDR;
     memcpy(arm_ptr(m, EXT_CODE_ADDR), &table, 4);
@@ -1880,8 +2109,8 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
         if (err != UC_ERR_OK) goto fail;
     }
     uc_hook restore_hook;
-    err = uc_hook_add(m->uc, &restore_hook, UC_HOOK_CODE, hook_restore_r9, m,
-                      EXT_CODE_ADDR, EXT_CODE_ADDR + len);
+    err = uc_hook_add(m->uc, &restore_hook, UC_HOOK_BLOCK, hook_restore_r9, m,
+                      EXT_BASE_ADDR, EXT_BASE_ADDR + EXT_MEM_SIZE - 1);
     if (err != UC_ERR_OK) goto fail;
     uc_hook screen_hook;
     if (m->screen_addr && m->screen_len) {
@@ -2068,6 +2297,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     int wrapper_modal_event_routed = 0;
     int32_t wrapper_modal_event[3] = {0};
     int gxdzc_modal_cancel_release = 0;
+    int gxdzc_modal_closed_by_wrapper = 0;
     int restore_game_timer_after_modal_cancel = 0;
     uint32_t modal_ext_chunk = 0;
     uint32_t modal_suspend_depth_pre = 0;
@@ -2075,7 +2305,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         memcpy(&modal_ext_chunk, arm_ptr(m, m->primary_p_addr + 12), 4);
     if (modal_ext_chunk && arm_ptr(m, modal_ext_chunk + 0x34))
         memcpy(&modal_suspend_depth_pre, arm_ptr(m, modal_ext_chunk + 0x34), 4);
-
     /* wrapper 模态框（extChunk[0x34]>0）活动时，将事件路由到 wrapper helper。
      * 真机上事件先经 wrapper helper，wrapper 在模态框期间拦截 SOFTRIGHT 并
      * 调用 resume（0xE83220）关闭模态框恢复前一页。VMRP 的 primary helper
@@ -2170,6 +2399,18 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         call_modal_snapshot_candidate) {
         m->modal_screen_snapshot_valid = 1;
     }
+    if (wrapper_modal_event_routed && arm_ext_is_gxdzc_pack() &&
+        modal_suspend_depth_pre > 0 && modal_suspend_depth_post == 0) {
+        /* cfunction.ext resume(0xE83220) decrements extChunk[0x34] and
+         * relinks the wrapper timer when it reaches zero. A right-side touch
+         * button closes the gxdzc download dialog through that resume path
+         * without producing an MR_KEY_SOFTRIGHT event, so key-code-only
+         * detection misses the cancel and leaves game.ext's pending download
+         * fields set. Treat the observed 1->0 suspend-depth transition as
+         * the modal close signal; left-side confirm keeps the depth at 1 and
+         * continues into mr_initNetwork/mr_socket/mr_connect. */
+        gxdzc_modal_closed_by_wrapper = 1;
+    }
 
     if (call_ret != MR_SUCCESS) return MR_FAILED;
 
@@ -2193,7 +2434,8 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         if (grw && arm_ptr(m, grw + 0x8C))
             memcpy(arm_ptr(m, grw + 0x8C), &m->saved_game_timer_head, 4);
         if (sd == 0) {
-            if (gxdzc_modal_cancel_release && arm_ext_is_gxdzc_pack() &&
+            if ((gxdzc_modal_cancel_release || gxdzc_modal_closed_by_wrapper) &&
+                arm_ext_is_gxdzc_pack() &&
                 grw && arm_ptr(m, grw + 0x1A37)) {
                 uint32_t resource_state = 0x53;
                 uint8_t zero_byte = 0;
@@ -2229,7 +2471,8 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
                 }
             }
             m->saved_game_timer_head = 0;
-            if (gxdzc_modal_cancel_release && arm_ext_is_gxdzc_pack()) {
+            if ((gxdzc_modal_cancel_release || gxdzc_modal_closed_by_wrapper) &&
+                arm_ext_is_gxdzc_pack()) {
                 m->gxdzc_modal_cancel_cleared = 1;
             }
             m->active_helper_addr = m->primary_helper_addr;
@@ -2262,7 +2505,12 @@ uint32 arm_ext_helper_addr(ArmExtModule *m) {
 
 uint32 arm_ext_primary_helper(ArmExtModule *m) {
     if (!m) return 0;
-    if (m->timer_p_addr && m->timer_helper_addr) {
+    if (m->timer_p_addr && m->timer_helper_addr &&
+        !(m->timer_p_addr == m->p_addr && m->timer_helper_addr == m->helper_addr)) {
+        /* gxdzc/netpay 的“请稍后...”路径由 wrapper 自己在 0xE83A69
+         * 启动 10ms timer；该 owner 不能屏蔽宿主侧 wrapper timer 路由。
+         * 只有 timer 属于后加载子插件时，才跳过 wrapper timer，避免把
+         * 独立子插件 timer 当成 wrapper tick。 */
         return 0;
     }
     if (!(m->primary_helper_addr && m->primary_helper_addr != m->helper_addr)) {
@@ -2315,6 +2563,20 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     uint32_t func = 0, param = 0;
     memcpy(&func, arm_ptr(m, ext_chunk + 0x28), 4);
     memcpy(&param, arm_ptr(m, ext_chunk + 0x24), 4);
+    int wrapper_timer_owner =
+        m->timer_p_addr == m->p_addr &&
+        m->timer_helper_addr == m->helper_addr &&
+        m->wrapper_timer_dispatch_addr != 0;
+    if (wrapper_timer_owner) {
+        /*
+         * wrapper 自己的 table[31] timerStart 来自 timer queue 管理函数
+         * 0xE83A34，下一次宿主 timer 必须进入 0xE83A80 的队列消费逻辑；
+         * extChunk[0x28] 是事件/控件分发入口 0xE830BD，会把节点重新挂回
+         * 队列而不是执行到 0xE83B46 的回调。验证：gxdzc 付费点击后
+         * 0x66FFBD 回调被消费并显示 netpay 付费界面，ctest 仍通过。
+         */
+        func = m->wrapper_timer_dispatch_addr;
+    }
     if (!func) return MR_FAILED;
     /* 以 wrapper 的 R9 调用目标函数:
      * R0=extChunk, R1=is_stop, R2=param, R3=timer_interval */
@@ -2365,6 +2627,30 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     sync_timer_state_from_arm(m);
     leave_screen_context(m, saved_screenBuf);
     capture_timer_dispatches(m);
+    if (wrapper_timer_owner) {
+        uint32_t queue_head = 0;
+        uint32_t queue_base_ms = 0;
+        uint32_t q = wrapper_rw + 0x1FCu;
+        if (arm_ptr(m, q + 20)) {
+            memcpy(&queue_head, arm_ptr(m, q + 12), 4);
+            memcpy(&queue_base_ms, arm_ptr(m, q + 20), 4);
+        }
+        if (queue_head) {
+            mr_timer_state = 1;
+            m->host_timer_pending = 1;
+            internal_slot_write(m, m->mr_timer_state_slot, 1);
+            /*
+             * 0xE83A80 可能只消费到期节点并留下后续节点；若 ARM 侧没有
+             * 再次调用 table[31]，宿主仍要保持 timer running，下一 tick
+             * 才能继续推进 wrapper 队列。验证：gxdzc pay.sh 不再停在
+             * 标题/“请稍后”，同时 gghjt pay-normal-back.sh 仍能返回。
+             */
+            if (queue_base_ms == 0) {
+                uint32_t now = mr_getTime();
+                memcpy(arm_ptr(m, q + 20), &now, 4);
+            }
+        }
+    }
 
     /* wrapper dispatch 可能清零 game timer head（模态框进入时），保存旧值 */
     /* dispatch 后重新读 game_rw（ARM 代码可能修改了 primary_p_addr[0]） */
