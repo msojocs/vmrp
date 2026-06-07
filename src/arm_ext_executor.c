@@ -212,6 +212,9 @@ struct ArmExtModule {
     /* wrapper 进入模态框时 game 的 timer 链表头被清零（dispatch 中检测到），
      * 保存清零前的值以便 cancel 时恢复。 */
     uint32_t saved_game_timer_head;
+    /* gxdzc 下载提示被 SOFTRIGHT 取消后，wrapper timer 可能把已经关闭的
+     * 模态 suspend 状态重新写回；在下一次真实下载提示前需要忽略这类残留。 */
+    int gxdzc_modal_cancel_cleared;
     /* gxdzc 的 wrapper 模态框直接画到同一 framebuffer 上；cancel/resume
      * 不会触发底层页面重绘，所以保存进入 suspend 前的画面用于精确恢复。 */
     uint8_t *modal_screen_snapshot;
@@ -1022,7 +1025,22 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             }
             ret = p_addr ? MR_SUCCESS : MR_FAILED;
         } break;
-        case 26: { char buf[1024]; format_arm(m, buf, sizeof(buf), arm_str(m, r0), 1); mr_printf("%s", buf); ret = 0; } break;
+        case 26: {
+            char buf[1024];
+            format_arm(m, buf, sizeof(buf), arm_str(m, r0), 1);
+            mr_printf("%s", buf);
+            if (m->gxdzc_modal_cancel_cleared && arm_ext_is_gxdzc_pack() &&
+                strcmp(buf, "ht_Exit") == 0) {
+                m->gxdzc_modal_cancel_cleared = 0;
+                /* gxdzc 取消下载提示后，game.ext 的退出处理会在 timer 中
+                 * 反复打印 ht_Exit，却不再落到 table[54]/mr_exit。真机此时
+                 * 已回到主菜单并直接退出；这里仅在刚完成下载模态取消清理后
+                 * 同步宿主退出语义，避免影响普通下载模态和常规退出脚本。 */
+                ret = mr_exit();
+                break;
+            }
+            ret = 0;
+        } break;
         case 27: {
             uint32_t base = m->origin_mem_addr;
             uint32_t len = m->origin_mem_len;
@@ -1976,11 +1994,12 @@ static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk) {
     /* wrapper 反汇编确认 extChunk[0x34] 是 suspend 深度：
      *   0xE831A4 suspend: [0x34]++，首次进入时摘掉 wrapper timer 节点
      *   0xE83220 resume:  [0x34]--，回到 0 时重新挂回 timer 节点
-     * 普通 wrapper 模态/子流程会把 active_helper_addr 切到后加载的子模块，
-     * 由该前台子模块继续处理用户选择；真正的“返回上层/停止自驱”路径则
-     * 只挂起 primary app，没有新的前台 helper 接管。模拟器没有真机平台
-     * 的上层调度器，因此要在这种无前台子模块且宿主定时器空闲的状态下
-     * 调用 mr_exit()，把 wrapper 状态同步到宿主平台层。 */
+     * 普通 wrapper 模态/子流程会把 active_helper_addr 切到后加载的子模块；
+     * gxdzc 的资源下载提示则只摘掉 game timer，并把旧链表头保存在
+     * saved_game_timer_head，取消时还要恢复。真正的“返回上层/停止自驱”
+     * 路径没有前台子模块、没有可恢复的 game timer，且宿主定时器空闲。
+     * 模拟器没有真机平台的上层调度器，因此只在这些条件都满足时调用
+     * mr_exit()，把 wrapper 状态同步到宿主平台层。 */
     enum { MR_TIMER_STATE_IDLE = 0 };
     uint32_t suspend_depth = 0;
     memcpy(&suspend_depth, arm_ptr(m, ext_chunk + 0x34), 4);
@@ -1990,7 +2009,8 @@ static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk) {
         m->active_helper_addr != m->primary_helper_addr;
     if (suspend_depth > 0 &&
         mr_timer_state == MR_TIMER_STATE_IDLE &&
-        !foreground_child) {
+        !foreground_child &&
+        m->saved_game_timer_head == 0) {
         mr_exit();
         return 1;
     }
@@ -2015,6 +2035,46 @@ static int arm_ext_save_gxdzc_modal_screen_snapshot(ArmExtModule *m) {
     if (!m->modal_screen_snapshot) return 0;
     memcpy(m->modal_screen_snapshot, arm_ptr(m, m->screen_addr), m->screen_len);
     m->modal_screen_snapshot_valid = 0;
+    return 1;
+}
+
+static int arm_ext_is_gxdzc_download_pending(ArmExtModule *m, uint32_t grw) {
+    if (!m || !arm_ext_is_gxdzc_pack() || !grw) return 0;
+    if (!arm_ptr(m, grw + 0x03C8) || !arm_ptr(m, grw + 0x0388) ||
+        !arm_ptr(m, grw + 0x0DC1) || !arm_ptr(m, grw + 0x1A34 + 0x17)) {
+        return 0;
+    }
+    uint32_t resource_state = 0;
+    uint8_t request_active = 0, download_pending = 0;
+    memcpy(&resource_state, arm_ptr(m, grw + 0x03C8), 4);
+    memcpy(&request_active, arm_ptr(m, grw + 0x0388), 1);
+    memcpy(&download_pending, arm_ptr(m, grw + 0x0DC1), 1);
+    return resource_state == 5 || request_active != 0 || download_pending != 0;
+}
+
+static int arm_ext_clear_gxdzc_cancelled_modal_tail(ArmExtModule *m,
+                                                    uint32_t ext_chunk,
+                                                    uint32_t game_rw,
+                                                    uint32_t timer_head) {
+    if (!m || !m->gxdzc_modal_cancel_cleared || !arm_ext_is_gxdzc_pack()) {
+        return 0;
+    }
+    if (arm_ext_is_gxdzc_download_pending(m, game_rw)) {
+        /* 用户重新进入下载提示后，重新允许 wrapper 保存这次真实模态的
+         * game timer。验证点：download-resource-twice.sh 仍不能自动退出。 */
+        m->gxdzc_modal_cancel_cleared = 0;
+        return 0;
+    }
+    if (game_rw && timer_head && arm_ptr(m, game_rw + 0x8C)) {
+        memcpy(arm_ptr(m, game_rw + 0x8C), &timer_head, 4);
+    }
+    if (ext_chunk && arm_ptr(m, ext_chunk + 0x34)) {
+        uint32_t zero_depth = 0;
+        memcpy(arm_ptr(m, ext_chunk + 0x34), &zero_depth, 4);
+    }
+    m->saved_game_timer_head = 0;
+    m->active_helper_addr = m->primary_helper_addr;
+    m->active_p_addr = m->primary_p_addr;
     return 1;
 }
 
@@ -2159,7 +2219,10 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         uint32_t _ac_s8_post = 0;
         memcpy(&_ac_s8_post, arm_ptr(m, _ac_grw + 0x8C), 4);
         if (_ac_s8_post == 0) {
-            m->saved_game_timer_head = _ac_s8_pre;
+            if (!arm_ext_clear_gxdzc_cancelled_modal_tail(m, modal_ext_chunk,
+                                                          _ac_grw, _ac_s8_pre)) {
+                m->saved_game_timer_head = _ac_s8_pre;
+            }
         }
     }
     uint32_t modal_suspend_depth_post = modal_suspend_depth_pre;
@@ -2178,6 +2241,15 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
             memcpy(&ec, arm_ptr(m, m->primary_p_addr + 12), 4);
         if (ec && arm_ptr(m, ec + 0x34))
             memcpy(&sd, arm_ptr(m, ec + 0x34), 4);
+        if (gxdzc_modal_cancel_release && arm_ext_is_gxdzc_pack() &&
+            sd > 0 && ec && arm_ptr(m, ec + 0x34)) {
+            uint32_t zero_depth = 0;
+            /* gxdzc 下载提示的 SOFTRIGHT 取消在 VMRP 下可能已关闭控件树，
+             * 但 wrapper suspend depth 仍停在 1。真机会回到底层菜单；
+             * 若不归零，后续“退出游戏”会被当成仍处于下载模态而无法退出。 */
+            memcpy(arm_ptr(m, ec + 0x34), &zero_depth, 4);
+            sd = 0;
+        }
         if (sd == 0 && m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
             memcpy(&grw, arm_ptr(m, m->primary_p_addr), 4);
         if (grw && arm_ptr(m, grw + 0x8C))
@@ -2219,6 +2291,9 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
                 }
             }
             m->saved_game_timer_head = 0;
+            if (gxdzc_modal_cancel_release && arm_ext_is_gxdzc_pack()) {
+                m->gxdzc_modal_cancel_cleared = 1;
+            }
             m->active_helper_addr = m->primary_helper_addr;
             m->active_p_addr = m->primary_p_addr;
         }
@@ -2363,7 +2438,10 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
         if (_grw2 && arm_ptr(m, _grw2 + 0x8C))
             memcpy(&_s8_post, arm_ptr(m, _grw2 + 0x8C), 4);
         if (_s8_post == 0 && _s8_pre != 0) {
-            m->saved_game_timer_head = _s8_pre;
+            if (!arm_ext_clear_gxdzc_cancelled_modal_tail(m, ext_chunk,
+                                                          _grw2, _s8_pre)) {
+                m->saved_game_timer_head = _s8_pre;
+            }
         }
         uint32_t suspend_depth_post = 0;
         if (arm_ptr(m, ext_chunk + 0x34))
