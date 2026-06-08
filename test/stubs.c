@@ -9,6 +9,11 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "stubs_configurable.h"
+
+/* 可配置桩的全局实例 */
+stub_overrides_t g_stub_overrides;
+
 /* ---------- arm_ext_executor stubs ---------- */
 typedef struct ArmExtModule ArmExtModule;
 
@@ -45,36 +50,111 @@ void arm_ext_unload(ArmExtModule *m) { (void)m; }
 #include "../src/mythroad/include/dsm.h"
 
 static void stub_log(char *msg) { (void)msg; }
-static uint32_t stub_get_uptime_ms(void) { return 0; }
-static int32_t stub_timerStart(uint16_t t) { (void)t; return 0; }
-static int32_t stub_timerStop(void) { return 0; }
+static uint32_t stub_get_uptime_ms(void) {
+    if (g_stub_overrides.get_uptime_ms)
+        return g_stub_overrides.get_uptime_ms();
+    return 0;
+}
+static int32_t stub_timerStart(uint16_t t) {
+    g_stub_overrides.record.timer_start_count++;
+    g_stub_overrides.record.last_timer_interval = t;
+    if (g_stub_overrides.timerStart)
+        return g_stub_overrides.timerStart(t);
+    return 0;
+}
+static int32_t stub_timerStop(void) {
+    g_stub_overrides.record.timer_stop_count++;
+    if (g_stub_overrides.timerStop)
+        return g_stub_overrides.timerStop();
+    return 0;
+}
 static int32_t stub_sleep(uint32_t ms) { (void)ms; return 0; }
 static int32_t stub_getDatetime(void *dt) { (void)dt; return 0; }
 static int32_t stub_rand(void) { return 42; }
 static void stub_srand(uint32_t s) { (void)s; }
 static void stub_exit(void) { exit(1); }
 static void stub_drawBitmap(void *b, int16_t x, int16_t y, uint16_t w, uint16_t h) {
+    g_stub_overrides.record.draw_bitmap_count++;
+    if (g_stub_overrides.drawBitmap) {
+        g_stub_overrides.drawBitmap(b, x, y, w, h);
+        return;
+    }
     (void)b;(void)x;(void)y;(void)w;(void)h;
 }
-static int32_t stub_open(const char *f, uint32_t m) { (void)f;(void)m; return 0; }
-static int32_t stub_close(int32_t f) { (void)f; return 0; }
-static int32_t stub_read(int32_t f, void *p, uint32_t l) { (void)f;(void)p;(void)l; return -1; }
-static int32_t stub_write(int32_t f, void *p, uint32_t l) { (void)f;(void)p;(void)l; return -1; }
-static int32_t stub_seek(int32_t f, int32_t p, int m) { (void)f;(void)p;(void)m; return -1; }
-static int32_t stub_info(const char *f) { (void)f; return -1; }
-static int32_t stub_remove(const char *f) { (void)f; return -1; }
+static int32_t stub_open(const char *f, uint32_t m) {
+    g_stub_overrides.record.file_open_count++;
+    if (f) {
+        strncpy(g_stub_overrides.record.last_open_path, f,
+                sizeof(g_stub_overrides.record.last_open_path) - 1);
+        g_stub_overrides.record.last_open_path[
+            sizeof(g_stub_overrides.record.last_open_path) - 1] = '\0';
+    }
+    g_stub_overrides.record.last_open_mode = m;
+    if (g_stub_overrides.file_open)
+        return g_stub_overrides.file_open(f, m);
+    return 0;
+}
+static int32_t stub_close(int32_t f) {
+    g_stub_overrides.record.file_close_count++;
+    if (g_stub_overrides.file_close)
+        return g_stub_overrides.file_close(f);
+    return 0;
+}
+static int32_t stub_read(int32_t f, void *p, uint32_t l) {
+    g_stub_overrides.record.file_read_count++;
+    if (g_stub_overrides.file_read)
+        return g_stub_overrides.file_read(f, p, l);
+    return -1;
+}
+static int32_t stub_write(int32_t f, void *p, uint32_t l) {
+    g_stub_overrides.record.file_write_count++;
+    if (g_stub_overrides.file_write)
+        return g_stub_overrides.file_write(f, p, l);
+    return -1;
+}
+static int32_t stub_seek(int32_t f, int32_t p, int m) {
+    if (g_stub_overrides.file_seek)
+        return g_stub_overrides.file_seek(f, p, m);
+    (void)f;(void)p;(void)m; return -1;
+}
+static int32_t stub_info(const char *f) {
+    if (g_stub_overrides.file_info)
+        return g_stub_overrides.file_info(f);
+    (void)f; return -1;
+}
+static int32_t stub_remove(const char *f) {
+    if (g_stub_overrides.file_remove)
+        return g_stub_overrides.file_remove(f);
+    (void)f; return -1;
+}
 static int32_t stub_rename(const char *o, const char *n) { (void)o;(void)n; return -1; }
 static int32_t stub_mkDir(const char *n) { (void)n; return 0; }
 static int32_t stub_rmDir(const char *n) { (void)n; return 0; }
-static int32_t stub_getLen(const char *f) { (void)f; return -1; }
+static int32_t stub_getLen(const char *f) {
+    if (g_stub_overrides.file_getLen)
+        return g_stub_overrides.file_getLen(f);
+    (void)f; return -1;
+}
 static int32_t stub_opendir(const char *n) { (void)n; return -1; }
 static char *stub_readdir(int32_t h) { (void)h; return NULL; }
 static int32_t stub_closedir(int32_t h) { (void)h; return 0; }
 
 static int32_t stub_initNetwork(void *cb, const char *m, void *ud) {
+    g_stub_overrides.record.init_network_count++;
+    if (g_stub_overrides.initNetwork)
+        return g_stub_overrides.initNetwork(cb, m, ud);
     (void)cb;(void)m;(void)ud; return -1;
 }
 static int32_t stub_getHostByName(const char *n, void *cb, void *ud) {
+    g_stub_overrides.record.get_host_count++;
+    if (n) {
+        strncpy(g_stub_overrides.record.last_host_name, n,
+                sizeof(g_stub_overrides.record.last_host_name) - 1);
+        g_stub_overrides.record.last_host_name[
+            sizeof(g_stub_overrides.record.last_host_name) - 1] = '\0';
+    }
+    if (g_stub_overrides.getHostByName)
+        return g_stub_overrides.getHostByName(n, cb, ud);
     (void)n;(void)cb;(void)ud; return -1;
 }
 static int32_t stub_closeNetwork(void) { return 0; }
