@@ -1,0 +1,137 @@
+
+/tmp/arm_lib_analysis/normal/mr_gb2312.obj:     file format elf32-littlearm
+
+
+Disassembly of section .text:
+
+00000000 <c2u>:
+   0:	b5f7      	push	{r0, r1, r2, r4, r5, r6, r7, lr}
+   2:	b084      	sub	sp, #16
+   4:	45d5      	cmp	sp, sl
+   6:	d201      	bcs.n	c <c2u+0xc>
+   8:	f7ff fffe 	bl	0 <__rt_stkovf_split_small>
+   c:	1c07      	adds	r7, r0, #0
+   e:	2000      	movs	r0, #0
+  10:	9002      	str	r0, [sp, #8]
+  12:	9805      	ldr	r0, [sp, #20]
+  14:	2800      	cmp	r0, #0
+  16:	d003      	beq.n	20 <c2u+0x20>
+  18:	2000      	movs	r0, #0
+  1a:	9905      	ldr	r1, [sp, #20]
+  1c:	43c0      	mvns	r0, r0
+  1e:	6008      	str	r0, [r1, #0]
+  20:	2000      	movs	r0, #0
+  22:	1c01      	adds	r1, r0, #0
+  24:	e00c      	b.n	40 <c2u+0x40>
+  26:	2ba1      	cmp	r3, #161	; 0xa1
+  28:	d305      	bcc.n	36 <c2u+0x36>
+  2a:	2bfe      	cmp	r3, #254	; 0xfe
+  2c:	d803      	bhi.n	36 <c2u+0x36>
+  2e:	183b      	adds	r3, r7, r0
+  30:	785b      	ldrb	r3, [r3, #1]
+  32:	2b00      	cmp	r3, #0
+  34:	d101      	bne.n	3a <c2u+0x3a>
+  36:	3101      	adds	r1, #1
+  38:	e001      	b.n	3e <c2u+0x3e>
+  3a:	3001      	adds	r0, #1
+  3c:	3101      	adds	r1, #1
+  3e:	3001      	adds	r0, #1
+  40:	5c3b      	ldrb	r3, [r7, r0]
+  42:	2b00      	cmp	r3, #0
+  44:	d1ef      	bne.n	26 <c2u+0x26>
+  46:	0048      	lsls	r0, r1, #1
+  48:	3002      	adds	r0, #2
+  4a:	6010      	str	r0, [r2, #0]
+  4c:	f7ff fffe 	bl	0 <mr_malloc>
+  50:	1c06      	adds	r6, r0, #0
+  52:	d101      	bne.n	58 <c2u+0x58>
+  54:	b007      	add	sp, #28
+  56:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  58:	2400      	movs	r4, #0
+  5a:	1c25      	adds	r5, r4, #0
+  5c:	a901      	add	r1, sp, #4
+  5e:	9103      	str	r1, [sp, #12]
+  60:	e04d      	b.n	fe <c2u+0xfe>
+  62:	ab00      	add	r3, sp, #0
+  64:	7218      	strb	r0, [r3, #8]
+  66:	5d39      	ldrb	r1, [r7, r4]
+  68:	1c08      	adds	r0, r1, #0
+  6a:	38a1      	subs	r0, #161	; 0xa1
+  6c:	285d      	cmp	r0, #93	; 0x5d
+  6e:	d82b      	bhi.n	c8 <c2u+0xc8>
+  70:	1938      	adds	r0, r7, r4
+  72:	7842      	ldrb	r2, [r0, #1]
+  74:	2a00      	cmp	r2, #0
+  76:	d027      	beq.n	c8 <c2u+0xc8>
+  78:	725a      	strb	r2, [r3, #9]
+  7a:	7840      	ldrb	r0, [r0, #1]
+  7c:	38a1      	subs	r0, #161	; 0xa1
+  7e:	285d      	cmp	r0, #93	; 0x5d
+  80:	d80f      	bhi.n	a2 <c2u+0xa2>
+  82:	2000      	movs	r0, #0
+  84:	9001      	str	r0, [sp, #4]
+  86:	a802      	add	r0, sp, #8
+  88:	9903      	ldr	r1, [sp, #12]
+  8a:	f7ff fffe 	bl	0 <dsmGB2UCS2>
+  8e:	9801      	ldr	r0, [sp, #4]
+  90:	9901      	ldr	r1, [sp, #4]
+  92:	0200      	lsls	r0, r0, #8
+  94:	1209      	asrs	r1, r1, #8
+  96:	1841      	adds	r1, r0, r1
+  98:	1c28      	adds	r0, r5, #0
+  9a:	3501      	adds	r5, #1
+  9c:	0040      	lsls	r0, r0, #1
+  9e:	5231      	strh	r1, [r6, r0]
+  a0:	e010      	b.n	c4 <c2u+0xc4>
+  a2:	9805      	ldr	r0, [sp, #20]
+  a4:	2800      	cmp	r0, #0
+  a6:	d008      	beq.n	ba <c2u+0xba>
+  a8:	9805      	ldr	r0, [sp, #20]
+  aa:	6004      	str	r4, [r0, #0]
+  ac:	0069      	lsls	r1, r5, #1
+  ae:	3102      	adds	r1, #2
+  b0:	1c30      	adds	r0, r6, #0
+  b2:	f7ff fffe 	bl	0 <mr_free>
+  b6:	2000      	movs	r0, #0
+  b8:	e7cc      	b.n	54 <c2u+0x54>
+  ba:	1c28      	adds	r0, r5, #0
+  bc:	3501      	adds	r5, #1
+  be:	4913      	ldr	r1, [pc, #76]	; (10c <c2u+0x10c>)
+  c0:	0040      	lsls	r0, r0, #1
+  c2:	5231      	strh	r1, [r6, r0]
+  c4:	3402      	adds	r4, #2
+  c6:	e01a      	b.n	fe <c2u+0xfe>
+  c8:	2980      	cmp	r1, #128	; 0x80
+  ca:	d206      	bcs.n	da <c2u+0xda>
+  cc:	1c28      	adds	r0, r5, #0
+  ce:	3501      	adds	r5, #1
+  d0:	0209      	lsls	r1, r1, #8
+  d2:	0040      	lsls	r0, r0, #1
+  d4:	5231      	strh	r1, [r6, r0]
+  d6:	3401      	adds	r4, #1
+  d8:	e011      	b.n	fe <c2u+0xfe>
+  da:	9805      	ldr	r0, [sp, #20]
+  dc:	2800      	cmp	r0, #0
+  de:	d008      	beq.n	f2 <c2u+0xf2>
+  e0:	9805      	ldr	r0, [sp, #20]
+  e2:	6004      	str	r4, [r0, #0]
+  e4:	0069      	lsls	r1, r5, #1
+  e6:	3102      	adds	r1, #2
+  e8:	1c30      	adds	r0, r6, #0
+  ea:	f7ff fffe 	bl	0 <mr_free>
+  ee:	2000      	movs	r0, #0
+  f0:	e7b0      	b.n	54 <c2u+0x54>
+  f2:	1c28      	adds	r0, r5, #0
+  f4:	3501      	adds	r5, #1
+  f6:	4905      	ldr	r1, [pc, #20]	; (10c <c2u+0x10c>)
+  f8:	0040      	lsls	r0, r0, #1
+  fa:	5231      	strh	r1, [r6, r0]
+  fc:	3402      	adds	r4, #2
+  fe:	5d38      	ldrb	r0, [r7, r4]
+ 100:	2800      	cmp	r0, #0
+ 102:	d1ae      	bne.n	62 <c2u+0x62>
+ 104:	0069      	lsls	r1, r5, #1
+ 106:	5270      	strh	r0, [r6, r1]
+ 108:	1c30      	adds	r0, r6, #0
+ 10a:	e7a3      	b.n	54 <c2u+0x54>
+ 10c:	0000fdff 	.word	0x0000fdff

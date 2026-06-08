@@ -1,0 +1,193 @@
+
+/tmp/mtk_disasm/full1968/mr_socket_target.obj:     file format elf32-littlearm
+
+
+Disassembly of section i.sock_mr_getHost:
+
+00000000 <sock_mr_getHost>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_checklstring>
+  14:	e1a01000 	mov	r1, r0
+  18:	e1a00004 	mov	r0, r4
+  1c:	ebfffffe 	bl	0 <_mr_getHost>
+  20:	e1a01000 	mov	r1, r0
+  24:	e1a00004 	mov	r0, r4
+  28:	ebfffffe 	bl	0 <mrp_pushnumber>
+  2c:	e3a00001 	mov	r0, #1
+  30:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.global_unload:
+
+00000000 <global_unload>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e28f000c 	add	r0, pc, #12
+   8:	ebfffffe 	bl	0 <mr_printf>
+   c:	ebfffffe 	bl	0 <mr_closeNetwork>
+  10:	e3a00000 	mov	r0, #0
+  14:	e8bd8010 	pop	{r4, pc}
+  18:	61656c43 	.word	0x61656c43
+  1c:	654e206e 	.word	0x654e206e
+  20:	726f7774 	.word	0x726f7774
+  24:	0000216b 	.word	0x0000216b
+
+Disassembly of section i.mr_initNetworkCB:
+
+00000000 <mr_initNetworkCB>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05000 	mov	r5, r0
+   8:	e59f00c4 	ldr	r0, [pc, #196]	; d4 <mr_initNetworkCB+0xd4>
+   c:	e5900000 	ldr	r0, [r0]
+  10:	e3500001 	cmp	r0, #1
+  14:	13500002 	cmpne	r0, #2
+  18:	128f00b8 	addne	r0, pc, #184	; 0xb8
+  1c:	1a00000f 	bne	60 <mr_initNetworkCB+0x60>
+  20:	e59f40c4 	ldr	r4, [pc, #196]	; ec <mr_initNetworkCB+0xec>
+  24:	e28f10b8 	add	r1, pc, #184	; 0xb8
+  28:	e5940000 	ldr	r0, [r4]
+  2c:	ebfffffe 	bl	0 <mrp_pushstring>
+  30:	e59f10b8 	ldr	r1, [pc, #184]	; f0 <mr_initNetworkCB+0xf0>
+  34:	e5940000 	ldr	r0, [r4]
+  38:	ebfffffe 	bl	0 <mrp_rawget>
+  3c:	e5940000 	ldr	r0, [r4]
+  40:	e3e01000 	mvn	r1, #0
+  44:	ebfffffe 	bl	0 <mrp_type>
+  48:	e3500005 	cmp	r0, #5
+  4c:	0a000006 	beq	6c <mr_initNetworkCB+0x6c>
+  50:	e5940000 	ldr	r0, [r4]
+  54:	e3e01001 	mvn	r1, #1
+  58:	ebfffffe 	bl	0 <mrp_settop>
+  5c:	e28f0090 	add	r0, pc, #144	; 0x90
+  60:	ebfffffe 	bl	0 <mr_printf>
+  64:	e3e00000 	mvn	r0, #0
+  68:	e8bd8070 	pop	{r4, r5, r6, pc}
+  6c:	e3550000 	cmp	r5, #0
+  70:	1a000004 	bne	88 <mr_initNetworkCB+0x88>
+  74:	e5940000 	ldr	r0, [r4]
+  78:	e28f1084 	add	r1, pc, #132	; 0x84
+  7c:	ebfffffe 	bl	0 <mrp_pushstring>
+  80:	e3a01002 	mov	r1, #2
+  84:	ea000005 	b	a0 <mr_initNetworkCB+0xa0>
+  88:	e3750001 	cmn	r5, #1
+  8c:	1a000009 	bne	b8 <mr_initNetworkCB+0xb8>
+  90:	e5940000 	ldr	r0, [r4]
+  94:	e28f1068 	add	r1, pc, #104	; 0x68
+  98:	ebfffffe 	bl	0 <mrp_pushstring>
+  9c:	e3a01005 	mov	r1, #5
+  a0:	e5940000 	ldr	r0, [r4]
+  a4:	ebfffffe 	bl	0 <mrp_pushnumber>
+  a8:	e5940000 	ldr	r0, [r4]
+  ac:	e3e01002 	mvn	r1, #2
+  b0:	ebfffffe 	bl	0 <mrp_rawset>
+  b4:	ea000001 	b	c0 <mr_initNetworkCB+0xc0>
+  b8:	e28f004c 	add	r0, pc, #76	; 0x4c
+  bc:	ebfffffe 	bl	0 <mr_printf>
+  c0:	e5940000 	ldr	r0, [r4]
+  c4:	e3e01001 	mvn	r1, #1
+  c8:	ebfffffe 	bl	0 <mrp_settop>
+  cc:	e3a00000 	mov	r0, #0
+  d0:	e8bd8070 	pop	{r4, r5, r6, pc}
+  d4:	00000000 	.word	0x00000000
+  d8:	69204d56 	.word	0x69204d56
+  dc:	44492073 	.word	0x44492073
+  e0:	0021454c 	.word	0x0021454c
+  e4:	6b636f73 	.word	0x6b636f73
+  e8:	00007465 	.word	0x00007465
+  ec:	00000000 	.word	0x00000000
+  f0:	ffffd8ef 	.word	0xffffd8ef
+  f4:	6b636f53 	.word	0x6b636f53
+  f8:	69207465 	.word	0x69207465
+  fc:	44492073 	.word	0x44492073
+ 100:	0021454c 	.word	0x0021454c
+ 104:	74617473 	.word	0x74617473
+ 108:	00000065 	.word	0x00000065
+ 10c:	74696e69 	.word	0x74696e69
+ 110:	7774654e 	.word	0x7774654e
+ 114:	436b726f 	.word	0x436b726f
+ 118:	61702042 	.word	0x61702042
+ 11c:	206d6172 	.word	0x206d6172
+ 120:	21727265 	.word	0x21727265
+ 124:	00000000 	.word	0x00000000
+
+Disassembly of section i.mropen_socket:
+
+00000000 <mropen_socket>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a06000 	mov	r6, r0
+   8:	ebfffffe 	bl	0 <mropen_socket>
+   c:	e59f502c 	ldr	r5, [pc, #44]	; 40 <mropen_socket+0x40>
+  10:	e3a04000 	mov	r4, #0
+  14:	ea000004 	b	2c <mropen_socket+0x2c>
+  18:	e0850184 	add	r0, r5, r4, lsl #3
+  1c:	e5901004 	ldr	r1, [r0, #4]
+  20:	e1a00006 	mov	r0, r6
+  24:	e12fff31 	blx	r1
+  28:	e2844001 	add	r4, r4, #1
+  2c:	e7950184 	ldr	r0, [r5, r4, lsl #3]
+  30:	e3500000 	cmp	r0, #0
+  34:	1afffff7 	bne	18 <mropen_socket+0x18>
+  38:	e3a00001 	mov	r0, #1
+  3c:	e8bd8070 	pop	{r4, r5, r6, pc}
+  40:	00000000 	.word	0x00000000
+
+Disassembly of section i.base_open:
+
+00000000 <base_open>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05000 	mov	r5, r0
+   8:	e59f00a0 	ldr	r0, [pc, #160]	; b0 <base_open+0xb0>
+   c:	ebfffffe 	bl	0 <mr_initNetwork>
+  10:	e1a04000 	mov	r4, r0
+  14:	e59f2098 	ldr	r2, [pc, #152]	; b4 <base_open+0xb4>
+  18:	e1a00005 	mov	r0, r5
+  1c:	e3a03000 	mov	r3, #0
+  20:	e28f1090 	add	r1, pc, #144	; 0x90
+  24:	ebfffffe 	bl	0 <mr_L_openlib>
+  28:	e3540000 	cmp	r4, #0
+  2c:	1a000004 	bne	44 <base_open+0x44>
+  30:	e28f1088 	add	r1, pc, #136	; 0x88
+  34:	e1a00005 	mov	r0, r5
+  38:	ebfffffe 	bl	0 <mrp_pushstring>
+  3c:	e3a01002 	mov	r1, #2
+  40:	ea00000c 	b	78 <base_open+0x78>
+  44:	e3740001 	cmn	r4, #1
+  48:	1a000004 	bne	60 <base_open+0x60>
+  4c:	e28f106c 	add	r1, pc, #108	; 0x6c
+  50:	e1a00005 	mov	r0, r5
+  54:	ebfffffe 	bl	0 <mrp_pushstring>
+  58:	e3a01005 	mov	r1, #5
+  5c:	ea000005 	b	78 <base_open+0x78>
+  60:	e3540002 	cmp	r4, #2
+  64:	1a00000a 	bne	94 <base_open+0x94>
+  68:	e28f1050 	add	r1, pc, #80	; 0x50
+  6c:	e1a00005 	mov	r0, r5
+  70:	ebfffffe 	bl	0 <mrp_pushstring>
+  74:	e3a01001 	mov	r1, #1
+  78:	e1a00005 	mov	r0, r5
+  7c:	ebfffffe 	bl	0 <mrp_pushnumber>
+  80:	e3e01002 	mvn	r1, #2
+  84:	e1a00005 	mov	r0, r5
+  88:	ebfffffe 	bl	0 <mrp_rawset>
+  8c:	e3a00001 	mov	r0, #1
+  90:	e8bd8070 	pop	{r4, r5, r6, pc}
+  94:	e28f102c 	add	r1, pc, #44	; 0x2c
+  98:	e1a00005 	mov	r0, r5
+  9c:	ebfffffe 	bl	0 <mrp_pushstring>
+  a0:	e1a00005 	mov	r0, r5
+  a4:	ebfffffe 	bl	0 <mrp_error>
+  a8:	e3a00000 	mov	r0, #0
+  ac:	e8bd8070 	pop	{r4, r5, r6, pc}
+	...
+  b8:	6b636f73 	.word	0x6b636f73
+  bc:	00007465 	.word	0x00007465
+  c0:	74617473 	.word	0x74617473
+  c4:	00000065 	.word	0x00000065
+  c8:	695f726d 	.word	0x695f726d
+  cc:	4e74696e 	.word	0x4e74696e
+  d0:	6f777465 	.word	0x6f777465
+  d4:	72206b72 	.word	0x72206b72
+  d8:	72757465 	.word	0x72757465
+  dc:	7265206e 	.word	0x7265206e
+  e0:	00002172 	.word	0x00002172

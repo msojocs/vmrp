@@ -1,0 +1,303 @@
+
+/tmp/mtk_disasm/mini2011/mr_encode.obj:     file format elf32-littlearm
+
+
+Disassembly of section i._mr_decode_table:
+
+00000000 <_mr_decode_table>:
+   0:	e3500044 	cmp	r0, #68	; 0x44
+   4:	e3a010ff 	mov	r1, #255	; 0xff
+   8:	03a01007 	moveq	r1, #7
+   c:	0a00001f 	beq	90 <_mr_decode_table+0x90>
+  10:	e3500068 	cmp	r0, #104	; 0x68
+  14:	03a0100e 	moveq	r1, #14
+  18:	0a00001c 	beq	90 <_mr_decode_table+0x90>
+  1c:	e3500078 	cmp	r0, #120	; 0x78
+  20:	03a0103f 	moveq	r1, #63	; 0x3f
+  24:	0a000019 	beq	90 <_mr_decode_table+0x90>
+  28:	e2402041 	sub	r2, r0, #65	; 0x41
+  2c:	e3520019 	cmp	r2, #25
+  30:	92400036 	subls	r0, r0, #54	; 0x36
+  34:	9a00000b 	bls	68 <_mr_decode_table+0x68>
+  38:	e2402061 	sub	r2, r0, #97	; 0x61
+  3c:	e352000a 	cmp	r2, #10
+  40:	920210ff 	andls	r1, r2, #255	; 0xff
+  44:	9a000011 	bls	90 <_mr_decode_table+0x90>
+  48:	e240206c 	sub	r2, r0, #108	; 0x6c
+  4c:	e352000e 	cmp	r2, #14
+  50:	9240003d 	subls	r0, r0, #61	; 0x3d
+  54:	9a000003 	bls	68 <_mr_decode_table+0x68>
+  58:	e2402030 	sub	r2, r0, #48	; 0x30
+  5c:	e3520009 	cmp	r2, #9
+  60:	8a000002 	bhi	70 <_mr_decode_table+0x70>
+  64:	e240000b 	sub	r0, r0, #11
+  68:	e20010ff 	and	r1, r0, #255	; 0xff
+  6c:	ea000007 	b	90 <_mr_decode_table+0x90>
+  70:	e350002b 	cmp	r0, #43	; 0x2b
+  74:	03a0103e 	moveq	r1, #62	; 0x3e
+  78:	0a000004 	beq	90 <_mr_decode_table+0x90>
+  7c:	e350002f 	cmp	r0, #47	; 0x2f
+  80:	03a0103b 	moveq	r1, #59	; 0x3b
+  84:	0a000001 	beq	90 <_mr_decode_table+0x90>
+  88:	e350003d 	cmp	r0, #61	; 0x3d
+  8c:	03a01040 	moveq	r1, #64	; 0x40
+  90:	e1a00001 	mov	r0, r1
+  94:	e12fff1e 	bx	lr
+
+Disassembly of section i._mr_decode:
+
+00000000 <_mr_decode>:
+   0:	e92d4ffc 	push	{r2, r3, r4, r5, r6, r7, r8, r9, sl, fp, lr}
+   4:	e1b0a001 	movs	sl, r1
+   8:	e1a07000 	mov	r7, r0
+   c:	03a00000 	moveq	r0, #0
+  10:	e1a08002 	mov	r8, r2
+  14:	0a00002f 	beq	d8 <_mr_decode+0xd8>
+  18:	e24a0004 	sub	r0, sl, #4
+  1c:	e3a04000 	mov	r4, #0
+  20:	e1a05004 	mov	r5, r4
+  24:	e1a0b120 	lsr	fp, r0, #2
+  28:	e3a06000 	mov	r6, #0
+  2c:	e28d9004 	add	r9, sp, #4
+  30:	ea00001e 	b	b0 <_mr_decode+0xb0>
+  34:	e3a03000 	mov	r3, #0
+  38:	e0850003 	add	r0, r5, r3
+  3c:	e7d70000 	ldrb	r0, [r7, r0]
+  40:	ebfffffe 	bl	0 <_mr_decode>
+  44:	e35000ff 	cmp	r0, #255	; 0xff
+  48:	e7c90003 	strb	r0, [r9, r3]
+  4c:	0a000020 	beq	d4 <_mr_decode+0xd4>
+  50:	e2833001 	add	r3, r3, #1
+  54:	e3530004 	cmp	r3, #4
+  58:	3afffff6 	bcc	38 <_mr_decode+0x38>
+  5c:	e5dd0004 	ldrb	r0, [sp, #4]
+  60:	e5dd1005 	ldrb	r1, [sp, #5]
+  64:	e2855004 	add	r5, r5, #4
+  68:	e1a00100 	lsl	r0, r0, #2
+  6c:	e2011030 	and	r1, r1, #48	; 0x30
+  70:	e1800221 	orr	r0, r0, r1, lsr #4
+  74:	e7c80004 	strb	r0, [r8, r4]
+  78:	e5dd0005 	ldrb	r0, [sp, #5]
+  7c:	e5dd1006 	ldrb	r1, [sp, #6]
+  80:	e2866001 	add	r6, r6, #1
+  84:	e1a00200 	lsl	r0, r0, #4
+  88:	e201103c 	and	r1, r1, #60	; 0x3c
+  8c:	e1801121 	orr	r1, r0, r1, lsr #2
+  90:	e0880004 	add	r0, r8, r4
+  94:	e5c01001 	strb	r1, [r0, #1]
+  98:	e5dd1007 	ldrb	r1, [sp, #7]
+  9c:	e2844003 	add	r4, r4, #3
+  a0:	e201203f 	and	r2, r1, #63	; 0x3f
+  a4:	e5dd1006 	ldrb	r1, [sp, #6]
+  a8:	e1821301 	orr	r1, r2, r1, lsl #6
+  ac:	e5c01002 	strb	r1, [r0, #2]
+  b0:	e156000b 	cmp	r6, fp
+  b4:	3affffde 	bcc	34 <_mr_decode+0x34>
+  b8:	e3a03000 	mov	r3, #0
+  bc:	e0850003 	add	r0, r5, r3
+  c0:	e7d70000 	ldrb	r0, [r7, r0]
+  c4:	ebfffffe 	bl	0 <_mr_decode>
+  c8:	e35000ff 	cmp	r0, #255	; 0xff
+  cc:	e7c90003 	strb	r0, [r9, r3]
+  d0:	1a000001 	bne	dc <_mr_decode+0xdc>
+  d4:	e3e00000 	mvn	r0, #0
+  d8:	e8bd8ffc 	pop	{r2, r3, r4, r5, r6, r7, r8, r9, sl, fp, pc}
+  dc:	e2833001 	add	r3, r3, #1
+  e0:	e3530004 	cmp	r3, #4
+  e4:	3afffff4 	bcc	bc <_mr_decode+0xbc>
+  e8:	e087000a 	add	r0, r7, sl
+  ec:	e5501002 	ldrb	r1, [r0, #-2]
+  f0:	e351003d 	cmp	r1, #61	; 0x3d
+  f4:	03a01002 	moveq	r1, #2
+  f8:	0a000003 	beq	10c <_mr_decode+0x10c>
+  fc:	e5500001 	ldrb	r0, [r0, #-1]
+ 100:	e350003d 	cmp	r0, #61	; 0x3d
+ 104:	13a01000 	movne	r1, #0
+ 108:	03a01001 	moveq	r1, #1
+ 10c:	e3a00000 	mov	r0, #0
+ 110:	e3a02000 	mov	r2, #0
+ 114:	e1500001 	cmp	r0, r1
+ 118:	32603004 	rsbcc	r3, r0, #4
+ 11c:	30833009 	addcc	r3, r3, r9
+ 120:	32800001 	addcc	r0, r0, #1
+ 124:	35432001 	strbcc	r2, [r3, #-1]
+ 128:	3afffff9 	bcc	114 <_mr_decode+0x114>
+ 12c:	e5dd0004 	ldrb	r0, [sp, #4]
+ 130:	e5dd2005 	ldrb	r2, [sp, #5]
+ 134:	e2613003 	rsb	r3, r1, #3
+ 138:	e1a00100 	lsl	r0, r0, #2
+ 13c:	e2022030 	and	r2, r2, #48	; 0x30
+ 140:	e1800222 	orr	r0, r0, r2, lsr #4
+ 144:	e5cd0000 	strb	r0, [sp]
+ 148:	e5dd0005 	ldrb	r0, [sp, #5]
+ 14c:	e5dd2006 	ldrb	r2, [sp, #6]
+ 150:	e1a00200 	lsl	r0, r0, #4
+ 154:	e202203c 	and	r2, r2, #60	; 0x3c
+ 158:	e1800122 	orr	r0, r0, r2, lsr #2
+ 15c:	e5cd0001 	strb	r0, [sp, #1]
+ 160:	e5dd0007 	ldrb	r0, [sp, #7]
+ 164:	e200203f 	and	r2, r0, #63	; 0x3f
+ 168:	e5dd0006 	ldrb	r0, [sp, #6]
+ 16c:	e1820300 	orr	r0, r2, r0, lsl #6
+ 170:	e5cd0002 	strb	r0, [sp, #2]
+ 174:	e3a00000 	mov	r0, #0
+ 178:	e1a0200d 	mov	r2, sp
+ 17c:	e1530000 	cmp	r3, r0
+ 180:	87d21000 	ldrbhi	r1, [r2, r0]
+ 184:	8084c000 	addhi	ip, r4, r0
+ 188:	82800001 	addhi	r0, r0, #1
+ 18c:	87c8100c 	strbhi	r1, [r8, ip]
+ 190:	8afffff9 	bhi	17c <_mr_decode+0x17c>
+ 194:	e0840000 	add	r0, r4, r0
+ 198:	e8bd8ffc 	pop	{r2, r3, r4, r5, r6, r7, r8, r9, sl, fp, pc}
+
+Disassembly of section i._mr_encode_table:
+
+00000000 <_mr_encode_table>:
+   0:	e3500007 	cmp	r0, #7
+   4:	e3a010ff 	mov	r1, #255	; 0xff
+   8:	03a01044 	moveq	r1, #68	; 0x44
+   c:	0a00001b 	beq	80 <_mr_encode_table+0x80>
+  10:	e350000e 	cmp	r0, #14
+  14:	03a01068 	moveq	r1, #104	; 0x68
+  18:	0a000018 	beq	80 <_mr_encode_table+0x80>
+  1c:	e350003b 	cmp	r0, #59	; 0x3b
+  20:	03a0102f 	moveq	r1, #47	; 0x2f
+  24:	0a000015 	beq	80 <_mr_encode_table+0x80>
+  28:	e240200b 	sub	r2, r0, #11
+  2c:	e3520019 	cmp	r2, #25
+  30:	92800036 	addls	r0, r0, #54	; 0x36
+  34:	9a00000a 	bls	64 <_mr_encode_table+0x64>
+  38:	e240202f 	sub	r2, r0, #47	; 0x2f
+  3c:	e352000e 	cmp	r2, #14
+  40:	9280003d 	addls	r0, r0, #61	; 0x3d
+  44:	9a000006 	bls	64 <_mr_encode_table+0x64>
+  48:	e350000a 	cmp	r0, #10
+  4c:	92800061 	addls	r0, r0, #97	; 0x61
+  50:	9a000003 	bls	64 <_mr_encode_table+0x64>
+  54:	e2402025 	sub	r2, r0, #37	; 0x25
+  58:	e3520009 	cmp	r2, #9
+  5c:	8a000002 	bhi	6c <_mr_encode_table+0x6c>
+  60:	e280000b 	add	r0, r0, #11
+  64:	e20010ff 	and	r1, r0, #255	; 0xff
+  68:	ea000004 	b	80 <_mr_encode_table+0x80>
+  6c:	e350003e 	cmp	r0, #62	; 0x3e
+  70:	03a0102b 	moveq	r1, #43	; 0x2b
+  74:	0a000001 	beq	80 <_mr_encode_table+0x80>
+  78:	e350003f 	cmp	r0, #63	; 0x3f
+  7c:	03a01078 	moveq	r1, #120	; 0x78
+  80:	e1a00001 	mov	r0, r1
+  84:	e12fff1e 	bx	lr
+
+Disassembly of section i._mr_encode:
+
+00000000 <_mr_encode>:
+   0:	e92d4ff8 	push	{r3, r4, r5, r6, r7, r8, r9, sl, fp, lr}
+   4:	e1a05000 	mov	r5, r0
+   8:	e1a00001 	mov	r0, r1
+   c:	e3a01003 	mov	r1, #3
+  10:	e1a04002 	mov	r4, r2
+  14:	ebfffffe 	bl	0 <__aeabi_uidivmod>
+  18:	e3a03000 	mov	r3, #0
+  1c:	e1a06003 	mov	r6, r3
+  20:	e1a0b000 	mov	fp, r0
+  24:	e1a0a001 	mov	sl, r1
+  28:	e3a09000 	mov	r9, #0
+  2c:	ea000022 	b	bc <_mr_encode+0xbc>
+  30:	e7d50006 	ldrb	r0, [r5, r6]
+  34:	e1a00120 	lsr	r0, r0, #2
+  38:	ebfffffe 	bl	0 <_mr_encode>
+  3c:	e7c40003 	strb	r0, [r4, r3]
+  40:	e7d50006 	ldrb	r0, [r5, r6]
+  44:	e0858006 	add	r8, r5, r6
+  48:	e5d81001 	ldrb	r1, [r8, #1]
+  4c:	e1a00f00 	lsl	r0, r0, #30
+  50:	e1a00d20 	lsr	r0, r0, #26
+  54:	e1800221 	orr	r0, r0, r1, lsr #4
+  58:	ebfffffe 	bl	0 <_mr_encode>
+  5c:	e0847003 	add	r7, r4, r3
+  60:	e5c70001 	strb	r0, [r7, #1]
+  64:	e5d80001 	ldrb	r0, [r8, #1]
+  68:	e5d81002 	ldrb	r1, [r8, #2]
+  6c:	e1a00e00 	lsl	r0, r0, #28
+  70:	e1a00d20 	lsr	r0, r0, #26
+  74:	e1800321 	orr	r0, r0, r1, lsr #6
+  78:	ebfffffe 	bl	0 <_mr_encode>
+  7c:	e5c70002 	strb	r0, [r7, #2]
+  80:	e5d80002 	ldrb	r0, [r8, #2]
+  84:	e200003f 	and	r0, r0, #63	; 0x3f
+  88:	ebfffffe 	bl	0 <_mr_encode>
+  8c:	e5c70003 	strb	r0, [r7, #3]
+  90:	e7d41003 	ldrb	r1, [r4, r3]
+  94:	e5d72001 	ldrb	r2, [r7, #1]
+  98:	e1811002 	orr	r1, r1, r2
+  9c:	e5d72002 	ldrb	r2, [r7, #2]
+  a0:	e1811002 	orr	r1, r1, r2
+  a4:	e1810000 	orr	r0, r1, r0
+  a8:	e35000ff 	cmp	r0, #255	; 0xff
+  ac:	0a000031 	beq	178 <_mr_encode+0x178>
+  b0:	e2833004 	add	r3, r3, #4
+  b4:	e2866003 	add	r6, r6, #3
+  b8:	e2899001 	add	r9, r9, #1
+  bc:	e159000b 	cmp	r9, fp
+  c0:	3affffda 	bcc	30 <_mr_encode+0x30>
+  c4:	e35a0000 	cmp	sl, #0
+  c8:	e3a07000 	mov	r7, #0
+  cc:	0a000035 	beq	1a8 <_mr_encode+0x1a8>
+  d0:	e5cd7002 	strb	r7, [sp, #2]
+  d4:	e5cd7001 	strb	r7, [sp, #1]
+  d8:	e3a00000 	mov	r0, #0
+  dc:	e1a0100d 	mov	r1, sp
+  e0:	e5cd7000 	strb	r7, [sp]
+  e4:	e150000a 	cmp	r0, sl
+  e8:	30862000 	addcc	r2, r6, r0
+  ec:	37d52002 	ldrbcc	r2, [r5, r2]
+  f0:	37c12000 	strbcc	r2, [r1, r0]
+  f4:	32800001 	addcc	r0, r0, #1
+  f8:	3afffff9 	bcc	e4 <_mr_encode+0xe4>
+  fc:	e5dd0000 	ldrb	r0, [sp]
+ 100:	e1a00120 	lsr	r0, r0, #2
+ 104:	ebfffffe 	bl	0 <_mr_encode>
+ 108:	e7c40003 	strb	r0, [r4, r3]
+ 10c:	e5dd0000 	ldrb	r0, [sp]
+ 110:	e5dd1001 	ldrb	r1, [sp, #1]
+ 114:	e1a00f00 	lsl	r0, r0, #30
+ 118:	e1a00d20 	lsr	r0, r0, #26
+ 11c:	e1800221 	orr	r0, r0, r1, lsr #4
+ 120:	ebfffffe 	bl	0 <_mr_encode>
+ 124:	e0845003 	add	r5, r4, r3
+ 128:	e5c50001 	strb	r0, [r5, #1]
+ 12c:	e5dd0001 	ldrb	r0, [sp, #1]
+ 130:	e5dd1002 	ldrb	r1, [sp, #2]
+ 134:	e1a00e00 	lsl	r0, r0, #28
+ 138:	e1a00d20 	lsr	r0, r0, #26
+ 13c:	e1800321 	orr	r0, r0, r1, lsr #6
+ 140:	ebfffffe 	bl	0 <_mr_encode>
+ 144:	e5c50002 	strb	r0, [r5, #2]
+ 148:	e5dd0002 	ldrb	r0, [sp, #2]
+ 14c:	e200003f 	and	r0, r0, #63	; 0x3f
+ 150:	ebfffffe 	bl	0 <_mr_encode>
+ 154:	e5c50003 	strb	r0, [r5, #3]
+ 158:	e7d41003 	ldrb	r1, [r4, r3]
+ 15c:	e5d52001 	ldrb	r2, [r5, #1]
+ 160:	e1811002 	orr	r1, r1, r2
+ 164:	e5d52002 	ldrb	r2, [r5, #2]
+ 168:	e1811002 	orr	r1, r1, r2
+ 16c:	e1810000 	orr	r0, r1, r0
+ 170:	e35000ff 	cmp	r0, #255	; 0xff
+ 174:	1a000001 	bne	180 <_mr_encode+0x180>
+ 178:	e3e00000 	mvn	r0, #0
+ 17c:	e8bd8ff8 	pop	{r3, r4, r5, r6, r7, r8, r9, sl, fp, pc}
+ 180:	e2833004 	add	r3, r3, #4
+ 184:	e3a00000 	mov	r0, #0
+ 188:	e3a0103d 	mov	r1, #61	; 0x3d
+ 18c:	e26a2003 	rsb	r2, sl, #3
+ 190:	e1520000 	cmp	r2, r0
+ 194:	8043c000 	subhi	ip, r3, r0
+ 198:	808cc004 	addhi	ip, ip, r4
+ 19c:	82800001 	addhi	r0, r0, #1
+ 1a0:	854c1001 	strbhi	r1, [ip, #-1]
+ 1a4:	8afffff9 	bhi	190 <_mr_encode+0x190>
+ 1a8:	e1a00003 	mov	r0, r3
+ 1ac:	e7c47003 	strb	r7, [r4, r3]
+ 1b0:	e8bd8ff8 	pop	{r3, r4, r5, r6, r7, r8, r9, sl, fp, pc}

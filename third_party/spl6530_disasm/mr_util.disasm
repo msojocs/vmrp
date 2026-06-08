@@ -1,0 +1,31 @@
+
+/tmp/arm_lib_analysis/normal/mr_util.obj:     file format elf32-littlearm
+
+
+Disassembly of section .text:
+
+00000000 <mr_updcrc>:
+   0:	b530      	push	{r4, r5, lr}
+   2:	4c0b      	ldr	r4, [pc, #44]	; (30 <mr_updcrc+0x30>)
+   4:	2800      	cmp	r0, #0
+   6:	d101      	bne.n	c <mr_updcrc+0xc>
+   8:	43c2      	mvns	r2, r0
+   a:	e00d      	b.n	28 <mr_updcrc+0x28>
+   c:	6822      	ldr	r2, [r4, #0]
+   e:	2900      	cmp	r1, #0
+  10:	d00a      	beq.n	28 <mr_updcrc+0x28>
+  12:	4d08      	ldr	r5, [pc, #32]	; (34 <mr_updcrc+0x34>)
+  14:	7803      	ldrb	r3, [r0, #0]
+  16:	3001      	adds	r0, #1
+  18:	4053      	eors	r3, r2
+  1a:	061b      	lsls	r3, r3, #24
+  1c:	0d9b      	lsrs	r3, r3, #22
+  1e:	58eb      	ldr	r3, [r5, r3]
+  20:	0a12      	lsrs	r2, r2, #8
+  22:	405a      	eors	r2, r3
+  24:	3901      	subs	r1, #1
+  26:	d1f5      	bne.n	14 <mr_updcrc+0x14>
+  28:	6022      	str	r2, [r4, #0]
+  2a:	43d0      	mvns	r0, r2
+  2c:	bd30      	pop	{r4, r5, pc}
+	...

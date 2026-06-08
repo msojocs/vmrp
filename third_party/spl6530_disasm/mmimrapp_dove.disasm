@@ -1,0 +1,203 @@
+
+/tmp/arm_lib_analysis/normal/mmimrapp_dove.o:     file format elf32-bigarm
+
+
+Disassembly of section .text:
+
+00000000 <mr_license_register_validator>:
+   0:	495a      	ldr	r1, [pc, #360]	; (16c <mrapp_license_register+0x8>)
+   2:	6008      	str	r0, [r1, #0]
+   4:	4770      	bx	lr
+
+00000006 <mr_license_register_appinfo>:
+   6:	b5f0      	push	{r4, r5, r6, r7, lr}
+   8:	b0a5      	sub	sp, #148	; 0x94
+   a:	45d5      	cmp	sp, sl
+   c:	d201      	bcs.n	12 <mr_license_register_appinfo+0xc>
+   e:	f7ff fffe 	bl	0 <__rt_stkovf_split_small>
+  12:	1c0d      	adds	r5, r1, #0
+  14:	1c14      	adds	r4, r2, #0
+  16:	2900      	cmp	r1, #0
+  18:	d007      	beq.n	2a <mr_license_register_appinfo+0x24>
+  1a:	2c00      	cmp	r4, #0
+  1c:	d005      	beq.n	2a <mr_license_register_appinfo+0x24>
+  1e:	2800      	cmp	r0, #0
+  20:	d107      	bne.n	32 <mr_license_register_appinfo+0x2c>
+  22:	4852      	ldr	r0, [pc, #328]	; (16c <mrapp_license_register+0x8>)
+  24:	6840      	ldr	r0, [r0, #4]
+  26:	2800      	cmp	r0, #0
+  28:	d003      	beq.n	32 <mr_license_register_appinfo+0x2c>
+  2a:	2000      	movs	r0, #0
+  2c:	43c0      	mvns	r0, r0
+  2e:	b025      	add	sp, #148	; 0x94
+  30:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  32:	2180      	movs	r1, #128	; 0x80
+  34:	a805      	add	r0, sp, #20
+  36:	f7ff fffe 	bl	0 <__rt_memclr_w>
+  3a:	a803      	add	r0, sp, #12
+  3c:	2100      	movs	r1, #0
+  3e:	c002      	stmia	r0!, {r1}
+  40:	c002      	stmia	r0!, {r1}
+  42:	a803      	add	r0, sp, #12
+  44:	f7ff fffe 	bl	0 <mr_getDatetime>
+  48:	ab00      	add	r3, sp, #0
+  4a:	7b9a      	ldrb	r2, [r3, #14]
+  4c:	68a8      	ldr	r0, [r5, #8]
+  4e:	68e9      	ldr	r1, [r5, #12]
+  50:	9000      	str	r0, [sp, #0]
+  52:	9101      	str	r1, [sp, #4]
+  54:	9202      	str	r2, [sp, #8]
+  56:	cd0c      	ldmia	r5!, {r2, r3}
+  58:	a145      	add	r1, pc, #276	; (adr r1, 170 <mrapp_license_register+0xc>)
+  5a:	a805      	add	r0, sp, #20
+  5c:	f7ff fffe 	bl	0 <_sprintf>
+  60:	1c05      	adds	r5, r0, #0
+  62:	287f      	cmp	r0, #127	; 0x7f
+  64:	dd03      	ble.n	6e <mr_license_register_appinfo+0x68>
+  66:	257f      	movs	r5, #127	; 0x7f
+  68:	2000      	movs	r0, #0
+  6a:	a921      	add	r1, sp, #132	; 0x84
+  6c:	73c8      	strb	r0, [r1, #15]
+  6e:	4e3f      	ldr	r6, [pc, #252]	; (16c <mrapp_license_register+0x8>)
+  70:	21c0      	movs	r1, #192	; 0xc0
+  72:	3ec0      	subs	r6, #192	; 0xc0
+  74:	1c30      	adds	r0, r6, #0
+  76:	f7ff fffe 	bl	0 <__rt_memclr_w>
+  7a:	1c32      	adds	r2, r6, #0
+  7c:	1c29      	adds	r1, r5, #0
+  7e:	a805      	add	r0, sp, #20
+  80:	f7ff fffe 	bl	0 <_mr_encode>
+  84:	a03a      	add	r0, pc, #232	; (adr r0, 170 <mrapp_license_register+0xc>)
+  86:	60a0      	str	r0, [r4, #8]
+  88:	1c30      	adds	r0, r6, #0
+  8a:	f7ff fffe 	bl	0 <strlen>
+  8e:	6060      	str	r0, [r4, #4]
+  90:	6026      	str	r6, [r4, #0]
+  92:	2000      	movs	r0, #0
+  94:	e7cb      	b.n	2e <mr_license_register_appinfo+0x28>
+
+00000096 <mr_license_mgr_initialize>:
+  96:	b5f8      	push	{r3, r4, r5, r6, r7, lr}
+  98:	45d5      	cmp	sp, sl
+  9a:	d201      	bcs.n	a0 <mr_license_mgr_initialize+0xa>
+  9c:	f7ff fffe 	bl	0 <__rt_stkovf_split_small>
+  a0:	2400      	movs	r4, #0
+  a2:	2600      	movs	r6, #0
+  a4:	4d31      	ldr	r5, [pc, #196]	; (16c <mrapp_license_register+0x8>)
+  a6:	4f36      	ldr	r7, [pc, #216]	; (180 <mrapp_license_register+0x1c>)
+  a8:	e00f      	b.n	ca <mr_license_mgr_initialize+0x34>
+  aa:	602e      	str	r6, [r5, #0]
+  ac:	4780      	blx	r0
+  ae:	6828      	ldr	r0, [r5, #0]
+  b0:	2800      	cmp	r0, #0
+  b2:	d009      	beq.n	c8 <mr_license_mgr_initialize+0x32>
+  b4:	4933      	ldr	r1, [pc, #204]	; (184 <mrapp_license_register+0x20>)
+  b6:	4834      	ldr	r0, [pc, #208]	; (188 <mrapp_license_register+0x24>)
+  b8:	f7ff fffe 	bl	0 <mr_plat>
+  bc:	4933      	ldr	r1, [pc, #204]	; (18c <mrapp_license_register+0x28>)
+  be:	4308      	orrs	r0, r1
+  c0:	6068      	str	r0, [r5, #4]
+  c2:	6829      	ldr	r1, [r5, #0]
+  c4:	4788      	blx	r1
+  c6:	606e      	str	r6, [r5, #4]
+  c8:	3401      	adds	r4, #1
+  ca:	00a0      	lsls	r0, r4, #2
+  cc:	5838      	ldr	r0, [r7, r0]
+  ce:	2800      	cmp	r0, #0
+  d0:	d1eb      	bne.n	aa <mr_license_mgr_initialize+0x14>
+  d2:	bdf8      	pop	{r3, r4, r5, r6, r7, pc}
+
+000000d4 <mrapp_license_validator>:
+  d4:	b590      	push	{r4, r7, lr}
+  d6:	b0bf      	sub	sp, #252	; 0xfc
+  d8:	45d5      	cmp	sp, sl
+  da:	d201      	bcs.n	e0 <mrapp_license_validator+0xc>
+  dc:	f7ff fffe 	bl	0 <__rt_stkovf_split_small>
+  e0:	1c04      	adds	r4, r0, #0
+  e2:	a826      	add	r0, sp, #152	; 0x98
+  e4:	2164      	movs	r1, #100	; 0x64
+  e6:	f7ff fffe 	bl	0 <__rt_memclr_w>
+  ea:	2164      	movs	r1, #100	; 0x64
+  ec:	a80d      	add	r0, sp, #52	; 0x34
+  ee:	f7ff fffe 	bl	0 <__rt_memclr_w>
+  f2:	2100      	movs	r1, #0
+  f4:	a80b      	add	r0, sp, #44	; 0x2c
+  f6:	c002      	stmia	r0!, {r1}
+  f8:	c002      	stmia	r0!, {r1}
+  fa:	4925      	ldr	r1, [pc, #148]	; (190 <mrapp_license_register+0x2c>)
+  fc:	a806      	add	r0, sp, #24
+  fe:	2214      	movs	r2, #20
+ 100:	f7ff fffe 	bl	0 <__rt_memcpy_w>
+ 104:	a803      	add	r0, sp, #12
+ 106:	2100      	movs	r1, #0
+ 108:	2200      	movs	r2, #0
+ 10a:	c006      	stmia	r0!, {r1, r2}
+ 10c:	c004      	stmia	r0!, {r2}
+ 10e:	aa03      	add	r2, sp, #12
+ 110:	1c20      	adds	r0, r4, #0
+ 112:	a906      	add	r1, sp, #24
+ 114:	f7ff fffe 	bl	6 <mr_license_register_appinfo>
+ 118:	2800      	cmp	r0, #0
+ 11a:	d121      	bne.n	160 <mrapp_license_validator+0x8c>
+ 11c:	a80b      	add	r0, sp, #44	; 0x2c
+ 11e:	f7ff fffe 	bl	0 <mr_getDatetime>
+ 122:	aa26      	add	r2, sp, #152	; 0x98
+ 124:	9803      	ldr	r0, [sp, #12]
+ 126:	9904      	ldr	r1, [sp, #16]
+ 128:	f7ff fffe 	bl	0 <_mr_decode>
+ 12c:	ab08      	add	r3, sp, #32
+ 12e:	7b9a      	ldrb	r2, [r3, #14]
+ 130:	9808      	ldr	r0, [sp, #32]
+ 132:	9909      	ldr	r1, [sp, #36]	; 0x24
+ 134:	9000      	str	r0, [sp, #0]
+ 136:	ab05      	add	r3, sp, #20
+ 138:	9202      	str	r2, [sp, #8]
+ 13a:	9101      	str	r1, [sp, #4]
+ 13c:	cb0e      	ldmia	r3, {r1, r2, r3}
+ 13e:	a80d      	add	r0, sp, #52	; 0x34
+ 140:	f7ff fffe 	bl	0 <_sprintf>
+ 144:	aa26      	add	r2, sp, #152	; 0x98
+ 146:	a90d      	add	r1, sp, #52	; 0x34
+ 148:	a012      	add	r0, pc, #72	; (adr r0, 194 <mrapp_license_register+0x30>)
+ 14a:	f7ff fffe 	bl	0 <mr_printf>
+ 14e:	a926      	add	r1, sp, #152	; 0x98
+ 150:	a80d      	add	r0, sp, #52	; 0x34
+ 152:	f7ff fffe 	bl	0 <strcmp>
+ 156:	2800      	cmp	r0, #0
+ 158:	d102      	bne.n	160 <mrapp_license_validator+0x8c>
+ 15a:	a016      	add	r0, pc, #88	; (adr r0, 1b4 <mrapp_license_register+0x50>)
+ 15c:	f7ff fffe 	bl	0 <mr_printf>
+ 160:	b03f      	add	sp, #252	; 0xfc
+ 162:	bd90      	pop	{r4, r7, pc}
+
+00000164 <mrapp_license_register>:
+ 164:	481a      	ldr	r0, [pc, #104]	; (1d0 <mrapp_license_register+0x6c>)
+ 166:	4901      	ldr	r1, [pc, #4]	; (16c <mrapp_license_register+0x8>)
+ 168:	6008      	str	r0, [r1, #0]
+ 16a:	4770      	bx	lr
+ 16c:	000000c0 	.word	0x000000c0
+ 170:	25732425 	.word	0x25732425
+ 174:	782c2578 	.word	0x782c2578
+ 178:	26257340 	.word	0x26257340
+ 17c:	25780000 	.word	0x25780000
+ 180:	00000000 	.word	0x00000000
+ 184:	2e5b9d5f 	.word	0x2e5b9d5f
+ 188:	000004bb 	.word	0x000004bb
+ 18c:	80000001 	.word	0x80000001
+ 190:	00000000 	.word	0x00000000
+ 194:	6d726170 	.word	0x6d726170
+ 198:	705f6c69 	.word	0x705f6c69
+ 19c:	63656e73 	.word	0x63656e73
+ 1a0:	655f7661 	.word	0x655f7661
+ 1a4:	6c696461 	.word	0x6c696461
+ 1a8:	746f723a 	.word	0x746f723a
+ 1ac:	2025732c 	.word	0x2025732c
+ 1b0:	20257300 	.word	0x20257300
+ 1b4:	6d726170 	.word	0x6d726170
+ 1b8:	705f6c69 	.word	0x705f6c69
+ 1bc:	63656e73 	.word	0x63656e73
+ 1c0:	655f7661 	.word	0x655f7661
+ 1c4:	6c696461 	.word	0x6c696461
+ 1c8:	746f7220 	.word	0x746f7220
+ 1cc:	6f6b0000 	.word	0x6f6b0000
+ 1d0:	00000000 	.word	0x00000000

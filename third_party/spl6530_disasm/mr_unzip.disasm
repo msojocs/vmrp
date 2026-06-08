@@ -1,0 +1,369 @@
+
+/tmp/arm_lib_analysis/normal/mr_unzip.obj:     file format elf32-littlearm
+
+
+Disassembly of section .text:
+
+00000000 <mr_unzip>:
+   0:	b5f0      	push	{r4, r5, r6, r7, lr}
+   2:	b085      	sub	sp, #20
+   4:	45d5      	cmp	sp, sl
+   6:	d201      	bcs.n	c <mr_unzip+0xc>
+   8:	f7ff fffe 	bl	0 <__rt_stkovf_split_small>
+   c:	2400      	movs	r4, #0
+   e:	2500      	movs	r5, #0
+  10:	2100      	movs	r1, #0
+  12:	2000      	movs	r0, #0
+  14:	f7ff fffe 	bl	0 <mr_updcrc>
+  18:	f7ff fffe 	bl	0 <mr_inflate>
+  1c:	43e6      	mvns	r6, r4
+  1e:	2803      	cmp	r0, #3
+  20:	d105      	bne.n	2e <mr_unzip+0x2e>
+  22:	a08f      	add	r0, pc, #572	; (adr r0, 260 <mr_get_method+0x122>)
+  24:	f7ff fffe 	bl	0 <mr_printf>
+  28:	1c30      	adds	r0, r6, #0
+  2a:	b005      	add	sp, #20
+  2c:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  2e:	2800      	cmp	r0, #0
+  30:	d004      	beq.n	3c <mr_unzip+0x3c>
+  32:	a08f      	add	r0, pc, #572	; (adr r0, 270 <mr_get_method+0x132>)
+  34:	f7ff fffe 	bl	0 <mr_printf>
+  38:	1c30      	adds	r0, r6, #0
+  3a:	e7f6      	b.n	2a <mr_unzip+0x2a>
+  3c:	4897      	ldr	r0, [pc, #604]	; (29c <mr_get_method+0x15e>)
+  3e:	4998      	ldr	r1, [pc, #608]	; (2a0 <mr_get_method+0x162>)
+  40:	6806      	ldr	r6, [r0, #0]
+  42:	2e02      	cmp	r6, #2
+  44:	d116      	bne.n	74 <mr_unzip+0x74>
+  46:	6808      	ldr	r0, [r1, #0]
+  48:	7bc3      	ldrb	r3, [r0, #15]
+  4a:	7b82      	ldrb	r2, [r0, #14]
+  4c:	021b      	lsls	r3, r3, #8
+  4e:	431a      	orrs	r2, r3
+  50:	7c03      	ldrb	r3, [r0, #16]
+  52:	7c44      	ldrb	r4, [r0, #17]
+  54:	0224      	lsls	r4, r4, #8
+  56:	4323      	orrs	r3, r4
+  58:	041b      	lsls	r3, r3, #16
+  5a:	431a      	orrs	r2, r3
+  5c:	1c14      	adds	r4, r2, #0
+  5e:	7dc3      	ldrb	r3, [r0, #23]
+  60:	7d82      	ldrb	r2, [r0, #22]
+  62:	021b      	lsls	r3, r3, #8
+  64:	431a      	orrs	r2, r3
+  66:	7e03      	ldrb	r3, [r0, #24]
+  68:	7e40      	ldrb	r0, [r0, #25]
+  6a:	0200      	lsls	r0, r0, #8
+  6c:	4318      	orrs	r0, r3
+  6e:	0400      	lsls	r0, r0, #16
+  70:	4302      	orrs	r2, r0
+  72:	1c15      	adds	r5, r2, #0
+  74:	4f8b      	ldr	r7, [pc, #556]	; (2a4 <mr_get_method+0x166>)
+  76:	680b      	ldr	r3, [r1, #0]
+  78:	2000      	movs	r0, #0
+  7a:	6839      	ldr	r1, [r7, #0]
+  7c:	1c4a      	adds	r2, r1, #1
+  7e:	603a      	str	r2, [r7, #0]
+  80:	5c59      	ldrb	r1, [r3, r1]
+  82:	aa01      	add	r2, sp, #4
+  84:	5411      	strb	r1, [r2, r0]
+  86:	3001      	adds	r0, #1
+  88:	2808      	cmp	r0, #8
+  8a:	dbf6      	blt.n	7a <mr_unzip+0x7a>
+  8c:	2e02      	cmp	r6, #2
+  8e:	d016      	beq.n	be <mr_unzip+0xbe>
+  90:	ab00      	add	r3, sp, #0
+  92:	7959      	ldrb	r1, [r3, #5]
+  94:	7918      	ldrb	r0, [r3, #4]
+  96:	0209      	lsls	r1, r1, #8
+  98:	4308      	orrs	r0, r1
+  9a:	7999      	ldrb	r1, [r3, #6]
+  9c:	79da      	ldrb	r2, [r3, #7]
+  9e:	0212      	lsls	r2, r2, #8
+  a0:	4311      	orrs	r1, r2
+  a2:	0409      	lsls	r1, r1, #16
+  a4:	4308      	orrs	r0, r1
+  a6:	1c04      	adds	r4, r0, #0
+  a8:	7a59      	ldrb	r1, [r3, #9]
+  aa:	7a18      	ldrb	r0, [r3, #8]
+  ac:	0209      	lsls	r1, r1, #8
+  ae:	4308      	orrs	r0, r1
+  b0:	7a99      	ldrb	r1, [r3, #10]
+  b2:	7ada      	ldrb	r2, [r3, #11]
+  b4:	0212      	lsls	r2, r2, #8
+  b6:	4311      	orrs	r1, r2
+  b8:	0409      	lsls	r1, r1, #16
+  ba:	4308      	orrs	r0, r1
+  bc:	1c05      	adds	r5, r0, #0
+  be:	487a      	ldr	r0, [pc, #488]	; (2a8 <mr_get_method+0x16a>)
+  c0:	2100      	movs	r1, #0
+  c2:	6800      	ldr	r0, [r0, #0]
+  c4:	f7ff fffe 	bl	0 <mr_updcrc>
+  c8:	42a0      	cmp	r0, r4
+  ca:	d002      	beq.n	d2 <mr_unzip+0xd2>
+  cc:	a077      	add	r0, pc, #476	; (adr r0, 2ac <mr_get_method+0x16e>)
+  ce:	f7ff fffe 	bl	0 <mr_printf>
+  d2:	487f      	ldr	r0, [pc, #508]	; (2d0 <mr_get_method+0x192>)
+  d4:	6800      	ldr	r0, [r0, #0]
+  d6:	4285      	cmp	r5, r0
+  d8:	d002      	beq.n	e0 <mr_unzip+0xe0>
+  da:	a07e      	add	r0, pc, #504	; (adr r0, 2d4 <mr_get_method+0x196>)
+  dc:	f7ff fffe 	bl	0 <mr_printf>
+  e0:	2000      	movs	r0, #0
+  e2:	e7a2      	b.n	2a <mr_unzip+0x2a>
+
+000000e4 <mr_check_zipfile>:
+  e4:	b570      	push	{r4, r5, r6, lr}
+  e6:	496e      	ldr	r1, [pc, #440]	; (2a0 <mr_get_method+0x162>)
+  e8:	4d6e      	ldr	r5, [pc, #440]	; (2a4 <mr_get_method+0x166>)
+  ea:	6809      	ldr	r1, [r1, #0]
+  ec:	682a      	ldr	r2, [r5, #0]
+  ee:	1889      	adds	r1, r1, r2
+  f0:	7ecc      	ldrb	r4, [r1, #27]
+  f2:	7e8b      	ldrb	r3, [r1, #26]
+  f4:	261d      	movs	r6, #29
+  f6:	0224      	lsls	r4, r4, #8
+  f8:	4323      	orrs	r3, r4
+  fa:	5c76      	ldrb	r6, [r6, r1]
+  fc:	7f0c      	ldrb	r4, [r1, #28]
+  fe:	0236      	lsls	r6, r6, #8
+ 100:	4334      	orrs	r4, r6
+ 102:	191b      	adds	r3, r3, r4
+ 104:	189a      	adds	r2, r3, r2
+ 106:	321e      	adds	r2, #30
+ 108:	602a      	str	r2, [r5, #0]
+ 10a:	1c03      	adds	r3, r0, #0
+ 10c:	2000      	movs	r0, #0
+ 10e:	43c0      	mvns	r0, r0
+ 110:	429a      	cmp	r2, r3
+ 112:	d813      	bhi.n	13c <mr_check_zipfile+0x58>
+ 114:	784b      	ldrb	r3, [r1, #1]
+ 116:	780a      	ldrb	r2, [r1, #0]
+ 118:	021b      	lsls	r3, r3, #8
+ 11a:	431a      	orrs	r2, r3
+ 11c:	788b      	ldrb	r3, [r1, #2]
+ 11e:	78cc      	ldrb	r4, [r1, #3]
+ 120:	0224      	lsls	r4, r4, #8
+ 122:	4323      	orrs	r3, r4
+ 124:	041b      	lsls	r3, r3, #16
+ 126:	431a      	orrs	r2, r3
+ 128:	4b74      	ldr	r3, [pc, #464]	; (2fc <mr_get_method+0x1be>)
+ 12a:	429a      	cmp	r2, r3
+ 12c:	d106      	bne.n	13c <mr_check_zipfile+0x58>
+ 12e:	7a0a      	ldrb	r2, [r1, #8]
+ 130:	2a08      	cmp	r2, #8
+ 132:	d103      	bne.n	13c <mr_check_zipfile+0x58>
+ 134:	7989      	ldrb	r1, [r1, #6]
+ 136:	07c9      	lsls	r1, r1, #31
+ 138:	d100      	bne.n	13c <mr_check_zipfile+0x58>
+ 13a:	2000      	movs	r0, #0
+ 13c:	bd70      	pop	{r4, r5, r6, pc}
+
+0000013e <mr_get_method>:
+ 13e:	b5f1      	push	{r0, r4, r5, r6, r7, lr}
+ 140:	b082      	sub	sp, #8
+ 142:	45d5      	cmp	sp, sl
+ 144:	d201      	bcs.n	14a <mr_get_method+0xc>
+ 146:	f7ff fffe 	bl	0 <__rt_stkovf_split_small>
+ 14a:	4954      	ldr	r1, [pc, #336]	; (29c <mr_get_method+0x15e>)
+ 14c:	2008      	movs	r0, #8
+ 14e:	6008      	str	r0, [r1, #0]
+ 150:	4e54      	ldr	r6, [pc, #336]	; (2a4 <mr_get_method+0x166>)
+ 152:	4f53      	ldr	r7, [pc, #332]	; (2a0 <mr_get_method+0x162>)
+ 154:	6832      	ldr	r2, [r6, #0]
+ 156:	ab00      	add	r3, sp, #0
+ 158:	1c50      	adds	r0, r2, #1
+ 15a:	1c31      	adds	r1, r6, #0
+ 15c:	6008      	str	r0, [r1, #0]
+ 15e:	6839      	ldr	r1, [r7, #0]
+ 160:	5c8a      	ldrb	r2, [r1, r2]
+ 162:	711a      	strb	r2, [r3, #4]
+ 164:	1c42      	adds	r2, r0, #1
+ 166:	1c33      	adds	r3, r6, #0
+ 168:	601a      	str	r2, [r3, #0]
+ 16a:	5c08      	ldrb	r0, [r1, r0]
+ 16c:	ab00      	add	r3, sp, #0
+ 16e:	7158      	strb	r0, [r3, #5]
+ 170:	2500      	movs	r5, #0
+ 172:	43ed      	mvns	r5, r5
+ 174:	1c2c      	adds	r4, r5, #0
+ 176:	2202      	movs	r2, #2
+ 178:	a161      	add	r1, pc, #388	; (adr r1, 300 <mr_get_method+0x1c2>)
+ 17a:	a801      	add	r0, sp, #4
+ 17c:	f7ff fffe 	bl	0 <memcmp>
+ 180:	2800      	cmp	r0, #0
+ 182:	d006      	beq.n	192 <mr_get_method+0x54>
+ 184:	2202      	movs	r2, #2
+ 186:	a15f      	add	r1, pc, #380	; (adr r1, 304 <mr_get_method+0x1c6>)
+ 188:	a801      	add	r0, sp, #4
+ 18a:	f7ff fffe 	bl	0 <memcmp>
+ 18e:	2800      	cmp	r0, #0
+ 190:	d151      	bne.n	236 <mr_get_method+0xf8>
+ 192:	6833      	ldr	r3, [r6, #0]
+ 194:	1c32      	adds	r2, r6, #0
+ 196:	1c59      	adds	r1, r3, #1
+ 198:	6031      	str	r1, [r6, #0]
+ 19a:	6838      	ldr	r0, [r7, #0]
+ 19c:	5cc4      	ldrb	r4, [r0, r3]
+ 19e:	2c08      	cmp	r4, #8
+ 1a0:	d004      	beq.n	1ac <mr_get_method+0x6e>
+ 1a2:	a059      	add	r0, pc, #356	; (adr r0, 308 <mr_get_method+0x1ca>)
+ 1a4:	f7ff fffe 	bl	0 <mr_printf>
+ 1a8:	1c28      	adds	r0, r5, #0
+ 1aa:	bdfe      	pop	{r1, r2, r3, r4, r5, r6, r7, pc}
+ 1ac:	1c4b      	adds	r3, r1, #1
+ 1ae:	6013      	str	r3, [r2, #0]
+ 1b0:	5c41      	ldrb	r1, [r0, r1]
+ 1b2:	068e      	lsls	r6, r1, #26
+ 1b4:	d504      	bpl.n	1c0 <mr_get_method+0x82>
+ 1b6:	a058      	add	r0, pc, #352	; (adr r0, 318 <mr_get_method+0x1da>)
+ 1b8:	f7ff fffe 	bl	0 <mr_printf>
+ 1bc:	1c28      	adds	r0, r5, #0
+ 1be:	e7f4      	b.n	1aa <mr_get_method+0x6c>
+ 1c0:	078e      	lsls	r6, r1, #30
+ 1c2:	d504      	bpl.n	1ce <mr_get_method+0x90>
+ 1c4:	a058      	add	r0, pc, #352	; (adr r0, 328 <mr_get_method+0x1ea>)
+ 1c6:	f7ff fffe 	bl	0 <mr_printf>
+ 1ca:	1c28      	adds	r0, r5, #0
+ 1cc:	e7ed      	b.n	1aa <mr_get_method+0x6c>
+ 1ce:	060e      	lsls	r6, r1, #24
+ 1d0:	0fb6      	lsrs	r6, r6, #30
+ 1d2:	d004      	beq.n	1de <mr_get_method+0xa0>
+ 1d4:	a05b      	add	r0, pc, #364	; (adr r0, 344 <mr_get_method+0x206>)
+ 1d6:	f7ff fffe 	bl	0 <mr_printf>
+ 1da:	1c28      	adds	r0, r5, #0
+ 1dc:	e7e5      	b.n	1aa <mr_get_method+0x6c>
+ 1de:	3301      	adds	r3, #1
+ 1e0:	6013      	str	r3, [r2, #0]
+ 1e2:	3301      	adds	r3, #1
+ 1e4:	6013      	str	r3, [r2, #0]
+ 1e6:	3301      	adds	r3, #1
+ 1e8:	6013      	str	r3, [r2, #0]
+ 1ea:	3301      	adds	r3, #1
+ 1ec:	6013      	str	r3, [r2, #0]
+ 1ee:	1c5e      	adds	r6, r3, #1
+ 1f0:	3601      	adds	r6, #1
+ 1f2:	6016      	str	r6, [r2, #0]
+ 1f4:	074b      	lsls	r3, r1, #29
+ 1f6:	d50d      	bpl.n	214 <mr_get_method+0xd6>
+ 1f8:	1c73      	adds	r3, r6, #1
+ 1fa:	6013      	str	r3, [r2, #0]
+ 1fc:	5d86      	ldrb	r6, [r0, r6]
+ 1fe:	1c5f      	adds	r7, r3, #1
+ 200:	6017      	str	r7, [r2, #0]
+ 202:	5cc3      	ldrb	r3, [r0, r3]
+ 204:	021b      	lsls	r3, r3, #8
+ 206:	431e      	orrs	r6, r3
+ 208:	e002      	b.n	210 <mr_get_method+0xd2>
+ 20a:	6813      	ldr	r3, [r2, #0]
+ 20c:	3301      	adds	r3, #1
+ 20e:	6013      	str	r3, [r2, #0]
+ 210:	3e01      	subs	r6, #1
+ 212:	d2fa      	bcs.n	20a <mr_get_method+0xcc>
+ 214:	070b      	lsls	r3, r1, #28
+ 216:	d505      	bpl.n	224 <mr_get_method+0xe6>
+ 218:	6813      	ldr	r3, [r2, #0]
+ 21a:	1c5e      	adds	r6, r3, #1
+ 21c:	6016      	str	r6, [r2, #0]
+ 21e:	5cc3      	ldrb	r3, [r0, r3]
+ 220:	2b00      	cmp	r3, #0
+ 222:	d1f9      	bne.n	218 <mr_get_method+0xda>
+ 224:	06c9      	lsls	r1, r1, #27
+ 226:	d51a      	bpl.n	25e <mr_get_method+0x120>
+ 228:	6811      	ldr	r1, [r2, #0]
+ 22a:	1c4b      	adds	r3, r1, #1
+ 22c:	6013      	str	r3, [r2, #0]
+ 22e:	5c41      	ldrb	r1, [r0, r1]
+ 230:	2900      	cmp	r1, #0
+ 232:	d1f9      	bne.n	228 <mr_get_method+0xea>
+ 234:	e013      	b.n	25e <mr_get_method+0x120>
+ 236:	2204      	movs	r2, #4
+ 238:	a147      	add	r1, pc, #284	; (adr r1, 358 <mr_get_method+0x21a>)
+ 23a:	6838      	ldr	r0, [r7, #0]
+ 23c:	f7ff fffe 	bl	0 <memcmp>
+ 240:	2800      	cmp	r0, #0
+ 242:	d10c      	bne.n	25e <mr_get_method+0x120>
+ 244:	4915      	ldr	r1, [pc, #84]	; (29c <mr_get_method+0x15e>)
+ 246:	2002      	movs	r0, #2
+ 248:	6008      	str	r0, [r1, #0]
+ 24a:	2000      	movs	r0, #0
+ 24c:	6030      	str	r0, [r6, #0]
+ 24e:	2408      	movs	r4, #8
+ 250:	9802      	ldr	r0, [sp, #8]
+ 252:	f7ff fffe 	bl	e4 <mr_check_zipfile>
+ 256:	2800      	cmp	r0, #0
+ 258:	d001      	beq.n	25e <mr_get_method+0x120>
+ 25a:	1c28      	adds	r0, r5, #0
+ 25c:	e7a5      	b.n	1aa <mr_get_method+0x6c>
+ 25e:	e07f      	b.n	360 <mr_get_method+0x222>
+ 260:	2074756f 	.word	0x2074756f
+ 264:	6d20666f 	.word	0x6d20666f
+ 268:	726f6d65 	.word	0x726f6d65
+ 26c:	00000079 	.word	0x00000079
+ 270:	61766e69 	.word	0x61766e69
+ 274:	2064696c 	.word	0x2064696c
+ 278:	706d6f63 	.word	0x706d6f63
+ 27c:	73736572 	.word	0x73736572
+ 280:	64206465 	.word	0x64206465
+ 284:	2d617461 	.word	0x2d617461
+ 288:	726f662d 	.word	0x726f662d
+ 28c:	2074616d 	.word	0x2074616d
+ 290:	6c6f6976 	.word	0x6c6f6976
+ 294:	64657461 	.word	0x64657461
+	...
+ 2ac:	61766e69 	.word	0x61766e69
+ 2b0:	2064696c 	.word	0x2064696c
+ 2b4:	706d6f63 	.word	0x706d6f63
+ 2b8:	73736572 	.word	0x73736572
+ 2bc:	64206465 	.word	0x64206465
+ 2c0:	2d617461 	.word	0x2d617461
+ 2c4:	6372632d 	.word	0x6372632d
+ 2c8:	72726520 	.word	0x72726520
+ 2cc:	0000726f 	.word	0x0000726f
+ 2d0:	00000000 	.word	0x00000000
+ 2d4:	61766e69 	.word	0x61766e69
+ 2d8:	2064696c 	.word	0x2064696c
+ 2dc:	706d6f63 	.word	0x706d6f63
+ 2e0:	73736572 	.word	0x73736572
+ 2e4:	64206465 	.word	0x64206465
+ 2e8:	2d617461 	.word	0x2d617461
+ 2ec:	6e656c2d 	.word	0x6e656c2d
+ 2f0:	20687467 	.word	0x20687467
+ 2f4:	6f727265 	.word	0x6f727265
+ 2f8:	00000072 	.word	0x00000072
+ 2fc:	04034b50 	.word	0x04034b50
+ 300:	00008b1f 	.word	0x00008b1f
+ 304:	00009e1f 	.word	0x00009e1f
+ 308:	6e6b6e75 	.word	0x6e6b6e75
+ 30c:	206e776f 	.word	0x206e776f
+ 310:	6874656d 	.word	0x6874656d
+ 314:	0000646f 	.word	0x0000646f
+ 318:	65207369 	.word	0x65207369
+ 31c:	7972636e 	.word	0x7972636e
+ 320:	64657470 	.word	0x64657470
+ 324:	00000000 	.word	0x00000000
+ 328:	61207369 	.word	0x61207369
+ 32c:	6d206120 	.word	0x6d206120
+ 330:	69746c75 	.word	0x69746c75
+ 334:	7261702d 	.word	0x7261702d
+ 338:	7a672074 	.word	0x7a672074
+ 33c:	66207069 	.word	0x66207069
+ 340:	00656c69 	.word	0x00656c69
+ 344:	20736168 	.word	0x20736168
+ 348:	45534552 	.word	0x45534552
+ 34c:	44455652 	.word	0x44455652
+ 350:	616c6620 	.word	0x616c6620
+ 354:	00007367 	.word	0x00007367
+ 358:	04034b50 	.word	0x04034b50
+ 35c:	00000000 	.word	0x00000000
+ 360:	2c00      	cmp	r4, #0
+ 362:	db01      	blt.n	368 <mr_get_method+0x22a>
+ 364:	1c20      	adds	r0, r4, #0
+ 366:	e720      	b.n	1aa <mr_get_method+0x6c>
+ 368:	a002      	add	r0, pc, #8	; (adr r0, 374 <mr_get_method+0x236>)
+ 36a:	f7ff fffe 	bl	0 <mr_printf>
+ 36e:	1c28      	adds	r0, r5, #0
+ 370:	e71b      	b.n	1aa <mr_get_method+0x6c>
+ 372:	0000      	.short	0x0000
+ 374:	697a6f6e 	.word	0x697a6f6e
+ 378:	00000070 	.word	0x00000070

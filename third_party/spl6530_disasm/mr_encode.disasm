@@ -1,0 +1,412 @@
+
+/tmp/arm_lib_analysis/normal/mr_encode.obj:     file format elf32-littlearm
+
+
+Disassembly of section .text:
+
+00000000 <_mr_decode_table>:
+   0:	21ff      	movs	r1, #255	; 0xff
+   2:	2844      	cmp	r0, #68	; 0x44
+   4:	d101      	bne.n	a <_mr_decode_table+0xa>
+   6:	2107      	movs	r1, #7
+   8:	e031      	b.n	6e <_mr_decode_table+0x6e>
+   a:	2868      	cmp	r0, #104	; 0x68
+   c:	d101      	bne.n	12 <_mr_decode_table+0x12>
+   e:	210e      	movs	r1, #14
+  10:	e02d      	b.n	6e <_mr_decode_table+0x6e>
+  12:	2878      	cmp	r0, #120	; 0x78
+  14:	d101      	bne.n	1a <_mr_decode_table+0x1a>
+  16:	213f      	movs	r1, #63	; 0x3f
+  18:	e029      	b.n	6e <_mr_decode_table+0x6e>
+  1a:	1c02      	adds	r2, r0, #0
+  1c:	3a41      	subs	r2, #65	; 0x41
+  1e:	2a19      	cmp	r2, #25
+  20:	d803      	bhi.n	2a <_mr_decode_table+0x2a>
+  22:	30ca      	adds	r0, #202	; 0xca
+  24:	0601      	lsls	r1, r0, #24
+  26:	0e09      	lsrs	r1, r1, #24
+  28:	e021      	b.n	6e <_mr_decode_table+0x6e>
+  2a:	1c02      	adds	r2, r0, #0
+  2c:	3a61      	subs	r2, #97	; 0x61
+  2e:	2a0a      	cmp	r2, #10
+  30:	d802      	bhi.n	38 <_mr_decode_table+0x38>
+  32:	0611      	lsls	r1, r2, #24
+  34:	0e09      	lsrs	r1, r1, #24
+  36:	e01a      	b.n	6e <_mr_decode_table+0x6e>
+  38:	1c02      	adds	r2, r0, #0
+  3a:	3a6c      	subs	r2, #108	; 0x6c
+  3c:	2a0e      	cmp	r2, #14
+  3e:	d803      	bhi.n	48 <_mr_decode_table+0x48>
+  40:	30c3      	adds	r0, #195	; 0xc3
+  42:	0601      	lsls	r1, r0, #24
+  44:	0e09      	lsrs	r1, r1, #24
+  46:	e012      	b.n	6e <_mr_decode_table+0x6e>
+  48:	1c02      	adds	r2, r0, #0
+  4a:	3a30      	subs	r2, #48	; 0x30
+  4c:	2a09      	cmp	r2, #9
+  4e:	d803      	bhi.n	58 <_mr_decode_table+0x58>
+  50:	30f5      	adds	r0, #245	; 0xf5
+  52:	0601      	lsls	r1, r0, #24
+  54:	0e09      	lsrs	r1, r1, #24
+  56:	e00a      	b.n	6e <_mr_decode_table+0x6e>
+  58:	282b      	cmp	r0, #43	; 0x2b
+  5a:	d101      	bne.n	60 <_mr_decode_table+0x60>
+  5c:	213e      	movs	r1, #62	; 0x3e
+  5e:	e006      	b.n	6e <_mr_decode_table+0x6e>
+  60:	282f      	cmp	r0, #47	; 0x2f
+  62:	d101      	bne.n	68 <_mr_decode_table+0x68>
+  64:	213b      	movs	r1, #59	; 0x3b
+  66:	e002      	b.n	6e <_mr_decode_table+0x6e>
+  68:	283d      	cmp	r0, #61	; 0x3d
+  6a:	d100      	bne.n	6e <_mr_decode_table+0x6e>
+  6c:	2140      	movs	r1, #64	; 0x40
+  6e:	1c08      	adds	r0, r1, #0
+  70:	4770      	bx	lr
+
+00000072 <_mr_decode>:
+  72:	b5f7      	push	{r0, r1, r2, r4, r5, r6, r7, lr}
+  74:	b084      	sub	sp, #16
+  76:	45d5      	cmp	sp, sl
+  78:	d201      	bcs.n	7e <_mr_decode+0xc>
+  7a:	f7ff fffe 	bl	0 <__rt_stkovf_split_small>
+  7e:	1c07      	adds	r7, r0, #0
+  80:	9805      	ldr	r0, [sp, #20]
+  82:	2800      	cmp	r0, #0
+  84:	d101      	bne.n	8a <_mr_decode+0x18>
+  86:	b007      	add	sp, #28
+  88:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  8a:	9805      	ldr	r0, [sp, #20]
+  8c:	3804      	subs	r0, #4
+  8e:	0881      	lsrs	r1, r0, #2
+  90:	9103      	str	r1, [sp, #12]
+  92:	2500      	movs	r5, #0
+  94:	1c2e      	adds	r6, r5, #0
+  96:	2000      	movs	r0, #0
+  98:	9002      	str	r0, [sp, #8]
+  9a:	e02c      	b.n	f6 <_mr_decode+0x84>
+  9c:	2400      	movs	r4, #0
+  9e:	1930      	adds	r0, r6, r4
+  a0:	5c38      	ldrb	r0, [r7, r0]
+  a2:	f7ff fffe 	bl	0 <_mr_decode_table>
+  a6:	a901      	add	r1, sp, #4
+  a8:	5508      	strb	r0, [r1, r4]
+  aa:	28ff      	cmp	r0, #255	; 0xff
+  ac:	d102      	bne.n	b4 <_mr_decode+0x42>
+  ae:	2000      	movs	r0, #0
+  b0:	43c0      	mvns	r0, r0
+  b2:	e7e8      	b.n	86 <_mr_decode+0x14>
+  b4:	3401      	adds	r4, #1
+  b6:	2c04      	cmp	r4, #4
+  b8:	d3f1      	bcc.n	9e <_mr_decode+0x2c>
+  ba:	ab00      	add	r3, sp, #0
+  bc:	7918      	ldrb	r0, [r3, #4]
+  be:	7959      	ldrb	r1, [r3, #5]
+  c0:	0080      	lsls	r0, r0, #2
+  c2:	0689      	lsls	r1, r1, #26
+  c4:	0f89      	lsrs	r1, r1, #30
+  c6:	4308      	orrs	r0, r1
+  c8:	9906      	ldr	r1, [sp, #24]
+  ca:	5548      	strb	r0, [r1, r5]
+  cc:	7958      	ldrb	r0, [r3, #5]
+  ce:	7999      	ldrb	r1, [r3, #6]
+  d0:	0100      	lsls	r0, r0, #4
+  d2:	0689      	lsls	r1, r1, #26
+  d4:	0f09      	lsrs	r1, r1, #28
+  d6:	4301      	orrs	r1, r0
+  d8:	9806      	ldr	r0, [sp, #24]
+  da:	1940      	adds	r0, r0, r5
+  dc:	7041      	strb	r1, [r0, #1]
+  de:	7999      	ldrb	r1, [r3, #6]
+  e0:	79da      	ldrb	r2, [r3, #7]
+  e2:	0189      	lsls	r1, r1, #6
+  e4:	0692      	lsls	r2, r2, #26
+  e6:	0e92      	lsrs	r2, r2, #26
+  e8:	4311      	orrs	r1, r2
+  ea:	7081      	strb	r1, [r0, #2]
+  ec:	3503      	adds	r5, #3
+  ee:	3604      	adds	r6, #4
+  f0:	9802      	ldr	r0, [sp, #8]
+  f2:	3001      	adds	r0, #1
+  f4:	9002      	str	r0, [sp, #8]
+  f6:	9802      	ldr	r0, [sp, #8]
+  f8:	9903      	ldr	r1, [sp, #12]
+  fa:	4288      	cmp	r0, r1
+  fc:	d3ce      	bcc.n	9c <_mr_decode+0x2a>
+  fe:	2400      	movs	r4, #0
+ 100:	1930      	adds	r0, r6, r4
+ 102:	5c38      	ldrb	r0, [r7, r0]
+ 104:	f7ff fffe 	bl	0 <_mr_decode_table>
+ 108:	a901      	add	r1, sp, #4
+ 10a:	5508      	strb	r0, [r1, r4]
+ 10c:	28ff      	cmp	r0, #255	; 0xff
+ 10e:	d102      	bne.n	116 <_mr_decode+0xa4>
+ 110:	2000      	movs	r0, #0
+ 112:	43c0      	mvns	r0, r0
+ 114:	e7b7      	b.n	86 <_mr_decode+0x14>
+ 116:	3401      	adds	r4, #1
+ 118:	2c04      	cmp	r4, #4
+ 11a:	d3f1      	bcc.n	100 <_mr_decode+0x8e>
+ 11c:	9805      	ldr	r0, [sp, #20]
+ 11e:	1838      	adds	r0, r7, r0
+ 120:	3810      	subs	r0, #16
+ 122:	7b81      	ldrb	r1, [r0, #14]
+ 124:	293d      	cmp	r1, #61	; 0x3d
+ 126:	d101      	bne.n	12c <_mr_decode+0xba>
+ 128:	2002      	movs	r0, #2
+ 12a:	e005      	b.n	138 <_mr_decode+0xc6>
+ 12c:	7bc0      	ldrb	r0, [r0, #15]
+ 12e:	283d      	cmp	r0, #61	; 0x3d
+ 130:	d101      	bne.n	136 <_mr_decode+0xc4>
+ 132:	2001      	movs	r0, #1
+ 134:	e000      	b.n	138 <_mr_decode+0xc6>
+ 136:	2000      	movs	r0, #0
+ 138:	2100      	movs	r1, #0
+ 13a:	2404      	movs	r4, #4
+ 13c:	2200      	movs	r2, #0
+ 13e:	e005      	b.n	14c <_mr_decode+0xda>
+ 140:	1a63      	subs	r3, r4, r1
+ 142:	ae01      	add	r6, sp, #4
+ 144:	199b      	adds	r3, r3, r6
+ 146:	3b10      	subs	r3, #16
+ 148:	73da      	strb	r2, [r3, #15]
+ 14a:	3101      	adds	r1, #1
+ 14c:	4281      	cmp	r1, r0
+ 14e:	d3f7      	bcc.n	140 <_mr_decode+0xce>
+ 150:	ab00      	add	r3, sp, #0
+ 152:	7919      	ldrb	r1, [r3, #4]
+ 154:	795a      	ldrb	r2, [r3, #5]
+ 156:	0089      	lsls	r1, r1, #2
+ 158:	0692      	lsls	r2, r2, #26
+ 15a:	0f92      	lsrs	r2, r2, #30
+ 15c:	4311      	orrs	r1, r2
+ 15e:	7019      	strb	r1, [r3, #0]
+ 160:	7959      	ldrb	r1, [r3, #5]
+ 162:	799a      	ldrb	r2, [r3, #6]
+ 164:	0109      	lsls	r1, r1, #4
+ 166:	0692      	lsls	r2, r2, #26
+ 168:	0f12      	lsrs	r2, r2, #28
+ 16a:	4311      	orrs	r1, r2
+ 16c:	7059      	strb	r1, [r3, #1]
+ 16e:	7999      	ldrb	r1, [r3, #6]
+ 170:	79da      	ldrb	r2, [r3, #7]
+ 172:	0189      	lsls	r1, r1, #6
+ 174:	0692      	lsls	r2, r2, #26
+ 176:	0e92      	lsrs	r2, r2, #26
+ 178:	4311      	orrs	r1, r2
+ 17a:	7099      	strb	r1, [r3, #2]
+ 17c:	2100      	movs	r1, #0
+ 17e:	2203      	movs	r2, #3
+ 180:	1a13      	subs	r3, r2, r0
+ 182:	e005      	b.n	190 <_mr_decode+0x11e>
+ 184:	4668      	mov	r0, sp
+ 186:	5c40      	ldrb	r0, [r0, r1]
+ 188:	9c06      	ldr	r4, [sp, #24]
+ 18a:	186a      	adds	r2, r5, r1
+ 18c:	54a0      	strb	r0, [r4, r2]
+ 18e:	3101      	adds	r1, #1
+ 190:	428b      	cmp	r3, r1
+ 192:	d8f7      	bhi.n	184 <_mr_decode+0x112>
+ 194:	1868      	adds	r0, r5, r1
+ 196:	e776      	b.n	86 <_mr_decode+0x14>
+
+00000198 <_mr_encode_table>:
+ 198:	21ff      	movs	r1, #255	; 0xff
+ 19a:	2807      	cmp	r0, #7
+ 19c:	d101      	bne.n	1a2 <_mr_encode_table+0xa>
+ 19e:	2144      	movs	r1, #68	; 0x44
+ 1a0:	e02c      	b.n	1fc <_mr_encode_table+0x64>
+ 1a2:	280e      	cmp	r0, #14
+ 1a4:	d101      	bne.n	1aa <_mr_encode_table+0x12>
+ 1a6:	2168      	movs	r1, #104	; 0x68
+ 1a8:	e028      	b.n	1fc <_mr_encode_table+0x64>
+ 1aa:	283b      	cmp	r0, #59	; 0x3b
+ 1ac:	d101      	bne.n	1b2 <_mr_encode_table+0x1a>
+ 1ae:	212f      	movs	r1, #47	; 0x2f
+ 1b0:	e024      	b.n	1fc <_mr_encode_table+0x64>
+ 1b2:	1c02      	adds	r2, r0, #0
+ 1b4:	3a0b      	subs	r2, #11
+ 1b6:	2a19      	cmp	r2, #25
+ 1b8:	d803      	bhi.n	1c2 <_mr_encode_table+0x2a>
+ 1ba:	3036      	adds	r0, #54	; 0x36
+ 1bc:	0601      	lsls	r1, r0, #24
+ 1be:	0e09      	lsrs	r1, r1, #24
+ 1c0:	e01c      	b.n	1fc <_mr_encode_table+0x64>
+ 1c2:	1c02      	adds	r2, r0, #0
+ 1c4:	3a2f      	subs	r2, #47	; 0x2f
+ 1c6:	2a0e      	cmp	r2, #14
+ 1c8:	d803      	bhi.n	1d2 <_mr_encode_table+0x3a>
+ 1ca:	303d      	adds	r0, #61	; 0x3d
+ 1cc:	0601      	lsls	r1, r0, #24
+ 1ce:	0e09      	lsrs	r1, r1, #24
+ 1d0:	e014      	b.n	1fc <_mr_encode_table+0x64>
+ 1d2:	280a      	cmp	r0, #10
+ 1d4:	d803      	bhi.n	1de <_mr_encode_table+0x46>
+ 1d6:	3061      	adds	r0, #97	; 0x61
+ 1d8:	0601      	lsls	r1, r0, #24
+ 1da:	0e09      	lsrs	r1, r1, #24
+ 1dc:	e00e      	b.n	1fc <_mr_encode_table+0x64>
+ 1de:	1c02      	adds	r2, r0, #0
+ 1e0:	3a25      	subs	r2, #37	; 0x25
+ 1e2:	2a09      	cmp	r2, #9
+ 1e4:	d803      	bhi.n	1ee <_mr_encode_table+0x56>
+ 1e6:	300b      	adds	r0, #11
+ 1e8:	0601      	lsls	r1, r0, #24
+ 1ea:	0e09      	lsrs	r1, r1, #24
+ 1ec:	e006      	b.n	1fc <_mr_encode_table+0x64>
+ 1ee:	283e      	cmp	r0, #62	; 0x3e
+ 1f0:	d101      	bne.n	1f6 <_mr_encode_table+0x5e>
+ 1f2:	212b      	movs	r1, #43	; 0x2b
+ 1f4:	e002      	b.n	1fc <_mr_encode_table+0x64>
+ 1f6:	283f      	cmp	r0, #63	; 0x3f
+ 1f8:	d100      	bne.n	1fc <_mr_encode_table+0x64>
+ 1fa:	2178      	movs	r1, #120	; 0x78
+ 1fc:	1c08      	adds	r0, r1, #0
+ 1fe:	4770      	bx	lr
+
+00000200 <_mr_encode>:
+ 200:	b5f7      	push	{r0, r1, r2, r4, r5, r6, r7, lr}
+ 202:	b086      	sub	sp, #24
+ 204:	45d5      	cmp	sp, sl
+ 206:	d201      	bcs.n	20c <_mr_encode+0xc>
+ 208:	f7ff fffe 	bl	0 <__rt_stkovf_split_small>
+ 20c:	1c16      	adds	r6, r2, #0
+ 20e:	2003      	movs	r0, #3
+ 210:	f7ff fffe 	bl	0 <__rt_udiv>
+ 214:	9004      	str	r0, [sp, #16]
+ 216:	9103      	str	r1, [sp, #12]
+ 218:	2400      	movs	r4, #0
+ 21a:	1c25      	adds	r5, r4, #0
+ 21c:	2000      	movs	r0, #0
+ 21e:	9002      	str	r0, [sp, #8]
+ 220:	e034      	b.n	28c <_mr_encode+0x8c>
+ 222:	9906      	ldr	r1, [sp, #24]
+ 224:	5d48      	ldrb	r0, [r1, r5]
+ 226:	0880      	lsrs	r0, r0, #2
+ 228:	f7ff fffe 	bl	198 <_mr_encode_table>
+ 22c:	5530      	strb	r0, [r6, r4]
+ 22e:	9906      	ldr	r1, [sp, #24]
+ 230:	5d48      	ldrb	r0, [r1, r5]
+ 232:	1949      	adds	r1, r1, r5
+ 234:	9105      	str	r1, [sp, #20]
+ 236:	7849      	ldrb	r1, [r1, #1]
+ 238:	0780      	lsls	r0, r0, #30
+ 23a:	0e80      	lsrs	r0, r0, #26
+ 23c:	0909      	lsrs	r1, r1, #4
+ 23e:	4308      	orrs	r0, r1
+ 240:	f7ff fffe 	bl	198 <_mr_encode_table>
+ 244:	1937      	adds	r7, r6, r4
+ 246:	7078      	strb	r0, [r7, #1]
+ 248:	9905      	ldr	r1, [sp, #20]
+ 24a:	7848      	ldrb	r0, [r1, #1]
+ 24c:	7889      	ldrb	r1, [r1, #2]
+ 24e:	0700      	lsls	r0, r0, #28
+ 250:	0e80      	lsrs	r0, r0, #26
+ 252:	0989      	lsrs	r1, r1, #6
+ 254:	4308      	orrs	r0, r1
+ 256:	f7ff fffe 	bl	198 <_mr_encode_table>
+ 25a:	70b8      	strb	r0, [r7, #2]
+ 25c:	9905      	ldr	r1, [sp, #20]
+ 25e:	7888      	ldrb	r0, [r1, #2]
+ 260:	0680      	lsls	r0, r0, #26
+ 262:	0e80      	lsrs	r0, r0, #26
+ 264:	f7ff fffe 	bl	198 <_mr_encode_table>
+ 268:	70f8      	strb	r0, [r7, #3]
+ 26a:	5d31      	ldrb	r1, [r6, r4]
+ 26c:	787a      	ldrb	r2, [r7, #1]
+ 26e:	4311      	orrs	r1, r2
+ 270:	78ba      	ldrb	r2, [r7, #2]
+ 272:	4311      	orrs	r1, r2
+ 274:	4308      	orrs	r0, r1
+ 276:	28ff      	cmp	r0, #255	; 0xff
+ 278:	d103      	bne.n	282 <_mr_encode+0x82>
+ 27a:	2000      	movs	r0, #0
+ 27c:	43c0      	mvns	r0, r0
+ 27e:	b009      	add	sp, #36	; 0x24
+ 280:	bdf0      	pop	{r4, r5, r6, r7, pc}
+ 282:	3404      	adds	r4, #4
+ 284:	3503      	adds	r5, #3
+ 286:	9802      	ldr	r0, [sp, #8]
+ 288:	3001      	adds	r0, #1
+ 28a:	9002      	str	r0, [sp, #8]
+ 28c:	9802      	ldr	r0, [sp, #8]
+ 28e:	9904      	ldr	r1, [sp, #16]
+ 290:	4288      	cmp	r0, r1
+ 292:	d3c6      	bcc.n	222 <_mr_encode+0x22>
+ 294:	9903      	ldr	r1, [sp, #12]
+ 296:	2700      	movs	r7, #0
+ 298:	2900      	cmp	r1, #0
+ 29a:	d049      	beq.n	330 <_mr_encode+0x130>
+ 29c:	ab00      	add	r3, sp, #0
+ 29e:	719f      	strb	r7, [r3, #6]
+ 2a0:	715f      	strb	r7, [r3, #5]
+ 2a2:	711f      	strb	r7, [r3, #4]
+ 2a4:	2000      	movs	r0, #0
+ 2a6:	e005      	b.n	2b4 <_mr_encode+0xb4>
+ 2a8:	9a06      	ldr	r2, [sp, #24]
+ 2aa:	1829      	adds	r1, r5, r0
+ 2ac:	5c51      	ldrb	r1, [r2, r1]
+ 2ae:	aa01      	add	r2, sp, #4
+ 2b0:	5411      	strb	r1, [r2, r0]
+ 2b2:	3001      	adds	r0, #1
+ 2b4:	9903      	ldr	r1, [sp, #12]
+ 2b6:	4288      	cmp	r0, r1
+ 2b8:	d3f6      	bcc.n	2a8 <_mr_encode+0xa8>
+ 2ba:	ab00      	add	r3, sp, #0
+ 2bc:	7918      	ldrb	r0, [r3, #4]
+ 2be:	0880      	lsrs	r0, r0, #2
+ 2c0:	f7ff fffe 	bl	198 <_mr_encode_table>
+ 2c4:	5530      	strb	r0, [r6, r4]
+ 2c6:	ab00      	add	r3, sp, #0
+ 2c8:	7918      	ldrb	r0, [r3, #4]
+ 2ca:	7959      	ldrb	r1, [r3, #5]
+ 2cc:	0780      	lsls	r0, r0, #30
+ 2ce:	0e80      	lsrs	r0, r0, #26
+ 2d0:	0909      	lsrs	r1, r1, #4
+ 2d2:	4308      	orrs	r0, r1
+ 2d4:	f7ff fffe 	bl	198 <_mr_encode_table>
+ 2d8:	1935      	adds	r5, r6, r4
+ 2da:	7068      	strb	r0, [r5, #1]
+ 2dc:	ab00      	add	r3, sp, #0
+ 2de:	7958      	ldrb	r0, [r3, #5]
+ 2e0:	7999      	ldrb	r1, [r3, #6]
+ 2e2:	0700      	lsls	r0, r0, #28
+ 2e4:	0e80      	lsrs	r0, r0, #26
+ 2e6:	0989      	lsrs	r1, r1, #6
+ 2e8:	4308      	orrs	r0, r1
+ 2ea:	f7ff fffe 	bl	198 <_mr_encode_table>
+ 2ee:	70a8      	strb	r0, [r5, #2]
+ 2f0:	ab00      	add	r3, sp, #0
+ 2f2:	7998      	ldrb	r0, [r3, #6]
+ 2f4:	0680      	lsls	r0, r0, #26
+ 2f6:	0e80      	lsrs	r0, r0, #26
+ 2f8:	f7ff fffe 	bl	198 <_mr_encode_table>
+ 2fc:	70e8      	strb	r0, [r5, #3]
+ 2fe:	5d31      	ldrb	r1, [r6, r4]
+ 300:	786a      	ldrb	r2, [r5, #1]
+ 302:	4311      	orrs	r1, r2
+ 304:	78aa      	ldrb	r2, [r5, #2]
+ 306:	4311      	orrs	r1, r2
+ 308:	4308      	orrs	r0, r1
+ 30a:	28ff      	cmp	r0, #255	; 0xff
+ 30c:	d102      	bne.n	314 <_mr_encode+0x114>
+ 30e:	2000      	movs	r0, #0
+ 310:	43c0      	mvns	r0, r0
+ 312:	e7b4      	b.n	27e <_mr_encode+0x7e>
+ 314:	3404      	adds	r4, #4
+ 316:	9a03      	ldr	r2, [sp, #12]
+ 318:	2000      	movs	r0, #0
+ 31a:	213d      	movs	r1, #61	; 0x3d
+ 31c:	2303      	movs	r3, #3
+ 31e:	1a9b      	subs	r3, r3, r2
+ 320:	e004      	b.n	32c <_mr_encode+0x12c>
+ 322:	1a22      	subs	r2, r4, r0
+ 324:	1992      	adds	r2, r2, r6
+ 326:	3a10      	subs	r2, #16
+ 328:	73d1      	strb	r1, [r2, #15]
+ 32a:	3001      	adds	r0, #1
+ 32c:	4283      	cmp	r3, r0
+ 32e:	d8f8      	bhi.n	322 <_mr_encode+0x122>
+ 330:	5537      	strb	r7, [r6, r4]
+ 332:	1c20      	adds	r0, r4, #0
+ 334:	e7a3      	b.n	27e <_mr_encode+0x7e>
+	...

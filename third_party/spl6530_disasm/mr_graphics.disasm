@@ -1,0 +1,804 @@
+
+/tmp/arm_lib_analysis/normal/mr_graphics.obj:     file format elf32-littlearm
+
+
+Disassembly of section .text:
+
+00000000 <calc_anchor>:
+   0:	b5f0      	push	{r4, r5, r6, r7, lr}
+   2:	1c0e      	adds	r6, r1, #0
+   4:	1c17      	adds	r7, r2, #0
+   6:	9a07      	ldr	r2, [sp, #28]
+   8:	9908      	ldr	r1, [sp, #32]
+   a:	9c05      	ldr	r4, [sp, #20]
+   c:	9d06      	ldr	r5, [sp, #24]
+   e:	469c      	mov	ip, r3
+  10:	6983      	ldr	r3, [r0, #24]
+  12:	199b      	adds	r3, r3, r6
+  14:	69c0      	ldr	r0, [r0, #28]
+  16:	19c0      	adds	r0, r0, r7
+  18:	2d00      	cmp	r5, #0
+  1a:	d102      	bne.n	22 <calc_anchor+0x22>
+  1c:	2604      	movs	r6, #4
+  1e:	2510      	movs	r5, #16
+  20:	e003      	b.n	2a <calc_anchor+0x2a>
+  22:	260d      	movs	r6, #13
+  24:	402e      	ands	r6, r5
+  26:	2772      	movs	r7, #114	; 0x72
+  28:	403d      	ands	r5, r7
+  2a:	2e04      	cmp	r6, #4
+  2c:	d104      	bne.n	38 <calc_anchor+0x38>
+  2e:	2d10      	cmp	r5, #16
+  30:	d102      	bne.n	38 <calc_anchor+0x38>
+  32:	6013      	str	r3, [r2, #0]
+  34:	6008      	str	r0, [r1, #0]
+  36:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  38:	2e01      	cmp	r6, #1
+  3a:	d009      	beq.n	50 <calc_anchor+0x50>
+  3c:	2e04      	cmp	r6, #4
+  3e:	d005      	beq.n	4c <calc_anchor+0x4c>
+  40:	2e08      	cmp	r6, #8
+  42:	d1f8      	bne.n	36 <calc_anchor+0x36>
+  44:	4666      	mov	r6, ip
+  46:	1b9b      	subs	r3, r3, r6
+  48:	6013      	str	r3, [r2, #0]
+  4a:	e008      	b.n	5e <calc_anchor+0x5e>
+  4c:	6013      	str	r3, [r2, #0]
+  4e:	e006      	b.n	5e <calc_anchor+0x5e>
+  50:	4666      	mov	r6, ip
+  52:	0ff7      	lsrs	r7, r6, #31
+  54:	1c3e      	adds	r6, r7, #0
+  56:	4466      	add	r6, ip
+  58:	1076      	asrs	r6, r6, #1
+  5a:	1b9b      	subs	r3, r3, r6
+  5c:	6013      	str	r3, [r2, #0]
+  5e:	0fe2      	lsrs	r2, r4, #31
+  60:	1912      	adds	r2, r2, r4
+  62:	1052      	asrs	r2, r2, #1
+  64:	2d02      	cmp	r5, #2
+  66:	d00e      	beq.n	86 <calc_anchor+0x86>
+  68:	2d10      	cmp	r5, #16
+  6a:	d00a      	beq.n	82 <calc_anchor+0x82>
+  6c:	2d20      	cmp	r5, #32
+  6e:	d005      	beq.n	7c <calc_anchor+0x7c>
+  70:	2d40      	cmp	r5, #64	; 0x40
+  72:	d1e0      	bne.n	36 <calc_anchor+0x36>
+  74:	1a80      	subs	r0, r0, r2
+  76:	3803      	subs	r0, #3
+  78:	6008      	str	r0, [r1, #0]
+  7a:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  7c:	1b00      	subs	r0, r0, r4
+  7e:	6008      	str	r0, [r1, #0]
+  80:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  82:	6008      	str	r0, [r1, #0]
+  84:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  86:	1a80      	subs	r0, r0, r2
+  88:	6008      	str	r0, [r1, #0]
+  8a:	bdf0      	pop	{r4, r5, r6, r7, pc}
+
+0000008c <mr_drawRegion>:
+  8c:	b5ff      	push	{r0, r1, r2, r3, r4, r5, r6, r7, lr}
+  8e:	b08f      	sub	sp, #60	; 0x3c
+  90:	45d5      	cmp	sp, sl
+  92:	d201      	bcs.n	98 <mr_drawRegion+0xc>
+  94:	f7ff fffe 	bl	0 <__rt_stkovf_split_small>
+  98:	981d      	ldr	r0, [sp, #116]	; 0x74
+  9a:	9e1a      	ldr	r6, [sp, #104]	; 0x68
+  9c:	9f19      	ldr	r7, [sp, #100]	; 0x64
+  9e:	9a0f      	ldr	r2, [sp, #60]	; 0x3c
+  a0:	6c11      	ldr	r1, [r2, #64]	; 0x40
+  a2:	9105      	str	r1, [sp, #20]
+  a4:	9a0f      	ldr	r2, [sp, #60]	; 0x3c
+  a6:	2a00      	cmp	r2, #0
+  a8:	d071      	beq.n	18e <mr_drawRegion+0x102>
+  aa:	9b10      	ldr	r3, [sp, #64]	; 0x40
+  ac:	2b00      	cmp	r3, #0
+  ae:	d06e      	beq.n	18e <mr_drawRegion+0x102>
+  b0:	9b10      	ldr	r3, [sp, #64]	; 0x40
+  b2:	7a19      	ldrb	r1, [r3, #8]
+  b4:	2900      	cmp	r1, #0
+  b6:	d009      	beq.n	cc <mr_drawRegion+0x40>
+  b8:	2901      	cmp	r1, #1
+  ba:	d103      	bne.n	c4 <mr_drawRegion+0x38>
+  bc:	9b10      	ldr	r3, [sp, #64]	; 0x40
+  be:	6819      	ldr	r1, [r3, #0]
+  c0:	8809      	ldrh	r1, [r1, #0]
+  c2:	e001      	b.n	c8 <mr_drawRegion+0x3c>
+  c4:	9b10      	ldr	r3, [sp, #64]	; 0x40
+  c6:	8959      	ldrh	r1, [r3, #10]
+  c8:	040d      	lsls	r5, r1, #16
+  ca:	0c2d      	lsrs	r5, r5, #16
+  cc:	9c1b      	ldr	r4, [sp, #108]	; 0x6c
+  ce:	2814      	cmp	r0, #20
+  d0:	d001      	beq.n	d6 <mr_drawRegion+0x4a>
+  d2:	2800      	cmp	r0, #0
+  d4:	d109      	bne.n	ea <mr_drawRegion+0x5e>
+  d6:	9a0f      	ldr	r2, [sp, #60]	; 0x3c
+  d8:	6990      	ldr	r0, [r2, #24]
+  da:	1900      	adds	r0, r0, r4
+  dc:	901b      	str	r0, [sp, #108]	; 0x6c
+  de:	9a0f      	ldr	r2, [sp, #60]	; 0x3c
+  e0:	69d0      	ldr	r0, [r2, #28]
+  e2:	991c      	ldr	r1, [sp, #112]	; 0x70
+  e4:	1840      	adds	r0, r0, r1
+  e6:	901c      	str	r0, [sp, #112]	; 0x70
+  e8:	e01e      	b.n	128 <mr_drawRegion+0x9c>
+  ea:	9a1c      	ldr	r2, [sp, #112]	; 0x70
+  ec:	08b1      	lsrs	r1, r6, #2
+  ee:	0089      	lsls	r1, r1, #2
+  f0:	4694      	mov	ip, r2
+  f2:	d10c      	bne.n	10e <mr_drawRegion+0x82>
+  f4:	aa1c      	add	r2, sp, #112	; 0x70
+  f6:	a91b      	add	r1, sp, #108	; 0x6c
+  f8:	9102      	str	r1, [sp, #8]
+  fa:	9203      	str	r2, [sp, #12]
+  fc:	9001      	str	r0, [sp, #4]
+  fe:	9700      	str	r7, [sp, #0]
+ 100:	9b18      	ldr	r3, [sp, #96]	; 0x60
+ 102:	980f      	ldr	r0, [sp, #60]	; 0x3c
+ 104:	4662      	mov	r2, ip
+ 106:	1c21      	adds	r1, r4, #0
+ 108:	f7ff fffe 	bl	0 <calc_anchor>
+ 10c:	e00c      	b.n	128 <mr_drawRegion+0x9c>
+ 10e:	aa1c      	add	r2, sp, #112	; 0x70
+ 110:	9203      	str	r2, [sp, #12]
+ 112:	9a18      	ldr	r2, [sp, #96]	; 0x60
+ 114:	a91b      	add	r1, sp, #108	; 0x6c
+ 116:	9102      	str	r1, [sp, #8]
+ 118:	9001      	str	r0, [sp, #4]
+ 11a:	1c3b      	adds	r3, r7, #0
+ 11c:	9200      	str	r2, [sp, #0]
+ 11e:	4662      	mov	r2, ip
+ 120:	1c21      	adds	r1, r4, #0
+ 122:	980f      	ldr	r0, [sp, #60]	; 0x3c
+ 124:	f7ff fffe 	bl	0 <calc_anchor>
+ 128:	991b      	ldr	r1, [sp, #108]	; 0x6c
+ 12a:	9a0f      	ldr	r2, [sp, #60]	; 0x3c
+ 12c:	910e      	str	r1, [sp, #56]	; 0x38
+ 12e:	6810      	ldr	r0, [r2, #0]
+ 130:	4288      	cmp	r0, r1
+ 132:	db00      	blt.n	136 <mr_drawRegion+0xaa>
+ 134:	1c01      	adds	r1, r0, #0
+ 136:	468c      	mov	ip, r1
+ 138:	981c      	ldr	r0, [sp, #112]	; 0x70
+ 13a:	9a0f      	ldr	r2, [sp, #60]	; 0x3c
+ 13c:	900d      	str	r0, [sp, #52]	; 0x34
+ 13e:	6851      	ldr	r1, [r2, #4]
+ 140:	4281      	cmp	r1, r0
+ 142:	db00      	blt.n	146 <mr_drawRegion+0xba>
+ 144:	1c08      	adds	r0, r1, #0
+ 146:	4686      	mov	lr, r0
+ 148:	08b0      	lsrs	r0, r6, #2
+ 14a:	d10f      	bne.n	16c <mr_drawRegion+0xe0>
+ 14c:	980e      	ldr	r0, [sp, #56]	; 0x38
+ 14e:	9a18      	ldr	r2, [sp, #96]	; 0x60
+ 150:	1880      	adds	r0, r0, r2
+ 152:	9a0f      	ldr	r2, [sp, #60]	; 0x3c
+ 154:	6911      	ldr	r1, [r2, #16]
+ 156:	4288      	cmp	r0, r1
+ 158:	db00      	blt.n	15c <mr_drawRegion+0xd0>
+ 15a:	1c08      	adds	r0, r1, #0
+ 15c:	9a0f      	ldr	r2, [sp, #60]	; 0x3c
+ 15e:	990d      	ldr	r1, [sp, #52]	; 0x34
+ 160:	6952      	ldr	r2, [r2, #20]
+ 162:	19c9      	adds	r1, r1, r7
+ 164:	4291      	cmp	r1, r2
+ 166:	db10      	blt.n	18a <mr_drawRegion+0xfe>
+ 168:	1c11      	adds	r1, r2, #0
+ 16a:	e00e      	b.n	18a <mr_drawRegion+0xfe>
+ 16c:	9a0f      	ldr	r2, [sp, #60]	; 0x3c
+ 16e:	980e      	ldr	r0, [sp, #56]	; 0x38
+ 170:	6911      	ldr	r1, [r2, #16]
+ 172:	19c0      	adds	r0, r0, r7
+ 174:	4288      	cmp	r0, r1
+ 176:	db00      	blt.n	17a <mr_drawRegion+0xee>
+ 178:	1c08      	adds	r0, r1, #0
+ 17a:	990d      	ldr	r1, [sp, #52]	; 0x34
+ 17c:	9a18      	ldr	r2, [sp, #96]	; 0x60
+ 17e:	1889      	adds	r1, r1, r2
+ 180:	9a0f      	ldr	r2, [sp, #60]	; 0x3c
+ 182:	6952      	ldr	r2, [r2, #20]
+ 184:	4291      	cmp	r1, r2
+ 186:	db00      	blt.n	18a <mr_drawRegion+0xfe>
+ 188:	1c11      	adds	r1, r2, #0
+ 18a:	4672      	mov	r2, lr
+ 18c:	e000      	b.n	190 <mr_drawRegion+0x104>
+ 18e:	e018      	b.n	1c2 <mr_drawRegion+0x136>
+ 190:	1a8c      	subs	r4, r1, r2
+ 192:	4661      	mov	r1, ip
+ 194:	1a40      	subs	r0, r0, r1
+ 196:	9006      	str	r0, [sp, #24]
+ 198:	2c00      	cmp	r4, #0
+ 19a:	dd12      	ble.n	1c2 <mr_drawRegion+0x136>
+ 19c:	2800      	cmp	r0, #0
+ 19e:	dd10      	ble.n	1c2 <mr_drawRegion+0x136>
+ 1a0:	9a11      	ldr	r2, [sp, #68]	; 0x44
+ 1a2:	1c31      	adds	r1, r6, #0
+ 1a4:	0052      	lsls	r2, r2, #1
+ 1a6:	920c      	str	r2, [sp, #48]	; 0x30
+ 1a8:	9a18      	ldr	r2, [sp, #96]	; 0x60
+ 1aa:	0052      	lsls	r2, r2, #1
+ 1ac:	920b      	str	r2, [sp, #44]	; 0x2c
+ 1ae:	9a12      	ldr	r2, [sp, #72]	; 0x48
+ 1b0:	18ba      	adds	r2, r7, r2
+ 1b2:	3a01      	subs	r2, #1
+ 1b4:	2e08      	cmp	r6, #8
+ 1b6:	d204      	bcs.n	1c2 <mr_drawRegion+0x136>
+ 1b8:	a303      	add	r3, pc, #12	; (adr r3, 1c8 <mr_drawRegion+0x13c>)
+ 1ba:	199b      	adds	r3, r3, r6
+ 1bc:	5b9b      	ldrh	r3, [r3, r6]
+ 1be:	005b      	lsls	r3, r3, #1
+ 1c0:	449f      	add	pc, r3
+ 1c2:	b013      	add	sp, #76	; 0x4c
+ 1c4:	bdf0      	pop	{r4, r5, r6, r7, pc}
+ 1c6:	0000      	.short	0x0000
+ 1c8:	0042000a 	.word	0x0042000a
+ 1cc:	008100a0 	.word	0x008100a0
+ 1d0:	00bd011a 	.word	0x00bd011a
+ 1d4:	00d700f9 	.word	0x00d700f9
+ 1d8:	9b10      	ldr	r3, [sp, #64]	; 0x40
+ 1da:	7a19      	ldrb	r1, [r3, #8]
+ 1dc:	2900      	cmp	r1, #0
+ 1de:	d163      	bne.n	2a8 <mr_drawRegion+0x21c>
+ 1e0:	9a11      	ldr	r2, [sp, #68]	; 0x44
+ 1e2:	9b10      	ldr	r3, [sp, #64]	; 0x40
+ 1e4:	9e0d      	ldr	r6, [sp, #52]	; 0x34
+ 1e6:	1c11      	adds	r1, r2, #0
+ 1e8:	889a      	ldrh	r2, [r3, #4]
+ 1ea:	4471      	add	r1, lr
+ 1ec:	1b89      	subs	r1, r1, r6
+ 1ee:	4351      	muls	r1, r2
+ 1f0:	681a      	ldr	r2, [r3, #0]
+ 1f2:	0049      	lsls	r1, r1, #1
+ 1f4:	1889      	adds	r1, r1, r2
+ 1f6:	9b0e      	ldr	r3, [sp, #56]	; 0x38
+ 1f8:	4662      	mov	r2, ip
+ 1fa:	1ad2      	subs	r2, r2, r3
+ 1fc:	9b11      	ldr	r3, [sp, #68]	; 0x44
+ 1fe:	18d2      	adds	r2, r2, r3
+ 200:	0052      	lsls	r2, r2, #1
+ 202:	188d      	adds	r5, r1, r2
+ 204:	9a0f      	ldr	r2, [sp, #60]	; 0x3c
+ 206:	4673      	mov	r3, lr
+ 208:	6ad1      	ldr	r1, [r2, #44]	; 0x2c
+ 20a:	6b12      	ldr	r2, [r2, #48]	; 0x30
+ 20c:	435a      	muls	r2, r3
+ 20e:	0052      	lsls	r2, r2, #1
+ 210:	1889      	adds	r1, r1, r2
+ 212:	4662      	mov	r2, ip
+ 214:	0052      	lsls	r2, r2, #1
+ 216:	188e      	adds	r6, r1, r2
+ 218:	9910      	ldr	r1, [sp, #64]	; 0x40
+ 21a:	2304      	movs	r3, #4
+ 21c:	5ec9      	ldrsh	r1, [r1, r3]
+ 21e:	9f05      	ldr	r7, [sp, #20]
+ 220:	0049      	lsls	r1, r1, #1
+ 222:	007a      	lsls	r2, r7, #1
+ 224:	920a      	str	r2, [sp, #40]	; 0x28
+ 226:	0047      	lsls	r7, r0, #1
+ 228:	9109      	str	r1, [sp, #36]	; 0x24
+ 22a:	e008      	b.n	23e <mr_drawRegion+0x1b2>
+ 22c:	1c3a      	adds	r2, r7, #0
+ 22e:	1c29      	adds	r1, r5, #0
+ 230:	1c30      	adds	r0, r6, #0
+ 232:	f7ff fffe 	bl	0 <__rt_memcpy>
+ 236:	980a      	ldr	r0, [sp, #40]	; 0x28
+ 238:	1986      	adds	r6, r0, r6
+ 23a:	9809      	ldr	r0, [sp, #36]	; 0x24
+ 23c:	1945      	adds	r5, r0, r5
+ 23e:	1c20      	adds	r0, r4, #0
+ 240:	3c01      	subs	r4, #1
+ 242:	2800      	cmp	r0, #0
+ 244:	dcf2      	bgt.n	22c <mr_drawRegion+0x1a0>
+ 246:	e7bc      	b.n	1c2 <mr_drawRegion+0x136>
+ 248:	990d      	ldr	r1, [sp, #52]	; 0x34
+ 24a:	4672      	mov	r2, lr
+ 24c:	1a51      	subs	r1, r2, r1
+ 24e:	9a12      	ldr	r2, [sp, #72]	; 0x48
+ 250:	1e7b      	subs	r3, r7, #1
+ 252:	1a89      	subs	r1, r1, r2
+ 254:	1a59      	subs	r1, r3, r1
+ 256:	9b10      	ldr	r3, [sp, #64]	; 0x40
+ 258:	889a      	ldrh	r2, [r3, #4]
+ 25a:	4351      	muls	r1, r2
+ 25c:	681a      	ldr	r2, [r3, #0]
+ 25e:	0049      	lsls	r1, r1, #1
+ 260:	1889      	adds	r1, r1, r2
+ 262:	9b0e      	ldr	r3, [sp, #56]	; 0x38
+ 264:	4662      	mov	r2, ip
+ 266:	1ad2      	subs	r2, r2, r3
+ 268:	9b11      	ldr	r3, [sp, #68]	; 0x44
+ 26a:	18d2      	adds	r2, r2, r3
+ 26c:	0052      	lsls	r2, r2, #1
+ 26e:	188e      	adds	r6, r1, r2
+ 270:	9604      	str	r6, [sp, #16]
+ 272:	2701      	movs	r7, #1
+ 274:	9910      	ldr	r1, [sp, #64]	; 0x40
+ 276:	2304      	movs	r3, #4
+ 278:	5ec9      	ldrsh	r1, [r1, r3]
+ 27a:	424e      	negs	r6, r1
+ 27c:	9910      	ldr	r1, [sp, #64]	; 0x40
+ 27e:	7a09      	ldrb	r1, [r1, #8]
+ 280:	2900      	cmp	r1, #0
+ 282:	d111      	bne.n	2a8 <mr_drawRegion+0x21c>
+ 284:	9d04      	ldr	r5, [sp, #16]
+ 286:	9a0f      	ldr	r2, [sp, #60]	; 0x3c
+ 288:	4673      	mov	r3, lr
+ 28a:	6ad1      	ldr	r1, [r2, #44]	; 0x2c
+ 28c:	6b12      	ldr	r2, [r2, #48]	; 0x30
+ 28e:	435a      	muls	r2, r3
+ 290:	0052      	lsls	r2, r2, #1
+ 292:	1889      	adds	r1, r1, r2
+ 294:	4662      	mov	r2, ip
+ 296:	0052      	lsls	r2, r2, #1
+ 298:	188f      	adds	r7, r1, r2
+ 29a:	9905      	ldr	r1, [sp, #20]
+ 29c:	0049      	lsls	r1, r1, #1
+ 29e:	9108      	str	r1, [sp, #32]
+ 2a0:	0071      	lsls	r1, r6, #1
+ 2a2:	9107      	str	r1, [sp, #28]
+ 2a4:	0046      	lsls	r6, r0, #1
+ 2a6:	e009      	b.n	2bc <mr_drawRegion+0x230>
+ 2a8:	e0c4      	b.n	434 <mr_drawRegion+0x3a8>
+ 2aa:	1c32      	adds	r2, r6, #0
+ 2ac:	1c29      	adds	r1, r5, #0
+ 2ae:	1c38      	adds	r0, r7, #0
+ 2b0:	f7ff fffe 	bl	0 <__rt_memcpy>
+ 2b4:	9808      	ldr	r0, [sp, #32]
+ 2b6:	19c7      	adds	r7, r0, r7
+ 2b8:	9807      	ldr	r0, [sp, #28]
+ 2ba:	1945      	adds	r5, r0, r5
+ 2bc:	1c20      	adds	r0, r4, #0
+ 2be:	3c01      	subs	r4, #1
+ 2c0:	2800      	cmp	r0, #0
+ 2c2:	dcf2      	bgt.n	2aa <mr_drawRegion+0x21e>
+ 2c4:	e77d      	b.n	1c2 <mr_drawRegion+0x136>
+ 2c6:	9b10      	ldr	r3, [sp, #64]	; 0x40
+ 2c8:	8899      	ldrh	r1, [r3, #4]
+ 2ca:	681b      	ldr	r3, [r3, #0]
+ 2cc:	9e0d      	ldr	r6, [sp, #52]	; 0x34
+ 2ce:	434a      	muls	r2, r1
+ 2d0:	0052      	lsls	r2, r2, #1
+ 2d2:	18d2      	adds	r2, r2, r3
+ 2d4:	9b0b      	ldr	r3, [sp, #44]	; 0x2c
+ 2d6:	18d2      	adds	r2, r2, r3
+ 2d8:	4673      	mov	r3, lr
+ 2da:	1b9b      	subs	r3, r3, r6
+ 2dc:	434b      	muls	r3, r1
+ 2de:	0059      	lsls	r1, r3, #1
+ 2e0:	1a51      	subs	r1, r2, r1
+ 2e2:	9a0c      	ldr	r2, [sp, #48]	; 0x30
+ 2e4:	9b0e      	ldr	r3, [sp, #56]	; 0x38
+ 2e6:	1889      	adds	r1, r1, r2
+ 2e8:	4662      	mov	r2, ip
+ 2ea:	0052      	lsls	r2, r2, #1
+ 2ec:	3902      	subs	r1, #2
+ 2ee:	1a89      	subs	r1, r1, r2
+ 2f0:	005a      	lsls	r2, r3, #1
+ 2f2:	188f      	adds	r7, r1, r2
+ 2f4:	9704      	str	r7, [sp, #16]
+ 2f6:	2700      	movs	r7, #0
+ 2f8:	43ff      	mvns	r7, r7
+ 2fa:	9910      	ldr	r1, [sp, #64]	; 0x40
+ 2fc:	2304      	movs	r3, #4
+ 2fe:	5ec9      	ldrsh	r1, [r1, r3]
+ 300:	424e      	negs	r6, r1
+ 302:	e097      	b.n	434 <mr_drawRegion+0x3a8>
+ 304:	990d      	ldr	r1, [sp, #52]	; 0x34
+ 306:	4672      	mov	r2, lr
+ 308:	1a51      	subs	r1, r2, r1
+ 30a:	9a12      	ldr	r2, [sp, #72]	; 0x48
+ 30c:	9b10      	ldr	r3, [sp, #64]	; 0x40
+ 30e:	1889      	adds	r1, r1, r2
+ 310:	889a      	ldrh	r2, [r3, #4]
+ 312:	4351      	muls	r1, r2
+ 314:	681a      	ldr	r2, [r3, #0]
+ 316:	0049      	lsls	r1, r1, #1
+ 318:	1889      	adds	r1, r1, r2
+ 31a:	9a0c      	ldr	r2, [sp, #48]	; 0x30
+ 31c:	9b0e      	ldr	r3, [sp, #56]	; 0x38
+ 31e:	1889      	adds	r1, r1, r2
+ 320:	9a0b      	ldr	r2, [sp, #44]	; 0x2c
+ 322:	1889      	adds	r1, r1, r2
+ 324:	005a      	lsls	r2, r3, #1
+ 326:	1889      	adds	r1, r1, r2
+ 328:	4662      	mov	r2, ip
+ 32a:	0052      	lsls	r2, r2, #1
+ 32c:	3902      	subs	r1, #2
+ 32e:	1a8f      	subs	r7, r1, r2
+ 330:	9704      	str	r7, [sp, #16]
+ 332:	2700      	movs	r7, #0
+ 334:	43ff      	mvns	r7, r7
+ 336:	9910      	ldr	r1, [sp, #64]	; 0x40
+ 338:	2304      	movs	r3, #4
+ 33a:	5ece      	ldrsh	r6, [r1, r3]
+ 33c:	e07a      	b.n	434 <mr_drawRegion+0x3a8>
+ 33e:	9b10      	ldr	r3, [sp, #64]	; 0x40
+ 340:	8899      	ldrh	r1, [r3, #4]
+ 342:	681b      	ldr	r3, [r3, #0]
+ 344:	9e0d      	ldr	r6, [sp, #52]	; 0x34
+ 346:	434a      	muls	r2, r1
+ 348:	0052      	lsls	r2, r2, #1
+ 34a:	18d2      	adds	r2, r2, r3
+ 34c:	4673      	mov	r3, lr
+ 34e:	1b9b      	subs	r3, r3, r6
+ 350:	005b      	lsls	r3, r3, #1
+ 352:	18d2      	adds	r2, r2, r3
+ 354:	9b0c      	ldr	r3, [sp, #48]	; 0x30
+ 356:	9e0e      	ldr	r6, [sp, #56]	; 0x38
+ 358:	18d2      	adds	r2, r2, r3
+ 35a:	4663      	mov	r3, ip
+ 35c:	1b9b      	subs	r3, r3, r6
+ 35e:	434b      	muls	r3, r1
+ 360:	0059      	lsls	r1, r3, #1
+ 362:	1a56      	subs	r6, r2, r1
+ 364:	9604      	str	r6, [sp, #16]
+ 366:	9910      	ldr	r1, [sp, #64]	; 0x40
+ 368:	2304      	movs	r3, #4
+ 36a:	5ec9      	ldrsh	r1, [r1, r3]
+ 36c:	424f      	negs	r7, r1
+ 36e:	2601      	movs	r6, #1
+ 370:	e060      	b.n	434 <mr_drawRegion+0x3a8>
+ 372:	9b10      	ldr	r3, [sp, #64]	; 0x40
+ 374:	6819      	ldr	r1, [r3, #0]
+ 376:	9b0c      	ldr	r3, [sp, #48]	; 0x30
+ 378:	18c9      	adds	r1, r1, r3
+ 37a:	9b10      	ldr	r3, [sp, #64]	; 0x40
+ 37c:	889b      	ldrh	r3, [r3, #4]
+ 37e:	9e0d      	ldr	r6, [sp, #52]	; 0x34
+ 380:	435a      	muls	r2, r3
+ 382:	0052      	lsls	r2, r2, #1
+ 384:	1889      	adds	r1, r1, r2
+ 386:	9a0b      	ldr	r2, [sp, #44]	; 0x2c
+ 388:	1889      	adds	r1, r1, r2
+ 38a:	4672      	mov	r2, lr
+ 38c:	0052      	lsls	r2, r2, #1
+ 38e:	1a89      	subs	r1, r1, r2
+ 390:	0072      	lsls	r2, r6, #1
+ 392:	1889      	adds	r1, r1, r2
+ 394:	4662      	mov	r2, ip
+ 396:	1c1e      	adds	r6, r3, #0
+ 398:	4356      	muls	r6, r2
+ 39a:	3902      	subs	r1, #2
+ 39c:	0072      	lsls	r2, r6, #1
+ 39e:	9e0e      	ldr	r6, [sp, #56]	; 0x38
+ 3a0:	1a89      	subs	r1, r1, r2
+ 3a2:	4373      	muls	r3, r6
+ 3a4:	005a      	lsls	r2, r3, #1
+ 3a6:	188f      	adds	r7, r1, r2
+ 3a8:	9704      	str	r7, [sp, #16]
+ 3aa:	9910      	ldr	r1, [sp, #64]	; 0x40
+ 3ac:	2304      	movs	r3, #4
+ 3ae:	5ec9      	ldrsh	r1, [r1, r3]
+ 3b0:	424f      	negs	r7, r1
+ 3b2:	1f5e      	subs	r6, r3, #5
+ 3b4:	e03e      	b.n	434 <mr_drawRegion+0x3a8>
+ 3b6:	9b10      	ldr	r3, [sp, #64]	; 0x40
+ 3b8:	6819      	ldr	r1, [r3, #0]
+ 3ba:	9a0c      	ldr	r2, [sp, #48]	; 0x30
+ 3bc:	188a      	adds	r2, r1, r2
+ 3be:	8899      	ldrh	r1, [r3, #4]
+ 3c0:	9b12      	ldr	r3, [sp, #72]	; 0x48
+ 3c2:	1c0e      	adds	r6, r1, #0
+ 3c4:	435e      	muls	r6, r3
+ 3c6:	0073      	lsls	r3, r6, #1
+ 3c8:	18d2      	adds	r2, r2, r3
+ 3ca:	9b0b      	ldr	r3, [sp, #44]	; 0x2c
+ 3cc:	9e0d      	ldr	r6, [sp, #52]	; 0x34
+ 3ce:	18d2      	adds	r2, r2, r3
+ 3d0:	4673      	mov	r3, lr
+ 3d2:	1b9b      	subs	r3, r3, r6
+ 3d4:	005b      	lsls	r3, r3, #1
+ 3d6:	1ad2      	subs	r2, r2, r3
+ 3d8:	4663      	mov	r3, ip
+ 3da:	1c0e      	adds	r6, r1, #0
+ 3dc:	435e      	muls	r6, r3
+ 3de:	0073      	lsls	r3, r6, #1
+ 3e0:	18d2      	adds	r2, r2, r3
+ 3e2:	9b0e      	ldr	r3, [sp, #56]	; 0x38
+ 3e4:	3a02      	subs	r2, #2
+ 3e6:	4359      	muls	r1, r3
+ 3e8:	0049      	lsls	r1, r1, #1
+ 3ea:	1a57      	subs	r7, r2, r1
+ 3ec:	9704      	str	r7, [sp, #16]
+ 3ee:	9910      	ldr	r1, [sp, #64]	; 0x40
+ 3f0:	2304      	movs	r3, #4
+ 3f2:	5ecf      	ldrsh	r7, [r1, r3]
+ 3f4:	1f5e      	subs	r6, r3, #5
+ 3f6:	e01d      	b.n	434 <mr_drawRegion+0x3a8>
+ 3f8:	9b10      	ldr	r3, [sp, #64]	; 0x40
+ 3fa:	8899      	ldrh	r1, [r3, #4]
+ 3fc:	681a      	ldr	r2, [r3, #0]
+ 3fe:	9b12      	ldr	r3, [sp, #72]	; 0x48
+ 400:	1c0e      	adds	r6, r1, #0
+ 402:	435e      	muls	r6, r3
+ 404:	0073      	lsls	r3, r6, #1
+ 406:	9e0d      	ldr	r6, [sp, #52]	; 0x34
+ 408:	18d2      	adds	r2, r2, r3
+ 40a:	0073      	lsls	r3, r6, #1
+ 40c:	1ad2      	subs	r2, r2, r3
+ 40e:	9b0c      	ldr	r3, [sp, #48]	; 0x30
+ 410:	1c0e      	adds	r6, r1, #0
+ 412:	18d2      	adds	r2, r2, r3
+ 414:	4673      	mov	r3, lr
+ 416:	005b      	lsls	r3, r3, #1
+ 418:	18d2      	adds	r2, r2, r3
+ 41a:	4663      	mov	r3, ip
+ 41c:	435e      	muls	r6, r3
+ 41e:	0073      	lsls	r3, r6, #1
+ 420:	18d2      	adds	r2, r2, r3
+ 422:	9b0e      	ldr	r3, [sp, #56]	; 0x38
+ 424:	4359      	muls	r1, r3
+ 426:	0049      	lsls	r1, r1, #1
+ 428:	1a56      	subs	r6, r2, r1
+ 42a:	9604      	str	r6, [sp, #16]
+ 42c:	9910      	ldr	r1, [sp, #64]	; 0x40
+ 42e:	2304      	movs	r3, #4
+ 430:	5ecf      	ldrsh	r7, [r1, r3]
+ 432:	2601      	movs	r6, #1
+ 434:	9a0f      	ldr	r2, [sp, #60]	; 0x3c
+ 436:	4673      	mov	r3, lr
+ 438:	6ad1      	ldr	r1, [r2, #44]	; 0x2c
+ 43a:	6b12      	ldr	r2, [r2, #48]	; 0x30
+ 43c:	435a      	muls	r2, r3
+ 43e:	0052      	lsls	r2, r2, #1
+ 440:	1889      	adds	r1, r1, r2
+ 442:	4662      	mov	r2, ip
+ 444:	0052      	lsls	r2, r2, #1
+ 446:	1889      	adds	r1, r1, r2
+ 448:	1c0a      	adds	r2, r1, #0
+ 44a:	9b10      	ldr	r3, [sp, #64]	; 0x40
+ 44c:	7a1b      	ldrb	r3, [r3, #8]
+ 44e:	2b00      	cmp	r3, #0
+ 450:	d11b      	bne.n	48a <mr_drawRegion+0x3fe>
+ 452:	007b      	lsls	r3, r7, #1
+ 454:	9f05      	ldr	r7, [sp, #20]
+ 456:	007d      	lsls	r5, r7, #1
+ 458:	0076      	lsls	r6, r6, #1
+ 45a:	46b4      	mov	ip, r6
+ 45c:	e010      	b.n	480 <mr_drawRegion+0x3f4>
+ 45e:	9e04      	ldr	r6, [sp, #16]
+ 460:	e003      	b.n	46a <mr_drawRegion+0x3de>
+ 462:	8837      	ldrh	r7, [r6, #0]
+ 464:	800f      	strh	r7, [r1, #0]
+ 466:	199e      	adds	r6, r3, r6
+ 468:	3102      	adds	r1, #2
+ 46a:	1c07      	adds	r7, r0, #0
+ 46c:	3801      	subs	r0, #1
+ 46e:	2f00      	cmp	r7, #0
+ 470:	dcf7      	bgt.n	462 <mr_drawRegion+0x3d6>
+ 472:	9806      	ldr	r0, [sp, #24]
+ 474:	18a9      	adds	r1, r5, r2
+ 476:	1c0a      	adds	r2, r1, #0
+ 478:	9f04      	ldr	r7, [sp, #16]
+ 47a:	4666      	mov	r6, ip
+ 47c:	19f6      	adds	r6, r6, r7
+ 47e:	9604      	str	r6, [sp, #16]
+ 480:	1c26      	adds	r6, r4, #0
+ 482:	3c01      	subs	r4, #1
+ 484:	2e00      	cmp	r6, #0
+ 486:	dcea      	bgt.n	45e <mr_drawRegion+0x3d2>
+ 488:	e69b      	b.n	1c2 <mr_drawRegion+0x136>
+ 48a:	007b      	lsls	r3, r7, #1
+ 48c:	9f05      	ldr	r7, [sp, #20]
+ 48e:	007f      	lsls	r7, r7, #1
+ 490:	0076      	lsls	r6, r6, #1
+ 492:	46b4      	mov	ip, r6
+ 494:	46be      	mov	lr, r7
+ 496:	e013      	b.n	4c0 <mr_drawRegion+0x434>
+ 498:	9e04      	ldr	r6, [sp, #16]
+ 49a:	e005      	b.n	4a8 <mr_drawRegion+0x41c>
+ 49c:	8837      	ldrh	r7, [r6, #0]
+ 49e:	42af      	cmp	r7, r5
+ 4a0:	d000      	beq.n	4a4 <mr_drawRegion+0x418>
+ 4a2:	800f      	strh	r7, [r1, #0]
+ 4a4:	199e      	adds	r6, r3, r6
+ 4a6:	3102      	adds	r1, #2
+ 4a8:	1c07      	adds	r7, r0, #0
+ 4aa:	3801      	subs	r0, #1
+ 4ac:	2f00      	cmp	r7, #0
+ 4ae:	dcf5      	bgt.n	49c <mr_drawRegion+0x410>
+ 4b0:	9806      	ldr	r0, [sp, #24]
+ 4b2:	4671      	mov	r1, lr
+ 4b4:	1889      	adds	r1, r1, r2
+ 4b6:	1c0a      	adds	r2, r1, #0
+ 4b8:	9f04      	ldr	r7, [sp, #16]
+ 4ba:	4666      	mov	r6, ip
+ 4bc:	19f6      	adds	r6, r6, r7
+ 4be:	9604      	str	r6, [sp, #16]
+ 4c0:	1c26      	adds	r6, r4, #0
+ 4c2:	3c01      	subs	r4, #1
+ 4c4:	2e00      	cmp	r6, #0
+ 4c6:	dce7      	bgt.n	498 <mr_drawRegion+0x40c>
+ 4c8:	e67b      	b.n	1c2 <mr_drawRegion+0x136>
+
+000004ca <mr_transbitmapDraw>:
+ 4ca:	b5ff      	push	{r0, r1, r2, r3, r4, r5, r6, r7, lr}
+ 4cc:	b089      	sub	sp, #36	; 0x24
+ 4ce:	45d5      	cmp	sp, sl
+ 4d0:	d201      	bcs.n	4d6 <mr_transbitmapDraw+0xc>
+ 4d2:	f7ff fffe 	bl	0 <__rt_stkovf_split_small>
+ 4d6:	1c06      	adds	r6, r0, #0
+ 4d8:	4696      	mov	lr, r2
+ 4da:	af13      	add	r7, sp, #76	; 0x4c
+ 4dc:	cfa5      	ldmia	r7, {r0, r2, r5, r7}
+ 4de:	468c      	mov	ip, r1
+ 4e0:	9917      	ldr	r1, [sp, #92]	; 0x5c
+ 4e2:	9c12      	ldr	r4, [sp, #72]	; 0x48
+ 4e4:	2300      	movs	r3, #0
+ 4e6:	9304      	str	r3, [sp, #16]
+ 4e8:	2e00      	cmp	r6, #0
+ 4ea:	d102      	bne.n	4f2 <mr_transbitmapDraw+0x28>
+ 4ec:	43d8      	mvns	r0, r3
+ 4ee:	b00d      	add	sp, #52	; 0x34
+ 4f0:	bdf0      	pop	{r4, r5, r6, r7, pc}
+ 4f2:	4663      	mov	r3, ip
+ 4f4:	9306      	str	r3, [sp, #24]
+ 4f6:	46f4      	mov	ip, lr
+ 4f8:	9b0c      	ldr	r3, [sp, #48]	; 0x30
+ 4fa:	469e      	mov	lr, r3
+ 4fc:	2f00      	cmp	r7, #0
+ 4fe:	da02      	bge.n	506 <mr_transbitmapDraw+0x3c>
+ 500:	1be4      	subs	r4, r4, r7
+ 502:	19d2      	adds	r2, r2, r7
+ 504:	2700      	movs	r7, #0
+ 506:	2900      	cmp	r1, #0
+ 508:	da02      	bge.n	510 <mr_transbitmapDraw+0x46>
+ 50a:	1a40      	subs	r0, r0, r1
+ 50c:	186d      	adds	r5, r5, r1
+ 50e:	2100      	movs	r1, #0
+ 510:	4663      	mov	r3, ip
+ 512:	1bdb      	subs	r3, r3, r7
+ 514:	429a      	cmp	r2, r3
+ 516:	db00      	blt.n	51a <mr_transbitmapDraw+0x50>
+ 518:	1c1a      	adds	r2, r3, #0
+ 51a:	9214      	str	r2, [sp, #80]	; 0x50
+ 51c:	69b3      	ldr	r3, [r6, #24]
+ 51e:	0042      	lsls	r2, r0, #1
+ 520:	435a      	muls	r2, r3
+ 522:	6973      	ldr	r3, [r6, #20]
+ 524:	0052      	lsls	r2, r2, #1
+ 526:	18d3      	adds	r3, r2, r3
+ 528:	9300      	str	r3, [sp, #0]
+ 52a:	68f2      	ldr	r2, [r6, #12]
+ 52c:	6833      	ldr	r3, [r6, #0]
+ 52e:	4342      	muls	r2, r0
+ 530:	0052      	lsls	r2, r2, #1
+ 532:	189b      	adds	r3, r3, r2
+ 534:	9301      	str	r3, [sp, #4]
+ 536:	4662      	mov	r2, ip
+ 538:	434a      	muls	r2, r1
+ 53a:	9b06      	ldr	r3, [sp, #24]
+ 53c:	0052      	lsls	r2, r2, #1
+ 53e:	18d2      	adds	r2, r2, r3
+ 540:	007b      	lsls	r3, r7, #1
+ 542:	18d3      	adds	r3, r2, r3
+ 544:	9302      	str	r3, [sp, #8]
+ 546:	9a14      	ldr	r2, [sp, #80]	; 0x50
+ 548:	18a7      	adds	r7, r4, r2
+ 54a:	4672      	mov	r2, lr
+ 54c:	1a51      	subs	r1, r2, r1
+ 54e:	42a9      	cmp	r1, r5
+ 550:	da00      	bge.n	554 <mr_transbitmapDraw+0x8a>
+ 552:	1c0d      	adds	r5, r1, #0
+ 554:	4662      	mov	r2, ip
+ 556:	0051      	lsls	r1, r2, #1
+ 558:	9005      	str	r0, [sp, #20]
+ 55a:	1940      	adds	r0, r0, r5
+ 55c:	9007      	str	r0, [sp, #28]
+ 55e:	9108      	str	r1, [sp, #32]
+ 560:	e06b      	b.n	63a <mr_transbitmapDraw+0x170>
+ 562:	2500      	movs	r5, #0
+ 564:	e03a      	b.n	5dc <mr_transbitmapDraw+0x112>
+ 566:	9800      	ldr	r0, [sp, #0]
+ 568:	00aa      	lsls	r2, r5, #2
+ 56a:	5e80      	ldrsh	r0, [r0, r2]
+ 56c:	2800      	cmp	r0, #0
+ 56e:	db38      	blt.n	5e2 <mr_transbitmapDraw+0x118>
+ 570:	9b00      	ldr	r3, [sp, #0]
+ 572:	18d2      	adds	r2, r2, r3
+ 574:	2302      	movs	r3, #2
+ 576:	5ed2      	ldrsh	r2, [r2, r3]
+ 578:	3901      	subs	r1, #1
+ 57a:	42a9      	cmp	r1, r5
+ 57c:	d10a      	bne.n	594 <mr_transbitmapDraw+0xca>
+ 57e:	035b      	lsls	r3, r3, #13
+ 580:	1c11      	adds	r1, r2, #0
+ 582:	4019      	ands	r1, r3
+ 584:	9104      	str	r1, [sp, #16]
+ 586:	0492      	lsls	r2, r2, #18
+ 588:	0c92      	lsrs	r2, r2, #18
+ 58a:	9904      	ldr	r1, [sp, #16]
+ 58c:	2900      	cmp	r1, #0
+ 58e:	d001      	beq.n	594 <mr_transbitmapDraw+0xca>
+ 590:	1881      	adds	r1, r0, r2
+ 592:	9103      	str	r1, [sp, #12]
+ 594:	1881      	adds	r1, r0, r2
+ 596:	4281      	cmp	r1, r0
+ 598:	db1f      	blt.n	5da <mr_transbitmapDraw+0x110>
+ 59a:	42a7      	cmp	r7, r4
+ 59c:	db1d      	blt.n	5da <mr_transbitmapDraw+0x110>
+ 59e:	42a0      	cmp	r0, r4
+ 5a0:	dc00      	bgt.n	5a4 <mr_transbitmapDraw+0xda>
+ 5a2:	1c20      	adds	r0, r4, #0
+ 5a4:	42b9      	cmp	r1, r7
+ 5a6:	db00      	blt.n	5aa <mr_transbitmapDraw+0xe0>
+ 5a8:	1c39      	adds	r1, r7, #0
+ 5aa:	1a0a      	subs	r2, r1, r0
+ 5ac:	9b01      	ldr	r3, [sp, #4]
+ 5ae:	0041      	lsls	r1, r0, #1
+ 5b0:	18c9      	adds	r1, r1, r3
+ 5b2:	1b00      	subs	r0, r0, r4
+ 5b4:	9b02      	ldr	r3, [sp, #8]
+ 5b6:	0040      	lsls	r0, r0, #1
+ 5b8:	18c0      	adds	r0, r0, r3
+ 5ba:	2a00      	cmp	r2, #0
+ 5bc:	dd0d      	ble.n	5da <mr_transbitmapDraw+0x110>
+ 5be:	0783      	lsls	r3, r0, #30
+ 5c0:	d006      	beq.n	5d0 <mr_transbitmapDraw+0x106>
+ 5c2:	078b      	lsls	r3, r1, #30
+ 5c4:	d004      	beq.n	5d0 <mr_transbitmapDraw+0x106>
+ 5c6:	880b      	ldrh	r3, [r1, #0]
+ 5c8:	3102      	adds	r1, #2
+ 5ca:	8003      	strh	r3, [r0, #0]
+ 5cc:	3002      	adds	r0, #2
+ 5ce:	3a01      	subs	r2, #1
+ 5d0:	2a00      	cmp	r2, #0
+ 5d2:	dd02      	ble.n	5da <mr_transbitmapDraw+0x110>
+ 5d4:	0052      	lsls	r2, r2, #1
+ 5d6:	f7ff fffe 	bl	0 <__rt_memcpy>
+ 5da:	3501      	adds	r5, #1
+ 5dc:	69b1      	ldr	r1, [r6, #24]
+ 5de:	42a9      	cmp	r1, r5
+ 5e0:	dcc1      	bgt.n	566 <mr_transbitmapDraw+0x9c>
+ 5e2:	9904      	ldr	r1, [sp, #16]
+ 5e4:	2900      	cmp	r1, #0
+ 5e6:	d017      	beq.n	618 <mr_transbitmapDraw+0x14e>
+ 5e8:	2100      	movs	r1, #0
+ 5ea:	9104      	str	r1, [sp, #16]
+ 5ec:	9803      	ldr	r0, [sp, #12]
+ 5ee:	42a0      	cmp	r0, r4
+ 5f0:	dc00      	bgt.n	5f4 <mr_transbitmapDraw+0x12a>
+ 5f2:	1c20      	adds	r0, r4, #0
+ 5f4:	9b01      	ldr	r3, [sp, #4]
+ 5f6:	0041      	lsls	r1, r0, #1
+ 5f8:	18ca      	adds	r2, r1, r3
+ 5fa:	1b01      	subs	r1, r0, r4
+ 5fc:	9b02      	ldr	r3, [sp, #8]
+ 5fe:	0049      	lsls	r1, r1, #1
+ 600:	18c9      	adds	r1, r1, r3
+ 602:	e007      	b.n	614 <mr_transbitmapDraw+0x14a>
+ 604:	8813      	ldrh	r3, [r2, #0]
+ 606:	8a35      	ldrh	r5, [r6, #16]
+ 608:	42ab      	cmp	r3, r5
+ 60a:	d000      	beq.n	60e <mr_transbitmapDraw+0x144>
+ 60c:	800b      	strh	r3, [r1, #0]
+ 60e:	3102      	adds	r1, #2
+ 610:	3202      	adds	r2, #2
+ 612:	3001      	adds	r0, #1
+ 614:	4287      	cmp	r7, r0
+ 616:	dcf5      	bgt.n	604 <mr_transbitmapDraw+0x13a>
+ 618:	68f0      	ldr	r0, [r6, #12]
+ 61a:	9b01      	ldr	r3, [sp, #4]
+ 61c:	0040      	lsls	r0, r0, #1
+ 61e:	18c3      	adds	r3, r0, r3
+ 620:	9301      	str	r3, [sp, #4]
+ 622:	9808      	ldr	r0, [sp, #32]
+ 624:	9b02      	ldr	r3, [sp, #8]
+ 626:	18c3      	adds	r3, r0, r3
+ 628:	9302      	str	r3, [sp, #8]
+ 62a:	69b0      	ldr	r0, [r6, #24]
+ 62c:	9b00      	ldr	r3, [sp, #0]
+ 62e:	0080      	lsls	r0, r0, #2
+ 630:	18c0      	adds	r0, r0, r3
+ 632:	9000      	str	r0, [sp, #0]
+ 634:	9805      	ldr	r0, [sp, #20]
+ 636:	3001      	adds	r0, #1
+ 638:	9005      	str	r0, [sp, #20]
+ 63a:	9807      	ldr	r0, [sp, #28]
+ 63c:	9905      	ldr	r1, [sp, #20]
+ 63e:	4288      	cmp	r0, r1
+ 640:	dc8f      	bgt.n	562 <mr_transbitmapDraw+0x98>
+ 642:	2000      	movs	r0, #0
+ 644:	e753      	b.n	4ee <mr_transbitmapDraw+0x24>
+	...

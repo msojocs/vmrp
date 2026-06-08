@@ -1,0 +1,279 @@
+
+/tmp/mtk_disasm/full1968/tomr_to.obj:     file format elf32-littlearm
+
+
+Disassembly of section i.to_mr_tonumber:
+
+00000000 <to_mr_tonumber>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a07001 	mov	r7, r1
+   8:	e1a06000 	mov	r6, r0
+   c:	e1a05002 	mov	r5, r2
+  10:	e1a04001 	mov	r4, r1
+  14:	ebfffffe 	bl	0 <mrp_gettop>
+  18:	e3540000 	cmp	r4, #0
+  1c:	b2644000 	rsblt	r4, r4, #0
+  20:	e1500004 	cmp	r0, r4
+  24:	a1a01007 	movge	r1, r7
+  28:	a1a00006 	movge	r0, r6
+  2c:	a8bd41f0 	popge	{r4, r5, r6, r7, r8, lr}
+  30:	aafffffe 	bge	0 <mrp_tonumber>
+  34:	b1a00005 	movlt	r0, r5
+  38:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.to_mr_tostring:
+
+00000000 <to_mr_tostring>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a07001 	mov	r7, r1
+   8:	e1a06000 	mov	r6, r0
+   c:	e1a05002 	mov	r5, r2
+  10:	e1a04001 	mov	r4, r1
+  14:	ebfffffe 	bl	0 <mrp_gettop>
+  18:	e3540000 	cmp	r4, #0
+  1c:	b2644000 	rsblt	r4, r4, #0
+  20:	e1500004 	cmp	r0, r4
+  24:	a1a01007 	movge	r1, r7
+  28:	a1a00006 	movge	r0, r6
+  2c:	a8bd41f0 	popge	{r4, r5, r6, r7, r8, lr}
+  30:	aafffffe 	bge	0 <mrp_tostring>
+  34:	b1a00005 	movlt	r0, r5
+  38:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.to_mr_touserdata:
+
+00000000 <to_mr_touserdata>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a07001 	mov	r7, r1
+   8:	e1a06000 	mov	r6, r0
+   c:	e1a05002 	mov	r5, r2
+  10:	e1a04001 	mov	r4, r1
+  14:	ebfffffe 	bl	0 <mrp_gettop>
+  18:	e3540000 	cmp	r4, #0
+  1c:	b2644000 	rsblt	r4, r4, #0
+  20:	e1500004 	cmp	r0, r4
+  24:	a1a01007 	movge	r1, r7
+  28:	a1a00006 	movge	r0, r6
+  2c:	a8bd41f0 	popge	{r4, r5, r6, r7, r8, lr}
+  30:	aafffffe 	bge	0 <mrp_touserdata>
+  34:	b1a00005 	movlt	r0, r5
+  38:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.to_mr_tousertype:
+
+00000000 <to_mr_tousertype>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a07001 	mov	r7, r1
+   8:	e1a06002 	mov	r6, r2
+   c:	e1a05000 	mov	r5, r0
+  10:	e1a04001 	mov	r4, r1
+  14:	ebfffffe 	bl	0 <mrp_gettop>
+  18:	e3540000 	cmp	r4, #0
+  1c:	b2644000 	rsblt	r4, r4, #0
+  20:	e1500004 	cmp	r0, r4
+  24:	b1a00006 	movlt	r0, r6
+  28:	b8bd81f0 	poplt	{r4, r5, r6, r7, r8, pc}
+  2c:	e1a01007 	mov	r1, r7
+  30:	e1a00005 	mov	r0, r5
+  34:	ebfffffe 	bl	0 <mrp_touserdata>
+  38:	e3500000 	cmp	r0, #0
+  3c:	15900000 	ldrne	r0, [r0]
+  40:	03a00000 	moveq	r0, #0
+  44:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.to_mr_tovalue:
+
+00000000 <to_mr_tovalue>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a06001 	mov	r6, r1
+   8:	e1a05002 	mov	r5, r2
+   c:	e1a04001 	mov	r4, r1
+  10:	ebfffffe 	bl	0 <mrp_gettop>
+  14:	e3540000 	cmp	r4, #0
+  18:	b2644000 	rsblt	r4, r4, #0
+  1c:	e1500004 	cmp	r0, r4
+  20:	a1a00006 	movge	r0, r6
+  24:	b1a00005 	movlt	r0, r5
+  28:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.to_mr_toboolean:
+
+00000000 <to_mr_toboolean>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a07001 	mov	r7, r1
+   8:	e1a06000 	mov	r6, r0
+   c:	e1a05002 	mov	r5, r2
+  10:	e1a04001 	mov	r4, r1
+  14:	ebfffffe 	bl	0 <mrp_gettop>
+  18:	e3540000 	cmp	r4, #0
+  1c:	b2644000 	rsblt	r4, r4, #0
+  20:	e1500004 	cmp	r0, r4
+  24:	a1a01007 	movge	r1, r7
+  28:	a1a00006 	movge	r0, r6
+  2c:	a8bd41f0 	popge	{r4, r5, r6, r7, r8, lr}
+  30:	aafffffe 	bge	0 <mrp_toboolean>
+  34:	b1a00005 	movlt	r0, r5
+  38:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.to_mr_tofieldnumber:
+
+00000000 <to_mr_tofieldnumber>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a04001 	mov	r4, r1
+   8:	e59d5018 	ldr	r5, [sp, #24]
+   c:	e59d601c 	ldr	r6, [sp, #28]
+  10:	e1a01002 	mov	r1, r2
+  14:	e1a07000 	mov	r7, r0
+  18:	ebfffffe 	bl	0 <mrp_pushnumber>
+  1c:	e1a01004 	mov	r1, r4
+  20:	e1a00007 	mov	r0, r7
+  24:	ebfffffe 	bl	0 <mrp_gettable>
+  28:	e3e01000 	mvn	r1, #0
+  2c:	e1a00007 	mov	r0, r7
+  30:	ebfffffe 	bl	0 <mrp_type>
+  34:	e3500000 	cmp	r0, #0
+  38:	0a000005 	beq	54 <to_mr_tofieldnumber+0x54>
+  3c:	e3e01000 	mvn	r1, #0
+  40:	e1a00007 	mov	r0, r7
+  44:	ebfffffe 	bl	0 <mrp_tonumber>
+  48:	ebfffffe 	bl	0 <__aeabi_i2d>
+  4c:	e1a05000 	mov	r5, r0
+  50:	e1a06001 	mov	r6, r1
+  54:	e3e01001 	mvn	r1, #1
+  58:	e1a00007 	mov	r0, r7
+  5c:	ebfffffe 	bl	0 <mrp_settop>
+  60:	e1a00005 	mov	r0, r5
+  64:	e1a01006 	mov	r1, r6
+  68:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.to_mr_tofieldstring:
+
+00000000 <to_mr_tofieldstring>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05001 	mov	r5, r1
+   8:	e1a01002 	mov	r1, r2
+   c:	e1a06000 	mov	r6, r0
+  10:	e1a04003 	mov	r4, r3
+  14:	ebfffffe 	bl	0 <mrp_pushnumber>
+  18:	e1a01005 	mov	r1, r5
+  1c:	e1a00006 	mov	r0, r6
+  20:	ebfffffe 	bl	0 <mrp_gettable>
+  24:	e3e01000 	mvn	r1, #0
+  28:	e1a00006 	mov	r0, r6
+  2c:	ebfffffe 	bl	0 <mrp_type>
+  30:	e3500000 	cmp	r0, #0
+  34:	01a00004 	moveq	r0, r4
+  38:	0a000002 	beq	48 <to_mr_tofieldstring+0x48>
+  3c:	e3e01000 	mvn	r1, #0
+  40:	e1a00006 	mov	r0, r6
+  44:	ebfffffe 	bl	0 <mrp_tostring>
+  48:	e1a04000 	mov	r4, r0
+  4c:	e1a00006 	mov	r0, r6
+  50:	e3e01001 	mvn	r1, #1
+  54:	ebfffffe 	bl	0 <mrp_settop>
+  58:	e1a00004 	mov	r0, r4
+  5c:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.to_mr_tofielduserdata:
+
+00000000 <to_mr_tofielduserdata>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05001 	mov	r5, r1
+   8:	e1a01002 	mov	r1, r2
+   c:	e1a06000 	mov	r6, r0
+  10:	e1a04003 	mov	r4, r3
+  14:	ebfffffe 	bl	0 <mrp_pushnumber>
+  18:	e1a01005 	mov	r1, r5
+  1c:	e1a00006 	mov	r0, r6
+  20:	ebfffffe 	bl	0 <mrp_gettable>
+  24:	e3e01000 	mvn	r1, #0
+  28:	e1a00006 	mov	r0, r6
+  2c:	ebfffffe 	bl	0 <mrp_type>
+  30:	e3500000 	cmp	r0, #0
+  34:	01a00004 	moveq	r0, r4
+  38:	0a000002 	beq	48 <to_mr_tofielduserdata+0x48>
+  3c:	e3e01000 	mvn	r1, #0
+  40:	e1a00006 	mov	r0, r6
+  44:	ebfffffe 	bl	0 <mrp_touserdata>
+  48:	e1a04000 	mov	r4, r0
+  4c:	e1a00006 	mov	r0, r6
+  50:	e3e01001 	mvn	r1, #1
+  54:	ebfffffe 	bl	0 <mrp_settop>
+  58:	e1a00004 	mov	r0, r4
+  5c:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.to_mr_tofieldusertype:
+
+00000000 <to_mr_tofieldusertype>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05001 	mov	r5, r1
+   8:	e1a01002 	mov	r1, r2
+   c:	e1a06000 	mov	r6, r0
+  10:	e1a04003 	mov	r4, r3
+  14:	ebfffffe 	bl	0 <mrp_pushnumber>
+  18:	e1a01005 	mov	r1, r5
+  1c:	e1a00006 	mov	r0, r6
+  20:	ebfffffe 	bl	0 <mrp_gettable>
+  24:	e3e01000 	mvn	r1, #0
+  28:	e1a00006 	mov	r0, r6
+  2c:	ebfffffe 	bl	0 <mrp_type>
+  30:	e3500000 	cmp	r0, #0
+  34:	0a000003 	beq	48 <to_mr_tofieldusertype+0x48>
+  38:	e3e01000 	mvn	r1, #0
+  3c:	e1a00006 	mov	r0, r6
+  40:	ebfffffe 	bl	0 <mrp_touserdata>
+  44:	e5904000 	ldr	r4, [r0]
+  48:	e3e01001 	mvn	r1, #1
+  4c:	e1a00006 	mov	r0, r6
+  50:	ebfffffe 	bl	0 <mrp_settop>
+  54:	e1a00004 	mov	r0, r4
+  58:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.to_mr_tofieldvalue:
+
+00000000 <to_mr_tofieldvalue>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a04001 	mov	r4, r1
+   8:	e1a01002 	mov	r1, r2
+   c:	e1a06000 	mov	r6, r0
+  10:	e1a05003 	mov	r5, r3
+  14:	ebfffffe 	bl	0 <mrp_pushnumber>
+  18:	e1a01004 	mov	r1, r4
+  1c:	e1a00006 	mov	r0, r6
+  20:	ebfffffe 	bl	0 <mrp_gettable>
+  24:	e3e01000 	mvn	r1, #0
+  28:	e1a00006 	mov	r0, r6
+  2c:	ebfffffe 	bl	0 <mrp_type>
+  30:	e3500000 	cmp	r0, #0
+  34:	01a04005 	moveq	r4, r5
+  38:	e1a00006 	mov	r0, r6
+  3c:	e3e01001 	mvn	r1, #1
+  40:	ebfffffe 	bl	0 <mrp_settop>
+  44:	e1a00004 	mov	r0, r4
+  48:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.to_mr_getfieldboolean:
+
+00000000 <to_mr_getfieldboolean>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a04001 	mov	r4, r1
+   8:	e1a01002 	mov	r1, r2
+   c:	e1a05000 	mov	r5, r0
+  10:	ebfffffe 	bl	0 <mrp_pushnumber>
+  14:	e1a01004 	mov	r1, r4
+  18:	e1a00005 	mov	r0, r5
+  1c:	ebfffffe 	bl	0 <mrp_gettable>
+  20:	e3e01000 	mvn	r1, #0
+  24:	e1a00005 	mov	r0, r5
+  28:	ebfffffe 	bl	0 <mrp_type>
+  2c:	e3500000 	cmp	r0, #0
+  30:	0a000002 	beq	40 <to_mr_getfieldboolean+0x40>
+  34:	e3e01000 	mvn	r1, #0
+  38:	e1a00005 	mov	r0, r5
+  3c:	ebfffffe 	bl	0 <mrp_toboolean>
+  40:	e1a04000 	mov	r4, r0
+  44:	e1a00005 	mov	r0, r5
+  48:	e3e01001 	mvn	r1, #1
+  4c:	ebfffffe 	bl	0 <mrp_settop>
+  50:	e1a00004 	mov	r0, r4
+  54:	e8bd8070 	pop	{r4, r5, r6, pc}

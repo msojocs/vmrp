@@ -1,0 +1,27 @@
+---- __MMI_DSM_MEDIA_EXT__ Matches (26 in 12 files) ----
+Aud_recorder_media.c (media\audio\src):#endif /* __MMI_DSM_MEDIA_EXT__ */ 
+Aud_recorder_media.c (media\audio\src):#endif /* __MMI_DSM_MEDIA_EXT__ */ 
+Aud_recorder_media.c (media\audio\src):#endif /* __MMI_DSM_MEDIA_EXT__ */ 
+Aud_recorder_media.c (media\audio\src):#endif /* __MMI_DSM_MEDIA_EXT__ */ 
+Aud_recorder_media.c (media\audio\src):#endif /* __MMI_DSM_MEDIA_EXT__ */ 
+Aud_recorder_media.c (media\audio\src):#endif /* __MMI_DSM_MEDIA_EXT__ */ 
+Aud_recorder_media.c (media\audio\src):#endif /* __MMI_DSM_MEDIA_EXT__ */ 
+Aud_recorder_media.c (media\audio\src):#endif /* __MMI_DSM_MEDIA_EXT__ */ 
+Aud_recorder_media.c (media\audio\src):#endif /* __MMI_DSM_MEDIA_EXT__ */ 
+Aud_recorder_media.c (media\audio\src):#endif /* __MMI_DSM_MEDIA_EXT__ */ 
+Aud_recorder_media.c (media\audio\src):#endif /* __MMI_DSM_MEDIA_EXT__ */ 
+Media.c (hal\audio\src\v1):#endif /* __MMI_DSM_MEDIA_EXT__ */ 
+Mrp_mpchat.c (plutommi\mmi\mythroad\mythroadsrc):#ifndef __MMI_DSM_MEDIA_EXT__
+mrp_Mpchat_i.h (plutommi\mmi\mythroad\mythroadinc):#ifndef __MMI_DSM_MEDIA_EXT__
+mrp_Resizer_mem.c (plutommi\mmi\mythroad\mythroadsrc):#endif /* defined(__DSM_SPLAYER__) || defined(__MMI_DSM_MEDIA_EXT__) */
+Mrp_resizer_mem_6253_series.c (plutommi\mmi\mythroad\mythroadsrc):#endif /* defined(__DSM_SPLAYER__) || defined(__MMI_DSM_MEDIA_EXT__) */
+SKY_MM_audio.c (plutommi\mmi\mythroad\mmsrc):#if 0//(defined(__DSM_SPLAYER__) || defined(__MMI_DSM_MEDIA_EXT__)) && defined(__MTK_TARGET__)
+SKY_MM_audio.c (plutommi\mmi\mythroad\mmsrc):#if defined(__MMI_DSM_MEDIA_EXT__)
+Sky_mm_main.c (plutommi\mmi\mythroad\mmsrc):#if (defined(__DSM_SPLAYER__)  || defined(__MMI_DSM_MEDIA_EXT__)) && defined(__MTK_TARGET__)
+Sky_mm_main.c (plutommi\mmi\mythroad\mmsrc):		#endif /* __MMI_DSM_MEDIA_EXT__  */
+sky_MM_port.c (plutommi\mmi\mythroad\mmsrc):#if (defined(__DSM_SPLAYER__) || defined(__MMI_DSM_MEDIA_EXT__))&& defined(__MTK_TARGET__)
+sky_MM_Resizer_mem.c (plutommi\mmi\mythroad\mmsrc):#if (defined(__DSM_SPLAYER__) || defined(__MMI_DSM_MEDIA_EXT__)) && defined(__MTK_TARGET__)
+sky_MM_Resizer_mem.c (plutommi\mmi\mythroad\mmsrc):#endif /* defined(__DSM_SPLAYER__) || defined(__MMI_DSM_MEDIA_EXT__) */
+sky_MM_resizer_mem_6253_series.c (plutommi\mmi\mythroad\mmsrc):#if (defined(__DSM_SPLAYER__) || defined(__MMI_DSM_MEDIA_EXT__)) && defined(__MTK_TARGET__)
+sky_MM_resizer_mem_6253_series.c (plutommi\mmi\mythroad\mmsrc):#endif /* defined(__DSM_SPLAYER__) || defined(__MMI_DSM_MEDIA_EXT__) */
+sky_MM_VC_Platform.c (plutommi\mmi\mythroad\mmsrc):#if defined(__MMI_DSM_MEDIA_EXT__) && defined(__MTK_TARGET__)

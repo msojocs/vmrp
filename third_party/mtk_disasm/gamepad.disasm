@@ -1,0 +1,210 @@
+
+/tmp/mtk_disasm/gamepad/gamepad.obj:     file format elf32-littlearm
+
+
+Disassembly of section i.EV_GameSimuKeyValue:
+
+00000000 <EV_GameSimuKeyValue>:
+   0:	4908      	ldr	r1, [pc, #32]	; (24 <EV_GameSimuKeyValue+0x24>)
+   2:	8888      	ldrh	r0, [r1, #4]
+   4:	88ca      	ldrh	r2, [r1, #6]
+   6:	4290      	cmp	r0, r2
+   8:	d109      	bne.n	1e <EV_GameSimuKeyValue+0x1e>
+   a:	7808      	ldrb	r0, [r1, #0]
+   c:	3001      	adds	r0, #1
+   e:	0600      	lsls	r0, r0, #24
+  10:	0e00      	lsrs	r0, r0, #24
+  12:	7008      	strb	r0, [r1, #0]
+  14:	2814      	cmp	r0, #20
+  16:	d102      	bne.n	1e <EV_GameSimuKeyValue+0x1e>
+  18:	2000      	movs	r0, #0
+  1a:	7008      	strb	r0, [r1, #0]
+  1c:	6108      	str	r0, [r1, #16]
+  1e:	6908      	ldr	r0, [r1, #16]
+  20:	60c8      	str	r0, [r1, #12]
+  22:	4770      	bx	lr
+  24:	00000000 	.word	0x00000000
+
+Disassembly of section i.EV_EntryGameSimu:
+
+00000000 <EV_EntryGameSimu>:
+   0:	490d      	ldr	r1, [pc, #52]	; (38 <EV_EntryGameSimu+0x38>)
+   2:	b510      	push	{r4, lr}
+   4:	480c      	ldr	r0, [pc, #48]	; (38 <EV_EntryGameSimu+0x38>)
+   6:	2201      	movs	r2, #1
+   8:	3920      	subs	r1, #32
+   a:	6148      	str	r0, [r1, #20]
+   c:	02d2      	lsls	r2, r2, #11
+   e:	618a      	str	r2, [r1, #24]
+  10:	2400      	movs	r4, #0
+  12:	810c      	strh	r4, [r1, #8]
+  14:	808c      	strh	r4, [r1, #4]
+  16:	80cc      	strh	r4, [r1, #6]
+  18:	610c      	str	r4, [r1, #16]
+  1a:	61cc      	str	r4, [r1, #28]
+  1c:	1c11      	adds	r1, r2, #0
+  1e:	f7ff fffe 	bl	0 <__rt_memclr_w>
+  22:	4806      	ldr	r0, [pc, #24]	; (3c <EV_EntryGameSimu+0x3c>)
+  24:	6800      	ldr	r0, [r0, #0]
+  26:	6840      	ldr	r0, [r0, #4]
+  28:	0700      	lsls	r0, r0, #28
+  2a:	d404      	bmi.n	36 <EV_EntryGameSimu+0x36>
+  2c:	210a      	movs	r1, #10
+  2e:	1c20      	adds	r0, r4, #0
+  30:	4a03      	ldr	r2, [pc, #12]	; (40 <EV_EntryGameSimu+0x40>)
+  32:	f7ff fffe 	bl	0 <UART_Register_RX_cb>
+  36:	bd10      	pop	{r4, pc}
+  38:	00000020 	.word	0x00000020
+	...
+
+Disassembly of section i.EV_ExitGameSimu:
+
+00000000 <EV_ExitGameSimu>:
+   0:	4770      	bx	lr
+	...
+
+Disassembly of section i.GameSimuUartFIFO:
+
+00000000 <GameSimuUartFIFO>:
+   0:	b5f0      	push	{r4, r5, r6, r7, lr}
+   2:	b09b      	sub	sp, #108	; 0x6c
+   4:	ab00      	add	r3, sp, #0
+   6:	2600      	movs	r6, #0
+   8:	711e      	strb	r6, [r3, #4]
+   a:	4d13      	ldr	r5, [pc, #76]	; (58 <GameSimuUartFIFO+0x58>)
+   c:	220a      	movs	r2, #10
+   e:	9200      	str	r2, [sp, #0]
+  10:	69e8      	ldr	r0, [r5, #28]
+  12:	2264      	movs	r2, #100	; 0x64
+  14:	2400      	movs	r4, #0
+  16:	0600      	lsls	r0, r0, #24
+  18:	0e00      	lsrs	r0, r0, #24
+  1a:	ab01      	add	r3, sp, #4
+  1c:	a902      	add	r1, sp, #8
+  1e:	f7ff fffe 	bl	0 <UART_GetBytes>
+  22:	702e      	strb	r6, [r5, #0]
+  24:	88a9      	ldrh	r1, [r5, #4]
+  26:	696a      	ldr	r2, [r5, #20]
+  28:	69ab      	ldr	r3, [r5, #24]
+  2a:	1851      	adds	r1, r2, r1
+  2c:	18d3      	adds	r3, r2, r3
+  2e:	e009      	b.n	44 <GameSimuUartFIFO+0x44>
+  30:	ae02      	add	r6, sp, #8
+  32:	5d36      	ldrb	r6, [r6, r4]
+  34:	700e      	strb	r6, [r1, #0]
+  36:	3101      	adds	r1, #1
+  38:	4299      	cmp	r1, r3
+  3a:	d100      	bne.n	3e <GameSimuUartFIFO+0x3e>
+  3c:	1c11      	adds	r1, r2, #0
+  3e:	3401      	adds	r4, #1
+  40:	0424      	lsls	r4, r4, #16
+  42:	0c24      	lsrs	r4, r4, #16
+  44:	4284      	cmp	r4, r0
+  46:	d3f3      	bcc.n	30 <GameSimuUartFIFO+0x30>
+  48:	1a88      	subs	r0, r1, r2
+  4a:	0400      	lsls	r0, r0, #16
+  4c:	0c00      	lsrs	r0, r0, #16
+  4e:	80a8      	strh	r0, [r5, #4]
+  50:	f7ff fffe 	bl	0 <GameSimuUartFIFO>
+  54:	b01b      	add	sp, #108	; 0x6c
+  56:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  58:	00000000 	.word	0x00000000
+
+Disassembly of section i.GameSimuKeyboardGetValid:
+
+00000000 <GameSimuKeyboardGetValid>:
+   0:	b5f1      	push	{r0, r4, r5, r6, r7, lr}
+   2:	4c2f      	ldr	r4, [pc, #188]	; (c0 <GameSimuKeyboardGetValid+0xc0>)
+   4:	25ff      	movs	r5, #255	; 0xff
+   6:	042d      	lsls	r5, r5, #16
+   8:	1c20      	adds	r0, r4, #0
+   a:	6942      	ldr	r2, [r0, #20]
+   c:	88e1      	ldrh	r1, [r4, #6]
+   e:	6980      	ldr	r0, [r0, #24]
+  10:	2700      	movs	r7, #0
+  12:	4694      	mov	ip, r2
+  14:	4686      	mov	lr, r0
+  16:	e034      	b.n	82 <GameSimuKeyboardGetValid+0x82>
+  18:	7860      	ldrb	r0, [r4, #1]
+  1a:	4662      	mov	r2, ip
+  1c:	1852      	adds	r2, r2, r1
+  1e:	2805      	cmp	r0, #5
+  20:	d229      	bcs.n	76 <GameSimuKeyboardGetValid+0x76>
+  22:	a302      	add	r3, pc, #8	; (adr r3, 2c <GameSimuKeyboardGetValid+0x2c>)
+  24:	5c1b      	ldrb	r3, [r3, r0]
+  26:	005b      	lsls	r3, r3, #1
+  28:	449f      	add	pc, r3
+  2a:	0000      	.short	0x0000
+  2c:	15110803 	.word	0x15110803
+  30:	001a      	.short	0x001a
+  32:	7810      	ldrb	r0, [r2, #0]
+  34:	28ff      	cmp	r0, #255	; 0xff
+  36:	d11e      	bne.n	76 <GameSimuKeyboardGetValid+0x76>
+  38:	2001      	movs	r0, #1
+  3a:	e00f      	b.n	5c <GameSimuKeyboardGetValid+0x5c>
+  3c:	7810      	ldrb	r0, [r2, #0]
+  3e:	2855      	cmp	r0, #85	; 0x55
+  40:	d103      	bne.n	4a <GameSimuKeyboardGetValid+0x4a>
+  42:	2002      	movs	r0, #2
+  44:	7060      	strb	r0, [r4, #1]
+  46:	1c0e      	adds	r6, r1, #0
+  48:	e015      	b.n	76 <GameSimuKeyboardGetValid+0x76>
+  4a:	7067      	strb	r7, [r4, #1]
+  4c:	e019      	b.n	82 <GameSimuKeyboardGetValid+0x82>
+  4e:	7810      	ldrb	r0, [r2, #0]
+  50:	70e0      	strb	r0, [r4, #3]
+  52:	2003      	movs	r0, #3
+  54:	e002      	b.n	5c <GameSimuKeyboardGetValid+0x5c>
+  56:	7810      	ldrb	r0, [r2, #0]
+  58:	70a0      	strb	r0, [r4, #2]
+  5a:	2004      	movs	r0, #4
+  5c:	7060      	strb	r0, [r4, #1]
+  5e:	e00a      	b.n	76 <GameSimuKeyboardGetValid+0x76>
+  60:	7810      	ldrb	r0, [r2, #0]
+  62:	7067      	strb	r7, [r4, #1]
+  64:	28aa      	cmp	r0, #170	; 0xaa
+  66:	d105      	bne.n	74 <GameSimuKeyboardGetValid+0x74>
+  68:	78e0      	ldrb	r0, [r4, #3]
+  6a:	78a2      	ldrb	r2, [r4, #2]
+  6c:	0200      	lsls	r0, r0, #8
+  6e:	4310      	orrs	r0, r2
+  70:	1c05      	adds	r5, r0, #0
+  72:	e000      	b.n	76 <GameSimuKeyboardGetValid+0x76>
+  74:	1c31      	adds	r1, r6, #0
+  76:	3101      	adds	r1, #1
+  78:	0409      	lsls	r1, r1, #16
+  7a:	0c09      	lsrs	r1, r1, #16
+  7c:	4571      	cmp	r1, lr
+  7e:	d100      	bne.n	82 <GameSimuKeyboardGetValid+0x82>
+  80:	2100      	movs	r1, #0
+  82:	9800      	ldr	r0, [sp, #0]
+  84:	4281      	cmp	r1, r0
+  86:	d1c7      	bne.n	18 <GameSimuKeyboardGetValid+0x18>
+  88:	20ff      	movs	r0, #255	; 0xff
+  8a:	0400      	lsls	r0, r0, #16
+  8c:	4285      	cmp	r5, r0
+  8e:	80e1      	strh	r1, [r4, #6]
+  90:	d013      	beq.n	ba <GameSimuKeyboardGetValid+0xba>
+  92:	2100      	movs	r1, #0
+  94:	2000      	movs	r0, #0
+  96:	4b0b      	ldr	r3, [pc, #44]	; (c4 <GameSimuKeyboardGetValid+0xc4>)
+  98:	2601      	movs	r6, #1
+  9a:	0042      	lsls	r2, r0, #1
+  9c:	5a9a      	ldrh	r2, [r3, r2]
+  9e:	402a      	ands	r2, r5
+  a0:	d002      	beq.n	a8 <GameSimuKeyboardGetValid+0xa8>
+  a2:	1c32      	adds	r2, r6, #0
+  a4:	4082      	lsls	r2, r0
+  a6:	4311      	orrs	r1, r2
+  a8:	3001      	adds	r0, #1
+  aa:	0600      	lsls	r0, r0, #24
+  ac:	0e00      	lsrs	r0, r0, #24
+  ae:	280f      	cmp	r0, #15
+  b0:	d3f3      	bcc.n	9a <GameSimuKeyboardGetValid+0x9a>
+  b2:	2001      	movs	r0, #1
+  b4:	07c0      	lsls	r0, r0, #31
+  b6:	4308      	orrs	r0, r1
+  b8:	6120      	str	r0, [r4, #16]
+  ba:	6920      	ldr	r0, [r4, #16]
+  bc:	bdf8      	pop	{r3, r4, r5, r6, r7, pc}
+	...

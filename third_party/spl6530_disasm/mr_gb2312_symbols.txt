@@ -1,0 +1,8 @@
+00000000 a BuildAttributes$$THUMB_ISAv2$M$E$P$PE$A:L22$X:L11$S22$IW$STKCKD$~SHL$OSPACE$PRES8
+00000000 N C$debug_frame13
+         w Lib$$Request$$armlib
+         U __rt_stkovf_split_small
+00000000 T c2u
+         U dsmGB2UCS2
+         U mr_free
+         U mr_malloc

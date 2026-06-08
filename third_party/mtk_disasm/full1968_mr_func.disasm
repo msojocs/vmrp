@@ -1,0 +1,237 @@
+
+/tmp/mtk_disasm/full1968/mr_func.obj:     file format elf32-littlearm
+
+
+Disassembly of section i.mr_F_newCclosure:
+
+00000000 <mr_F_newCclosure>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a06000 	mov	r6, r0
+   8:	e3a00010 	mov	r0, #16
+   c:	e0803181 	add	r3, r0, r1, lsl #3
+  10:	e1a05001 	mov	r5, r1
+  14:	e3a01000 	mov	r1, #0
+  18:	e1a00006 	mov	r0, r6
+  1c:	e3a02000 	mov	r2, #0
+  20:	ebfffffe 	bl	0 <mr_M_realloc>
+  24:	e1a04000 	mov	r4, r0
+  28:	e1a01000 	mov	r1, r0
+  2c:	e1a00006 	mov	r0, r6
+  30:	e3a02006 	mov	r2, #6
+  34:	ebfffffe 	bl	0 <mr_C_link>
+  38:	e3a01001 	mov	r1, #1
+  3c:	e5c41006 	strb	r1, [r4, #6]
+  40:	e1a00004 	mov	r0, r4
+  44:	e5c45007 	strb	r5, [r4, #7]
+  48:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.mr_F_newLclosure:
+
+00000000 <mr_F_newLclosure>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a07000 	mov	r7, r0
+   8:	e3a00018 	mov	r0, #24
+   c:	e0803101 	add	r3, r0, r1, lsl #2
+  10:	e1a06002 	mov	r6, r2
+  14:	e1a05001 	mov	r5, r1
+  18:	e3a01000 	mov	r1, #0
+  1c:	e3a02000 	mov	r2, #0
+  20:	e1a00007 	mov	r0, r7
+  24:	ebfffffe 	bl	0 <mr_M_realloc>
+  28:	e1a04000 	mov	r4, r0
+  2c:	e1a01000 	mov	r1, r0
+  30:	e1a00007 	mov	r0, r7
+  34:	e3a02006 	mov	r2, #6
+  38:	ebfffffe 	bl	0 <mr_C_link>
+  3c:	e3a01000 	mov	r1, #0
+  40:	e5c41006 	strb	r1, [r4, #6]
+  44:	e8960006 	ldm	r6, {r1, r2}
+  48:	e5841010 	str	r1, [r4, #16]
+  4c:	e5842014 	str	r2, [r4, #20]
+  50:	e1a00004 	mov	r0, r4
+  54:	e5c45007 	strb	r5, [r4, #7]
+  58:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.mr_F_findupval:
+
+00000000 <mr_F_findupval>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05001 	mov	r5, r1
+   8:	e2804048 	add	r4, r0, #72	; 0x48
+   c:	ea000003 	b	20 <mr_F_findupval+0x20>
+  10:	11a04001 	movne	r4, r1
+  14:	1a000001 	bne	20 <mr_F_findupval+0x20>
+  18:	e1a00001 	mov	r0, r1
+  1c:	e8bd8070 	pop	{r4, r5, r6, pc}
+  20:	e5941000 	ldr	r1, [r4]
+  24:	e3510000 	cmp	r1, #0
+  28:	0a000002 	beq	38 <mr_F_findupval+0x38>
+  2c:	e5912008 	ldr	r2, [r1, #8]
+  30:	e1520005 	cmp	r2, r5
+  34:	2afffff5 	bcs	10 <mr_F_findupval+0x10>
+  38:	e3a03014 	mov	r3, #20
+  3c:	e3a02000 	mov	r2, #0
+  40:	e3a01000 	mov	r1, #0
+  44:	ebfffffe 	bl	0 <mr_M_realloc>
+  48:	e3a0100a 	mov	r1, #10
+  4c:	e5c01004 	strb	r1, [r0, #4]
+  50:	e3a01001 	mov	r1, #1
+  54:	e5c01005 	strb	r1, [r0, #5]
+  58:	e5805008 	str	r5, [r0, #8]
+  5c:	e5941000 	ldr	r1, [r4]
+  60:	e5801000 	str	r1, [r0]
+  64:	e5840000 	str	r0, [r4]
+  68:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.mr_F_close:
+
+00000000 <mr_F_close>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05001 	mov	r5, r1
+   8:	e1a04000 	mov	r4, r0
+   c:	ea00000a 	b	3c <mr_F_close+0x3c>
+  10:	e5903000 	ldr	r3, [r0]
+  14:	e3a0200a 	mov	r2, #10
+  18:	e581300c 	str	r3, [r1, #12]
+  1c:	e5900004 	ldr	r0, [r0, #4]
+  20:	e5810010 	str	r0, [r1, #16]
+  24:	e281000c 	add	r0, r1, #12
+  28:	e5810008 	str	r0, [r1, #8]
+  2c:	e5910000 	ldr	r0, [r1]
+  30:	e5840048 	str	r0, [r4, #72]	; 0x48
+  34:	e1a00004 	mov	r0, r4
+  38:	ebfffffe 	bl	0 <mr_C_link>
+  3c:	e5941048 	ldr	r1, [r4, #72]	; 0x48
+  40:	e3510000 	cmp	r1, #0
+  44:	08bd8070 	popeq	{r4, r5, r6, pc}
+  48:	e5910008 	ldr	r0, [r1, #8]
+  4c:	e1500005 	cmp	r0, r5
+  50:	2affffee 	bcs	10 <mr_F_close+0x10>
+  54:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.mr_F_newproto:
+
+00000000 <mr_F_newproto>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05000 	mov	r5, r0
+   8:	e3a03048 	mov	r3, #72	; 0x48
+   c:	e3a02000 	mov	r2, #0
+  10:	e3a01000 	mov	r1, #0
+  14:	ebfffffe 	bl	0 <mr_M_realloc>
+  18:	e1a04000 	mov	r4, r0
+  1c:	e1a01000 	mov	r1, r0
+  20:	e1a00005 	mov	r0, r5
+  24:	e3a02009 	mov	r2, #9
+  28:	ebfffffe 	bl	0 <mr_C_link>
+  2c:	e3a01000 	mov	r1, #0
+  30:	e5841008 	str	r1, [r4, #8]
+  34:	e5841028 	str	r1, [r4, #40]	; 0x28
+  38:	e5841010 	str	r1, [r4, #16]
+  3c:	e5841034 	str	r1, [r4, #52]	; 0x34
+  40:	e584100c 	str	r1, [r4, #12]
+  44:	e584102c 	str	r1, [r4, #44]	; 0x2c
+  48:	e5841030 	str	r1, [r4, #48]	; 0x30
+  4c:	e5841024 	str	r1, [r4, #36]	; 0x24
+  50:	e5c41044 	strb	r1, [r4, #68]	; 0x44
+  54:	e584101c 	str	r1, [r4, #28]
+  58:	e5c41045 	strb	r1, [r4, #69]	; 0x45
+  5c:	e5c41046 	strb	r1, [r4, #70]	; 0x46
+  60:	e5c41047 	strb	r1, [r4, #71]	; 0x47
+  64:	e5841014 	str	r1, [r4, #20]
+  68:	e5841038 	str	r1, [r4, #56]	; 0x38
+  6c:	e5841018 	str	r1, [r4, #24]
+  70:	e584103c 	str	r1, [r4, #60]	; 0x3c
+  74:	e1a00004 	mov	r0, r4
+  78:	e5841020 	str	r1, [r4, #32]
+  7c:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.mr_F_freeproto:
+
+00000000 <mr_F_freeproto>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05000 	mov	r5, r0
+   8:	e591002c 	ldr	r0, [r1, #44]	; 0x2c
+   c:	e1a04001 	mov	r4, r1
+  10:	e1a02100 	lsl	r2, r0, #2
+  14:	e591100c 	ldr	r1, [r1, #12]
+  18:	e1a00005 	mov	r0, r5
+  1c:	e3a03000 	mov	r3, #0
+  20:	ebfffffe 	bl	0 <mr_M_realloc>
+  24:	e5940034 	ldr	r0, [r4, #52]	; 0x34
+  28:	e5941010 	ldr	r1, [r4, #16]
+  2c:	e1a02100 	lsl	r2, r0, #2
+  30:	e1a00005 	mov	r0, r5
+  34:	e3a03000 	mov	r3, #0
+  38:	ebfffffe 	bl	0 <mr_M_realloc>
+  3c:	e5940028 	ldr	r0, [r4, #40]	; 0x28
+  40:	e5941008 	ldr	r1, [r4, #8]
+  44:	e1a02180 	lsl	r2, r0, #3
+  48:	e1a00005 	mov	r0, r5
+  4c:	e3a03000 	mov	r3, #0
+  50:	ebfffffe 	bl	0 <mr_M_realloc>
+  54:	e5940030 	ldr	r0, [r4, #48]	; 0x30
+  58:	e5941014 	ldr	r1, [r4, #20]
+  5c:	e1a02100 	lsl	r2, r0, #2
+  60:	e1a00005 	mov	r0, r5
+  64:	e3a03000 	mov	r3, #0
+  68:	ebfffffe 	bl	0 <mr_M_realloc>
+  6c:	e5940038 	ldr	r0, [r4, #56]	; 0x38
+  70:	e3a0100c 	mov	r1, #12
+  74:	e0020091 	mul	r2, r1, r0
+  78:	e5941018 	ldr	r1, [r4, #24]
+  7c:	e1a00005 	mov	r0, r5
+  80:	e3a03000 	mov	r3, #0
+  84:	ebfffffe 	bl	0 <mr_M_realloc>
+  88:	e5940024 	ldr	r0, [r4, #36]	; 0x24
+  8c:	e594101c 	ldr	r1, [r4, #28]
+  90:	e1a02100 	lsl	r2, r0, #2
+  94:	e1a00005 	mov	r0, r5
+  98:	e3a03000 	mov	r3, #0
+  9c:	ebfffffe 	bl	0 <mr_M_realloc>
+  a0:	e1a01004 	mov	r1, r4
+  a4:	e1a00005 	mov	r0, r5
+  a8:	e8bd4070 	pop	{r4, r5, r6, lr}
+  ac:	e3a03000 	mov	r3, #0
+  b0:	e3a02048 	mov	r2, #72	; 0x48
+  b4:	eafffffe 	b	0 <mr_M_realloc>
+
+Disassembly of section i.mr_F_freeclosure:
+
+00000000 <mr_F_freeclosure>:
+   0:	e5d13006 	ldrb	r3, [r1, #6]
+   4:	e5d12007 	ldrb	r2, [r1, #7]
+   8:	e3530000 	cmp	r3, #0
+   c:	01a02102 	lsleq	r2, r2, #2
+  10:	02822018 	addeq	r2, r2, #24
+  14:	11a02182 	lslne	r2, r2, #3
+  18:	12822010 	addne	r2, r2, #16
+  1c:	e3a03000 	mov	r3, #0
+  20:	eafffffe 	b	0 <mr_M_realloc>
+
+Disassembly of section i.mr_F_getlocalname:
+
+00000000 <mr_F_getlocalname>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e5904038 	ldr	r4, [r0, #56]	; 0x38
+   8:	e3a03000 	mov	r3, #0
+   c:	ea000009 	b	38 <mr_F_getlocalname+0x38>
+  10:	e59cc008 	ldr	ip, [ip, #8]
+  14:	e15c0002 	cmp	ip, r2
+  18:	da000005 	ble	34 <mr_F_getlocalname+0x34>
+  1c:	e2511001 	subs	r1, r1, #1
+  20:	05900018 	ldreq	r0, [r0, #24]
+  24:	00831083 	addeq	r1, r3, r3, lsl #1
+  28:	07900101 	ldreq	r0, [r0, r1, lsl #2]
+  2c:	02800010 	addeq	r0, r0, #16
+  30:	08bd8010 	popeq	{r4, pc}
+  34:	e2833001 	add	r3, r3, #1
+  38:	e1540003 	cmp	r4, r3
+  3c:	da000005 	ble	58 <mr_F_getlocalname+0x58>
+  40:	e590c018 	ldr	ip, [r0, #24]
+  44:	e083e083 	add	lr, r3, r3, lsl #1
+  48:	e08cc10e 	add	ip, ip, lr, lsl #2
+  4c:	e59ce004 	ldr	lr, [ip, #4]
+  50:	e15e0002 	cmp	lr, r2
+  54:	daffffed 	ble	10 <mr_F_getlocalname+0x10>
+  58:	e3a00000 	mov	r0, #0
+  5c:	e8bd8010 	pop	{r4, pc}

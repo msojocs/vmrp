@@ -1,0 +1,4 @@
+---- __SKY_MM_STREAMLINED__ Matches (3 in 2 files) ----
+Mmigame_menutable.c (ms_mmi\source\mmi_app\app\game\game_manager\c):#if defined(__SKY_MM_STREAMLINED__)
+Mmigame_menutable.c (ms_mmi\source\mmi_app\app\game\game_manager\c):#if defined(__SKY_MM_STREAMLINED__)
+Mmigame_wintab.c (ms_mmi\source\mmi_app\app\game\game_manager\c):#if defined(__SKY_MM_STREAMLINED__)

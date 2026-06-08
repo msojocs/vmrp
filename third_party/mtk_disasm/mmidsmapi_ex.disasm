@@ -1,0 +1,1803 @@
+
+/tmp/mtk_disasm/mmidsmex/mmidsmapi.obj:     file format elf32-littlearm
+
+
+Disassembly of section i.mr_registerLappEntry:
+
+00000000 <mr_registerLappEntry>:
+   0:	4901      	ldr	r1, [pc, #4]	; (8 <mr_registerLappEntry+0x8>)
+   2:	6008      	str	r0, [r1, #0]
+   4:	4770      	bx	lr
+   6:	0000      	.short	0x0000
+   8:	00000000 	.word	0x00000000
+
+Disassembly of section i.mr_setting_get_hw_version:
+
+00000000 <mr_setting_get_hw_version>:
+   0:	b570      	push	{r4, r5, r6, lr}
+   2:	0014      	movs	r4, r2
+   4:	001d      	movs	r5, r3
+   6:	2a00      	cmp	r2, #0
+   8:	d001      	beq.n	e <mr_setting_get_hw_version+0xe>
+   a:	2d00      	cmp	r5, #0
+   c:	d102      	bne.n	14 <mr_setting_get_hw_version+0x14>
+   e:	2000      	movs	r0, #0
+  10:	43c0      	mvns	r0, r0
+  12:	bd70      	pop	{r4, r5, r6, pc}
+  14:	f7ff fffe 	bl	0 <release_hw_ver>
+  18:	0002      	movs	r2, r0
+  1a:	6020      	str	r0, [r4, #0]
+  1c:	2094      	movs	r0, #148	; 0x94
+  1e:	a105      	add	r1, pc, #20	; (adr r1, 34 <mr_setting_get_hw_version+0x34>)
+  20:	f7ff fffe 	bl	0 <kal_prompt_trace>
+  24:	6820      	ldr	r0, [r4, #0]
+  26:	f7ff fffe 	bl	0 <strlen>
+  2a:	1c40      	adds	r0, r0, #1
+  2c:	6028      	str	r0, [r5, #0]
+  2e:	2000      	movs	r0, #0
+  30:	bd70      	pop	{r4, r5, r6, pc}
+  32:	0000      	.short	0x0000
+  34:	00007325 	.word	0x00007325
+
+Disassembly of section i.mr_setting_get_buid_datetime:
+
+00000000 <mr_setting_get_buid_datetime>:
+   0:	b570      	push	{r4, r5, r6, lr}
+   2:	0015      	movs	r5, r2
+   4:	001c      	movs	r4, r3
+   6:	2a00      	cmp	r2, #0
+   8:	d001      	beq.n	e <mr_setting_get_buid_datetime+0xe>
+   a:	2c00      	cmp	r4, #0
+   c:	d102      	bne.n	14 <mr_setting_get_buid_datetime+0x14>
+   e:	2000      	movs	r0, #0
+  10:	43c0      	mvns	r0, r0
+  12:	bd70      	pop	{r4, r5, r6, pc}
+  14:	f7ff fffe 	bl	0 <build_date_time>
+  18:	6028      	str	r0, [r5, #0]
+  1a:	f7ff fffe 	bl	0 <strlen>
+  1e:	1c40      	adds	r0, r0, #1
+  20:	6020      	str	r0, [r4, #0]
+  22:	2000      	movs	r0, #0
+  24:	bd70      	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.mr_get_rand:
+
+00000000 <mr_get_rand>:
+   0:	b510      	push	{r4, lr}
+   2:	0004      	movs	r4, r0
+   4:	f7ff fffe 	bl	0 <mr_getTime>
+   8:	f7ff fffe 	bl	0 <srand>
+   c:	f7ff fffe 	bl	0 <rand>
+  10:	0021      	movs	r1, r4
+  12:	f7ff fffe 	bl	0 <__aeabi_idivmod>
+  16:	207d      	movs	r0, #125	; 0x7d
+  18:	00c0      	lsls	r0, r0, #3
+  1a:	1808      	adds	r0, r1, r0
+  1c:	bd10      	pop	{r4, pc}
+
+Disassembly of section i.mr_start_plat_application:
+
+00000000 <mr_start_plat_application>:
+   0:	4903      	ldr	r1, [pc, #12]	; (10 <mr_start_plat_application+0x10>)
+   2:	6809      	ldr	r1, [r1, #0]
+   4:	2900      	cmp	r1, #0
+   6:	d000      	beq.n	a <mr_start_plat_application+0xa>
+   8:	4708      	bx	r1
+   a:	2000      	movs	r0, #0
+   c:	43c0      	mvns	r0, r0
+   e:	4770      	bx	lr
+  10:	00000000 	.word	0x00000000
+
+Disassembly of section i.add_m_info:
+
+00000000 <add_m_info>:
+   0:	b5f0      	push	{r4, r5, r6, r7, lr}
+   2:	0005      	movs	r5, r0
+   4:	000e      	movs	r6, r1
+   6:	2000      	movs	r0, #0
+   8:	b087      	sub	sp, #28
+   a:	0001      	movs	r1, r0
+   c:	ac05      	add	r4, sp, #20
+   e:	c403      	stmia	r4!, {r0, r1}
+  10:	2100      	movs	r1, #0
+  12:	0017      	movs	r7, r2
+  14:	000a      	movs	r2, r1
+  16:	000b      	movs	r3, r1
+  18:	a801      	add	r0, sp, #4
+  1a:	c00e      	stmia	r0!, {r1, r2, r3}
+  1c:	6001      	str	r1, [r0, #0]
+  1e:	3c08      	subs	r4, #8
+  20:	c406      	stmia	r4!, {r1, r2}
+  22:	380c      	subs	r0, #12
+  24:	000c      	movs	r4, r1
+  26:	c01e      	stmia	r0!, {r1, r2, r3, r4}
+  28:	003a      	movs	r2, r7
+  2a:	a108      	add	r1, pc, #32	; (adr r1, 4c <add_m_info+0x4c>)
+  2c:	f7ff fffe 	bl	0 <__1sprintf>
+  30:	a905      	add	r1, sp, #20
+  32:	a801      	add	r0, sp, #4
+  34:	f7ff fffe 	bl	0 <mmi_asc_to_ucs2>
+  38:	0031      	movs	r1, r6
+  3a:	0028      	movs	r0, r5
+  3c:	f7ff fffe 	bl	0 <mmi_ucs2cat>
+  40:	0028      	movs	r0, r5
+  42:	a901      	add	r1, sp, #4
+  44:	f7ff fffe 	bl	0 <mmi_ucs2cat>
+  48:	b007      	add	sp, #28
+  4a:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  4c:	002f6425 	.word	0x002f6425
+
+Disassembly of section i.get_child_info:
+
+00000000 <get_child_info>:
+   0:	b5f7      	push	{r0, r1, r2, r4, r5, r6, r7, lr}
+   2:	000d      	movs	r5, r1
+   4:	b0b4      	sub	sp, #208	; 0xd0
+   6:	21c8      	movs	r1, #200	; 0xc8
+   8:	a802      	add	r0, sp, #8
+   a:	f7ff fffe 	bl	0 <__aeabi_memclr4>
+   e:	2400      	movs	r4, #0
+  10:	2d00      	cmp	r5, #0
+  12:	d102      	bne.n	1a <get_child_info+0x1a>
+  14:	2000      	movs	r0, #0
+  16:	b037      	add	sp, #220	; 0xdc
+  18:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  1a:	0028      	movs	r0, r5
+  1c:	f7ff fffe 	bl	0 <GetNumOfChild_Ext>
+  20:	0007      	movs	r7, r0
+  22:	9936      	ldr	r1, [sp, #216]	; 0xd8
+  24:	0028      	movs	r0, r5
+  26:	f7ff fffe 	bl	0 <GetSequenceItemIds_Ext>
+  2a:	0028      	movs	r0, r5
+  2c:	a902      	add	r1, sp, #8
+  2e:	f7ff fffe 	bl	0 <GetSequenceStringIds_Ext>
+  32:	ae02      	add	r6, sp, #8
+  34:	e018      	b.n	68 <get_child_info+0x68>
+  36:	9836      	ldr	r0, [sp, #216]	; 0xd8
+  38:	0065      	lsls	r5, r4, #1
+  3a:	5b40      	ldrh	r0, [r0, r5]
+  3c:	2800      	cmp	r0, #0
+  3e:	d008      	beq.n	52 <get_child_info+0x52>
+  40:	f7ff fffe 	bl	0 <GetNumOfChild_Ext>
+  44:	9001      	str	r0, [sp, #4]
+  46:	5b70      	ldrh	r0, [r6, r5]
+  48:	f7ff fffe 	bl	0 <get_string>
+  4c:	9a01      	ldr	r2, [sp, #4]
+  4e:	0001      	movs	r1, r0
+  50:	e004      	b.n	5c <get_child_info+0x5c>
+  52:	5b70      	ldrh	r0, [r6, r5]
+  54:	f7ff fffe 	bl	0 <get_string>
+  58:	0001      	movs	r1, r0
+  5a:	2200      	movs	r2, #0
+  5c:	9834      	ldr	r0, [sp, #208]	; 0xd0
+  5e:	f7ff fffe 	bl	0 <get_child_info>
+  62:	1c64      	adds	r4, r4, #1
+  64:	0424      	lsls	r4, r4, #16
+  66:	0c24      	lsrs	r4, r4, #16
+  68:	42bc      	cmp	r4, r7
+  6a:	d3e4      	bcc.n	36 <get_child_info+0x36>
+  6c:	0038      	movs	r0, r7
+  6e:	e7d2      	b.n	16 <get_child_info+0x16>
+
+Disassembly of section i.mr_free_m:
+
+00000000 <mr_free_m>:
+   0:	b510      	push	{r4, lr}
+   2:	f7ff fffe 	bl	0 <mr_pal_mem_scrmem_free>
+   6:	bd10      	pop	{r4, pc}
+
+Disassembly of section i.mr_mainmenu_get_menutree:
+
+00000000 <mr_mainmenu_get_menutree>:
+   0:	b5ff      	push	{r0, r1, r2, r3, r4, r5, r6, r7, lr}
+   2:	b0b5      	sub	sp, #212	; 0xd4
+   4:	21c8      	movs	r1, #200	; 0xc8
+   6:	a802      	add	r0, sp, #8
+   8:	f7ff fffe 	bl	0 <__aeabi_memclr4>
+   c:	9837      	ldr	r0, [sp, #220]	; 0xdc
+   e:	2400      	movs	r4, #0
+  10:	0025      	movs	r5, r4
+  12:	2800      	cmp	r0, #0
+  14:	d02c      	beq.n	70 <mr_mainmenu_get_menutree+0x70>
+  16:	9838      	ldr	r0, [sp, #224]	; 0xe0
+  18:	2800      	cmp	r0, #0
+  1a:	d029      	beq.n	70 <mr_mainmenu_get_menutree+0x70>
+  1c:	983e      	ldr	r0, [sp, #248]	; 0xf8
+  1e:	2800      	cmp	r0, #0
+  20:	d026      	beq.n	70 <mr_mainmenu_get_menutree+0x70>
+  22:	2601      	movs	r6, #1
+  24:	0376      	lsls	r6, r6, #13
+  26:	0030      	movs	r0, r6
+  28:	f7ff fffe 	bl	0 <mr_pal_mem_scrmem_alloc>
+  2c:	2800      	cmp	r0, #0
+  2e:	9001      	str	r0, [sp, #4]
+  30:	d01e      	beq.n	70 <mr_mainmenu_get_menutree+0x70>
+  32:	0031      	movs	r1, r6
+  34:	f7ff fffe 	bl	0 <__aeabi_memclr>
+  38:	4e28      	ldr	r6, [pc, #160]	; (dc <mr_mainmenu_get_menutree+0xdc>)
+  3a:	8830      	ldrh	r0, [r6, #0]
+  3c:	f7ff fffe 	bl	0 <GetNumOfChild_Ext>
+  40:	0002      	movs	r2, r0
+  42:	9801      	ldr	r0, [sp, #4]
+  44:	a126      	add	r1, pc, #152	; (adr r1, e0 <mr_mainmenu_get_menutree+0xe0>)
+  46:	f7ff fffe 	bl	0 <mr_mainmenu_get_menutree>
+  4a:	8831      	ldrh	r1, [r6, #0]
+  4c:	9801      	ldr	r0, [sp, #4]
+  4e:	aa02      	add	r2, sp, #8
+  50:	f7ff fffe 	bl	0 <mr_mainmenu_get_menutree>
+  54:	0007      	movs	r7, r0
+  56:	2864      	cmp	r0, #100	; 0x64
+  58:	d900      	bls.n	5c <mr_mainmenu_get_menutree+0x5c>
+  5a:	2764      	movs	r7, #100	; 0x64
+  5c:	20c8      	movs	r0, #200	; 0xc8
+  5e:	4378      	muls	r0, r7
+  60:	9034      	str	r0, [sp, #208]	; 0xd0
+  62:	f7ff fffe 	bl	0 <mr_pal_mem_scrmem_alloc>
+  66:	0006      	movs	r6, r0
+  68:	d106      	bne.n	78 <mr_mainmenu_get_menutree+0x78>
+  6a:	9801      	ldr	r0, [sp, #4]
+  6c:	f7ff fffe 	bl	0 <mr_pal_mem_scrmem_free>
+  70:	2000      	movs	r0, #0
+  72:	43c0      	mvns	r0, r0
+  74:	b039      	add	sp, #228	; 0xe4
+  76:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  78:	9934      	ldr	r1, [sp, #208]	; 0xd0
+  7a:	0030      	movs	r0, r6
+  7c:	f7ff fffe 	bl	0 <__aeabi_memclr>
+  80:	e00d      	b.n	9e <mr_mainmenu_get_menutree+0x9e>
+  82:	0060      	lsls	r0, r4, #1
+  84:	1982      	adds	r2, r0, r6
+  86:	0068      	lsls	r0, r5, #1
+  88:	a902      	add	r1, sp, #8
+  8a:	5a09      	ldrh	r1, [r1, r0]
+  8c:	9801      	ldr	r0, [sp, #4]
+  8e:	f7ff fffe 	bl	0 <mr_mainmenu_get_menutree>
+  92:	1900      	adds	r0, r0, r4
+  94:	0404      	lsls	r4, r0, #16
+  96:	1c6d      	adds	r5, r5, #1
+  98:	0c24      	lsrs	r4, r4, #16
+  9a:	042d      	lsls	r5, r5, #16
+  9c:	0c2d      	lsrs	r5, r5, #16
+  9e:	42bd      	cmp	r5, r7
+  a0:	d3ef      	bcc.n	82 <mr_mainmenu_get_menutree+0x82>
+  a2:	2500      	movs	r5, #0
+  a4:	e008      	b.n	b8 <mr_mainmenu_get_menutree+0xb8>
+  a6:	0068      	lsls	r0, r5, #1
+  a8:	5a31      	ldrh	r1, [r6, r0]
+  aa:	9801      	ldr	r0, [sp, #4]
+  ac:	aa02      	add	r2, sp, #8
+  ae:	f7ff fffe 	bl	0 <mr_mainmenu_get_menutree>
+  b2:	1c6d      	adds	r5, r5, #1
+  b4:	042d      	lsls	r5, r5, #16
+  b6:	0c2d      	lsrs	r5, r5, #16
+  b8:	42a5      	cmp	r5, r4
+  ba:	d3f4      	bcc.n	a6 <mr_mainmenu_get_menutree+0xa6>
+  bc:	0030      	movs	r0, r6
+  be:	f7ff fffe 	bl	0 <mr_pal_mem_scrmem_free>
+  c2:	9937      	ldr	r1, [sp, #220]	; 0xdc
+  c4:	9801      	ldr	r0, [sp, #4]
+  c6:	6008      	str	r0, [r1, #0]
+  c8:	9801      	ldr	r0, [sp, #4]
+  ca:	f7ff fffe 	bl	0 <mr_str_wstrlen>
+  ce:	9938      	ldr	r1, [sp, #224]	; 0xe0
+  d0:	6008      	str	r0, [r1, #0]
+  d2:	4908      	ldr	r1, [pc, #32]	; (f4 <mr_mainmenu_get_menutree+0xf4>)
+  d4:	983e      	ldr	r0, [sp, #248]	; 0xf8
+  d6:	6001      	str	r1, [r0, #0]
+  d8:	2000      	movs	r0, #0
+  da:	e7cb      	b.n	74 <mr_mainmenu_get_menutree+0x74>
+  dc:	00000000 	.word	0x00000000
+  e0:	0061006d 	.word	0x0061006d
+  e4:	006e0069 	.word	0x006e0069
+  e8:	0065006d 	.word	0x0065006d
+  ec:	0075006e 	.word	0x0075006e
+	...
+
+Disassembly of section i.mr_plat:
+
+00000000 <mr_plat>:
+   0:	b570      	push	{r4, r5, r6, lr}
+   2:	0004      	movs	r4, r0
+   4:	000d      	movs	r5, r1
+   6:	000b      	movs	r3, r1
+   8:	0002      	movs	r2, r0
+   a:	2094      	movs	r0, #148	; 0x94
+   c:	a1f1      	add	r1, pc, #964	; (adr r1, 3d4 <mr_plat+0x3d4>)
+   e:	f7ff fffe 	bl	0 <kal_prompt_trace>
+  12:	48f8      	ldr	r0, [pc, #992]	; (3f4 <mr_plat+0x3f4>)
+  14:	1a23      	subs	r3, r4, r0
+  16:	4284      	cmp	r4, r0
+  18:	d070      	beq.n	fc <mr_plat+0xfc>
+  1a:	dc74      	bgt.n	106 <mr_plat+0x106>
+  1c:	49f6      	ldr	r1, [pc, #984]	; (3f8 <mr_plat+0x3f8>)
+  1e:	1a60      	subs	r0, r4, r1
+  20:	428c      	cmp	r4, r1
+  22:	d06d      	beq.n	100 <mr_plat+0x100>
+  24:	dc37      	bgt.n	96 <mr_plat+0x96>
+  26:	49f5      	ldr	r1, [pc, #980]	; (3fc <mr_plat+0x3fc>)
+  28:	1a60      	subs	r0, r4, r1
+  2a:	428c      	cmp	r4, r1
+  2c:	d069      	beq.n	102 <mr_plat+0x102>
+  2e:	dc19      	bgt.n	64 <mr_plat+0x64>
+  30:	2c66      	cmp	r4, #102	; 0x66
+  32:	d067      	beq.n	104 <mr_plat+0x104>
+  34:	dc0b      	bgt.n	4e <mr_plat+0x4e>
+  36:	2c02      	cmp	r4, #2
+  38:	d07e      	beq.n	138 <mr_plat+0x138>
+  3a:	2c03      	cmp	r4, #3
+  3c:	d07d      	beq.n	13a <mr_plat+0x13a>
+  3e:	2c04      	cmp	r4, #4
+  40:	d07c      	beq.n	13c <mr_plat+0x13c>
+  42:	2c65      	cmp	r4, #101	; 0x65
+  44:	d17b      	bne.n	13e <mr_plat+0x13e>
+  46:	0028      	movs	r0, r5
+  48:	f7ff fffe 	bl	0 <mr_lcd_set_rotation>
+  4c:	bd70      	pop	{r4, r5, r6, pc}
+  4e:	2c67      	cmp	r4, #103	; 0x67
+  50:	d076      	beq.n	140 <mr_plat+0x140>
+  52:	2c68      	cmp	r4, #104	; 0x68
+  54:	d075      	beq.n	142 <mr_plat+0x142>
+  56:	48ea      	ldr	r0, [pc, #936]	; (400 <mr_plat+0x400>)
+  58:	1820      	adds	r0, r4, r0
+  5a:	d1f3      	bne.n	44 <mr_plat+0x44>
+  5c:	0028      	movs	r0, r5
+  5e:	f7ff fffe 	bl	0 <mr_net_check_connect>
+  62:	bd70      	pop	{r4, r5, r6, pc}
+  64:	280f      	cmp	r0, #15
+  66:	d06d      	beq.n	144 <mr_plat+0x144>
+  68:	dc0b      	bgt.n	82 <mr_plat+0x82>
+  6a:	2801      	cmp	r0, #1
+  6c:	d06b      	beq.n	146 <mr_plat+0x146>
+  6e:	2803      	cmp	r0, #3
+  70:	d06a      	beq.n	148 <mr_plat+0x148>
+  72:	2808      	cmp	r0, #8
+  74:	d069      	beq.n	14a <mr_plat+0x14a>
+  76:	280d      	cmp	r0, #13
+  78:	d1e4      	bne.n	44 <mr_plat+0x44>
+  7a:	0028      	movs	r0, r5
+  7c:	f7ff fffe 	bl	0 <mr_signal_initialize>
+  80:	bd70      	pop	{r4, r5, r6, pc}
+  82:	2811      	cmp	r0, #17
+  84:	d076      	beq.n	174 <mr_plat+0x174>
+  86:	2861      	cmp	r0, #97	; 0x61
+  88:	d075      	beq.n	176 <mr_plat+0x176>
+  8a:	2862      	cmp	r0, #98	; 0x62
+  8c:	d1da      	bne.n	44 <mr_plat+0x44>
+  8e:	0028      	movs	r0, r5
+  90:	f7ff fffe 	bl	0 <mr_sms_get_sms_count>
+  94:	bd70      	pop	{r4, r5, r6, pc}
+  96:	2865      	cmp	r0, #101	; 0x65
+  98:	d06e      	beq.n	178 <mr_plat+0x178>
+  9a:	dc18      	bgt.n	ce <mr_plat+0xce>
+  9c:	2808      	cmp	r0, #8
+  9e:	d06c      	beq.n	17a <mr_plat+0x17a>
+  a0:	dc0b      	bgt.n	ba <mr_plat+0xba>
+  a2:	2801      	cmp	r0, #1
+  a4:	d06a      	beq.n	17c <mr_plat+0x17c>
+  a6:	2802      	cmp	r0, #2
+  a8:	d069      	beq.n	17e <mr_plat+0x17e>
+  aa:	2805      	cmp	r0, #5
+  ac:	d068      	beq.n	180 <mr_plat+0x180>
+  ae:	2806      	cmp	r0, #6
+  b0:	d1c8      	bne.n	44 <mr_plat+0x44>
+  b2:	0028      	movs	r0, r5
+  b4:	f7ff fffe 	bl	0 <mr_net_data_account_show_ui>
+  b8:	bd70      	pop	{r4, r5, r6, pc}
+  ba:	2809      	cmp	r0, #9
+  bc:	d076      	beq.n	1ac <mr_plat+0x1ac>
+  be:	280a      	cmp	r0, #10
+  c0:	d075      	beq.n	1ae <mr_plat+0x1ae>
+  c2:	2864      	cmp	r0, #100	; 0x64
+  c4:	d1be      	bne.n	44 <mr_plat+0x44>
+  c6:	0028      	movs	r0, r5
+  c8:	f7ff fffe 	bl	0 <mr_setting_get_screen_type>
+  cc:	bd70      	pop	{r4, r5, r6, pc}
+  ce:	286e      	cmp	r0, #110	; 0x6e
+  d0:	d06e      	beq.n	1b0 <mr_plat+0x1b0>
+  d2:	dc09      	bgt.n	e8 <mr_plat+0xe8>
+  d4:	286a      	cmp	r0, #106	; 0x6a
+  d6:	d06c      	beq.n	1b2 <mr_plat+0x1b2>
+  d8:	286c      	cmp	r0, #108	; 0x6c
+  da:	d06b      	beq.n	1b4 <mr_plat+0x1b4>
+  dc:	286d      	cmp	r0, #109	; 0x6d
+  de:	d1b1      	bne.n	44 <mr_plat+0x44>
+  e0:	0028      	movs	r0, r5
+  e2:	f7ff fffe 	bl	0 <mr_backstage_hold_endkey>
+  e6:	bd70      	pop	{r4, r5, r6, pc}
+  e8:	286f      	cmp	r0, #111	; 0x6f
+  ea:	d07d      	beq.n	1e8 <mr_plat+0x1e8>
+  ec:	2871      	cmp	r0, #113	; 0x71
+  ee:	d07c      	beq.n	1ea <mr_plat+0x1ea>
+  f0:	287e      	cmp	r0, #126	; 0x7e
+  f2:	d1a7      	bne.n	44 <mr_plat+0x44>
+  f4:	0028      	movs	r0, r5
+  f6:	f7ff fffe 	bl	0 <mr_fs_get_position>
+  fa:	bd70      	pop	{r4, r5, r6, pc}
+  fc:	e150      	b.n	3a0 <mr_plat+0x3a0>
+  fe:	e002      	b.n	106 <mr_plat+0x106>
+ 100:	e0fe      	b.n	300 <mr_plat+0x300>
+ 102:	e141      	b.n	388 <mr_plat+0x388>
+ 104:	e148      	b.n	398 <mr_plat+0x398>
+ 106:	214b      	movs	r1, #75	; 0x4b
+ 108:	0109      	lsls	r1, r1, #4
+ 10a:	1a58      	subs	r0, r3, r1
+ 10c:	428b      	cmp	r3, r1
+ 10e:	d06d      	beq.n	1ec <mr_plat+0x1ec>
+ 110:	dc37      	bgt.n	182 <mr_plat+0x182>
+ 112:	2b14      	cmp	r3, #20
+ 114:	d06b      	beq.n	1ee <mr_plat+0x1ee>
+ 116:	dc09      	bgt.n	12c <mr_plat+0x12c>
+ 118:	3b08      	subs	r3, #8
+ 11a:	f7ff fffe 	bl	0 <__ARM_switch8>
+ 11e:	d10c      	.short	0xd10c
+ 120:	d910d510 	.word	0xd910d510
+ 124:	c6c31010 	.word	0xc6c31010
+ 128:	10b9cdcb 	.word	0x10b9cdcb
+ 12c:	2b1a      	cmp	r3, #26
+ 12e:	d071      	beq.n	214 <mr_plat+0x214>
+ 130:	dc14      	bgt.n	15c <mr_plat+0x15c>
+ 132:	2b17      	cmp	r3, #23
+ 134:	d06f      	beq.n	216 <mr_plat+0x216>
+ 136:	e009      	b.n	14c <mr_plat+0x14c>
+ 138:	e068      	b.n	20c <mr_plat+0x20c>
+ 13a:	e06d      	b.n	218 <mr_plat+0x218>
+ 13c:	e070      	b.n	220 <mr_plat+0x220>
+ 13e:	e147      	b.n	3d0 <mr_plat+0x3d0>
+ 140:	e126      	b.n	390 <mr_plat+0x390>
+ 142:	e131      	b.n	3a8 <mr_plat+0x3a8>
+ 144:	e110      	b.n	368 <mr_plat+0x368>
+ 146:	e0ff      	b.n	348 <mr_plat+0x348>
+ 148:	e11a      	b.n	380 <mr_plat+0x380>
+ 14a:	e0dd      	b.n	308 <mr_plat+0x308>
+ 14c:	2b18      	cmp	r3, #24
+ 14e:	d06f      	beq.n	230 <mr_plat+0x230>
+ 150:	2b19      	cmp	r3, #25
+ 152:	d191      	bne.n	78 <mr_plat+0x78>
+ 154:	0028      	movs	r0, r5
+ 156:	f7ff fffe 	bl	0 <mr_setting_check_wifi_support>
+ 15a:	e7ce      	b.n	fa <mr_plat+0xfa>
+ 15c:	2b1f      	cmp	r3, #31
+ 15e:	d068      	beq.n	232 <mr_plat+0x232>
+ 160:	2b59      	cmp	r3, #89	; 0x59
+ 162:	d067      	beq.n	234 <mr_plat+0x234>
+ 164:	48a6      	ldr	r0, [pc, #664]	; (400 <mr_plat+0x400>)
+ 166:	38c5      	subs	r0, #197	; 0xc5
+ 168:	1818      	adds	r0, r3, r0
+ 16a:	d185      	bne.n	78 <mr_plat+0x78>
+ 16c:	0028      	movs	r0, r5
+ 16e:	f7ff fffe 	bl	0 <mr_camera_init>
+ 172:	e7c2      	b.n	fa <mr_plat+0xfa>
+ 174:	e058      	b.n	228 <mr_plat+0x228>
+ 176:	e0bf      	b.n	2f8 <mr_plat+0x2f8>
+ 178:	e122      	b.n	3c0 <mr_plat+0x3c0>
+ 17a:	e074      	b.n	266 <mr_plat+0x266>
+ 17c:	e0b8      	b.n	2f0 <mr_plat+0x2f0>
+ 17e:	e0b3      	b.n	2e8 <mr_plat+0x2e8>
+ 180:	e0ae      	b.n	2e0 <mr_plat+0x2e0>
+ 182:	22ff      	movs	r2, #255	; 0xff
+ 184:	32ff      	adds	r2, #255	; 0xff
+ 186:	1a81      	subs	r1, r0, r2
+ 188:	4290      	cmp	r0, r2
+ 18a:	d070      	beq.n	26e <mr_plat+0x26e>
+ 18c:	dc1d      	bgt.n	1ca <mr_plat+0x1ca>
+ 18e:	2806      	cmp	r0, #6
+ 190:	d06e      	beq.n	270 <mr_plat+0x270>
+ 192:	dc10      	bgt.n	1b6 <mr_plat+0x1b6>
+ 194:	2801      	cmp	r0, #1
+ 196:	d06c      	beq.n	272 <mr_plat+0x272>
+ 198:	2802      	cmp	r0, #2
+ 19a:	d06b      	beq.n	274 <mr_plat+0x274>
+ 19c:	2804      	cmp	r0, #4
+ 19e:	d06a      	beq.n	276 <mr_plat+0x276>
+ 1a0:	2805      	cmp	r0, #5
+ 1a2:	d185      	bne.n	b0 <mr_plat+0xb0>
+ 1a4:	0028      	movs	r0, r5
+ 1a6:	f7ff fffe 	bl	0 <mr_camera_zoom_in>
+ 1aa:	e7a6      	b.n	fa <mr_plat+0xfa>
+ 1ac:	e064      	b.n	278 <mr_plat+0x278>
+ 1ae:	e067      	b.n	280 <mr_plat+0x280>
+ 1b0:	e0d2      	b.n	358 <mr_plat+0x358>
+ 1b2:	e0fd      	b.n	3b0 <mr_plat+0x3b0>
+ 1b4:	e100      	b.n	3b8 <mr_plat+0x3b8>
+ 1b6:	28c7      	cmp	r0, #199	; 0xc7
+ 1b8:	d072      	beq.n	2a0 <mr_plat+0x2a0>
+ 1ba:	28c8      	cmp	r0, #200	; 0xc8
+ 1bc:	d071      	beq.n	2a2 <mr_plat+0x2a2>
+ 1be:	28c9      	cmp	r0, #201	; 0xc9
+ 1c0:	d18d      	bne.n	de <mr_plat+0xde>
+ 1c2:	0028      	movs	r0, r5
+ 1c4:	f7ff fffe 	bl	0 <mr_voice_record_stop>
+ 1c8:	e797      	b.n	fa <mr_plat+0xfa>
+ 1ca:	221f      	movs	r2, #31
+ 1cc:	0152      	lsls	r2, r2, #5
+ 1ce:	1a88      	subs	r0, r1, r2
+ 1d0:	4291      	cmp	r1, r2
+ 1d2:	d03c      	beq.n	24e <mr_plat+0x24e>
+ 1d4:	dc0f      	bgt.n	1f6 <mr_plat+0x1f6>
+ 1d6:	488b      	ldr	r0, [pc, #556]	; (404 <mr_plat+0x404>)
+ 1d8:	1808      	adds	r0, r1, r0
+ 1da:	d030      	beq.n	23e <mr_plat+0x23e>
+ 1dc:	2801      	cmp	r0, #1
+ 1de:	d032      	beq.n	246 <mr_plat+0x246>
+ 1e0:	2802      	cmp	r0, #2
+ 1e2:	d186      	bne.n	f2 <mr_plat+0xf2>
+ 1e4:	0028      	movs	r0, r5
+ 1e6:	e003      	b.n	1f0 <mr_plat+0x1f0>
+ 1e8:	e0ba      	b.n	360 <mr_plat+0x360>
+ 1ea:	e0b1      	b.n	350 <mr_plat+0x350>
+ 1ec:	e09c      	b.n	328 <mr_plat+0x328>
+ 1ee:	e053      	b.n	298 <mr_plat+0x298>
+ 1f0:	f7ff fffe 	bl	0 <mr_motion_power_off>
+ 1f4:	e781      	b.n	fa <mr_plat+0xfa>
+ 1f6:	2801      	cmp	r0, #1
+ 1f8:	d02d      	beq.n	256 <mr_plat+0x256>
+ 1fa:	2802      	cmp	r0, #2
+ 1fc:	d02f      	beq.n	25e <mr_plat+0x25e>
+ 1fe:	4982      	ldr	r1, [pc, #520]	; (408 <mr_plat+0x408>)
+ 200:	1840      	adds	r0, r0, r1
+ 202:	d1a6      	bne.n	152 <mr_plat+0x152>
+ 204:	0028      	movs	r0, r5
+ 206:	f7ff fffe 	bl	0 <mr_backstage_idle_widget_set_msgcount>
+ 20a:	e776      	b.n	fa <mr_plat+0xfa>
+ 20c:	0028      	movs	r0, r5
+ 20e:	f7ff fffe 	bl	0 <MMIMRAPP_getKeyNum>
+ 212:	e772      	b.n	fa <mr_plat+0xfa>
+ 214:	e00f      	b.n	236 <mr_plat+0x236>
+ 216:	e037      	b.n	288 <mr_plat+0x288>
+ 218:	0028      	movs	r0, r5
+ 21a:	f7ff fffe 	bl	0 <MMIMRAPP_getKeyState>
+ 21e:	e76c      	b.n	fa <mr_plat+0xfa>
+ 220:	0028      	movs	r0, r5
+ 222:	f7ff fffe 	bl	0 <MMIMRAPP_nesActionInd>
+ 226:	e768      	b.n	fa <mr_plat+0xfa>
+ 228:	0028      	movs	r0, r5
+ 22a:	f7ff fffe 	bl	0 <mr_backlight_get_status>
+ 22e:	e764      	b.n	fa <mr_plat+0xfa>
+ 230:	e09e      	b.n	370 <mr_plat+0x370>
+ 232:	e0c9      	b.n	3c8 <mr_plat+0x3c8>
+ 234:	e0a0      	b.n	378 <mr_plat+0x378>
+ 236:	0028      	movs	r0, r5
+ 238:	f7ff fffe 	bl	0 <mr_setting_wifi_switch>
+ 23c:	e75d      	b.n	fa <mr_plat+0xfa>
+ 23e:	0028      	movs	r0, r5
+ 240:	f7ff fffe 	bl	0 <mr_motion_stop_listen>
+ 244:	e759      	b.n	fa <mr_plat+0xfa>
+ 246:	0028      	movs	r0, r5
+ 248:	f7ff fffe 	bl	0 <mr_motion_power_on>
+ 24c:	e755      	b.n	fa <mr_plat+0xfa>
+ 24e:	0028      	movs	r0, r5
+ 250:	f7ff fffe 	bl	0 <mr_motion_listen_shake>
+ 254:	e751      	b.n	fa <mr_plat+0xfa>
+ 256:	0028      	movs	r0, r5
+ 258:	f7ff fffe 	bl	0 <mr_motion_listen_tilt>
+ 25c:	e74d      	b.n	fa <mr_plat+0xfa>
+ 25e:	0028      	movs	r0, r5
+ 260:	f7ff fffe 	bl	0 <mr_motion_get_max_acc>
+ 264:	e749      	b.n	fa <mr_plat+0xfa>
+ 266:	0028      	movs	r0, r5
+ 268:	f7ff fffe 	bl	0 <mr_setting_restore_theme>
+ 26c:	e745      	b.n	fa <mr_plat+0xfa>
+ 26e:	e033      	b.n	2d8 <mr_plat+0x2d8>
+ 270:	e066      	b.n	340 <mr_plat+0x340>
+ 272:	e05d      	b.n	330 <mr_plat+0x330>
+ 274:	e054      	b.n	320 <mr_plat+0x320>
+ 276:	e05f      	b.n	338 <mr_plat+0x338>
+ 278:	0028      	movs	r0, r5
+ 27a:	f7ff fffe 	bl	0 <mr_setting_get_active_theme_id>
+ 27e:	e73c      	b.n	fa <mr_plat+0xfa>
+ 280:	0028      	movs	r0, r5
+ 282:	f7ff fffe 	bl	0 <mr_setting_set_theme_mainmenu_index>
+ 286:	e738      	b.n	fa <mr_plat+0xfa>
+ 288:	0028      	movs	r0, r5
+ 28a:	f7ff fffe 	bl	0 <mr_mainmenu_draw_background>
+ 28e:	e734      	b.n	fa <mr_plat+0xfa>
+ 290:	0028      	movs	r0, r5
+ 292:	f7ff fffe 	bl	0 <mr_layer_lock_frame_buffer>
+ 296:	e730      	b.n	fa <mr_plat+0xfa>
+ 298:	0028      	movs	r0, r5
+ 29a:	f7ff fffe 	bl	0 <mr_layer_unlock_frame_buffer>
+ 29e:	e72c      	b.n	fa <mr_plat+0xfa>
+ 2a0:	e036      	b.n	310 <mr_plat+0x310>
+ 2a2:	e039      	b.n	318 <mr_plat+0x318>
+ 2a4:	0029      	movs	r1, r5
+ 2a6:	2001      	movs	r0, #1
+ 2a8:	e001      	b.n	2ae <mr_plat+0x2ae>
+ 2aa:	0029      	movs	r1, r5
+ 2ac:	2000      	movs	r0, #0
+ 2ae:	f7ff fffe 	bl	0 <mr_layer_set_opacity>
+ 2b2:	e722      	b.n	fa <mr_plat+0xfa>
+ 2b4:	2001      	movs	r0, #1
+ 2b6:	e000      	b.n	2ba <mr_plat+0x2ba>
+ 2b8:	2000      	movs	r0, #0
+ 2ba:	f7ff fffe 	bl	0 <mr_layer_enable_source_key>
+ 2be:	e71c      	b.n	fa <mr_plat+0xfa>
+ 2c0:	0028      	movs	r0, r5
+ 2c2:	f7ff fffe 	bl	0 <mr_layer_free>
+ 2c6:	e718      	b.n	fa <mr_plat+0xfa>
+ 2c8:	0028      	movs	r0, r5
+ 2ca:	f7ff fffe 	bl	0 <mr_layer_set_active_layer>
+ 2ce:	e714      	b.n	fa <mr_plat+0xfa>
+ 2d0:	0028      	movs	r0, r5
+ 2d2:	f7ff fffe 	bl	0 <mr_layer_set_abm_layer>
+ 2d6:	e710      	b.n	fa <mr_plat+0xfa>
+ 2d8:	0028      	movs	r0, r5
+ 2da:	f7ff fffe 	bl	0 <mr_image_stop_animation>
+ 2de:	e70c      	b.n	fa <mr_plat+0xfa>
+ 2e0:	0028      	movs	r0, r5
+ 2e2:	f7ff fffe 	bl	0 <mr_net_data_account_set_use_flag>
+ 2e6:	e708      	b.n	fa <mr_plat+0xfa>
+ 2e8:	0028      	movs	r0, r5
+ 2ea:	f7ff fffe 	bl	0 <mr_net_get_data_account_req>
+ 2ee:	e704      	b.n	fa <mr_plat+0xfa>
+ 2f0:	0028      	movs	r0, r5
+ 2f2:	f7ff fffe 	bl	0 <mr_sms_get_sc_req>
+ 2f6:	e700      	b.n	fa <mr_plat+0xfa>
+ 2f8:	0028      	movs	r0, r5
+ 2fa:	f7ff fffe 	bl	0 <mr_sms_get_sms_status>
+ 2fe:	e6fc      	b.n	fa <mr_plat+0xfa>
+ 300:	0028      	movs	r0, r5
+ 302:	f7ff fffe 	bl	0 <mr_sms_get_memory_size>
+ 306:	e6f8      	b.n	fa <mr_plat+0xfa>
+ 308:	0028      	movs	r0, r5
+ 30a:	f7ff fffe 	bl	0 <mr_sms_enable_new_display>
+ 30e:	e6f4      	b.n	fa <mr_plat+0xfa>
+ 310:	0028      	movs	r0, r5
+ 312:	f7ff fffe 	bl	0 <mr_voice_record_pause>
+ 316:	e6f0      	b.n	fa <mr_plat+0xfa>
+ 318:	0028      	movs	r0, r5
+ 31a:	f7ff fffe 	bl	0 <mr_voice_record_resume>
+ 31e:	e6ec      	b.n	fa <mr_plat+0xfa>
+ 320:	0028      	movs	r0, r5
+ 322:	f7ff fffe 	bl	0 <mr_camera_destroy>
+ 326:	e6e8      	b.n	fa <mr_plat+0xfa>
+ 328:	0028      	movs	r0, r5
+ 32a:	f7ff fffe 	bl	0 <mr_camera_pause>
+ 32e:	e6e4      	b.n	fa <mr_plat+0xfa>
+ 330:	0028      	movs	r0, r5
+ 332:	f7ff fffe 	bl	0 <mr_camera_resume_ex>
+ 336:	e6e0      	b.n	fa <mr_plat+0xfa>
+ 338:	0028      	movs	r0, r5
+ 33a:	f7ff fffe 	bl	0 <mr_camera_get_zoom_max>
+ 33e:	e6dc      	b.n	fa <mr_plat+0xfa>
+ 340:	0028      	movs	r0, r5
+ 342:	f7ff fffe 	bl	0 <mr_camera_zoom_out>
+ 346:	e6d8      	b.n	fa <mr_plat+0xfa>
+ 348:	0028      	movs	r0, r5
+ 34a:	f7ff fffe 	bl	0 <mr_sim_set_active>
+ 34e:	e6d4      	b.n	fa <mr_plat+0xfa>
+ 350:	0028      	movs	r0, r5
+ 352:	f7ff fffe 	bl	0 <mr_fs_check_msdc_status>
+ 356:	e6d0      	b.n	fa <mr_plat+0xfa>
+ 358:	0028      	movs	r0, r5
+ 35a:	f7ff fffe 	bl	0 <mr_bsid_initialize>
+ 35e:	e6cc      	b.n	fa <mr_plat+0xfa>
+ 360:	0028      	movs	r0, r5
+ 362:	f7ff fffe 	bl	0 <mr_bsid_terminate>
+ 366:	e6c8      	b.n	fa <mr_plat+0xfa>
+ 368:	0028      	movs	r0, r5
+ 36a:	f7ff fffe 	bl	0 <mr_signal_terminate>
+ 36e:	e6c4      	b.n	fa <mr_plat+0xfa>
+ 370:	0028      	movs	r0, r5
+ 372:	f7ff fffe 	bl	0 <mr_backstage_refresh_status_icon_bar>
+ 376:	e6c0      	b.n	fa <mr_plat+0xfa>
+ 378:	0028      	movs	r0, r5
+ 37a:	f7ff fffe 	bl	0 <mr_backstage_support>
+ 37e:	e6bc      	b.n	fa <mr_plat+0xfa>
+ 380:	0028      	movs	r0, r5
+ 382:	f7ff fffe 	bl	0 <mr_backstage_hide_idle_pic>
+ 386:	e6b8      	b.n	fa <mr_plat+0xfa>
+ 388:	0028      	movs	r0, r5
+ 38a:	f7ff fffe 	bl	0 <mr_backstage_activate_app>
+ 38e:	e6b4      	b.n	fa <mr_plat+0xfa>
+ 390:	0028      	movs	r0, r5
+ 392:	f7ff fffe 	bl	0 <mr_media_pcm_get_read_addr>
+ 396:	e6b0      	b.n	fa <mr_plat+0xfa>
+ 398:	0028      	movs	r0, r5
+ 39a:	f7ff fffe 	bl	0 <mr_media_pcm_set_write_addr>
+ 39e:	e6ac      	b.n	fa <mr_plat+0xfa>
+ 3a0:	0028      	movs	r0, r5
+ 3a2:	f7ff fffe 	bl	0 <mr_media_audio_set_vol>
+ 3a6:	e6a8      	b.n	fa <mr_plat+0xfa>
+ 3a8:	0028      	movs	r0, r5
+ 3aa:	f7ff fffe 	bl	0 <mr_app_goto_dsm_screen>
+ 3ae:	e6a4      	b.n	fa <mr_plat+0xfa>
+ 3b0:	0028      	movs	r0, r5
+ 3b2:	f7ff fffe 	bl	0 <mr_plat>
+ 3b6:	e6a0      	b.n	fa <mr_plat+0xfa>
+ 3b8:	0028      	movs	r0, r5
+ 3ba:	f7ff fffe 	bl	0 <mr_setting_get_cur_scene>
+ 3be:	e69c      	b.n	fa <mr_plat+0xfa>
+ 3c0:	0028      	movs	r0, r5
+ 3c2:	f7ff fffe 	bl	0 <mr_setting_get_cur_lang>
+ 3c6:	e698      	b.n	fa <mr_plat+0xfa>
+ 3c8:	0028      	movs	r0, r5
+ 3ca:	f7ff fffe 	bl	0 <mr_entry_todo_list>
+ 3ce:	e694      	b.n	fa <mr_plat+0xfa>
+ 3d0:	2001      	movs	r0, #1
+ 3d2:	e692      	b.n	fa <mr_plat+0xfa>
+ 3d4:	705f726d 	.word	0x705f726d
+ 3d8:	2074616c 	.word	0x2074616c
+ 3dc:	65646f63 	.word	0x65646f63
+ 3e0:	25203d20 	.word	0x25203d20
+ 3e4:	70202c64 	.word	0x70202c64
+ 3e8:	6d617261 	.word	0x6d617261
+ 3ec:	25203d20 	.word	0x25203d20
+ 3f0:	00000064 	.word	0x00000064
+ 3f4:	00000516 	.word	0x00000516
+ 3f8:	00000451 	.word	0x00000451
+ 3fc:	000003eb 	.word	0x000003eb
+ 400:	fffffc17 	.word	0xfffffc17
+ 404:	fffffc23 	.word	0xfffffc23
+ 408:	fffff82d 	.word	0xfffff82d
+
+Disassembly of section i.mr_platEx_sys:
+
+00000000 <mr_platEx_sys>:
+   0:	b5ff      	push	{r0, r1, r2, r3, r4, r5, r6, r7, lr}
+   2:	0005      	movs	r5, r0
+   4:	000e      	movs	r6, r1
+   6:	0002      	movs	r2, r0
+   8:	b083      	sub	sp, #12
+   a:	9c0c      	ldr	r4, [sp, #48]	; 0x30
+   c:	001f      	movs	r7, r3
+   e:	2094      	movs	r0, #148	; 0x94
+  10:	a1f6      	add	r1, pc, #984	; (adr r1, 3ec <mr_platEx_sys+0x3ec>)
+  12:	f7ff fffe 	bl	0 <kal_prompt_trace>
+  16:	49fa      	ldr	r1, [pc, #1000]	; (400 <mr_platEx_sys+0x400>)
+  18:	1a68      	subs	r0, r5, r1
+  1a:	428d      	cmp	r5, r1
+  1c:	d074      	beq.n	108 <mr_platEx_sys+0x108>
+  1e:	dc79      	bgt.n	114 <mr_platEx_sys+0x114>
+  20:	49f8      	ldr	r1, [pc, #992]	; (404 <mr_platEx_sys+0x404>)
+  22:	1a68      	subs	r0, r5, r1
+  24:	428d      	cmp	r5, r1
+  26:	d071      	beq.n	10c <mr_platEx_sys+0x10c>
+  28:	dc32      	bgt.n	90 <mr_platEx_sys+0x90>
+  2a:	48f7      	ldr	r0, [pc, #988]	; (408 <mr_platEx_sys+0x408>)
+  2c:	1a2b      	subs	r3, r5, r0
+  2e:	4285      	cmp	r5, r0
+  30:	d06d      	beq.n	10e <mr_platEx_sys+0x10e>
+  32:	dc25      	bgt.n	80 <mr_platEx_sys+0x80>
+  34:	49f5      	ldr	r1, [pc, #980]	; (40c <mr_platEx_sys+0x40c>)
+  36:	1a68      	subs	r0, r5, r1
+  38:	428d      	cmp	r5, r1
+  3a:	d069      	beq.n	110 <mr_platEx_sys+0x110>
+  3c:	dc11      	bgt.n	62 <mr_platEx_sys+0x62>
+  3e:	2d01      	cmp	r5, #1
+  40:	d067      	beq.n	112 <mr_platEx_sys+0x112>
+  42:	2d02      	cmp	r5, #2
+  44:	d07e      	beq.n	144 <mr_platEx_sys+0x144>
+  46:	2d05      	cmp	r5, #5
+  48:	d07d      	beq.n	146 <mr_platEx_sys+0x146>
+  4a:	2d6a      	cmp	r5, #106	; 0x6a
+  4c:	d17c      	bne.n	148 <mr_platEx_sys+0x148>
+  4e:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+  50:	0023      	movs	r3, r4
+  52:	9200      	str	r2, [sp, #0]
+  54:	9905      	ldr	r1, [sp, #20]
+  56:	003a      	movs	r2, r7
+  58:	0030      	movs	r0, r6
+  5a:	f7ff fffe 	bl	0 <mr_platEx_sys>
+  5e:	b007      	add	sp, #28
+  60:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  62:	2801      	cmp	r0, #1
+  64:	d071      	beq.n	14a <mr_platEx_sys+0x14a>
+  66:	2802      	cmp	r0, #2
+  68:	d070      	beq.n	14c <mr_platEx_sys+0x14c>
+  6a:	2805      	cmp	r0, #5
+  6c:	d1ee      	bne.n	4c <mr_platEx_sys+0x4c>
+  6e:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+  70:	0023      	movs	r3, r4
+  72:	9200      	str	r2, [sp, #0]
+  74:	9905      	ldr	r1, [sp, #20]
+  76:	003a      	movs	r2, r7
+  78:	0030      	movs	r0, r6
+  7a:	f7ff fffe 	bl	0 <mr_platEx_sys>
+  7e:	e7ee      	b.n	5e <mr_platEx_sys+0x5e>
+  80:	f7ff fffe 	bl	0 <__ARM_switch8>
+  84:	f2f3620a 	.word	0xf2f3620a
+  88:	eff0f162 	.word	0xeff0f162
+  8c:	62ed62ee 	.word	0x62ed62ee
+  90:	281c      	cmp	r0, #28
+  92:	d07e      	beq.n	192 <mr_platEx_sys+0x192>
+  94:	dc20      	bgt.n	d8 <mr_platEx_sys+0xd8>
+  96:	2807      	cmp	r0, #7
+  98:	d07c      	beq.n	194 <mr_platEx_sys+0x194>
+  9a:	dc0e      	bgt.n	ba <mr_platEx_sys+0xba>
+  9c:	2801      	cmp	r0, #1
+  9e:	d07a      	beq.n	196 <mr_platEx_sys+0x196>
+  a0:	2802      	cmp	r0, #2
+  a2:	d079      	beq.n	198 <mr_platEx_sys+0x198>
+  a4:	2806      	cmp	r0, #6
+  a6:	d1d1      	bne.n	4c <mr_platEx_sys+0x4c>
+  a8:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+  aa:	0023      	movs	r3, r4
+  ac:	9200      	str	r2, [sp, #0]
+  ae:	9905      	ldr	r1, [sp, #20]
+  b0:	003a      	movs	r2, r7
+  b2:	0030      	movs	r0, r6
+  b4:	f7ff fffe 	bl	0 <mr_net_get_data_account>
+  b8:	e7d1      	b.n	5e <mr_platEx_sys+0x5e>
+  ba:	280a      	cmp	r0, #10
+  bc:	d06d      	beq.n	19a <mr_platEx_sys+0x19a>
+  be:	280e      	cmp	r0, #14
+  c0:	d06c      	beq.n	19c <mr_platEx_sys+0x19c>
+  c2:	280f      	cmp	r0, #15
+  c4:	d1c2      	bne.n	4c <mr_platEx_sys+0x4c>
+  c6:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+  c8:	0023      	movs	r3, r4
+  ca:	9200      	str	r2, [sp, #0]
+  cc:	9905      	ldr	r1, [sp, #20]
+  ce:	003a      	movs	r2, r7
+  d0:	0030      	movs	r0, r6
+  d2:	f7ff fffe 	bl	0 <mr_platEx_sys>
+  d6:	e7c2      	b.n	5e <mr_platEx_sys+0x5e>
+  d8:	286a      	cmp	r0, #106	; 0x6a
+  da:	d07e      	beq.n	1da <mr_platEx_sys+0x1da>
+  dc:	dc0b      	bgt.n	f6 <mr_platEx_sys+0xf6>
+  de:	2865      	cmp	r0, #101	; 0x65
+  e0:	d07c      	beq.n	1dc <mr_platEx_sys+0x1dc>
+  e2:	2866      	cmp	r0, #102	; 0x66
+  e4:	d07b      	beq.n	1de <mr_platEx_sys+0x1de>
+  e6:	2869      	cmp	r0, #105	; 0x69
+  e8:	d1b0      	bne.n	4c <mr_platEx_sys+0x4c>
+  ea:	6839      	ldr	r1, [r7, #0]
+  ec:	2201      	movs	r2, #1
+  ee:	0030      	movs	r0, r6
+  f0:	f7ff fffe 	bl	0 <mr_str_ucs2_to_gb>
+  f4:	e7b3      	b.n	5e <mr_platEx_sys+0x5e>
+  f6:	286c      	cmp	r0, #108	; 0x6c
+  f8:	d072      	beq.n	1e0 <mr_platEx_sys+0x1e0>
+  fa:	2876      	cmp	r0, #118	; 0x76
+  fc:	d071      	beq.n	1e2 <mr_platEx_sys+0x1e2>
+  fe:	2878      	cmp	r0, #120	; 0x78
+ 100:	d1a4      	bne.n	4c <mr_platEx_sys+0x4c>
+ 102:	f7ff fffe 	bl	0 <mr_backlight_turnon>
+ 106:	e7aa      	b.n	5e <mr_platEx_sys+0x5e>
+ 108:	e20a      	b.n	520 <mr_platEx_sys+0x520>
+ 10a:	e003      	b.n	114 <mr_platEx_sys+0x114>
+ 10c:	e14a      	b.n	3a4 <mr_platEx_sys+0x3a4>
+ 10e:	e164      	b.n	3da <mr_platEx_sys+0x3da>
+ 110:	e209      	b.n	526 <mr_platEx_sys+0x526>
+ 112:	e1ea      	b.n	4ea <mr_platEx_sys+0x4ea>
+ 114:	28b5      	cmp	r0, #181	; 0xb5
+ 116:	d06f      	beq.n	1f8 <mr_platEx_sys+0x1f8>
+ 118:	dc4e      	bgt.n	1b8 <mr_platEx_sys+0x1b8>
+ 11a:	2858      	cmp	r0, #88	; 0x58
+ 11c:	d06d      	beq.n	1fa <mr_platEx_sys+0x1fa>
+ 11e:	dc28      	bgt.n	172 <mr_platEx_sys+0x172>
+ 120:	2852      	cmp	r0, #82	; 0x52
+ 122:	d06b      	beq.n	1fc <mr_platEx_sys+0x1fc>
+ 124:	dc16      	bgt.n	154 <mr_platEx_sys+0x154>
+ 126:	2801      	cmp	r0, #1
+ 128:	d069      	beq.n	1fe <mr_platEx_sys+0x1fe>
+ 12a:	2802      	cmp	r0, #2
+ 12c:	d068      	beq.n	200 <mr_platEx_sys+0x200>
+ 12e:	2803      	cmp	r0, #3
+ 130:	d067      	beq.n	202 <mr_platEx_sys+0x202>
+ 132:	2809      	cmp	r0, #9
+ 134:	d18a      	bne.n	4c <mr_platEx_sys+0x4c>
+ 136:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 138:	0023      	movs	r3, r4
+ 13a:	9200      	str	r2, [sp, #0]
+ 13c:	003a      	movs	r2, r7
+ 13e:	9905      	ldr	r1, [sp, #20]
+ 140:	0030      	movs	r0, r6
+ 142:	e004      	b.n	14e <mr_platEx_sys+0x14e>
+ 144:	e1da      	b.n	4fc <mr_platEx_sys+0x4fc>
+ 146:	e1e2      	b.n	50e <mr_platEx_sys+0x50e>
+ 148:	e259      	b.n	5fe <mr_platEx_sys+0x5fe>
+ 14a:	e1f1      	b.n	530 <mr_platEx_sys+0x530>
+ 14c:	e126      	b.n	39c <mr_platEx_sys+0x39c>
+ 14e:	f7ff fffe 	bl	0 <mr_fs_get_create_time>
+ 152:	e784      	b.n	5e <mr_platEx_sys+0x5e>
+ 154:	2854      	cmp	r0, #84	; 0x54
+ 156:	d07d      	beq.n	254 <mr_platEx_sys+0x254>
+ 158:	2855      	cmp	r0, #85	; 0x55
+ 15a:	d07c      	beq.n	256 <mr_platEx_sys+0x256>
+ 15c:	2856      	cmp	r0, #86	; 0x56
+ 15e:	d185      	bne.n	6c <mr_platEx_sys+0x6c>
+ 160:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 162:	0023      	movs	r3, r4
+ 164:	9200      	str	r2, [sp, #0]
+ 166:	9905      	ldr	r1, [sp, #20]
+ 168:	003a      	movs	r2, r7
+ 16a:	0030      	movs	r0, r6
+ 16c:	f7ff fffe 	bl	0 <mr_layer_create>
+ 170:	e775      	b.n	5e <mr_platEx_sys+0x5e>
+ 172:	286d      	cmp	r0, #109	; 0x6d
+ 174:	d070      	beq.n	258 <mr_platEx_sys+0x258>
+ 176:	dc15      	bgt.n	1a4 <mr_platEx_sys+0x1a4>
+ 178:	285a      	cmp	r0, #90	; 0x5a
+ 17a:	d06e      	beq.n	25a <mr_platEx_sys+0x25a>
+ 17c:	285c      	cmp	r0, #92	; 0x5c
+ 17e:	d06d      	beq.n	25c <mr_platEx_sys+0x25c>
+ 180:	285d      	cmp	r0, #93	; 0x5d
+ 182:	d190      	bne.n	a6 <mr_platEx_sys+0xa6>
+ 184:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 186:	0023      	movs	r3, r4
+ 188:	9200      	str	r2, [sp, #0]
+ 18a:	003a      	movs	r2, r7
+ 18c:	9905      	ldr	r1, [sp, #20]
+ 18e:	0030      	movs	r0, r6
+ 190:	e005      	b.n	19e <mr_platEx_sys+0x19e>
+ 192:	e156      	b.n	442 <mr_platEx_sys+0x442>
+ 194:	e0f4      	b.n	380 <mr_platEx_sys+0x380>
+ 196:	e117      	b.n	3c8 <mr_platEx_sys+0x3c8>
+ 198:	e10d      	b.n	3b6 <mr_platEx_sys+0x3b6>
+ 19a:	e091      	b.n	2c0 <mr_platEx_sys+0x2c0>
+ 19c:	e084      	b.n	2a8 <mr_platEx_sys+0x2a8>
+ 19e:	f7ff fffe 	bl	0 <mr_layer_flatten>
+ 1a2:	e75c      	b.n	5e <mr_platEx_sys+0x5e>
+ 1a4:	28b2      	cmp	r0, #178	; 0xb2
+ 1a6:	d073      	beq.n	290 <mr_platEx_sys+0x290>
+ 1a8:	28b3      	cmp	r0, #179	; 0xb3
+ 1aa:	d072      	beq.n	292 <mr_platEx_sys+0x292>
+ 1ac:	28b4      	cmp	r0, #180	; 0xb4
+ 1ae:	d189      	bne.n	c4 <mr_platEx_sys+0xc4>
+ 1b0:	7830      	ldrb	r0, [r6, #0]
+ 1b2:	f7ff fffe 	bl	0 <mr_fmgr_filter_clear>
+ 1b6:	e752      	b.n	5e <mr_platEx_sys+0x5e>
+ 1b8:	4a95      	ldr	r2, [pc, #596]	; (410 <mr_platEx_sys+0x410>)
+ 1ba:	1a81      	subs	r1, r0, r2
+ 1bc:	4290      	cmp	r0, r2
+ 1be:	d069      	beq.n	294 <mr_platEx_sys+0x294>
+ 1c0:	dc2f      	bgt.n	222 <mr_platEx_sys+0x222>
+ 1c2:	4a94      	ldr	r2, [pc, #592]	; (414 <mr_platEx_sys+0x414>)
+ 1c4:	1a81      	subs	r1, r0, r2
+ 1c6:	4290      	cmp	r0, r2
+ 1c8:	d077      	beq.n	2ba <mr_platEx_sys+0x2ba>
+ 1ca:	dc1b      	bgt.n	204 <mr_platEx_sys+0x204>
+ 1cc:	28b6      	cmp	r0, #182	; 0xb6
+ 1ce:	d075      	beq.n	2bc <mr_platEx_sys+0x2bc>
+ 1d0:	28b7      	cmp	r0, #183	; 0xb7
+ 1d2:	d074      	beq.n	2be <mr_platEx_sys+0x2be>
+ 1d4:	4990      	ldr	r1, [pc, #576]	; (418 <mr_platEx_sys+0x418>)
+ 1d6:	1840      	adds	r0, r0, r1
+ 1d8:	e004      	b.n	1e4 <mr_platEx_sys+0x1e4>
+ 1da:	e083      	b.n	2e4 <mr_platEx_sys+0x2e4>
+ 1dc:	e124      	b.n	428 <mr_platEx_sys+0x428>
+ 1de:	e17d      	b.n	4dc <mr_platEx_sys+0x4dc>
+ 1e0:	e1cc      	b.n	57c <mr_platEx_sys+0x57c>
+ 1e2:	e1d9      	b.n	598 <mr_platEx_sys+0x598>
+ 1e4:	d180      	bne.n	e8 <mr_platEx_sys+0xe8>
+ 1e6:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 1e8:	0023      	movs	r3, r4
+ 1ea:	9200      	str	r2, [sp, #0]
+ 1ec:	9905      	ldr	r1, [sp, #20]
+ 1ee:	003a      	movs	r2, r7
+ 1f0:	0030      	movs	r0, r6
+ 1f2:	f7ff fffe 	bl	0 <mr_camera_create>
+ 1f6:	e732      	b.n	5e <mr_platEx_sys+0x5e>
+ 1f8:	e1da      	b.n	5b0 <mr_platEx_sys+0x5b0>
+ 1fa:	e093      	b.n	324 <mr_platEx_sys+0x324>
+ 1fc:	e165      	b.n	4ca <mr_platEx_sys+0x4ca>
+ 1fe:	e156      	b.n	4ae <mr_platEx_sys+0x4ae>
+ 200:	e1c1      	b.n	586 <mr_platEx_sys+0x586>
+ 202:	e0c6      	b.n	392 <mr_platEx_sys+0x392>
+ 204:	2904      	cmp	r1, #4
+ 206:	d076      	beq.n	2f6 <mr_platEx_sys+0x2f6>
+ 208:	295f      	cmp	r1, #95	; 0x5f
+ 20a:	d075      	beq.n	2f8 <mr_platEx_sys+0x2f8>
+ 20c:	29c3      	cmp	r1, #195	; 0xc3
+ 20e:	d191      	bne.n	134 <mr_platEx_sys+0x134>
+ 210:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 212:	0023      	movs	r3, r4
+ 214:	9200      	str	r2, [sp, #0]
+ 216:	9905      	ldr	r1, [sp, #20]
+ 218:	003a      	movs	r2, r7
+ 21a:	0030      	movs	r0, r6
+ 21c:	f7ff fffe 	bl	0 <mr_voice_record_start>
+ 220:	e71d      	b.n	5e <mr_platEx_sys+0x5e>
+ 222:	4a7b      	ldr	r2, [pc, #492]	; (410 <mr_platEx_sys+0x410>)
+ 224:	3a54      	subs	r2, #84	; 0x54
+ 226:	1a88      	subs	r0, r1, r2
+ 228:	4291      	cmp	r1, r2
+ 22a:	d06f      	beq.n	30c <mr_platEx_sys+0x30c>
+ 22c:	dc1e      	bgt.n	26c <mr_platEx_sys+0x26c>
+ 22e:	39ff      	subs	r1, #255	; 0xff
+ 230:	3930      	subs	r1, #48	; 0x30
+ 232:	d06c      	beq.n	30e <mr_platEx_sys+0x30e>
+ 234:	2901      	cmp	r1, #1
+ 236:	d06b      	beq.n	310 <mr_platEx_sys+0x310>
+ 238:	2902      	cmp	r1, #2
+ 23a:	d190      	bne.n	15e <mr_platEx_sys+0x15e>
+ 23c:	4877      	ldr	r0, [pc, #476]	; (41c <mr_platEx_sys+0x41c>)
+ 23e:	6800      	ldr	r0, [r0, #0]
+ 240:	0402      	lsls	r2, r0, #16
+ 242:	4877      	ldr	r0, [pc, #476]	; (420 <mr_platEx_sys+0x420>)
+ 244:	0c12      	lsrs	r2, r2, #16
+ 246:	6800      	ldr	r0, [r0, #0]
+ 248:	0401      	lsls	r1, r0, #16
+ 24a:	0c09      	lsrs	r1, r1, #16
+ 24c:	0030      	movs	r0, r6
+ 24e:	f7ff fffe 	bl	0 <dsm_LCD_Display>
+ 252:	e704      	b.n	5e <mr_platEx_sys+0x5e>
+ 254:	e122      	b.n	49c <mr_platEx_sys+0x49c>
+ 256:	e05c      	b.n	312 <mr_platEx_sys+0x312>
+ 258:	e01d      	b.n	296 <mr_platEx_sys+0x296>
+ 25a:	e075      	b.n	348 <mr_platEx_sys+0x348>
+ 25c:	e06b      	b.n	336 <mr_platEx_sys+0x336>
+ 25e:	e12f      	b.n	4c0 <mr_platEx_sys+0x4c0>
+ 260:	e183      	b.n	56a <mr_platEx_sys+0x56a>
+ 262:	e179      	b.n	558 <mr_platEx_sys+0x558>
+ 264:	e16f      	b.n	546 <mr_platEx_sys+0x546>
+ 266:	e165      	b.n	534 <mr_platEx_sys+0x534>
+ 268:	e0e2      	b.n	430 <mr_platEx_sys+0x430>
+ 26a:	e032      	b.n	2d2 <mr_platEx_sys+0x2d2>
+ 26c:	2863      	cmp	r0, #99	; 0x63
+ 26e:	d074      	beq.n	35a <mr_platEx_sys+0x35a>
+ 270:	496c      	ldr	r1, [pc, #432]	; (424 <mr_platEx_sys+0x424>)
+ 272:	1840      	adds	r0, r0, r1
+ 274:	d041      	beq.n	2fa <mr_platEx_sys+0x2fa>
+ 276:	496b      	ldr	r1, [pc, #428]	; (424 <mr_platEx_sys+0x424>)
+ 278:	3965      	subs	r1, #101	; 0x65
+ 27a:	1840      	adds	r0, r0, r1
+ 27c:	d197      	bne.n	1ae <mr_platEx_sys+0x1ae>
+ 27e:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 280:	0023      	movs	r3, r4
+ 282:	9200      	str	r2, [sp, #0]
+ 284:	9905      	ldr	r1, [sp, #20]
+ 286:	003a      	movs	r2, r7
+ 288:	0030      	movs	r0, r6
+ 28a:	f7ff fffe 	bl	0 <mr_net_gprs_info_query>
+ 28e:	e6e6      	b.n	5e <mr_platEx_sys+0x5e>
+ 290:	e187      	b.n	5a2 <mr_platEx_sys+0x5a2>
+ 292:	e189      	b.n	5a8 <mr_platEx_sys+0x5a8>
+ 294:	e0de      	b.n	454 <mr_platEx_sys+0x454>
+ 296:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 298:	0023      	movs	r3, r4
+ 29a:	9200      	str	r2, [sp, #0]
+ 29c:	9905      	ldr	r1, [sp, #20]
+ 29e:	003a      	movs	r2, r7
+ 2a0:	0030      	movs	r0, r6
+ 2a2:	f7ff fffe 	bl	0 <mr_qq_ext_api>
+ 2a6:	e6da      	b.n	5e <mr_platEx_sys+0x5e>
+ 2a8:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 2aa:	0023      	movs	r3, r4
+ 2ac:	9200      	str	r2, [sp, #0]
+ 2ae:	9905      	ldr	r1, [sp, #20]
+ 2b0:	003a      	movs	r2, r7
+ 2b2:	0030      	movs	r0, r6
+ 2b4:	f7ff fffe 	bl	0 <mr_platEx_sys>
+ 2b8:	e6d1      	b.n	5e <mr_platEx_sys+0x5e>
+ 2ba:	e0dd      	b.n	478 <mr_platEx_sys+0x478>
+ 2bc:	e181      	b.n	5c2 <mr_platEx_sys+0x5c2>
+ 2be:	e189      	b.n	5d4 <mr_platEx_sys+0x5d4>
+ 2c0:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 2c2:	0023      	movs	r3, r4
+ 2c4:	9200      	str	r2, [sp, #0]
+ 2c6:	9905      	ldr	r1, [sp, #20]
+ 2c8:	003a      	movs	r2, r7
+ 2ca:	0030      	movs	r0, r6
+ 2cc:	f7ff fffe 	bl	0 <mr_setting_set_theme>
+ 2d0:	e6c5      	b.n	5e <mr_platEx_sys+0x5e>
+ 2d2:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 2d4:	0023      	movs	r3, r4
+ 2d6:	9200      	str	r2, [sp, #0]
+ 2d8:	9905      	ldr	r1, [sp, #20]
+ 2da:	003a      	movs	r2, r7
+ 2dc:	0030      	movs	r0, r6
+ 2de:	f7ff fffe 	bl	0 <mr_setting_set_wallpaper>
+ 2e2:	e6bc      	b.n	5e <mr_platEx_sys+0x5e>
+ 2e4:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 2e6:	0023      	movs	r3, r4
+ 2e8:	9200      	str	r2, [sp, #0]
+ 2ea:	9905      	ldr	r1, [sp, #20]
+ 2ec:	003a      	movs	r2, r7
+ 2ee:	0030      	movs	r0, r6
+ 2f0:	f7ff fffe 	bl	0 <mr_setting_set_ring>
+ 2f4:	e6b3      	b.n	5e <mr_platEx_sys+0x5e>
+ 2f6:	e0b6      	b.n	466 <mr_platEx_sys+0x466>
+ 2f8:	e0c7      	b.n	48a <mr_platEx_sys+0x48a>
+ 2fa:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 2fc:	0023      	movs	r3, r4
+ 2fe:	9200      	str	r2, [sp, #0]
+ 300:	9905      	ldr	r1, [sp, #20]
+ 302:	003a      	movs	r2, r7
+ 304:	0030      	movs	r0, r6
+ 306:	f7ff fffe 	bl	0 <mr_setting_set_datetime>
+ 30a:	e6a8      	b.n	5e <mr_platEx_sys+0x5e>
+ 30c:	e165      	b.n	5da <mr_platEx_sys+0x5da>
+ 30e:	e025      	b.n	35c <mr_platEx_sys+0x35c>
+ 310:	e02d      	b.n	36e <mr_platEx_sys+0x36e>
+ 312:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 314:	0023      	movs	r3, r4
+ 316:	9200      	str	r2, [sp, #0]
+ 318:	9905      	ldr	r1, [sp, #20]
+ 31a:	003a      	movs	r2, r7
+ 31c:	0030      	movs	r0, r6
+ 31e:	f7ff fffe 	bl	0 <mr_layer_set_blt_layer>
+ 322:	e69c      	b.n	5e <mr_platEx_sys+0x5e>
+ 324:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 326:	0023      	movs	r3, r4
+ 328:	9200      	str	r2, [sp, #0]
+ 32a:	9905      	ldr	r1, [sp, #20]
+ 32c:	003a      	movs	r2, r7
+ 32e:	0030      	movs	r0, r6
+ 330:	f7ff fffe 	bl	0 <mr_layer_get_base_layer>
+ 334:	e693      	b.n	5e <mr_platEx_sys+0x5e>
+ 336:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 338:	0023      	movs	r3, r4
+ 33a:	9200      	str	r2, [sp, #0]
+ 33c:	9905      	ldr	r1, [sp, #20]
+ 33e:	003a      	movs	r2, r7
+ 340:	0030      	movs	r0, r6
+ 342:	f7ff fffe 	bl	0 <mr_layer_get_active_layer>
+ 346:	e68a      	b.n	5e <mr_platEx_sys+0x5e>
+ 348:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 34a:	0023      	movs	r3, r4
+ 34c:	9200      	str	r2, [sp, #0]
+ 34e:	9905      	ldr	r1, [sp, #20]
+ 350:	003a      	movs	r2, r7
+ 352:	0030      	movs	r0, r6
+ 354:	f7ff fffe 	bl	0 <mr_layer_set_layer_position>
+ 358:	e681      	b.n	5e <mr_platEx_sys+0x5e>
+ 35a:	e147      	b.n	5ec <mr_platEx_sys+0x5ec>
+ 35c:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 35e:	0023      	movs	r3, r4
+ 360:	9200      	str	r2, [sp, #0]
+ 362:	9905      	ldr	r1, [sp, #20]
+ 364:	003a      	movs	r2, r7
+ 366:	0030      	movs	r0, r6
+ 368:	f7ff fffe 	bl	0 <mr_layer_blt_previous>
+ 36c:	e677      	b.n	5e <mr_platEx_sys+0x5e>
+ 36e:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 370:	0023      	movs	r3, r4
+ 372:	9200      	str	r2, [sp, #0]
+ 374:	9905      	ldr	r1, [sp, #20]
+ 376:	003a      	movs	r2, r7
+ 378:	0030      	movs	r0, r6
+ 37a:	f7ff fffe 	bl	0 <mr_layer_get_act_layer>
+ 37e:	e66e      	b.n	5e <mr_platEx_sys+0x5e>
+ 380:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 382:	0023      	movs	r3, r4
+ 384:	9200      	str	r2, [sp, #0]
+ 386:	9905      	ldr	r1, [sp, #20]
+ 388:	003a      	movs	r2, r7
+ 38a:	0030      	movs	r0, r6
+ 38c:	f7ff fffe 	bl	0 <mr_net_set_data_account>
+ 390:	e665      	b.n	5e <mr_platEx_sys+0x5e>
+ 392:	0021      	movs	r1, r4
+ 394:	0038      	movs	r0, r7
+ 396:	f7ff fffe 	bl	0 <mr_net_get_network_plmn>
+ 39a:	e660      	b.n	5e <mr_platEx_sys+0x5e>
+ 39c:	0030      	movs	r0, r6
+ 39e:	f7ff fffe 	bl	0 <mr_net_soc_bind>
+ 3a2:	e65c      	b.n	5e <mr_platEx_sys+0x5e>
+ 3a4:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 3a6:	0023      	movs	r3, r4
+ 3a8:	9200      	str	r2, [sp, #0]
+ 3aa:	9905      	ldr	r1, [sp, #20]
+ 3ac:	003a      	movs	r2, r7
+ 3ae:	0030      	movs	r0, r6
+ 3b0:	f7ff fffe 	bl	0 <mr_sms_get_sms_info>
+ 3b4:	e653      	b.n	5e <mr_platEx_sys+0x5e>
+ 3b6:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 3b8:	0023      	movs	r3, r4
+ 3ba:	9200      	str	r2, [sp, #0]
+ 3bc:	9905      	ldr	r1, [sp, #20]
+ 3be:	003a      	movs	r2, r7
+ 3c0:	0030      	movs	r0, r6
+ 3c2:	f7ff fffe 	bl	0 <mr_sms_delete_sms>
+ 3c6:	e64a      	b.n	5e <mr_platEx_sys+0x5e>
+ 3c8:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 3ca:	0023      	movs	r3, r4
+ 3cc:	9200      	str	r2, [sp, #0]
+ 3ce:	9905      	ldr	r1, [sp, #20]
+ 3d0:	003a      	movs	r2, r7
+ 3d2:	0030      	movs	r0, r6
+ 3d4:	f7ff fffe 	bl	0 <mr_sms_read_sms>
+ 3d8:	e641      	b.n	5e <mr_platEx_sys+0x5e>
+ 3da:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 3dc:	0023      	movs	r3, r4
+ 3de:	9200      	str	r2, [sp, #0]
+ 3e0:	9905      	ldr	r1, [sp, #20]
+ 3e2:	003a      	movs	r2, r7
+ 3e4:	0030      	movs	r0, r6
+ 3e6:	f7ff fffe 	bl	0 <mr_sms_send_sms_from_ui>
+ 3ea:	e638      	b.n	5e <mr_platEx_sys+0x5e>
+ 3ec:	705f726d 	.word	0x705f726d
+ 3f0:	4574616c 	.word	0x4574616c
+ 3f4:	6f632078 	.word	0x6f632078
+ 3f8:	3d206564 	.word	0x3d206564
+ 3fc:	00642520 	.word	0x00642520
+ 400:	000004c7 	.word	0x000004c7
+ 404:	0000044e 	.word	0x0000044e
+ 408:	000003f0 	.word	0x000003f0
+ 40c:	000003e9 	.word	0x000003e9
+ 410:	000005c9 	.word	0x000005c9
+ 414:	00000502 	.word	0x00000502
+ 418:	fffffb02 	.word	0xfffffb02
+	...
+ 424:	fffffc7b 	.word	0xfffffc7b
+ 428:	0030      	movs	r0, r6
+ 42a:	f7ff fffe 	bl	0 <mr_sms_send_mms>
+ 42e:	e616      	b.n	5e <mr_platEx_sys+0x5e>
+ 430:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 432:	0023      	movs	r3, r4
+ 434:	9200      	str	r2, [sp, #0]
+ 436:	9905      	ldr	r1, [sp, #20]
+ 438:	003a      	movs	r2, r7
+ 43a:	0030      	movs	r0, r6
+ 43c:	f7ff fffe 	bl	0 <mr_sms_save_sms>
+ 440:	e60d      	b.n	5e <mr_platEx_sys+0x5e>
+ 442:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 444:	0023      	movs	r3, r4
+ 446:	9200      	str	r2, [sp, #0]
+ 448:	9905      	ldr	r1, [sp, #20]
+ 44a:	003a      	movs	r2, r7
+ 44c:	0030      	movs	r0, r6
+ 44e:	f7ff fffe 	bl	0 <mr_sms_reply_sms>
+ 452:	e604      	b.n	5e <mr_platEx_sys+0x5e>
+ 454:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 456:	0023      	movs	r3, r4
+ 458:	9200      	str	r2, [sp, #0]
+ 45a:	9905      	ldr	r1, [sp, #20]
+ 45c:	003a      	movs	r2, r7
+ 45e:	0030      	movs	r0, r6
+ 460:	f7ff fffe 	bl	0 <mr_voice_record_get_buffer>
+ 464:	e5fb      	b.n	5e <mr_platEx_sys+0x5e>
+ 466:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 468:	0023      	movs	r3, r4
+ 46a:	9200      	str	r2, [sp, #0]
+ 46c:	9905      	ldr	r1, [sp, #20]
+ 46e:	003a      	movs	r2, r7
+ 470:	0030      	movs	r0, r6
+ 472:	f7ff fffe 	bl	0 <mr_camera_get_preview_data>
+ 476:	e5f2      	b.n	5e <mr_platEx_sys+0x5e>
+ 478:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 47a:	0023      	movs	r3, r4
+ 47c:	9200      	str	r2, [sp, #0]
+ 47e:	9905      	ldr	r1, [sp, #20]
+ 480:	003a      	movs	r2, r7
+ 482:	0030      	movs	r0, r6
+ 484:	f7ff fffe 	bl	0 <mr_camera_capture>
+ 488:	e5e9      	b.n	5e <mr_platEx_sys+0x5e>
+ 48a:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 48c:	0023      	movs	r3, r4
+ 48e:	9200      	str	r2, [sp, #0]
+ 490:	9905      	ldr	r1, [sp, #20]
+ 492:	003a      	movs	r2, r7
+ 494:	0030      	movs	r0, r6
+ 496:	f7ff fffe 	bl	0 <mr_safe_dealcommand>
+ 49a:	e5e0      	b.n	5e <mr_platEx_sys+0x5e>
+ 49c:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 49e:	0023      	movs	r3, r4
+ 4a0:	9200      	str	r2, [sp, #0]
+ 4a2:	9905      	ldr	r1, [sp, #20]
+ 4a4:	003a      	movs	r2, r7
+ 4a6:	0030      	movs	r0, r6
+ 4a8:	f7ff fffe 	bl	0 <mr_sim_get_info>
+ 4ac:	e5d7      	b.n	5e <mr_platEx_sys+0x5e>
+ 4ae:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 4b0:	0023      	movs	r3, r4
+ 4b2:	9200      	str	r2, [sp, #0]
+ 4b4:	9905      	ldr	r1, [sp, #20]
+ 4b6:	003a      	movs	r2, r7
+ 4b8:	0030      	movs	r0, r6
+ 4ba:	f7ff fffe 	bl	0 <mr_get_cellinfo>
+ 4be:	e5ce      	b.n	5e <mr_platEx_sys+0x5e>
+ 4c0:	0021      	movs	r1, r4
+ 4c2:	0038      	movs	r0, r7
+ 4c4:	f7ff fffe 	bl	0 <mr_signal_get_level>
+ 4c8:	e5c9      	b.n	5e <mr_platEx_sys+0x5e>
+ 4ca:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 4cc:	0023      	movs	r3, r4
+ 4ce:	9200      	str	r2, [sp, #0]
+ 4d0:	9905      	ldr	r1, [sp, #20]
+ 4d2:	003a      	movs	r2, r7
+ 4d4:	0030      	movs	r0, r6
+ 4d6:	f7ff fffe 	bl	0 <mr_fs_get_free_space>
+ 4da:	e5c0      	b.n	5e <mr_platEx_sys+0x5e>
+ 4dc:	9905      	ldr	r1, [sp, #20]
+ 4de:	0023      	movs	r3, r4
+ 4e0:	003a      	movs	r2, r7
+ 4e2:	0030      	movs	r0, r6
+ 4e4:	f7ff fffe 	bl	0 <mr_fs_switch_path>
+ 4e8:	e5b9      	b.n	5e <mr_platEx_sys+0x5e>
+ 4ea:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 4ec:	0023      	movs	r3, r4
+ 4ee:	9200      	str	r2, [sp, #0]
+ 4f0:	9905      	ldr	r1, [sp, #20]
+ 4f2:	003a      	movs	r2, r7
+ 4f4:	0030      	movs	r0, r6
+ 4f6:	f7ff fffe 	bl	0 <mr_localui_menu_create_ex>
+ 4fa:	e5b0      	b.n	5e <mr_platEx_sys+0x5e>
+ 4fc:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 4fe:	0023      	movs	r3, r4
+ 500:	9200      	str	r2, [sp, #0]
+ 502:	9905      	ldr	r1, [sp, #20]
+ 504:	003a      	movs	r2, r7
+ 506:	0030      	movs	r0, r6
+ 508:	f7ff fffe 	bl	0 <mr_localui_menu_set_menuitem_ex>
+ 50c:	e5a7      	b.n	5e <mr_platEx_sys+0x5e>
+ 50e:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 510:	0023      	movs	r3, r4
+ 512:	9200      	str	r2, [sp, #0]
+ 514:	9905      	ldr	r1, [sp, #20]
+ 516:	003a      	movs	r2, r7
+ 518:	0030      	movs	r0, r6
+ 51a:	f7ff fffe 	bl	0 <mr_localui_menu_set_focus>
+ 51e:	e59e      	b.n	5e <mr_platEx_sys+0x5e>
+ 520:	f7ff fffe 	bl	0 <mr_backlight_turnoff>
+ 524:	e59b      	b.n	5e <mr_platEx_sys+0x5e>
+ 526:	0021      	movs	r1, r4
+ 528:	0038      	movs	r0, r7
+ 52a:	f7ff fffe 	bl	0 <mr_layer_get_base_layer_buffer>
+ 52e:	e596      	b.n	5e <mr_platEx_sys+0x5e>
+ 530:	2000      	movs	r0, #0
+ 532:	e594      	b.n	5e <mr_platEx_sys+0x5e>
+ 534:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 536:	0023      	movs	r3, r4
+ 538:	9200      	str	r2, [sp, #0]
+ 53a:	9905      	ldr	r1, [sp, #20]
+ 53c:	003a      	movs	r2, r7
+ 53e:	0030      	movs	r0, r6
+ 540:	f7ff fffe 	bl	0 <mr_mem_malloc_int_mem>
+ 544:	e58b      	b.n	5e <mr_platEx_sys+0x5e>
+ 546:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 548:	0023      	movs	r3, r4
+ 54a:	9200      	str	r2, [sp, #0]
+ 54c:	9905      	ldr	r1, [sp, #20]
+ 54e:	003a      	movs	r2, r7
+ 550:	0030      	movs	r0, r6
+ 552:	f7ff fffe 	bl	0 <mr_mem_free_int_mem>
+ 556:	e582      	b.n	5e <mr_platEx_sys+0x5e>
+ 558:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 55a:	0023      	movs	r3, r4
+ 55c:	9200      	str	r2, [sp, #0]
+ 55e:	9905      	ldr	r1, [sp, #20]
+ 560:	003a      	movs	r2, r7
+ 562:	0030      	movs	r0, r6
+ 564:	f7ff fffe 	bl	0 <mr_mem_malloc_scrmem>
+ 568:	e579      	b.n	5e <mr_platEx_sys+0x5e>
+ 56a:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 56c:	0023      	movs	r3, r4
+ 56e:	9200      	str	r2, [sp, #0]
+ 570:	9905      	ldr	r1, [sp, #20]
+ 572:	003a      	movs	r2, r7
+ 574:	0030      	movs	r0, r6
+ 576:	f7ff fffe 	bl	0 <mr_mem_free_scrmem>
+ 57a:	e570      	b.n	5e <mr_platEx_sys+0x5e>
+ 57c:	0021      	movs	r1, r4
+ 57e:	0038      	movs	r0, r7
+ 580:	f7ff fffe 	bl	0 <mr_nes_get_keypad_map>
+ 584:	e56b      	b.n	5e <mr_platEx_sys+0x5e>
+ 586:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 588:	0023      	movs	r3, r4
+ 58a:	9200      	str	r2, [sp, #0]
+ 58c:	9905      	ldr	r1, [sp, #20]
+ 58e:	003a      	movs	r2, r7
+ 590:	0030      	movs	r0, r6
+ 592:	f7ff fffe 	bl	0 <mr_nes_operate>
+ 596:	e562      	b.n	5e <mr_platEx_sys+0x5e>
+ 598:	0021      	movs	r1, r4
+ 59a:	0038      	movs	r0, r7
+ 59c:	f7ff fffe 	bl	0 <mr_nes_get_root_dir>
+ 5a0:	e55d      	b.n	5e <mr_platEx_sys+0x5e>
+ 5a2:	f7ff fffe 	bl	0 <mr_fmgr_filter_fmgr>
+ 5a6:	e55a      	b.n	5e <mr_platEx_sys+0x5e>
+ 5a8:	7830      	ldrb	r0, [r6, #0]
+ 5aa:	f7ff fffe 	bl	0 <mr_fmgr_filter_set>
+ 5ae:	e556      	b.n	5e <mr_platEx_sys+0x5e>
+ 5b0:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 5b2:	0023      	movs	r3, r4
+ 5b4:	9200      	str	r2, [sp, #0]
+ 5b6:	9905      	ldr	r1, [sp, #20]
+ 5b8:	003a      	movs	r2, r7
+ 5ba:	0030      	movs	r0, r6
+ 5bc:	f7ff fffe 	bl	0 <mr_fmgr_show>
+ 5c0:	e54d      	b.n	5e <mr_platEx_sys+0x5e>
+ 5c2:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 5c4:	0023      	movs	r3, r4
+ 5c6:	9200      	str	r2, [sp, #0]
+ 5c8:	9905      	ldr	r1, [sp, #20]
+ 5ca:	003a      	movs	r2, r7
+ 5cc:	0030      	movs	r0, r6
+ 5ce:	f7ff fffe 	bl	0 <mr_fmgr_get_selected_path>
+ 5d2:	e544      	b.n	5e <mr_platEx_sys+0x5e>
+ 5d4:	f7ff fffe 	bl	0 <mr_fmgr_exit>
+ 5d8:	e541      	b.n	5e <mr_platEx_sys+0x5e>
+ 5da:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 5dc:	0023      	movs	r3, r4
+ 5de:	9200      	str	r2, [sp, #0]
+ 5e0:	9905      	ldr	r1, [sp, #20]
+ 5e2:	003a      	movs	r2, r7
+ 5e4:	0030      	movs	r0, r6
+ 5e6:	f7ff fffe 	bl	0 <mr_dove_set_sms_strategy>
+ 5ea:	e538      	b.n	5e <mr_platEx_sys+0x5e>
+ 5ec:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 5ee:	0023      	movs	r3, r4
+ 5f0:	9200      	str	r2, [sp, #0]
+ 5f2:	9905      	ldr	r1, [sp, #20]
+ 5f4:	003a      	movs	r2, r7
+ 5f6:	0030      	movs	r0, r6
+ 5f8:	f7ff fffe 	bl	0 <mr_touch_panel_get_position>
+ 5fc:	e52f      	b.n	5e <mr_platEx_sys+0x5e>
+ 5fe:	210a      	movs	r1, #10
+ 600:	0028      	movs	r0, r5
+ 602:	f7ff fffe 	bl	0 <__aeabi_idivmod>
+ 606:	38c9      	subs	r0, #201	; 0xc9
+ 608:	0003      	movs	r3, r0
+ 60a:	f7ff fffe 	bl	0 <__ARM_switch8>
+ 60e:	0e19      	.short	0x0e19
+ 610:	241b1111 	.word	0x241b1111
+ 614:	302d2a27 	.word	0x302d2a27
+ 618:	453c7833 	.word	0x453c7833
+ 61c:	78574e78 	.word	0x78574e78
+ 620:	5d5a7878 	.word	0x5d5a7878
+ 624:	726c6660 	.word	0x726c6660
+ 628:	0078      	.short	0x0078
+ 62a:	f7ff fffe 	bl	0 <mr_media_init_device>
+ 62e:	e516      	b.n	5e <mr_platEx_sys+0x5e>
+ 630:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 632:	9400      	str	r4, [sp, #0]
+ 634:	9201      	str	r2, [sp, #4]
+ 636:	9a05      	ldr	r2, [sp, #20]
+ 638:	003b      	movs	r3, r7
+ 63a:	0031      	movs	r1, r6
+ 63c:	0028      	movs	r0, r5
+ 63e:	f7ff fffe 	bl	0 <mr_media_audio_load>
+ 642:	e50c      	b.n	5e <mr_platEx_sys+0x5e>
+ 644:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 646:	0023      	movs	r3, r4
+ 648:	9200      	str	r2, [sp, #0]
+ 64a:	9905      	ldr	r1, [sp, #20]
+ 64c:	003a      	movs	r2, r7
+ 64e:	0030      	movs	r0, r6
+ 650:	f7ff fffe 	bl	0 <mr_media_audio_play_req>
+ 654:	e503      	b.n	5e <mr_platEx_sys+0x5e>
+ 656:	f7ff fffe 	bl	0 <mr_media_audio_pause_req>
+ 65a:	e500      	b.n	5e <mr_platEx_sys+0x5e>
+ 65c:	f7ff fffe 	bl	0 <mr_media_audio_resume_req>
+ 660:	e4fd      	b.n	5e <mr_platEx_sys+0x5e>
+ 662:	f7ff fffe 	bl	0 <mr_media_audio_stop_req>
+ 666:	e4fa      	b.n	5e <mr_platEx_sys+0x5e>
+ 668:	f7ff fffe 	bl	0 <mr_media_close_device>
+ 66c:	e4f7      	b.n	5e <mr_platEx_sys+0x5e>
+ 66e:	f7ff fffe 	bl	0 <mr_media_audio_get_state>
+ 672:	e4f4      	b.n	5e <mr_platEx_sys+0x5e>
+ 674:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 676:	0023      	movs	r3, r4
+ 678:	9200      	str	r2, [sp, #0]
+ 67a:	9905      	ldr	r1, [sp, #20]
+ 67c:	003a      	movs	r2, r7
+ 67e:	0030      	movs	r0, r6
+ 680:	f7ff fffe 	bl	0 <mr_media_audio_set_progress_time>
+ 684:	e4eb      	b.n	5e <mr_platEx_sys+0x5e>
+ 686:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 688:	0023      	movs	r3, r4
+ 68a:	9200      	str	r2, [sp, #0]
+ 68c:	9905      	ldr	r1, [sp, #20]
+ 68e:	003a      	movs	r2, r7
+ 690:	0030      	movs	r0, r6
+ 692:	f7ff fffe 	bl	0 <mr_media_audio_get_total_time>
+ 696:	e4e2      	b.n	5e <mr_platEx_sys+0x5e>
+ 698:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 69a:	0023      	movs	r3, r4
+ 69c:	9200      	str	r2, [sp, #0]
+ 69e:	9905      	ldr	r1, [sp, #20]
+ 6a0:	003a      	movs	r2, r7
+ 6a2:	0030      	movs	r0, r6
+ 6a4:	f7ff fffe 	bl	0 <mr_media_audio_get_play_seconds>
+ 6a8:	e4d9      	b.n	5e <mr_platEx_sys+0x5e>
+ 6aa:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 6ac:	0023      	movs	r3, r4
+ 6ae:	9200      	str	r2, [sp, #0]
+ 6b0:	9905      	ldr	r1, [sp, #20]
+ 6b2:	003a      	movs	r2, r7
+ 6b4:	0030      	movs	r0, r6
+ 6b6:	f7ff fffe 	bl	0 <mr_media_audio_get_play_milliseconds>
+ 6ba:	e4d0      	b.n	5e <mr_platEx_sys+0x5e>
+ 6bc:	f7ff fffe 	bl	0 <mr_media_free_device>
+ 6c0:	e4cd      	b.n	5e <mr_platEx_sys+0x5e>
+ 6c2:	f7ff fffe 	bl	0 <mr_media_apm_alloc_buffer>
+ 6c6:	e4ca      	b.n	5e <mr_platEx_sys+0x5e>
+ 6c8:	f7ff fffe 	bl	0 <mr_media_apm_release_buffer>
+ 6cc:	e4c7      	b.n	5e <mr_platEx_sys+0x5e>
+ 6ce:	9a05      	ldr	r2, [sp, #20]
+ 6d0:	0031      	movs	r1, r6
+ 6d2:	0028      	movs	r0, r5
+ 6d4:	f7ff fffe 	bl	0 <mr_media_mma_open>
+ 6d8:	e4c1      	b.n	5e <mr_platEx_sys+0x5e>
+ 6da:	9a05      	ldr	r2, [sp, #20]
+ 6dc:	0031      	movs	r1, r6
+ 6de:	0028      	movs	r0, r5
+ 6e0:	f7ff fffe 	bl	0 <mr_media_mma_play>
+ 6e4:	e4bb      	b.n	5e <mr_platEx_sys+0x5e>
+ 6e6:	9a05      	ldr	r2, [sp, #20]
+ 6e8:	0031      	movs	r1, r6
+ 6ea:	0028      	movs	r0, r5
+ 6ec:	f7ff fffe 	bl	0 <mr_media_mma_stop>
+ 6f0:	e4b5      	b.n	5e <mr_platEx_sys+0x5e>
+ 6f2:	9a05      	ldr	r2, [sp, #20]
+ 6f4:	0031      	movs	r1, r6
+ 6f6:	0028      	movs	r0, r5
+ 6f8:	f7ff fffe 	bl	0 <mr_media_mma_close>
+ 6fc:	e4af      	b.n	5e <mr_platEx_sys+0x5e>
+ 6fe:	488c      	ldr	r0, [pc, #560]	; (930 <mr_platEx_sys+0x930>)
+ 700:	182b      	adds	r3, r5, r0
+ 702:	f7ff fffe 	bl	0 <__ARM_switch8>
+ 706:	2d0f      	.short	0x2d0f
+ 708:	3f364836 	.word	0x3f364836
+ 70c:	48484848 	.word	0x48484848
+ 710:	48480912 	.word	0x48480912
+ 714:	0048241b 	.word	0x0048241b
+ 718:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 71a:	0023      	movs	r3, r4
+ 71c:	9200      	str	r2, [sp, #0]
+ 71e:	9905      	ldr	r1, [sp, #20]
+ 720:	003a      	movs	r2, r7
+ 722:	0030      	movs	r0, r6
+ 724:	f7ff fffe 	bl	0 <mr_image_draw_animation>
+ 728:	e499      	b.n	5e <mr_platEx_sys+0x5e>
+ 72a:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 72c:	0023      	movs	r3, r4
+ 72e:	9200      	str	r2, [sp, #0]
+ 730:	9905      	ldr	r1, [sp, #20]
+ 732:	003a      	movs	r2, r7
+ 734:	0030      	movs	r0, r6
+ 736:	f7ff fffe 	bl	0 <mr_image_draw_img>
+ 73a:	e490      	b.n	5e <mr_platEx_sys+0x5e>
+ 73c:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 73e:	0023      	movs	r3, r4
+ 740:	9200      	str	r2, [sp, #0]
+ 742:	9905      	ldr	r1, [sp, #20]
+ 744:	003a      	movs	r2, r7
+ 746:	0030      	movs	r0, r6
+ 748:	f7ff fffe 	bl	0 <mr_image_draw_mtk_img>
+ 74c:	e487      	b.n	5e <mr_platEx_sys+0x5e>
+ 74e:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 750:	0023      	movs	r3, r4
+ 752:	9200      	str	r2, [sp, #0]
+ 754:	9905      	ldr	r1, [sp, #20]
+ 756:	003a      	movs	r2, r7
+ 758:	0030      	movs	r0, r6
+ 75a:	f7ff fffe 	bl	0 <mr_image_draw_mtk_animation>
+ 75e:	e47e      	b.n	5e <mr_platEx_sys+0x5e>
+ 760:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 762:	0023      	movs	r3, r4
+ 764:	9200      	str	r2, [sp, #0]
+ 766:	9905      	ldr	r1, [sp, #20]
+ 768:	003a      	movs	r2, r7
+ 76a:	0030      	movs	r0, r6
+ 76c:	f7ff fffe 	bl	0 <mr_image_get_image_info>
+ 770:	e475      	b.n	5e <mr_platEx_sys+0x5e>
+ 772:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 774:	0023      	movs	r3, r4
+ 776:	9200      	str	r2, [sp, #0]
+ 778:	9905      	ldr	r1, [sp, #20]
+ 77a:	003a      	movs	r2, r7
+ 77c:	0030      	movs	r0, r6
+ 77e:	f7ff fffe 	bl	0 <mr_image_decode>
+ 782:	e46c      	b.n	5e <mr_platEx_sys+0x5e>
+ 784:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 786:	0023      	movs	r3, r4
+ 788:	9200      	str	r2, [sp, #0]
+ 78a:	9905      	ldr	r1, [sp, #20]
+ 78c:	003a      	movs	r2, r7
+ 78e:	0030      	movs	r0, r6
+ 790:	f7ff fffe 	bl	0 <mr_image_gif_release>
+ 794:	e463      	b.n	5e <mr_platEx_sys+0x5e>
+ 796:	4967      	ldr	r1, [pc, #412]	; (934 <mr_platEx_sys+0x934>)
+ 798:	1a68      	subs	r0, r5, r1
+ 79a:	428d      	cmp	r5, r1
+ 79c:	d03e      	beq.n	81c <mr_platEx_sys+0x81c>
+ 79e:	dc11      	bgt.n	7c4 <mr_platEx_sys+0x7c4>
+ 7a0:	4865      	ldr	r0, [pc, #404]	; (938 <mr_platEx_sys+0x938>)
+ 7a2:	1828      	adds	r0, r5, r0
+ 7a4:	d01f      	beq.n	7e6 <mr_platEx_sys+0x7e6>
+ 7a6:	2801      	cmp	r0, #1
+ 7a8:	d026      	beq.n	7f8 <mr_platEx_sys+0x7f8>
+ 7aa:	2805      	cmp	r0, #5
+ 7ac:	d02d      	beq.n	80a <mr_platEx_sys+0x80a>
+ 7ae:	2815      	cmp	r0, #21
+ 7b0:	d14c      	bne.n	84c <mr_platEx_sys+0x84c>
+ 7b2:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 7b4:	0023      	movs	r3, r4
+ 7b6:	9200      	str	r2, [sp, #0]
+ 7b8:	9905      	ldr	r1, [sp, #20]
+ 7ba:	003a      	movs	r2, r7
+ 7bc:	0030      	movs	r0, r6
+ 7be:	f7ff fffe 	bl	0 <mr_phonebook_get_count>
+ 7c2:	e44c      	b.n	5e <mr_platEx_sys+0x5e>
+ 7c4:	2808      	cmp	r0, #8
+ 7c6:	d02c      	beq.n	822 <mr_platEx_sys+0x822>
+ 7c8:	2809      	cmp	r0, #9
+ 7ca:	d033      	beq.n	834 <mr_platEx_sys+0x834>
+ 7cc:	280a      	cmp	r0, #10
+ 7ce:	d03a      	beq.n	846 <mr_platEx_sys+0x846>
+ 7d0:	280b      	cmp	r0, #11
+ 7d2:	d13b      	bne.n	84c <mr_platEx_sys+0x84c>
+ 7d4:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 7d6:	0023      	movs	r3, r4
+ 7d8:	9200      	str	r2, [sp, #0]
+ 7da:	9905      	ldr	r1, [sp, #20]
+ 7dc:	003a      	movs	r2, r7
+ 7de:	0030      	movs	r0, r6
+ 7e0:	f7ff fffe 	bl	0 <mr_phonebook_get_total_num>
+ 7e4:	e43b      	b.n	5e <mr_platEx_sys+0x5e>
+ 7e6:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 7e8:	0023      	movs	r3, r4
+ 7ea:	9200      	str	r2, [sp, #0]
+ 7ec:	9905      	ldr	r1, [sp, #20]
+ 7ee:	003a      	movs	r2, r7
+ 7f0:	0030      	movs	r0, r6
+ 7f2:	f7ff fffe 	bl	0 <mr_phonebook_search>
+ 7f6:	e432      	b.n	5e <mr_platEx_sys+0x5e>
+ 7f8:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 7fa:	0023      	movs	r3, r4
+ 7fc:	9200      	str	r2, [sp, #0]
+ 7fe:	9905      	ldr	r1, [sp, #20]
+ 800:	003a      	movs	r2, r7
+ 802:	0030      	movs	r0, r6
+ 804:	f7ff fffe 	bl	0 <mr_phonebook_set_entry>
+ 808:	e429      	b.n	5e <mr_platEx_sys+0x5e>
+ 80a:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 80c:	0023      	movs	r3, r4
+ 80e:	9200      	str	r2, [sp, #0]
+ 810:	9905      	ldr	r1, [sp, #20]
+ 812:	003a      	movs	r2, r7
+ 814:	0030      	movs	r0, r6
+ 816:	f7ff fffe 	bl	0 <mr_phonebook_get_entry>
+ 81a:	e420      	b.n	5e <mr_platEx_sys+0x5e>
+ 81c:	f7ff fffe 	bl	0 <mr_phonebook_get_status>
+ 820:	e41d      	b.n	5e <mr_platEx_sys+0x5e>
+ 822:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 824:	0023      	movs	r3, r4
+ 826:	9200      	str	r2, [sp, #0]
+ 828:	9905      	ldr	r1, [sp, #20]
+ 82a:	003a      	movs	r2, r7
+ 82c:	0030      	movs	r0, r6
+ 82e:	f7ff fffe 	bl	0 <mr_phonebook_show_contact_list>
+ 832:	e414      	b.n	5e <mr_platEx_sys+0x5e>
+ 834:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 836:	0023      	movs	r3, r4
+ 838:	9200      	str	r2, [sp, #0]
+ 83a:	9905      	ldr	r1, [sp, #20]
+ 83c:	003a      	movs	r2, r7
+ 83e:	0030      	movs	r0, r6
+ 840:	f7ff fffe 	bl	0 <mr_phonebook_get_contact_item>
+ 844:	e40b      	b.n	5e <mr_platEx_sys+0x5e>
+ 846:	f7ff fffe 	bl	0 <mr_phonebook_destroy_contact_list>
+ 84a:	e408      	b.n	5e <mr_platEx_sys+0x5e>
+ 84c:	493b      	ldr	r1, [pc, #236]	; (93c <mr_platEx_sys+0x93c>)
+ 84e:	1a68      	subs	r0, r5, r1
+ 850:	428d      	cmp	r5, r1
+ 852:	d04d      	beq.n	8f0 <mr_platEx_sys+0x8f0>
+ 854:	dc20      	bgt.n	898 <mr_platEx_sys+0x898>
+ 856:	483a      	ldr	r0, [pc, #232]	; (940 <mr_platEx_sys+0x940>)
+ 858:	1a29      	subs	r1, r5, r0
+ 85a:	4285      	cmp	r5, r0
+ 85c:	d036      	beq.n	8cc <mr_platEx_sys+0x8cc>
+ 85e:	dc0d      	bgt.n	87c <mr_platEx_sys+0x87c>
+ 860:	4838      	ldr	r0, [pc, #224]	; (944 <mr_platEx_sys+0x944>)
+ 862:	1a28      	subs	r0, r5, r0
+ 864:	d029      	beq.n	8ba <mr_platEx_sys+0x8ba>
+ 866:	2801      	cmp	r0, #1
+ 868:	d160      	bne.n	92c <mr_platEx_sys+0x92c>
+ 86a:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 86c:	0023      	movs	r3, r4
+ 86e:	9200      	str	r2, [sp, #0]
+ 870:	9905      	ldr	r1, [sp, #20]
+ 872:	003a      	movs	r2, r7
+ 874:	0030      	movs	r0, r6
+ 876:	f7ff fffe 	bl	0 <mr_backstage_show_idle_pic>
+ 87a:	e41d      	b.n	b8 <mr_platEx_sys+0xb8>
+ 87c:	4832      	ldr	r0, [pc, #200]	; (948 <mr_platEx_sys+0x948>)
+ 87e:	1808      	adds	r0, r1, r0
+ 880:	d02d      	beq.n	8de <mr_platEx_sys+0x8de>
+ 882:	2801      	cmp	r0, #1
+ 884:	d152      	bne.n	92c <mr_platEx_sys+0x92c>
+ 886:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 888:	0023      	movs	r3, r4
+ 88a:	9200      	str	r2, [sp, #0]
+ 88c:	9905      	ldr	r1, [sp, #20]
+ 88e:	003a      	movs	r2, r7
+ 890:	0030      	movs	r0, r6
+ 892:	f7ff fffe 	bl	0 <mr_backstage_show_idle_widget>
+ 896:	e40f      	b.n	b8 <mr_platEx_sys+0xb8>
+ 898:	2801      	cmp	r0, #1
+ 89a:	d032      	beq.n	902 <mr_platEx_sys+0x902>
+ 89c:	2803      	cmp	r0, #3
+ 89e:	d033      	beq.n	908 <mr_platEx_sys+0x908>
+ 8a0:	2804      	cmp	r0, #4
+ 8a2:	d03a      	beq.n	91a <mr_platEx_sys+0x91a>
+ 8a4:	2806      	cmp	r0, #6
+ 8a6:	d141      	bne.n	92c <mr_platEx_sys+0x92c>
+ 8a8:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 8aa:	0023      	movs	r3, r4
+ 8ac:	9200      	str	r2, [sp, #0]
+ 8ae:	9905      	ldr	r1, [sp, #20]
+ 8b0:	003a      	movs	r2, r7
+ 8b2:	0030      	movs	r0, r6
+ 8b4:	f7ff fffe 	bl	0 <mr_backstage_get_picinfo>
+ 8b8:	e40d      	b.n	d6 <mr_platEx_sys+0xd6>
+ 8ba:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 8bc:	0023      	movs	r3, r4
+ 8be:	9200      	str	r2, [sp, #0]
+ 8c0:	9905      	ldr	r1, [sp, #20]
+ 8c2:	003a      	movs	r2, r7
+ 8c4:	0030      	movs	r0, r6
+ 8c6:	f7ff fffe 	bl	0 <mr_backstage_run>
+ 8ca:	e404      	b.n	d6 <mr_platEx_sys+0xd6>
+ 8cc:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 8ce:	0023      	movs	r3, r4
+ 8d0:	9200      	str	r2, [sp, #0]
+ 8d2:	9905      	ldr	r1, [sp, #20]
+ 8d4:	003a      	movs	r2, r7
+ 8d6:	0030      	movs	r0, r6
+ 8d8:	f7ff fffe 	bl	0 <mr_backstage_async_run>
+ 8dc:	e40a      	b.n	f4 <mr_platEx_sys+0xf4>
+ 8de:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 8e0:	0023      	movs	r3, r4
+ 8e2:	9200      	str	r2, [sp, #0]
+ 8e4:	9905      	ldr	r1, [sp, #20]
+ 8e6:	003a      	movs	r2, r7
+ 8e8:	0030      	movs	r0, r6
+ 8ea:	f7ff fffe 	bl	0 <mr_backstage_online_mgr_support>
+ 8ee:	e40a      	b.n	106 <mr_platEx_sys+0x106>
+ 8f0:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 8f2:	0023      	movs	r3, r4
+ 8f4:	9200      	str	r2, [sp, #0]
+ 8f6:	9905      	ldr	r1, [sp, #20]
+ 8f8:	003a      	movs	r2, r7
+ 8fa:	0030      	movs	r0, r6
+ 8fc:	f7ff fffe 	bl	0 <mr_backstage_hide_idle_widget>
+ 900:	e427      	b.n	152 <mr_platEx_sys+0x152>
+ 902:	f7ff fffe 	bl	0 <mr_backstage_is_idle_screen>
+ 906:	e424      	b.n	152 <mr_platEx_sys+0x152>
+ 908:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 90a:	0023      	movs	r3, r4
+ 90c:	9200      	str	r2, [sp, #0]
+ 90e:	9905      	ldr	r1, [sp, #20]
+ 910:	003a      	movs	r2, r7
+ 912:	0030      	movs	r0, r6
+ 914:	f7ff fffe 	bl	0 <mr_backstage_async_stop>
+ 918:	e41b      	b.n	152 <mr_platEx_sys+0x152>
+ 91a:	9a0d      	ldr	r2, [sp, #52]	; 0x34
+ 91c:	0023      	movs	r3, r4
+ 91e:	9200      	str	r2, [sp, #0]
+ 920:	9905      	ldr	r1, [sp, #20]
+ 922:	003a      	movs	r2, r7
+ 924:	0030      	movs	r0, r6
+ 926:	f7ff fffe 	bl	0 <mr_backstage_idle_widget_support>
+ 92a:	e412      	b.n	152 <mr_platEx_sys+0x152>
+ 92c:	2001      	movs	r0, #1
+ 92e:	e410      	b.n	152 <mr_platEx_sys+0x152>
+ 930:	fffff447 	.word	0xfffff447
+ 934:	00000fc1 	.word	0x00000fc1
+ 938:	fffff055 	.word	0xfffff055
+ 93c:	00001772 	.word	0x00001772
+ 940:	0000052b 	.word	0x0000052b
+ 944:	000003ec 	.word	0x000003ec
+ 948:	ffffedbb 	.word	0xffffedbb
+
+Disassembly of section i.mr_platEx:
+
+00000000 <mr_platEx>:
+   0:	b5fe      	push	{r1, r2, r3, r4, r5, r6, r7, lr}
+   2:	4e0b      	ldr	r6, [pc, #44]	; (30 <mr_platEx+0x30>)
+   4:	000d      	movs	r5, r1
+   6:	6836      	ldr	r6, [r6, #0]
+   8:	0017      	movs	r7, r2
+   a:	9a09      	ldr	r2, [sp, #36]	; 0x24
+   c:	9908      	ldr	r1, [sp, #32]
+   e:	0c04      	lsrs	r4, r0, #16
+  10:	42b4      	cmp	r4, r6
+  12:	da0a      	bge.n	2a <mr_platEx+0x2a>
+  14:	00a6      	lsls	r6, r4, #2
+  16:	4c07      	ldr	r4, [pc, #28]	; (34 <mr_platEx+0x34>)
+  18:	59a4      	ldr	r4, [r4, r6]
+  1a:	2c00      	cmp	r4, #0
+  1c:	d005      	beq.n	2a <mr_platEx+0x2a>
+  1e:	9201      	str	r2, [sp, #4]
+  20:	003a      	movs	r2, r7
+  22:	9100      	str	r1, [sp, #0]
+  24:	0029      	movs	r1, r5
+  26:	47a0      	blx	r4
+  28:	bdfe      	pop	{r1, r2, r3, r4, r5, r6, r7, pc}
+  2a:	2001      	movs	r0, #1
+  2c:	bdfe      	pop	{r1, r2, r3, r4, r5, r6, r7, pc}
+	...

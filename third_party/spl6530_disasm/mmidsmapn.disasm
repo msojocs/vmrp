@@ -1,0 +1,42 @@
+
+/tmp/arm_lib_analysis/normal/mmidsmapn.o:     file format elf32-bigarm
+
+
+Disassembly of section .text:
+
+00000000 <mr_getAPN>:
+   0:	e92d40f8 	push	{r3, r4, r5, r6, r7, lr}
+   4:	e15d000a 	cmp	sp, sl
+   8:	3bfffffe 	blcc	0 <__rt_stkovf_split_small>
+   c:	e1b05000 	movs	r5, r0
+  10:	e59f606c 	ldr	r6, [pc, #108]	; 84 <mr_getAPN+0x84>
+  14:	e3a04000 	mov	r4, #0
+  18:	0a000017 	beq	7c <mr_getAPN+0x7c>
+  1c:	e1a00005 	mov	r0, r5
+  20:	ebfffffe 	bl	0 <strlen>
+  24:	e3500000 	cmp	r0, #0
+  28:	159f0058 	ldrne	r0, [pc, #88]	; 88 <mr_getAPN+0x88>
+  2c:	15d00000 	ldrbne	r0, [r0]
+  30:	13500000 	cmpne	r0, #0
+  34:	0a000010 	beq	7c <mr_getAPN+0x7c>
+  38:	e59f704c 	ldr	r7, [pc, #76]	; 8c <mr_getAPN+0x8c>
+  3c:	e1a00005 	mov	r0, r5
+  40:	ebfffffe 	bl	0 <strlen>
+  44:	e1a02000 	mov	r2, r0
+  48:	e0840084 	add	r0, r4, r4, lsl #1
+  4c:	e7970180 	ldr	r0, [r7, r0, lsl #3]
+  50:	e1a01005 	mov	r1, r5
+  54:	ebfffffe 	bl	0 <strncmp>
+  58:	e3500000 	cmp	r0, #0
+  5c:	12844001 	addne	r4, r4, #1
+  60:	1a000003 	bne	74 <mr_getAPN+0x74>
+  64:	e0840084 	add	r0, r4, r4, lsl #1
+  68:	e0870180 	add	r0, r7, r0, lsl #3
+  6c:	e8bd40f8 	pop	{r3, r4, r5, r6, r7, lr}
+  70:	e12fff1e 	bx	lr
+  74:	e1540006 	cmp	r4, r6
+  78:	baffffef 	blt	3c <mr_getAPN+0x3c>
+  7c:	e3a00000 	mov	r0, #0
+  80:	eafffff9 	b	6c <mr_getAPN+0x6c>
+  84:	00000266 	.word	0x00000266
+	...

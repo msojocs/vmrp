@@ -1,0 +1,1119 @@
+
+/tmp/mtk_disasm/full1968/mr_iolib_target.obj:     file format elf32-littlearm
+
+
+Disassembly of section i.pushresult:
+
+00000000 <pushresult>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e3510000 	cmp	r1, #0
+   8:	e1a05000 	mov	r5, r0
+   c:	e1a04002 	mov	r4, r2
+  10:	0a000004 	beq	28 <pushresult+0x28>
+  14:	e3a01001 	mov	r1, #1
+  18:	e1a00005 	mov	r0, r5
+  1c:	ebfffffe 	bl	0 <mrp_pushboolean>
+  20:	e3a00001 	mov	r0, #1
+  24:	e8bd8070 	pop	{r4, r5, r6, pc}
+  28:	e1a00005 	mov	r0, r5
+  2c:	ebfffffe 	bl	0 <mrp_pushnil>
+  30:	e3540000 	cmp	r4, #0
+  34:	0a000006 	beq	54 <pushresult+0x54>
+  38:	ebfffffe 	bl	0 <mr_ferrno>
+  3c:	e1a03000 	mov	r3, r0
+  40:	e1a00005 	mov	r0, r5
+  44:	e1a02004 	mov	r2, r4
+  48:	e28f1030 	add	r1, pc, #48	; 0x30
+  4c:	ebfffffe 	bl	0 <mrp_pushfstring>
+  50:	ea000004 	b	68 <pushresult+0x68>
+  54:	ebfffffe 	bl	0 <mr_ferrno>
+  58:	e1a02000 	mov	r2, r0
+  5c:	e1a00005 	mov	r0, r5
+  60:	e28f102c 	add	r1, pc, #44	; 0x2c
+  64:	ebfffffe 	bl	0 <mrp_pushfstring>
+  68:	ebfffffe 	bl	0 <mr_ferrno>
+  6c:	e1a01000 	mov	r1, r0
+  70:	e1a00005 	mov	r0, r5
+  74:	ebfffffe 	bl	0 <mrp_pushnumber>
+  78:	e3a00003 	mov	r0, #3
+  7c:	e8bd8070 	pop	{r4, r5, r6, pc}
+  80:	656c6966 	.word	0x656c6966
+  84:	72726520 	.word	0x72726520
+  88:	7325203a 	.word	0x7325203a
+  8c:	6425203a 	.word	0x6425203a
+  90:	00000000 	.word	0x00000000
+  94:	656c6966 	.word	0x656c6966
+  98:	72726520 	.word	0x72726520
+  9c:	0064253a 	.word	0x0064253a
+
+Disassembly of section i.io_type:
+
+00000000 <io_type>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e28f202c 	add	r2, pc, #44	; 0x2c
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_checkudata>
+  14:	e3500000 	cmp	r0, #0
+  18:	03a01002 	moveq	r1, #2
+  1c:	0a000002 	beq	2c <io_type+0x2c>
+  20:	e5900000 	ldr	r0, [r0]
+  24:	e2701001 	rsbs	r1, r0, #1
+  28:	33a01000 	movcc	r1, #0
+  2c:	e1a00004 	mov	r0, r4
+  30:	ebfffffe 	bl	0 <mrp_pushnumber>
+  34:	e3a00001 	mov	r0, #1
+  38:	e8bd8010 	pop	{r4, pc}
+  3c:	656c6966 	.word	0x656c6966
+  40:	0000002a 	.word	0x0000002a
+
+Disassembly of section i.io_close:
+
+00000000 <io_close>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	ebfffffe 	bl	0 <io_close>
+   c:	e1a01000 	mov	r1, r0
+  10:	e1a00004 	mov	r0, r4
+  14:	e8bd4010 	pop	{r4, lr}
+  18:	e3a02000 	mov	r2, #0
+  1c:	eafffffe 	b	0 <io_close>
+
+Disassembly of section i.io_gc:
+
+00000000 <io_gc>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a01001 	mov	r1, #1
+   c:	ebfffffe 	bl	0 <io_gc>
+  10:	e5900000 	ldr	r0, [r0]
+  14:	e3500000 	cmp	r0, #0
+  18:	11a00004 	movne	r0, r4
+  1c:	1bfffffe 	blne	0 <io_gc>
+  20:	e3a00000 	mov	r0, #0
+  24:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.io_tostring:
+
+00000000 <io_tostring>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e24dd080 	sub	sp, sp, #128	; 0x80
+   8:	e1a04000 	mov	r4, r0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <io_tostring>
+  14:	e5900000 	ldr	r0, [r0]
+  18:	e3500000 	cmp	r0, #0
+  1c:	1a000003 	bne	30 <io_tostring+0x30>
+  20:	e28f1040 	add	r1, pc, #64	; 0x40
+  24:	e1a0000d 	mov	r0, sp
+  28:	ebfffffe 	bl	0 <strcpy>
+  2c:	ea000006 	b	4c <io_tostring+0x4c>
+  30:	e3a01001 	mov	r1, #1
+  34:	e1a00004 	mov	r0, r4
+  38:	ebfffffe 	bl	0 <mrp_touserdata>
+  3c:	e1a02000 	mov	r2, r0
+  40:	e1a0000d 	mov	r0, sp
+  44:	e28f1024 	add	r1, pc, #36	; 0x24
+  48:	ebfffffe 	bl	0 <__0sprintf>
+  4c:	e1a0200d 	mov	r2, sp
+  50:	e28f101c 	add	r1, pc, #28
+  54:	e1a00004 	mov	r0, r4
+  58:	ebfffffe 	bl	0 <mrp_pushfstring>
+  5c:	e3a00001 	mov	r0, #1
+  60:	e28dd080 	add	sp, sp, #128	; 0x80
+  64:	e8bd8010 	pop	{r4, pc}
+  68:	736f6c63 	.word	0x736f6c63
+  6c:	00006465 	.word	0x00006465
+  70:	00007025 	.word	0x00007025
+  74:	656c6966 	.word	0x656c6966
+  78:	73252820 	.word	0x73252820
+  7c:	00000029 	.word	0x00000029
+
+Disassembly of section i.io_open:
+
+00000000 <io_open>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a06000 	mov	r6, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_checklstring>
+  14:	e1a07000 	mov	r7, r0
+  18:	e1a00006 	mov	r0, r6
+  1c:	e3a02001 	mov	r2, #1
+  20:	e3a01002 	mov	r1, #2
+  24:	ebfffffe 	bl	0 <mr_L_optnumber>
+  28:	e1a05000 	mov	r5, r0
+  2c:	e1a00006 	mov	r0, r6
+  30:	e3a01004 	mov	r1, #4
+  34:	ebfffffe 	bl	0 <mrp_newuserdata>
+  38:	e1a04000 	mov	r4, r0
+  3c:	e3a00000 	mov	r0, #0
+  40:	e5840000 	str	r0, [r4]
+  44:	e1a00006 	mov	r0, r6
+  48:	e28f103c 	add	r1, pc, #60	; 0x3c
+  4c:	ebfffffe 	bl	0 <mr_L_getmetatable>
+  50:	e3e01001 	mvn	r1, #1
+  54:	e1a00006 	mov	r0, r6
+  58:	ebfffffe 	bl	0 <mrp_setmetatable>
+  5c:	e1a01005 	mov	r1, r5
+  60:	e1a00007 	mov	r0, r7
+  64:	ebfffffe 	bl	0 <mr_open>
+  68:	e3500000 	cmp	r0, #0
+  6c:	e5840000 	str	r0, [r4]
+  70:	01a00006 	moveq	r0, r6
+  74:	01a02007 	moveq	r2, r7
+  78:	08bd41f0 	popeq	{r4, r5, r6, r7, r8, lr}
+  7c:	13a00001 	movne	r0, #1
+  80:	03a01000 	moveq	r1, #0
+  84:	0afffffe 	beq	0 <io_open>
+  88:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+  8c:	656c6966 	.word	0x656c6966
+  90:	0000002a 	.word	0x0000002a
+
+Disassembly of section i.io_readAll:
+
+00000000 <io_readAll>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a05000 	mov	r5, r0
+   8:	e3a01001 	mov	r1, #1
+   c:	ebfffffe 	bl	0 <mrp_tostring>
+  10:	e1a06000 	mov	r6, r0
+  14:	ebfffffe 	bl	0 <mr_info>
+  18:	e3500001 	cmp	r0, #1
+  1c:	1a000008 	bne	44 <io_readAll+0x44>
+  20:	e1a00006 	mov	r0, r6
+  24:	ebfffffe 	bl	0 <mr_getLen>
+  28:	e2504000 	subs	r4, r0, #0
+  2c:	da000004 	ble	44 <io_readAll+0x44>
+  30:	e3a01001 	mov	r1, #1
+  34:	e1a00006 	mov	r0, r6
+  38:	ebfffffe 	bl	0 <mr_open>
+  3c:	e1b08000 	movs	r8, r0
+  40:	1a000001 	bne	4c <io_readAll+0x4c>
+  44:	e3a00000 	mov	r0, #0
+  48:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+  4c:	e2843011 	add	r3, r4, #17
+  50:	e3a02000 	mov	r2, #0
+  54:	e3a01000 	mov	r1, #0
+  58:	e1a00005 	mov	r0, r5
+  5c:	ebfffffe 	bl	0 <mr_M_realloc>
+  60:	e1b06000 	movs	r6, r0
+  64:	0a00001c 	beq	dc <io_readAll+0xdc>
+  68:	e2841011 	add	r1, r4, #17
+  6c:	e1a00006 	mov	r0, r6
+  70:	ebfffffe 	bl	0 <__aeabi_memclr>
+  74:	e5950010 	ldr	r0, [r5, #16]
+  78:	e5901024 	ldr	r1, [r0, #36]	; 0x24
+  7c:	e5900020 	ldr	r0, [r0, #32]
+  80:	e1510000 	cmp	r1, r0
+  84:	21a00005 	movcs	r0, r5
+  88:	2bfffffe 	blcs	0 <mr_C_collectgarbage>
+  8c:	e5957008 	ldr	r7, [r5, #8]
+  90:	e3a00004 	mov	r0, #4
+  94:	e5870000 	str	r0, [r7]
+  98:	e1a00005 	mov	r0, r5
+  9c:	e1a02004 	mov	r2, r4
+  a0:	e1a01006 	mov	r1, r6
+  a4:	ebfffffe 	bl	0 <_mr_newlstr_without_malloc>
+  a8:	e5870004 	str	r0, [r7, #4]
+  ac:	e5950008 	ldr	r0, [r5, #8]
+  b0:	e2866010 	add	r6, r6, #16
+  b4:	e2800008 	add	r0, r0, #8
+  b8:	e5850008 	str	r0, [r5, #8]
+  bc:	e3a05000 	mov	r5, #0
+  c0:	ea000009 	b	ec <io_readAll+0xec>
+  c4:	e0442005 	sub	r2, r4, r5
+  c8:	e0861005 	add	r1, r6, r5
+  cc:	e1a00008 	mov	r0, r8
+  d0:	ebfffffe 	bl	0 <mr_read>
+  d4:	e3500000 	cmp	r0, #0
+  d8:	ca000002 	bgt	e8 <io_readAll+0xe8>
+  dc:	e1a00008 	mov	r0, r8
+  e0:	ebfffffe 	bl	0 <mr_close>
+  e4:	eaffffd6 	b	44 <io_readAll+0x44>
+  e8:	e0855000 	add	r5, r5, r0
+  ec:	e1550004 	cmp	r5, r4
+  f0:	bafffff3 	blt	c4 <io_readAll+0xc4>
+  f4:	e1a00008 	mov	r0, r8
+  f8:	ebfffffe 	bl	0 <mr_close>
+  fc:	e3a00001 	mov	r0, #1
+ 100:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.f_read:
+
+00000000 <f_read>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a01001 	mov	r1, #1
+   c:	ebfffffe 	bl	0 <f_read>
+  10:	e1a01000 	mov	r1, r0
+  14:	e1a00004 	mov	r0, r4
+  18:	e8bd4010 	pop	{r4, lr}
+  1c:	e3a02002 	mov	r2, #2
+  20:	eafffffe 	b	0 <f_read>
+
+Disassembly of section i.f_write:
+
+00000000 <f_write>:
+   0:	e92d43f8 	push	{r3, r4, r5, r6, r7, r8, r9, lr}
+   4:	e1a08000 	mov	r8, r0
+   8:	e3a01001 	mov	r1, #1
+   c:	ebfffffe 	bl	0 <f_write>
+  10:	e1a07000 	mov	r7, r0
+  14:	e1a00008 	mov	r0, r8
+  18:	e3a04002 	mov	r4, #2
+  1c:	ebfffffe 	bl	0 <mrp_gettop>
+  20:	e2405001 	sub	r5, r0, #1
+  24:	e3a06001 	mov	r6, #1
+  28:	ea00000f 	b	6c <f_write+0x6c>
+  2c:	e1a0200d 	mov	r2, sp
+  30:	e1a01004 	mov	r1, r4
+  34:	e1a00008 	mov	r0, r8
+  38:	ebfffffe 	bl	0 <mr_L_checklstring>
+  3c:	e3560000 	cmp	r6, #0
+  40:	0a000007 	beq	64 <f_write+0x64>
+  44:	e1a01000 	mov	r1, r0
+  48:	e59d2000 	ldr	r2, [sp]
+  4c:	e1a00007 	mov	r0, r7
+  50:	ebfffffe 	bl	0 <mr_write>
+  54:	e59d1000 	ldr	r1, [sp]
+  58:	e1500001 	cmp	r0, r1
+  5c:	03a06001 	moveq	r6, #1
+  60:	0a000000 	beq	68 <f_write+0x68>
+  64:	e3a06000 	mov	r6, #0
+  68:	e2844001 	add	r4, r4, #1
+  6c:	e2555001 	subs	r5, r5, #1
+  70:	2affffed 	bcs	2c <f_write+0x2c>
+  74:	e1a01006 	mov	r1, r6
+  78:	e1a00008 	mov	r0, r8
+  7c:	e8bd43f8 	pop	{r3, r4, r5, r6, r7, r8, r9, lr}
+  80:	e3a02000 	mov	r2, #0
+  84:	eafffffe 	b	0 <f_write>
+
+Disassembly of section i.f_seek:
+
+00000000 <f_seek>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a06000 	mov	r6, r0
+   8:	e3a01001 	mov	r1, #1
+   c:	ebfffffe 	bl	0 <f_seek>
+  10:	e1a04000 	mov	r4, r0
+  14:	e1a00006 	mov	r0, r6
+  18:	e3a02000 	mov	r2, #0
+  1c:	e3a01002 	mov	r1, #2
+  20:	ebfffffe 	bl	0 <mr_L_optnumber>
+  24:	e1a05000 	mov	r5, r0
+  28:	e1a00006 	mov	r0, r6
+  2c:	e3a02000 	mov	r2, #0
+  30:	e3a01003 	mov	r1, #3
+  34:	ebfffffe 	bl	0 <mr_L_optnumber>
+  38:	e1a07000 	mov	r7, r0
+  3c:	e1a01000 	mov	r1, r0
+  40:	e1a00004 	mov	r0, r4
+  44:	e1a02005 	mov	r2, r5
+  48:	ebfffffe 	bl	0 <mr_seek>
+  4c:	e3500000 	cmp	r0, #0
+  50:	11a00006 	movne	r0, r6
+  54:	18bd41f0 	popne	{r4, r5, r6, r7, r8, lr}
+  58:	13a02000 	movne	r2, #0
+  5c:	13a01000 	movne	r1, #0
+  60:	1afffffe 	bne	0 <f_seek>
+  64:	e1a01007 	mov	r1, r7
+  68:	e1a00006 	mov	r0, r6
+  6c:	ebfffffe 	bl	0 <mrp_pushnumber>
+  70:	e3a00001 	mov	r0, #1
+  74:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.io_remove:
+
+00000000 <io_remove>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_checklstring>
+  14:	e1a05000 	mov	r5, r0
+  18:	ebfffffe 	bl	0 <mr_remove>
+  1c:	e2701001 	rsbs	r1, r0, #1
+  20:	e1a00004 	mov	r0, r4
+  24:	e1a02005 	mov	r2, r5
+  28:	e8bd4070 	pop	{r4, r5, r6, lr}
+  2c:	33a01000 	movcc	r1, #0
+  30:	eafffffe 	b	0 <io_remove>
+
+Disassembly of section i.io_rename:
+
+00000000 <io_rename>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_checklstring>
+  14:	e1a05000 	mov	r5, r0
+  18:	e1a00004 	mov	r0, r4
+  1c:	e3a02000 	mov	r2, #0
+  20:	e3a01002 	mov	r1, #2
+  24:	ebfffffe 	bl	0 <mr_L_checklstring>
+  28:	e1a01000 	mov	r1, r0
+  2c:	e1a00005 	mov	r0, r5
+  30:	ebfffffe 	bl	0 <mr_rename>
+  34:	e2701001 	rsbs	r1, r0, #1
+  38:	e1a00004 	mov	r0, r4
+  3c:	e1a02005 	mov	r2, r5
+  40:	e8bd4070 	pop	{r4, r5, r6, lr}
+  44:	33a01000 	movcc	r1, #0
+  48:	eafffffe 	b	0 <io_rename>
+
+Disassembly of section i.io_getuptime:
+
+00000000 <io_getuptime>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	ebfffffe 	bl	0 <mr_getTime>
+   c:	e1a01000 	mov	r1, r0
+  10:	e1a00004 	mov	r0, r4
+  14:	ebfffffe 	bl	0 <mrp_pushnumber>
+  18:	e3a00001 	mov	r0, #1
+  1c:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.io_mkdir:
+
+00000000 <io_mkdir>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_checklstring>
+  14:	e1a05000 	mov	r5, r0
+  18:	ebfffffe 	bl	0 <mr_mkDir>
+  1c:	e2701001 	rsbs	r1, r0, #1
+  20:	e1a00004 	mov	r0, r4
+  24:	e1a02005 	mov	r2, r5
+  28:	e8bd4070 	pop	{r4, r5, r6, lr}
+  2c:	33a01000 	movcc	r1, #0
+  30:	eafffffe 	b	0 <io_mkdir>
+
+Disassembly of section i.io_rmdir:
+
+00000000 <io_rmdir>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_checklstring>
+  14:	e1a05000 	mov	r5, r0
+  18:	ebfffffe 	bl	0 <mr_rmDir>
+  1c:	e2701001 	rsbs	r1, r0, #1
+  20:	e1a00004 	mov	r0, r4
+  24:	e1a02005 	mov	r2, r5
+  28:	e8bd4070 	pop	{r4, r5, r6, lr}
+  2c:	33a01000 	movcc	r1, #0
+  30:	eafffffe 	b	0 <io_rmdir>
+
+Disassembly of section i.io_getfileinfo:
+
+00000000 <io_getfileinfo>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_checklstring>
+  14:	ebfffffe 	bl	0 <mr_info>
+  18:	e1a01000 	mov	r1, r0
+  1c:	e1a00004 	mov	r0, r4
+  20:	ebfffffe 	bl	0 <mrp_pushnumber>
+  24:	e3a00001 	mov	r0, #1
+  28:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.io_getfilelen:
+
+00000000 <io_getfilelen>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_checklstring>
+  14:	ebfffffe 	bl	0 <mr_getLen>
+  18:	e1a01000 	mov	r1, r0
+  1c:	e1a00004 	mov	r0, r4
+  20:	ebfffffe 	bl	0 <mrp_pushnumber>
+  24:	e3a00001 	mov	r0, #1
+  28:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.io_findstart:
+
+00000000 <io_findstart>:
+   0:	e92d4030 	push	{r4, r5, lr}
+   4:	e24dd084 	sub	sp, sp, #132	; 0x84
+   8:	e1a05000 	mov	r5, r0
+   c:	e3a02000 	mov	r2, #0
+  10:	e3a01001 	mov	r1, #1
+  14:	ebfffffe 	bl	0 <mr_L_checklstring>
+  18:	e1a04000 	mov	r4, r0
+  1c:	e28d0004 	add	r0, sp, #4
+  20:	e3a01080 	mov	r1, #128	; 0x80
+  24:	ebfffffe 	bl	0 <__aeabi_memclr4>
+  28:	e3a02080 	mov	r2, #128	; 0x80
+  2c:	e28d1004 	add	r1, sp, #4
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mr_findStart>
+  38:	e1a01000 	mov	r1, r0
+  3c:	e1a00005 	mov	r0, r5
+  40:	ebfffffe 	bl	0 <mrp_pushnumber>
+  44:	e28d1004 	add	r1, sp, #4
+  48:	e1a00005 	mov	r0, r5
+  4c:	ebfffffe 	bl	0 <mrp_pushstring>
+  50:	e3a00002 	mov	r0, #2
+  54:	e28dd084 	add	sp, sp, #132	; 0x84
+  58:	e8bd8030 	pop	{r4, r5, pc}
+
+Disassembly of section i.io_findnext:
+
+00000000 <io_findnext>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e24dd080 	sub	sp, sp, #128	; 0x80
+   8:	e1a04000 	mov	r4, r0
+   c:	e3a02000 	mov	r2, #0
+  10:	e3a01001 	mov	r1, #1
+  14:	ebfffffe 	bl	0 <mr_L_optnumber>
+  18:	e3a02080 	mov	r2, #128	; 0x80
+  1c:	e1a0100d 	mov	r1, sp
+  20:	ebfffffe 	bl	0 <mr_findGetNext>
+  24:	e3500000 	cmp	r0, #0
+  28:	1a000003 	bne	3c <io_findnext+0x3c>
+  2c:	e1a0100d 	mov	r1, sp
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mrp_pushstring>
+  38:	ea000001 	b	44 <io_findnext+0x44>
+  3c:	e1a00004 	mov	r0, r4
+  40:	ebfffffe 	bl	0 <mrp_pushnil>
+  44:	e3a00001 	mov	r0, #1
+  48:	e28dd080 	add	sp, sp, #128	; 0x80
+  4c:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.io_findstop:
+
+00000000 <io_findstop>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_optnumber>
+  14:	ebfffffe 	bl	0 <mr_findStop>
+  18:	e1a01000 	mov	r1, r0
+  1c:	e1a00004 	mov	r0, r4
+  20:	ebfffffe 	bl	0 <mrp_pushnumber>
+  24:	e3a00001 	mov	r0, #1
+  28:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.MenuCreate:
+
+00000000 <MenuCreate>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05000 	mov	r5, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_checklstring>
+  14:	e1a04000 	mov	r4, r0
+  18:	e1a00005 	mov	r0, r5
+  1c:	e3a02000 	mov	r2, #0
+  20:	e3a01002 	mov	r1, #2
+  24:	ebfffffe 	bl	0 <mr_L_optnumber>
+  28:	e1a01800 	lsl	r1, r0, #16
+  2c:	e1a01841 	asr	r1, r1, #16
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mr_menuCreate>
+  38:	e3500000 	cmp	r0, #0
+  3c:	da000003 	ble	50 <MenuCreate+0x50>
+  40:	e1a01000 	mov	r1, r0
+  44:	e1a00005 	mov	r0, r5
+  48:	ebfffffe 	bl	0 <mrp_pushnumber>
+  4c:	ea000001 	b	58 <MenuCreate+0x58>
+  50:	e1a00005 	mov	r0, r5
+  54:	ebfffffe 	bl	0 <mrp_pushnil>
+  58:	e3a00001 	mov	r0, #1
+  5c:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.MenuAddItem:
+
+00000000 <MenuAddItem>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a06000 	mov	r6, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_optnumber>
+  14:	e1a04000 	mov	r4, r0
+  18:	e1a00006 	mov	r0, r6
+  1c:	e3a02000 	mov	r2, #0
+  20:	e3a01002 	mov	r1, #2
+  24:	ebfffffe 	bl	0 <mr_L_checklstring>
+  28:	e1a05000 	mov	r5, r0
+  2c:	e1a00006 	mov	r0, r6
+  30:	e3a02000 	mov	r2, #0
+  34:	e3a01003 	mov	r1, #3
+  38:	ebfffffe 	bl	0 <mr_L_optnumber>
+  3c:	e1a02000 	mov	r2, r0
+  40:	e1a00004 	mov	r0, r4
+  44:	e1a01005 	mov	r1, r5
+  48:	ebfffffe 	bl	0 <mr_menuSetItem>
+  4c:	e3500000 	cmp	r0, #0
+  50:	1a000003 	bne	64 <MenuAddItem+0x64>
+  54:	e1a01000 	mov	r1, r0
+  58:	e1a00006 	mov	r0, r6
+  5c:	ebfffffe 	bl	0 <mrp_pushnumber>
+  60:	ea000001 	b	6c <MenuAddItem+0x6c>
+  64:	e1a00006 	mov	r0, r6
+  68:	ebfffffe 	bl	0 <mrp_pushnil>
+  6c:	e3a00001 	mov	r0, #1
+  70:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.MenuShow:
+
+00000000 <MenuShow>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_optnumber>
+  14:	ebfffffe 	bl	0 <mr_menuShow>
+  18:	e3500000 	cmp	r0, #0
+  1c:	1a000003 	bne	30 <MenuShow+0x30>
+  20:	e1a01000 	mov	r1, r0
+  24:	e1a00004 	mov	r0, r4
+  28:	ebfffffe 	bl	0 <mrp_pushnumber>
+  2c:	ea000001 	b	38 <MenuShow+0x38>
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mrp_pushnil>
+  38:	e3a00001 	mov	r0, #1
+  3c:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.MenuSetFocus:
+
+00000000 <MenuSetFocus>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	ebfffffe 	bl	0 <mrp_pushnil>
+   8:	e3a00001 	mov	r0, #1
+   c:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.MenuRefresh:
+
+00000000 <MenuRefresh>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_optnumber>
+  14:	ebfffffe 	bl	0 <mr_menuRefresh>
+  18:	e3500000 	cmp	r0, #0
+  1c:	1a000003 	bne	30 <MenuRefresh+0x30>
+  20:	e1a01000 	mov	r1, r0
+  24:	e1a00004 	mov	r0, r4
+  28:	ebfffffe 	bl	0 <mrp_pushnumber>
+  2c:	ea000001 	b	38 <MenuRefresh+0x38>
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mrp_pushnil>
+  38:	e3a00001 	mov	r0, #1
+  3c:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.MenuRelease:
+
+00000000 <MenuRelease>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_optnumber>
+  14:	ebfffffe 	bl	0 <mr_menuRelease>
+  18:	e3500000 	cmp	r0, #0
+  1c:	1a000003 	bne	30 <MenuRelease+0x30>
+  20:	e1a01000 	mov	r1, r0
+  24:	e1a00004 	mov	r0, r4
+  28:	ebfffffe 	bl	0 <mrp_pushnumber>
+  2c:	ea000001 	b	38 <MenuRelease+0x38>
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mrp_pushnil>
+  38:	e3a00001 	mov	r0, #1
+  3c:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.DialogCreate:
+
+00000000 <DialogCreate>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a06000 	mov	r6, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_checklstring>
+  14:	e1a04000 	mov	r4, r0
+  18:	e1a00006 	mov	r0, r6
+  1c:	e3a02000 	mov	r2, #0
+  20:	e3a01002 	mov	r1, #2
+  24:	ebfffffe 	bl	0 <mr_L_checklstring>
+  28:	e1a05000 	mov	r5, r0
+  2c:	e1a00006 	mov	r0, r6
+  30:	e3a02000 	mov	r2, #0
+  34:	e3a01003 	mov	r1, #3
+  38:	ebfffffe 	bl	0 <mr_L_optnumber>
+  3c:	e1a02000 	mov	r2, r0
+  40:	e1a00004 	mov	r0, r4
+  44:	e1a01005 	mov	r1, r5
+  48:	ebfffffe 	bl	0 <mr_dialogCreate>
+  4c:	e3500000 	cmp	r0, #0
+  50:	da000003 	ble	64 <DialogCreate+0x64>
+  54:	e1a01000 	mov	r1, r0
+  58:	e1a00006 	mov	r0, r6
+  5c:	ebfffffe 	bl	0 <mrp_pushnumber>
+  60:	ea000001 	b	6c <DialogCreate+0x6c>
+  64:	e1a00006 	mov	r0, r6
+  68:	ebfffffe 	bl	0 <mrp_pushnil>
+  6c:	e3a00001 	mov	r0, #1
+  70:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.DialogRelease:
+
+00000000 <DialogRelease>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_optnumber>
+  14:	ebfffffe 	bl	0 <mr_dialogRelease>
+  18:	e3500000 	cmp	r0, #0
+  1c:	1a000003 	bne	30 <DialogRelease+0x30>
+  20:	e1a01000 	mov	r1, r0
+  24:	e1a00004 	mov	r0, r4
+  28:	ebfffffe 	bl	0 <mrp_pushnumber>
+  2c:	ea000001 	b	38 <DialogRelease+0x38>
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mrp_pushnil>
+  38:	e3a00001 	mov	r0, #1
+  3c:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.DialogRefresh:
+
+00000000 <DialogRefresh>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a07000 	mov	r7, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_optnumber>
+  14:	e1a04000 	mov	r4, r0
+  18:	e1a00007 	mov	r0, r7
+  1c:	e3a02000 	mov	r2, #0
+  20:	e3a01002 	mov	r1, #2
+  24:	ebfffffe 	bl	0 <mr_L_checklstring>
+  28:	e1a05000 	mov	r5, r0
+  2c:	e1a00007 	mov	r0, r7
+  30:	e3a02000 	mov	r2, #0
+  34:	e3a01003 	mov	r1, #3
+  38:	ebfffffe 	bl	0 <mr_L_checklstring>
+  3c:	e1a06000 	mov	r6, r0
+  40:	e1a00007 	mov	r0, r7
+  44:	e3e02000 	mvn	r2, #0
+  48:	e3a01004 	mov	r1, #4
+  4c:	ebfffffe 	bl	0 <mr_L_optnumber>
+  50:	e1a03000 	mov	r3, r0
+  54:	e1a00004 	mov	r0, r4
+  58:	e1a02006 	mov	r2, r6
+  5c:	e1a01005 	mov	r1, r5
+  60:	ebfffffe 	bl	0 <mr_dialogRefresh>
+  64:	e3500000 	cmp	r0, #0
+  68:	da000003 	ble	7c <DialogRefresh+0x7c>
+  6c:	e1a01000 	mov	r1, r0
+  70:	e1a00007 	mov	r0, r7
+  74:	ebfffffe 	bl	0 <mrp_pushnumber>
+  78:	ea000001 	b	84 <DialogRefresh+0x84>
+  7c:	e1a00007 	mov	r0, r7
+  80:	ebfffffe 	bl	0 <mrp_pushnil>
+  84:	e3a00001 	mov	r0, #1
+  88:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.TextCreate:
+
+00000000 <TextCreate>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a06000 	mov	r6, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_checklstring>
+  14:	e1a04000 	mov	r4, r0
+  18:	e1a00006 	mov	r0, r6
+  1c:	e3a02000 	mov	r2, #0
+  20:	e3a01002 	mov	r1, #2
+  24:	ebfffffe 	bl	0 <mr_L_checklstring>
+  28:	e1a05000 	mov	r5, r0
+  2c:	e1a00006 	mov	r0, r6
+  30:	e3a02000 	mov	r2, #0
+  34:	e3a01003 	mov	r1, #3
+  38:	ebfffffe 	bl	0 <mr_L_optnumber>
+  3c:	e1a02000 	mov	r2, r0
+  40:	e1a00004 	mov	r0, r4
+  44:	e1a01005 	mov	r1, r5
+  48:	ebfffffe 	bl	0 <mr_textCreate>
+  4c:	e3500000 	cmp	r0, #0
+  50:	da000003 	ble	64 <TextCreate+0x64>
+  54:	e1a01000 	mov	r1, r0
+  58:	e1a00006 	mov	r0, r6
+  5c:	ebfffffe 	bl	0 <mrp_pushnumber>
+  60:	ea000001 	b	6c <TextCreate+0x6c>
+  64:	e1a00006 	mov	r0, r6
+  68:	ebfffffe 	bl	0 <mrp_pushnil>
+  6c:	e3a00001 	mov	r0, #1
+  70:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.TextRelease:
+
+00000000 <TextRelease>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_optnumber>
+  14:	ebfffffe 	bl	0 <mr_textRelease>
+  18:	e3500000 	cmp	r0, #0
+  1c:	1a000003 	bne	30 <TextRelease+0x30>
+  20:	e1a01000 	mov	r1, r0
+  24:	e1a00004 	mov	r0, r4
+  28:	ebfffffe 	bl	0 <mrp_pushnumber>
+  2c:	ea000001 	b	38 <TextRelease+0x38>
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mrp_pushnil>
+  38:	e3a00001 	mov	r0, #1
+  3c:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.TextRefresh:
+
+00000000 <TextRefresh>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a06000 	mov	r6, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_optnumber>
+  14:	e1a04000 	mov	r4, r0
+  18:	e1a00006 	mov	r0, r6
+  1c:	e3a02000 	mov	r2, #0
+  20:	e3a01002 	mov	r1, #2
+  24:	ebfffffe 	bl	0 <mr_L_checklstring>
+  28:	e1a05000 	mov	r5, r0
+  2c:	e1a00006 	mov	r0, r6
+  30:	e3a02000 	mov	r2, #0
+  34:	e3a01003 	mov	r1, #3
+  38:	ebfffffe 	bl	0 <mr_L_checklstring>
+  3c:	e1a02000 	mov	r2, r0
+  40:	e1a00004 	mov	r0, r4
+  44:	e1a01005 	mov	r1, r5
+  48:	ebfffffe 	bl	0 <mr_textRefresh>
+  4c:	e3500000 	cmp	r0, #0
+  50:	da000003 	ble	64 <TextRefresh+0x64>
+  54:	e1a01000 	mov	r1, r0
+  58:	e1a00006 	mov	r0, r6
+  5c:	ebfffffe 	bl	0 <mrp_pushnumber>
+  60:	ea000001 	b	6c <TextRefresh+0x6c>
+  64:	e1a00006 	mov	r0, r6
+  68:	ebfffffe 	bl	0 <mrp_pushnil>
+  6c:	e3a00001 	mov	r0, #1
+  70:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.EditCreate:
+
+00000000 <EditCreate>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a07000 	mov	r7, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_checklstring>
+  14:	e1a04000 	mov	r4, r0
+  18:	e1a00007 	mov	r0, r7
+  1c:	e3a02000 	mov	r2, #0
+  20:	e3a01002 	mov	r1, #2
+  24:	ebfffffe 	bl	0 <mr_L_checklstring>
+  28:	e1a05000 	mov	r5, r0
+  2c:	e1a00007 	mov	r0, r7
+  30:	e3a02000 	mov	r2, #0
+  34:	e3a01003 	mov	r1, #3
+  38:	ebfffffe 	bl	0 <mr_L_optnumber>
+  3c:	e1a06000 	mov	r6, r0
+  40:	e1a00007 	mov	r0, r7
+  44:	e3a02044 	mov	r2, #68	; 0x44
+  48:	e3a01004 	mov	r1, #4
+  4c:	ebfffffe 	bl	0 <mr_L_optnumber>
+  50:	e1a03000 	mov	r3, r0
+  54:	e1a00004 	mov	r0, r4
+  58:	e1a02006 	mov	r2, r6
+  5c:	e1a01005 	mov	r1, r5
+  60:	ebfffffe 	bl	0 <mr_editCreate>
+  64:	e3500000 	cmp	r0, #0
+  68:	da000003 	ble	7c <EditCreate+0x7c>
+  6c:	e1a01000 	mov	r1, r0
+  70:	e1a00007 	mov	r0, r7
+  74:	ebfffffe 	bl	0 <mrp_pushnumber>
+  78:	ea000001 	b	84 <EditCreate+0x84>
+  7c:	e1a00007 	mov	r0, r7
+  80:	ebfffffe 	bl	0 <mrp_pushnil>
+  84:	e3a00001 	mov	r0, #1
+  88:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.EditRelease:
+
+00000000 <EditRelease>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_optnumber>
+  14:	ebfffffe 	bl	0 <mr_editRelease>
+  18:	e3500000 	cmp	r0, #0
+  1c:	1a000003 	bne	30 <EditRelease+0x30>
+  20:	e1a01000 	mov	r1, r0
+  24:	e1a00004 	mov	r0, r4
+  28:	ebfffffe 	bl	0 <mrp_pushnumber>
+  2c:	ea000001 	b	38 <EditRelease+0x38>
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mrp_pushnil>
+  38:	e3a00001 	mov	r0, #1
+  3c:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.EditGetText:
+
+00000000 <EditGetText>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05000 	mov	r5, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_optnumber>
+  14:	ebfffffe 	bl	0 <mr_editGetText>
+  18:	e1b04000 	movs	r4, r0
+  1c:	1a000002 	bne	2c <EditGetText+0x2c>
+  20:	e1a00005 	mov	r0, r5
+  24:	ebfffffe 	bl	0 <mrp_pushnil>
+  28:	ea000005 	b	44 <EditGetText+0x44>
+  2c:	e1a00004 	mov	r0, r4
+  30:	ebfffffe 	bl	0 <mr_wstrlen>
+  34:	e2802002 	add	r2, r0, #2
+  38:	e1a00005 	mov	r0, r5
+  3c:	e1a01004 	mov	r1, r4
+  40:	ebfffffe 	bl	0 <mrp_pushlstring>
+  44:	e3a00001 	mov	r0, #1
+  48:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.WinCreate:
+
+00000000 <WinCreate>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	ebfffffe 	bl	0 <mr_winCreate>
+   c:	e3500000 	cmp	r0, #0
+  10:	da000003 	ble	24 <WinCreate+0x24>
+  14:	e1a01000 	mov	r1, r0
+  18:	e1a00004 	mov	r0, r4
+  1c:	ebfffffe 	bl	0 <mrp_pushnumber>
+  20:	ea000001 	b	2c <WinCreate+0x2c>
+  24:	e1a00004 	mov	r0, r4
+  28:	ebfffffe 	bl	0 <mrp_pushnil>
+  2c:	e3a00001 	mov	r0, #1
+  30:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.WinRelease:
+
+00000000 <WinRelease>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a02000 	mov	r2, #0
+   c:	e3a01001 	mov	r1, #1
+  10:	ebfffffe 	bl	0 <mr_L_optnumber>
+  14:	ebfffffe 	bl	0 <mr_winRelease>
+  18:	e3500000 	cmp	r0, #0
+  1c:	1a000003 	bne	30 <WinRelease+0x30>
+  20:	e1a01000 	mov	r1, r0
+  24:	e1a00004 	mov	r0, r4
+  28:	ebfffffe 	bl	0 <mrp_pushnumber>
+  2c:	ea000001 	b	38 <WinRelease+0x38>
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mrp_pushnil>
+  38:	e3a00001 	mov	r0, #1
+  3c:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.mrp_open_file:
+
+00000000 <mrp_open_file>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e59f2090 	ldr	r2, [pc, #144]	; 9c <mrp_open_file+0x9c>
+   8:	e1a04000 	mov	r4, r0
+   c:	e3a03000 	mov	r3, #0
+  10:	e28f1088 	add	r1, pc, #136	; 0x88
+  14:	ebfffffe 	bl	0 <mr_L_openlib>
+  18:	e59f2084 	ldr	r2, [pc, #132]	; a4 <mrp_open_file+0xa4>
+  1c:	e3a03000 	mov	r3, #0
+  20:	e28f1080 	add	r1, pc, #128	; 0x80
+  24:	e1a00004 	mov	r0, r4
+  28:	ebfffffe 	bl	0 <mr_L_openlib>
+  2c:	e28f1078 	add	r1, pc, #120	; 0x78
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mr_L_newmetatable>
+  38:	e3a02007 	mov	r2, #7
+  3c:	e28f1070 	add	r1, pc, #112	; 0x70
+  40:	e1a00004 	mov	r0, r4
+  44:	ebfffffe 	bl	0 <mrp_pushlstring>
+  48:	e3e01001 	mvn	r1, #1
+  4c:	e1a00004 	mov	r0, r4
+  50:	ebfffffe 	bl	0 <mrp_pushvalue>
+  54:	e3e01002 	mvn	r1, #2
+  58:	e1a00004 	mov	r0, r4
+  5c:	ebfffffe 	bl	0 <mrp_rawset>
+  60:	e59f2054 	ldr	r2, [pc, #84]	; bc <mrp_open_file+0xbc>
+  64:	e3a03000 	mov	r3, #0
+  68:	e3a01000 	mov	r1, #0
+  6c:	e1a00004 	mov	r0, r4
+  70:	ebfffffe 	bl	0 <mr_L_openlib>
+  74:	e3e01000 	mvn	r1, #0
+  78:	e1a00004 	mov	r0, r4
+  7c:	ebfffffe 	bl	0 <mrp_pushvalue>
+  80:	e59f2038 	ldr	r2, [pc, #56]	; c0 <mrp_open_file+0xc0>
+  84:	e3a03001 	mov	r3, #1
+  88:	e28f1034 	add	r1, pc, #52	; 0x34
+  8c:	e1a00004 	mov	r0, r4
+  90:	ebfffffe 	bl	0 <mr_L_openlib>
+  94:	e3a00001 	mov	r0, #1
+  98:	e8bd8010 	pop	{r4, pc}
+  9c:	00000110 	.word	0x00000110
+  a0:	00697567 	.word	0x00697567
+  a4:	00000060 	.word	0x00000060
+  a8:	00737973 	.word	0x00737973
+  ac:	656c6966 	.word	0x656c6966
+  b0:	0000002a 	.word	0x0000002a
+  b4:	6e695f5f 	.word	0x6e695f5f
+  b8:	00786564 	.word	0x00786564
+  bc:	00000028 	.word	0x00000028
+  c0:	00000000 	.word	0x00000000
+  c4:	656c6966 	.word	0x656c6966
+  c8:	00000000 	.word	0x00000000
+
+Disassembly of section i.topfile:
+
+00000000 <topfile>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e59f2024 	ldr	r2, [pc, #36]	; 30 <topfile+0x30>
+   8:	e1a06001 	mov	r6, r1
+   c:	e1a05000 	mov	r5, r0
+  10:	ebfffffe 	bl	0 <mr_L_checkudata>
+  14:	e1b04000 	movs	r4, r0
+  18:	059f2014 	ldreq	r2, [pc, #20]	; 34 <topfile+0x34>
+  1c:	01a01006 	moveq	r1, r6
+  20:	01a00005 	moveq	r0, r5
+  24:	0bfffffe 	bleq	0 <mr_L_argerror>
+  28:	e1a00004 	mov	r0, r4
+  2c:	e8bd8070 	pop	{r4, r5, r6, pc}
+  30:	000001b0 	.word	0x000001b0
+  34:	000001b8 	.word	0x000001b8
+
+Disassembly of section i.tofile:
+
+00000000 <tofile>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05000 	mov	r5, r0
+   8:	ebfffffe 	bl	0 <tofile>
+   c:	e1a04000 	mov	r4, r0
+  10:	e5900000 	ldr	r0, [r0]
+  14:	e3500000 	cmp	r0, #0
+  18:	059f100c 	ldreq	r1, [pc, #12]	; 2c <tofile+0x2c>
+  1c:	01a00005 	moveq	r0, r5
+  20:	0bfffffe 	bleq	0 <mr_L_error>
+  24:	e5940000 	ldr	r0, [r4]
+  28:	e8bd8070 	pop	{r4, r5, r6, pc}
+  2c:	000001c4 	.word	0x000001c4
+
+Disassembly of section i.mr_aux_close:
+
+00000000 <mr_aux_close>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05000 	mov	r5, r0
+   8:	e3a01001 	mov	r1, #1
+   c:	ebfffffe 	bl	0 <mr_aux_close>
+  10:	ebfffffe 	bl	0 <mr_close>
+  14:	e2704001 	rsbs	r4, r0, #1
+  18:	33a04000 	movcc	r4, #0
+  1c:	e3540000 	cmp	r4, #0
+  20:	0a000004 	beq	38 <mr_aux_close+0x38>
+  24:	e3a01001 	mov	r1, #1
+  28:	e1a00005 	mov	r0, r5
+  2c:	ebfffffe 	bl	0 <mrp_touserdata>
+  30:	e3a01000 	mov	r1, #0
+  34:	e5801000 	str	r1, [r0]
+  38:	e1a00004 	mov	r0, r4
+  3c:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.g_read:
+
+00000000 <g_read>:
+   0:	e92d47f0 	push	{r4, r5, r6, r7, r8, r9, sl, lr}
+   4:	e24dde11 	sub	sp, sp, #272	; 0x110
+   8:	e1a0a001 	mov	sl, r1
+   c:	e1a09000 	mov	r9, r0
+  10:	e1a08002 	mov	r8, r2
+  14:	ebfffffe 	bl	0 <mrp_gettop>
+  18:	e2407001 	sub	r7, r0, #1
+  1c:	e2871014 	add	r1, r7, #20
+  20:	e1a00009 	mov	r0, r9
+  24:	e28f20e4 	add	r2, pc, #228	; 0xe4
+  28:	ebfffffe 	bl	0 <mr_L_checkstack>
+  2c:	e3a04001 	mov	r4, #1
+  30:	e1a06008 	mov	r6, r8
+  34:	ea000026 	b	d4 <g_read+0xd4>
+  38:	e1a01006 	mov	r1, r6
+  3c:	e1a00009 	mov	r0, r9
+  40:	ebfffffe 	bl	0 <mrp_type>
+  44:	e3500003 	cmp	r0, #3
+  48:	1a000020 	bne	d0 <g_read+0xd0>
+  4c:	e1a01006 	mov	r1, r6
+  50:	e1a00009 	mov	r0, r9
+  54:	ebfffffe 	bl	0 <mrp_tonumber>
+  58:	e1a04000 	mov	r4, r0
+  5c:	e1a00009 	mov	r0, r9
+  60:	e28d1004 	add	r1, sp, #4
+  64:	ebfffffe 	bl	0 <mr_L_buffinit>
+  68:	e3a05c01 	mov	r5, #256	; 0x100
+  6c:	e28d0004 	add	r0, sp, #4
+  70:	ebfffffe 	bl	0 <mr_L_prepbuffer>
+  74:	e1550004 	cmp	r5, r4
+  78:	81a05004 	movhi	r5, r4
+  7c:	e1a01000 	mov	r1, r0
+  80:	e1a0000a 	mov	r0, sl
+  84:	e1a02005 	mov	r2, r5
+  88:	ebfffffe 	bl	0 <mr_read>
+  8c:	e59d1004 	ldr	r1, [sp, #4]
+  90:	e0544000 	subs	r4, r4, r0
+  94:	e0811000 	add	r1, r1, r0
+  98:	e58d1004 	str	r1, [sp, #4]
+  9c:	0a000001 	beq	a8 <g_read+0xa8>
+  a0:	e1500005 	cmp	r0, r5
+  a4:	0afffff0 	beq	6c <g_read+0x6c>
+  a8:	e28d0004 	add	r0, sp, #4
+  ac:	ebfffffe 	bl	0 <mr_L_pushresult>
+  b0:	e3540000 	cmp	r4, #0
+  b4:	0a000004 	beq	cc <g_read+0xcc>
+  b8:	e3e01000 	mvn	r1, #0
+  bc:	e1a00009 	mov	r0, r9
+  c0:	ebfffffe 	bl	0 <mrp_strlen>
+  c4:	e1b04000 	movs	r4, r0
+  c8:	0a000000 	beq	d0 <g_read+0xd0>
+  cc:	e3a04001 	mov	r4, #1
+  d0:	e2866001 	add	r6, r6, #1
+  d4:	e2577001 	subs	r7, r7, #1
+  d8:	3a000002 	bcc	e8 <g_read+0xe8>
+  dc:	e3540000 	cmp	r4, #0
+  e0:	1affffd4 	bne	38 <g_read+0x38>
+  e4:	ea000001 	b	f0 <g_read+0xf0>
+  e8:	e3540000 	cmp	r4, #0
+  ec:	1a000004 	bne	104 <g_read+0x104>
+  f0:	e3e01001 	mvn	r1, #1
+  f4:	e1a00009 	mov	r0, r9
+  f8:	ebfffffe 	bl	0 <mrp_settop>
+  fc:	e1a00009 	mov	r0, r9
+ 100:	ebfffffe 	bl	0 <mrp_pushnil>
+ 104:	e0460008 	sub	r0, r6, r8
+ 108:	e28dde11 	add	sp, sp, #272	; 0x110
+ 10c:	e8bd87f0 	pop	{r4, r5, r6, r7, r8, r9, sl, pc}
+ 110:	206f6f74 	.word	0x206f6f74
+ 114:	796e616d 	.word	0x796e616d
+ 118:	67726120 	.word	0x67726120
+ 11c:	6e656d75 	.word	0x6e656d75
+ 120:	00007374 	.word	0x00007374

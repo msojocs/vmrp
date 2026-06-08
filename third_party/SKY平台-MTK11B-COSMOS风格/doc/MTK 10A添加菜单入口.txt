@@ -1,0 +1,19 @@
+
+1、首先在Mythroad.res中定义一个MENU，例如下边的定义了id="MENU_DSM_GAME_CENTER"
+#ifdef __MR_CFG_ENTRY_GAMECENTER__  
+    <MENUITEM id="MENU_DSM_GAME_CENTER" str="STR_DSM_GAME_CENTER"  img="IMG_DSM_LIST_GAME"/>
+#endif 
+
+2、在Res_Dsm.c中的函数PopulateMythroadRes把MENU挂在父MENU下，例如
+#ifdef __MR_CFG_ENTRY_GAMECENTER__
+	INSERT_DSM_MENU_ITEM(MENU_DSM_GAME_CENTER, MAIN_MENU_EXTRA_MENUID, i);
+#endif
+
+INSERT_DSM_MENU_ITEM(要添加的MENU ID, 父MENU ID, 添加位置从0开始);
+
+3、MENU和启动MRP关联
+在mrp_main.c中的固化列表中MR_PREINSTALLED_APPINFO_TABLE_BEGIN下添加MRP信息（注意国内和海外的宏），例如
+	MR_APPINFO_BEGIN(MENU_DSM_GAME_CENTER, MR_APPID_COOKIE, "*J,games")
+		MR_APPINFO_ENTRY(mr_all_list,  9)
+		MR_APPINFO_ENTRY(mr_alllist_cfg, 18)
+	MR_APPINFO_END()

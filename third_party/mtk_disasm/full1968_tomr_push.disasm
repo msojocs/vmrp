@@ -1,0 +1,243 @@
+
+/tmp/mtk_disasm/full1968/tomr_push.obj:     file format elf32-littlearm
+
+
+Disassembly of section i.to_mr_pushvalue:
+
+00000000 <to_mr_pushvalue>:
+   0:	eafffffe 	b	0 <mrp_pushvalue>
+
+Disassembly of section i.to_mr_pushboolean:
+
+00000000 <to_mr_pushboolean>:
+   0:	eafffffe 	b	0 <mrp_pushboolean>
+
+Disassembly of section i.to_mr_pushnumber:
+
+00000000 <to_mr_pushnumber>:
+   0:	eafffffe 	b	0 <mrp_pushnumber>
+
+Disassembly of section i.to_mr_pushstring:
+
+00000000 <to_mr_pushstring>:
+   0:	e3510000 	cmp	r1, #0
+   4:	1afffffe 	bne	0 <mrp_pushstring>
+   8:	0afffffe 	beq	0 <mrp_pushnil>
+
+Disassembly of section i.to_mr_pushuserdata:
+
+00000000 <to_mr_pushuserdata>:
+   0:	e3510000 	cmp	r1, #0
+   4:	1afffffe 	bne	0 <mrp_pushlightuserdata>
+   8:	0afffffe 	beq	0 <mrp_pushnil>
+
+Disassembly of section i.to_mr_pushusertype:
+
+00000000 <to_mr_pushusertype>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1b04001 	movs	r4, r1
+   8:	e1a05000 	mov	r5, r0
+   c:	01a00005 	moveq	r0, r5
+  10:	e1a07002 	mov	r7, r2
+  14:	08bd41f0 	popeq	{r4, r5, r6, r7, r8, lr}
+  18:	0afffffe 	beq	0 <mrp_pushnil>
+  1c:	e28f1f57 	add	r1, pc, #348	; 0x15c
+  20:	e1a00005 	mov	r0, r5
+  24:	ebfffffe 	bl	0 <mrp_pushstring>
+  28:	e59f615c 	ldr	r6, [pc, #348]	; 18c <to_mr_pushusertype+0x18c>
+  2c:	e1a00005 	mov	r0, r5
+  30:	e1a01006 	mov	r1, r6
+  34:	ebfffffe 	bl	0 <mrp_rawget>
+  38:	e1a01004 	mov	r1, r4
+  3c:	e1a00005 	mov	r0, r5
+  40:	ebfffffe 	bl	0 <mrp_pushlightuserdata>
+  44:	e3e01001 	mvn	r1, #1
+  48:	e1a00005 	mov	r0, r5
+  4c:	ebfffffe 	bl	0 <mrp_rawget>
+  50:	e3e01000 	mvn	r1, #0
+  54:	e1a00005 	mov	r0, r5
+  58:	ebfffffe 	bl	0 <mrp_type>
+  5c:	e3500000 	cmp	r0, #0
+  60:	e1a00005 	mov	r0, r5
+  64:	e3e01001 	mvn	r1, #1
+  68:	1a00001a 	bne	d8 <to_mr_pushusertype+0xd8>
+  6c:	ebfffffe 	bl	0 <mrp_settop>
+  70:	e1a01004 	mov	r1, r4
+  74:	e1a00005 	mov	r0, r5
+  78:	ebfffffe 	bl	0 <mrp_pushlightuserdata>
+  7c:	e3a01004 	mov	r1, #4
+  80:	e1a00005 	mov	r0, r5
+  84:	ebfffffe 	bl	0 <mrp_newuserdata>
+  88:	e5804000 	str	r4, [r0]
+  8c:	e1a00005 	mov	r0, r5
+  90:	e3e01000 	mvn	r1, #0
+  94:	ebfffffe 	bl	0 <mrp_pushvalue>
+  98:	e3e01003 	mvn	r1, #3
+  9c:	e1a00005 	mov	r0, r5
+  a0:	ebfffffe 	bl	0 <mrp_insert>
+  a4:	e3e01002 	mvn	r1, #2
+  a8:	e1a00005 	mov	r0, r5
+  ac:	ebfffffe 	bl	0 <mrp_rawset>
+  b0:	e3e01001 	mvn	r1, #1
+  b4:	e1a00005 	mov	r0, r5
+  b8:	ebfffffe 	bl	0 <mrp_settop>
+  bc:	e1a01007 	mov	r1, r7
+  c0:	e1a00005 	mov	r0, r5
+  c4:	ebfffffe 	bl	0 <mr_L_getmetatable>
+  c8:	e1a00005 	mov	r0, r5
+  cc:	e8bd41f0 	pop	{r4, r5, r6, r7, r8, lr}
+  d0:	e3e01001 	mvn	r1, #1
+  d4:	eafffffe 	b	0 <mrp_setmetatable>
+  d8:	ebfffffe 	bl	0 <mrp_insert>
+  dc:	e3e01001 	mvn	r1, #1
+  e0:	e1a00005 	mov	r0, r5
+  e4:	ebfffffe 	bl	0 <mrp_settop>
+  e8:	e28f10a0 	add	r1, pc, #160	; 0xa0
+  ec:	e1a00005 	mov	r0, r5
+  f0:	ebfffffe 	bl	0 <mrp_pushstring>
+  f4:	e1a01006 	mov	r1, r6
+  f8:	e1a00005 	mov	r0, r5
+  fc:	ebfffffe 	bl	0 <mrp_rawget>
+ 100:	e3e01001 	mvn	r1, #1
+ 104:	e1a00005 	mov	r0, r5
+ 108:	ebfffffe 	bl	0 <mrp_getmetatable>
+ 10c:	e3e01001 	mvn	r1, #1
+ 110:	e1a00005 	mov	r0, r5
+ 114:	ebfffffe 	bl	0 <mrp_rawget>
+ 118:	e3e01000 	mvn	r1, #0
+ 11c:	e1a00005 	mov	r0, r5
+ 120:	ebfffffe 	bl	0 <mrp_type>
+ 124:	e3500005 	cmp	r0, #5
+ 128:	1a00000a 	bne	158 <to_mr_pushusertype+0x158>
+ 12c:	e1a01007 	mov	r1, r7
+ 130:	e1a00005 	mov	r0, r5
+ 134:	ebfffffe 	bl	0 <mrp_pushstring>
+ 138:	e3e01001 	mvn	r1, #1
+ 13c:	e1a00005 	mov	r0, r5
+ 140:	ebfffffe 	bl	0 <mrp_rawget>
+ 144:	e3e01000 	mvn	r1, #0
+ 148:	e1a00005 	mov	r0, r5
+ 14c:	ebfffffe 	bl	0 <mrp_toboolean>
+ 150:	e3500001 	cmp	r0, #1
+ 154:	0a000005 	beq	170 <to_mr_pushusertype+0x170>
+ 158:	e1a01007 	mov	r1, r7
+ 15c:	e1a00005 	mov	r0, r5
+ 160:	ebfffffe 	bl	0 <mr_L_getmetatable>
+ 164:	e3e01004 	mvn	r1, #4
+ 168:	e1a00005 	mov	r0, r5
+ 16c:	ebfffffe 	bl	0 <mrp_setmetatable>
+ 170:	e1a00005 	mov	r0, r5
+ 174:	e8bd41f0 	pop	{r4, r5, r6, r7, r8, lr}
+ 178:	e3e01003 	mvn	r1, #3
+ 17c:	eafffffe 	b	0 <mrp_settop>
+ 180:	6d5f6f74 	.word	0x6d5f6f74
+ 184:	62755f72 	.word	0x62755f72
+ 188:	0000786f 	.word	0x0000786f
+ 18c:	ffffd8f0 	.word	0xffffd8f0
+ 190:	6d5f6f74 	.word	0x6d5f6f74
+ 194:	75735f72 	.word	0x75735f72
+ 198:	00726570 	.word	0x00726570
+
+Disassembly of section i.to_mr_pushfieldvalue:
+
+00000000 <to_mr_pushfieldvalue>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a06001 	mov	r6, r1
+   8:	e1a01002 	mov	r1, r2
+   c:	e1a05000 	mov	r5, r0
+  10:	e1a04003 	mov	r4, r3
+  14:	ebfffffe 	bl	0 <mrp_pushnumber>
+  18:	e1a01004 	mov	r1, r4
+  1c:	e1a00005 	mov	r0, r5
+  20:	ebfffffe 	bl	0 <mrp_pushvalue>
+  24:	e1a01006 	mov	r1, r6
+  28:	e1a00005 	mov	r0, r5
+  2c:	e8bd4070 	pop	{r4, r5, r6, lr}
+  30:	eafffffe 	b	0 <mrp_settable>
+
+Disassembly of section i.to_mr_pushfieldboolean:
+
+00000000 <to_mr_pushfieldboolean>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a06001 	mov	r6, r1
+   8:	e1a01002 	mov	r1, r2
+   c:	e1a05000 	mov	r5, r0
+  10:	e1a04003 	mov	r4, r3
+  14:	ebfffffe 	bl	0 <mrp_pushnumber>
+  18:	e1a01004 	mov	r1, r4
+  1c:	e1a00005 	mov	r0, r5
+  20:	ebfffffe 	bl	0 <mrp_pushboolean>
+  24:	e1a01006 	mov	r1, r6
+  28:	e1a00005 	mov	r0, r5
+  2c:	e8bd4070 	pop	{r4, r5, r6, lr}
+  30:	eafffffe 	b	0 <mrp_settable>
+
+Disassembly of section i.to_mr_pushfieldnumber:
+
+00000000 <to_mr_pushfieldnumber>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a06001 	mov	r6, r1
+   8:	e1a01002 	mov	r1, r2
+   c:	e1a05000 	mov	r5, r0
+  10:	e1a04003 	mov	r4, r3
+  14:	ebfffffe 	bl	0 <mrp_pushnumber>
+  18:	e1a01004 	mov	r1, r4
+  1c:	e1a00005 	mov	r0, r5
+  20:	ebfffffe 	bl	0 <mrp_pushnumber>
+  24:	e1a01006 	mov	r1, r6
+  28:	e1a00005 	mov	r0, r5
+  2c:	e8bd4070 	pop	{r4, r5, r6, lr}
+  30:	eafffffe 	b	0 <mrp_settable>
+
+Disassembly of section i.to_mr_pushfieldstring:
+
+00000000 <to_mr_pushfieldstring>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a06001 	mov	r6, r1
+   8:	e1a01002 	mov	r1, r2
+   c:	e1a05000 	mov	r5, r0
+  10:	e1a04003 	mov	r4, r3
+  14:	ebfffffe 	bl	0 <mrp_pushnumber>
+  18:	e1a01004 	mov	r1, r4
+  1c:	e1a00005 	mov	r0, r5
+  20:	ebfffffe 	bl	0 <to_mr_pushfieldstring>
+  24:	e1a01006 	mov	r1, r6
+  28:	e1a00005 	mov	r0, r5
+  2c:	e8bd4070 	pop	{r4, r5, r6, lr}
+  30:	eafffffe 	b	0 <mrp_settable>
+
+Disassembly of section i.to_mr_pushfielduserdata:
+
+00000000 <to_mr_pushfielduserdata>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a06001 	mov	r6, r1
+   8:	e1a01002 	mov	r1, r2
+   c:	e1a05000 	mov	r5, r0
+  10:	e1a04003 	mov	r4, r3
+  14:	ebfffffe 	bl	0 <mrp_pushnumber>
+  18:	e1a01004 	mov	r1, r4
+  1c:	e1a00005 	mov	r0, r5
+  20:	ebfffffe 	bl	0 <to_mr_pushfielduserdata>
+  24:	e1a01006 	mov	r1, r6
+  28:	e1a00005 	mov	r0, r5
+  2c:	e8bd4070 	pop	{r4, r5, r6, lr}
+  30:	eafffffe 	b	0 <mrp_settable>
+
+Disassembly of section i.to_mr_pushfieldusertype:
+
+00000000 <to_mr_pushfieldusertype>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a06001 	mov	r6, r1
+   8:	e59d7018 	ldr	r7, [sp, #24]
+   c:	e1a01002 	mov	r1, r2
+  10:	e1a05000 	mov	r5, r0
+  14:	e1a04003 	mov	r4, r3
+  18:	ebfffffe 	bl	0 <mrp_pushnumber>
+  1c:	e1a02007 	mov	r2, r7
+  20:	e1a01004 	mov	r1, r4
+  24:	e1a00005 	mov	r0, r5
+  28:	ebfffffe 	bl	0 <to_mr_pushfieldusertype>
+  2c:	e1a01006 	mov	r1, r6
+  30:	e1a00005 	mov	r0, r5
+  34:	e8bd41f0 	pop	{r4, r5, r6, r7, r8, lr}
+  38:	eafffffe 	b	0 <mrp_settable>

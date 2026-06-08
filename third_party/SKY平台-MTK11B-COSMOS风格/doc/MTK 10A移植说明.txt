@@ -1,0 +1,9 @@
+
+1.移植代码使用宏__MMI_DSM_NEW__
+2.在mrp_features.h中，10A1032版本使用		#define __MR_CFG_VAR_MTK_VERSION__ (0x10A1032)
+		      10A1101以上版本使用	#define __MR_CFG_VAR_MTK_VERSION__ (0x10A1103)
+3.新增加了JSKY的支持，DSM_JSKY_SUPPORT控制，默认关闭，如果需要支持此功能至少需5M内存，有些JSKY游戏需要支持屏幕缩放的话打开这个宏__MR_CFG_FEATURE_AUTO_ZOOMIN_ZOOMOUT_SWITCH__
+
+
+
+mrp_feature.h头文件，一些常用的宏,能开就开，注意第311行

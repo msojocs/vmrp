@@ -1,0 +1,876 @@
+
+/tmp/mtk_disasm/full1968/tomr_event.obj:     file format elf32-littlearm
+
+
+Disassembly of section i.storeatpeer:
+
+00000000 <storeatpeer>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a04001 	mov	r4, r1
+   8:	e28f10a8 	add	r1, pc, #168	; 0xa8
+   c:	e1a05000 	mov	r5, r0
+  10:	ebfffffe 	bl	0 <mrp_pushstring>
+  14:	e59f10a8 	ldr	r1, [pc, #168]	; c4 <storeatpeer+0xc4>
+  18:	e1a00005 	mov	r0, r5
+  1c:	ebfffffe 	bl	0 <mrp_rawget>
+  20:	e1a01004 	mov	r1, r4
+  24:	e1a00005 	mov	r0, r5
+  28:	ebfffffe 	bl	0 <mrp_pushvalue>
+  2c:	e3e01001 	mvn	r1, #1
+  30:	e1a00005 	mov	r0, r5
+  34:	ebfffffe 	bl	0 <mrp_rawget>
+  38:	e3e01000 	mvn	r1, #0
+  3c:	e1a00005 	mov	r0, r5
+  40:	ebfffffe 	bl	0 <mrp_type>
+  44:	e3500005 	cmp	r0, #5
+  48:	0a00000d 	beq	84 <storeatpeer+0x84>
+  4c:	e3e01001 	mvn	r1, #1
+  50:	e1a00005 	mov	r0, r5
+  54:	ebfffffe 	bl	0 <mrp_settop>
+  58:	e1a00005 	mov	r0, r5
+  5c:	ebfffffe 	bl	0 <mrp_newtable>
+  60:	e3a01001 	mov	r1, #1
+  64:	e1a00005 	mov	r0, r5
+  68:	ebfffffe 	bl	0 <mrp_pushvalue>
+  6c:	e3e01001 	mvn	r1, #1
+  70:	e1a00005 	mov	r0, r5
+  74:	ebfffffe 	bl	0 <mrp_pushvalue>
+  78:	e3e01003 	mvn	r1, #3
+  7c:	e1a00005 	mov	r0, r5
+  80:	ebfffffe 	bl	0 <mrp_rawset>
+  84:	e3e01003 	mvn	r1, #3
+  88:	e1a00005 	mov	r0, r5
+  8c:	ebfffffe 	bl	0 <mrp_insert>
+  90:	e3e01001 	mvn	r1, #1
+  94:	e1a00005 	mov	r0, r5
+  98:	ebfffffe 	bl	0 <mrp_settop>
+  9c:	e3e01002 	mvn	r1, #2
+  a0:	e1a00005 	mov	r0, r5
+  a4:	ebfffffe 	bl	0 <mrp_rawset>
+  a8:	e1a00005 	mov	r0, r5
+  ac:	e8bd4070 	pop	{r4, r5, r6, lr}
+  b0:	e3e01001 	mvn	r1, #1
+  b4:	eafffffe 	b	0 <mrp_settop>
+  b8:	6d5f6f74 	.word	0x6d5f6f74
+  bc:	65705f72 	.word	0x65705f72
+  c0:	00007265 	.word	0x00007265
+  c4:	ffffd8f0 	.word	0xffffd8f0
+
+Disassembly of section i.module_index_event:
+
+00000000 <module_index_event>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e28f1f42 	add	r1, pc, #264	; 0x108
+   c:	ebfffffe 	bl	0 <mrp_pushstring>
+  10:	e3e01002 	mvn	r1, #2
+  14:	e1a00004 	mov	r0, r4
+  18:	ebfffffe 	bl	0 <mrp_rawget>
+  1c:	e3e01000 	mvn	r1, #0
+  20:	e1a00004 	mov	r0, r4
+  24:	ebfffffe 	bl	0 <mrp_type>
+  28:	e3500005 	cmp	r0, #5
+  2c:	1a000011 	bne	78 <module_index_event+0x78>
+  30:	e3a01002 	mov	r1, #2
+  34:	e1a00004 	mov	r0, r4
+  38:	ebfffffe 	bl	0 <mrp_pushvalue>
+  3c:	e3e01001 	mvn	r1, #1
+  40:	e1a00004 	mov	r0, r4
+  44:	ebfffffe 	bl	0 <mrp_rawget>
+  48:	e3e01000 	mvn	r1, #0
+  4c:	e1a00004 	mov	r0, r4
+  50:	ebfffffe 	bl	0 <mrp_iscfunction>
+  54:	e3500000 	cmp	r0, #0
+  58:	13a02001 	movne	r2, #1
+  5c:	13a01000 	movne	r1, #0
+  60:	1a00001c 	bne	d8 <module_index_event+0xd8>
+  64:	e3e01000 	mvn	r1, #0
+  68:	e1a00004 	mov	r0, r4
+  6c:	ebfffffe 	bl	0 <mrp_type>
+  70:	e3500005 	cmp	r0, #5
+  74:	0a000022 	beq	104 <module_index_event+0x104>
+  78:	e3a01001 	mov	r1, #1
+  7c:	e1a00004 	mov	r0, r4
+  80:	ebfffffe 	bl	0 <mrp_getmetatable>
+  84:	e3500000 	cmp	r0, #0
+  88:	0a00001f 	beq	10c <module_index_event+0x10c>
+  8c:	e28f108c 	add	r1, pc, #140	; 0x8c
+  90:	e1a00004 	mov	r0, r4
+  94:	ebfffffe 	bl	0 <mrp_pushstring>
+  98:	e3e01001 	mvn	r1, #1
+  9c:	e1a00004 	mov	r0, r4
+  a0:	ebfffffe 	bl	0 <mrp_rawget>
+  a4:	e3a01001 	mov	r1, #1
+  a8:	e1a00004 	mov	r0, r4
+  ac:	ebfffffe 	bl	0 <mrp_pushvalue>
+  b0:	e3a01002 	mov	r1, #2
+  b4:	e1a00004 	mov	r0, r4
+  b8:	ebfffffe 	bl	0 <mrp_pushvalue>
+  bc:	e3e01000 	mvn	r1, #0
+  c0:	e1a00004 	mov	r0, r4
+  c4:	ebfffffe 	bl	0 <mrp_type>
+  c8:	e3500006 	cmp	r0, #6
+  cc:	1a000004 	bne	e4 <module_index_event+0xe4>
+  d0:	e3a02001 	mov	r2, #1
+  d4:	e3a01002 	mov	r1, #2
+  d8:	e1a00004 	mov	r0, r4
+  dc:	ebfffffe 	bl	0 <mrp_call>
+  e0:	ea000007 	b	104 <module_index_event+0x104>
+  e4:	e3e01000 	mvn	r1, #0
+  e8:	e1a00004 	mov	r0, r4
+  ec:	ebfffffe 	bl	0 <mrp_type>
+  f0:	e3500005 	cmp	r0, #5
+  f4:	1a000004 	bne	10c <module_index_event+0x10c>
+  f8:	e3e01002 	mvn	r1, #2
+  fc:	e1a00004 	mov	r0, r4
+ 100:	ebfffffe 	bl	0 <mrp_gettable>
+ 104:	e3a00001 	mov	r0, #1
+ 108:	e8bd8010 	pop	{r4, pc}
+ 10c:	e1a00004 	mov	r0, r4
+ 110:	ebfffffe 	bl	0 <mrp_pushnil>
+ 114:	eafffffa 	b	104 <module_index_event+0x104>
+ 118:	7465672e 	.word	0x7465672e
+ 11c:	00000000 	.word	0x00000000
+ 120:	6e695f5f 	.word	0x6e695f5f
+ 124:	00786564 	.word	0x00786564
+
+Disassembly of section i.module_newindex_event:
+
+00000000 <module_newindex_event>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e28f1e12 	add	r1, pc, #288	; 0x120
+   c:	ebfffffe 	bl	0 <mrp_pushstring>
+  10:	e3e01003 	mvn	r1, #3
+  14:	e1a00004 	mov	r0, r4
+  18:	ebfffffe 	bl	0 <mrp_rawget>
+  1c:	e3e01000 	mvn	r1, #0
+  20:	e1a00004 	mov	r0, r4
+  24:	ebfffffe 	bl	0 <mrp_type>
+  28:	e3500005 	cmp	r0, #5
+  2c:	1a000015 	bne	88 <module_newindex_event+0x88>
+  30:	e3a01002 	mov	r1, #2
+  34:	e1a00004 	mov	r0, r4
+  38:	ebfffffe 	bl	0 <mrp_pushvalue>
+  3c:	e3e01001 	mvn	r1, #1
+  40:	e1a00004 	mov	r0, r4
+  44:	ebfffffe 	bl	0 <mrp_rawget>
+  48:	e3e01000 	mvn	r1, #0
+  4c:	e1a00004 	mov	r0, r4
+  50:	ebfffffe 	bl	0 <mrp_iscfunction>
+  54:	e3500000 	cmp	r0, #0
+  58:	0a00000a 	beq	88 <module_newindex_event+0x88>
+  5c:	e3a01001 	mov	r1, #1
+  60:	e1a00004 	mov	r0, r4
+  64:	ebfffffe 	bl	0 <mrp_pushvalue>
+  68:	e3a01003 	mov	r1, #3
+  6c:	e1a00004 	mov	r0, r4
+  70:	ebfffffe 	bl	0 <mrp_pushvalue>
+  74:	e3a02000 	mov	r2, #0
+  78:	e3a01002 	mov	r1, #2
+  7c:	e1a00004 	mov	r0, r4
+  80:	ebfffffe 	bl	0 <mrp_call>
+  84:	ea000027 	b	128 <module_newindex_event+0x128>
+  88:	e3a01001 	mov	r1, #1
+  8c:	e1a00004 	mov	r0, r4
+  90:	ebfffffe 	bl	0 <mrp_getmetatable>
+  94:	e3500000 	cmp	r0, #0
+  98:	0a00001c 	beq	110 <module_newindex_event+0x110>
+  9c:	e3e01000 	mvn	r1, #0
+  a0:	e1a00004 	mov	r0, r4
+  a4:	ebfffffe 	bl	0 <mrp_getmetatable>
+  a8:	e3500000 	cmp	r0, #0
+  ac:	0a000017 	beq	110 <module_newindex_event+0x110>
+  b0:	e28f1080 	add	r1, pc, #128	; 0x80
+  b4:	e1a00004 	mov	r0, r4
+  b8:	ebfffffe 	bl	0 <mrp_pushstring>
+  bc:	e3e01001 	mvn	r1, #1
+  c0:	e1a00004 	mov	r0, r4
+  c4:	ebfffffe 	bl	0 <mrp_rawget>
+  c8:	e3e01000 	mvn	r1, #0
+  cc:	e1a00004 	mov	r0, r4
+  d0:	ebfffffe 	bl	0 <mrp_type>
+  d4:	e3500006 	cmp	r0, #6
+  d8:	1a00000c 	bne	110 <module_newindex_event+0x110>
+  dc:	e3a01001 	mov	r1, #1
+  e0:	e1a00004 	mov	r0, r4
+  e4:	ebfffffe 	bl	0 <mrp_pushvalue>
+  e8:	e3a01002 	mov	r1, #2
+  ec:	e1a00004 	mov	r0, r4
+  f0:	ebfffffe 	bl	0 <mrp_pushvalue>
+  f4:	e3a01003 	mov	r1, #3
+  f8:	e1a00004 	mov	r0, r4
+  fc:	ebfffffe 	bl	0 <mrp_pushvalue>
+ 100:	e3a02000 	mov	r2, #0
+ 104:	e3a01003 	mov	r1, #3
+ 108:	e1a00004 	mov	r0, r4
+ 10c:	ebfffffe 	bl	0 <mrp_call>
+ 110:	e3a01003 	mov	r1, #3
+ 114:	e1a00004 	mov	r0, r4
+ 118:	ebfffffe 	bl	0 <mrp_settop>
+ 11c:	e3e01002 	mvn	r1, #2
+ 120:	e1a00004 	mov	r0, r4
+ 124:	ebfffffe 	bl	0 <mrp_rawset>
+ 128:	e3a00000 	mov	r0, #0
+ 12c:	e8bd8010 	pop	{r4, pc}
+ 130:	7465732e 	.word	0x7465732e
+ 134:	00000000 	.word	0x00000000
+ 138:	656e5f5f 	.word	0x656e5f5f
+ 13c:	646e6977 	.word	0x646e6977
+ 140:	00007865 	.word	0x00007865
+
+Disassembly of section i.class_index_event:
+
+00000000 <class_index_event>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05000 	mov	r5, r0
+   8:	e3a01001 	mov	r1, #1
+   c:	ebfffffe 	bl	0 <mrp_type>
+  10:	e3500007 	cmp	r0, #7
+  14:	1a000096 	bne	274 <class_index_event+0x274>
+  18:	e28f1f9b 	add	r1, pc, #620	; 0x26c
+  1c:	e1a00005 	mov	r0, r5
+  20:	ebfffffe 	bl	0 <mrp_pushstring>
+  24:	e59f126c 	ldr	r1, [pc, #620]	; 298 <class_index_event+0x298>
+  28:	e1a00005 	mov	r0, r5
+  2c:	ebfffffe 	bl	0 <mrp_rawget>
+  30:	e3a01001 	mov	r1, #1
+  34:	e1a00005 	mov	r0, r5
+  38:	ebfffffe 	bl	0 <mrp_pushvalue>
+  3c:	e3e01001 	mvn	r1, #1
+  40:	e1a00005 	mov	r0, r5
+  44:	ebfffffe 	bl	0 <mrp_rawget>
+  48:	e3e01000 	mvn	r1, #0
+  4c:	e1a00005 	mov	r0, r5
+  50:	ebfffffe 	bl	0 <mrp_type>
+  54:	e3500005 	cmp	r0, #5
+  58:	1a00000a 	bne	88 <class_index_event+0x88>
+  5c:	e3a01002 	mov	r1, #2
+  60:	e1a00005 	mov	r0, r5
+  64:	ebfffffe 	bl	0 <mrp_pushvalue>
+  68:	e3e01001 	mvn	r1, #1
+  6c:	e1a00005 	mov	r0, r5
+  70:	ebfffffe 	bl	0 <mrp_rawget>
+  74:	e3e01000 	mvn	r1, #0
+  78:	e1a00005 	mov	r0, r5
+  7c:	ebfffffe 	bl	0 <mrp_type>
+  80:	e3500000 	cmp	r0, #0
+  84:	1a00007e 	bne	284 <class_index_event+0x284>
+  88:	e3a01002 	mov	r1, #2
+  8c:	e1a00005 	mov	r0, r5
+  90:	ebfffffe 	bl	0 <mrp_settop>
+  94:	e3a01001 	mov	r1, #1
+  98:	e1a00005 	mov	r0, r5
+  9c:	ebfffffe 	bl	0 <mrp_pushvalue>
+  a0:	ea00006b 	b	254 <class_index_event+0x254>
+  a4:	e3e01001 	mvn	r1, #1
+  a8:	e1a00005 	mov	r0, r5
+  ac:	ebfffffe 	bl	0 <mrp_remove>
+  b0:	e3a01002 	mov	r1, #2
+  b4:	e1a00005 	mov	r0, r5
+  b8:	ebfffffe 	bl	0 <mrp_isnumber>
+  bc:	e3500000 	cmp	r0, #0
+  c0:	0a000015 	beq	11c <class_index_event+0x11c>
+  c4:	e28f1e1d 	add	r1, pc, #464	; 0x1d0
+  c8:	e1a00005 	mov	r0, r5
+  cc:	ebfffffe 	bl	0 <mrp_pushstring>
+  d0:	e3e01001 	mvn	r1, #1
+  d4:	e1a00005 	mov	r0, r5
+  d8:	ebfffffe 	bl	0 <mrp_rawget>
+  dc:	e3e01000 	mvn	r1, #0
+  e0:	e1a00005 	mov	r0, r5
+  e4:	ebfffffe 	bl	0 <mrp_type>
+  e8:	e3500006 	cmp	r0, #6
+  ec:	1a000055 	bne	248 <class_index_event+0x248>
+  f0:	e3a01001 	mov	r1, #1
+  f4:	e1a00005 	mov	r0, r5
+  f8:	ebfffffe 	bl	0 <mrp_pushvalue>
+  fc:	e3a01002 	mov	r1, #2
+ 100:	e1a00005 	mov	r0, r5
+ 104:	ebfffffe 	bl	0 <mrp_pushvalue>
+ 108:	e3a02001 	mov	r2, #1
+ 10c:	e3a01002 	mov	r1, #2
+ 110:	e1a00005 	mov	r0, r5
+ 114:	ebfffffe 	bl	0 <mrp_call>
+ 118:	ea000059 	b	284 <class_index_event+0x284>
+ 11c:	e3a01002 	mov	r1, #2
+ 120:	e1a00005 	mov	r0, r5
+ 124:	ebfffffe 	bl	0 <mrp_pushvalue>
+ 128:	e3e01001 	mvn	r1, #1
+ 12c:	e1a00005 	mov	r0, r5
+ 130:	ebfffffe 	bl	0 <mrp_rawget>
+ 134:	e3e01000 	mvn	r1, #0
+ 138:	e1a00005 	mov	r0, r5
+ 13c:	ebfffffe 	bl	0 <mrp_type>
+ 140:	e3500000 	cmp	r0, #0
+ 144:	1a00004e 	bne	284 <class_index_event+0x284>
+ 148:	e3e01001 	mvn	r1, #1
+ 14c:	e1a00005 	mov	r0, r5
+ 150:	ebfffffe 	bl	0 <mrp_settop>
+ 154:	e28f1f52 	add	r1, pc, #328	; 0x148
+ 158:	e1a00005 	mov	r0, r5
+ 15c:	ebfffffe 	bl	0 <mrp_pushstring>
+ 160:	e3e01001 	mvn	r1, #1
+ 164:	e1a00005 	mov	r0, r5
+ 168:	ebfffffe 	bl	0 <mrp_rawget>
+ 16c:	e3e01000 	mvn	r1, #0
+ 170:	e1a00005 	mov	r0, r5
+ 174:	ebfffffe 	bl	0 <mrp_type>
+ 178:	e3500005 	cmp	r0, #5
+ 17c:	1a000031 	bne	248 <class_index_event+0x248>
+ 180:	e3a01002 	mov	r1, #2
+ 184:	e1a00005 	mov	r0, r5
+ 188:	ebfffffe 	bl	0 <mrp_pushvalue>
+ 18c:	e3e01001 	mvn	r1, #1
+ 190:	e1a00005 	mov	r0, r5
+ 194:	ebfffffe 	bl	0 <mrp_rawget>
+ 198:	e3e01000 	mvn	r1, #0
+ 19c:	e1a00005 	mov	r0, r5
+ 1a0:	ebfffffe 	bl	0 <mrp_iscfunction>
+ 1a4:	e3500000 	cmp	r0, #0
+ 1a8:	1affffd0 	bne	f0 <class_index_event+0xf0>
+ 1ac:	e3e01000 	mvn	r1, #0
+ 1b0:	e1a00005 	mov	r0, r5
+ 1b4:	ebfffffe 	bl	0 <mrp_type>
+ 1b8:	e3500005 	cmp	r0, #5
+ 1bc:	1a000021 	bne	248 <class_index_event+0x248>
+ 1c0:	e3a01001 	mov	r1, #1
+ 1c4:	e1a00005 	mov	r0, r5
+ 1c8:	ebfffffe 	bl	0 <mrp_touserdata>
+ 1cc:	e5904000 	ldr	r4, [r0]
+ 1d0:	e1a00005 	mov	r0, r5
+ 1d4:	ebfffffe 	bl	0 <mrp_newtable>
+ 1d8:	e28f10cc 	add	r1, pc, #204	; 0xcc
+ 1dc:	e1a00005 	mov	r0, r5
+ 1e0:	ebfffffe 	bl	0 <mrp_pushstring>
+ 1e4:	e1a01004 	mov	r1, r4
+ 1e8:	e1a00005 	mov	r0, r5
+ 1ec:	ebfffffe 	bl	0 <mrp_pushlightuserdata>
+ 1f0:	e3e01002 	mvn	r1, #2
+ 1f4:	e1a00005 	mov	r0, r5
+ 1f8:	ebfffffe 	bl	0 <mrp_rawset>
+ 1fc:	e3e01001 	mvn	r1, #1
+ 200:	e1a00005 	mov	r0, r5
+ 204:	ebfffffe 	bl	0 <mrp_insert>
+ 208:	e3e01001 	mvn	r1, #1
+ 20c:	e1a00005 	mov	r0, r5
+ 210:	ebfffffe 	bl	0 <mrp_setmetatable>
+ 214:	e3e01000 	mvn	r1, #0
+ 218:	e1a00005 	mov	r0, r5
+ 21c:	ebfffffe 	bl	0 <mrp_pushvalue>
+ 220:	e3a01002 	mov	r1, #2
+ 224:	e1a00005 	mov	r0, r5
+ 228:	ebfffffe 	bl	0 <mrp_pushvalue>
+ 22c:	e3e01001 	mvn	r1, #1
+ 230:	e1a00005 	mov	r0, r5
+ 234:	ebfffffe 	bl	0 <mrp_insert>
+ 238:	e3a01001 	mov	r1, #1
+ 23c:	e1a00005 	mov	r0, r5
+ 240:	ebfffffe 	bl	0 <class_index_event>
+ 244:	ea00000e 	b	284 <class_index_event+0x284>
+ 248:	e3a01003 	mov	r1, #3
+ 24c:	e1a00005 	mov	r0, r5
+ 250:	ebfffffe 	bl	0 <mrp_settop>
+ 254:	e3e01000 	mvn	r1, #0
+ 258:	e1a00005 	mov	r0, r5
+ 25c:	ebfffffe 	bl	0 <mrp_getmetatable>
+ 260:	e3500000 	cmp	r0, #0
+ 264:	1affff8e 	bne	a4 <class_index_event+0xa4>
+ 268:	e1a00005 	mov	r0, r5
+ 26c:	ebfffffe 	bl	0 <mrp_pushnil>
+ 270:	ea000003 	b	284 <class_index_event+0x284>
+ 274:	e3500005 	cmp	r0, #5
+ 278:	1afffffa 	bne	268 <class_index_event+0x268>
+ 27c:	e1a00005 	mov	r0, r5
+ 280:	ebfffffe 	bl	0 <class_index_event>
+ 284:	e3a00001 	mov	r0, #1
+ 288:	e8bd8070 	pop	{r4, r5, r6, pc}
+ 28c:	6d5f6f74 	.word	0x6d5f6f74
+ 290:	65705f72 	.word	0x65705f72
+ 294:	00007265 	.word	0x00007265
+ 298:	ffffd8f0 	.word	0xffffd8f0
+ 29c:	7465672e 	.word	0x7465672e
+ 2a0:	00000069 	.word	0x00000069
+ 2a4:	7465672e 	.word	0x7465672e
+ 2a8:	00000000 	.word	0x00000000
+ 2ac:	6c65732e 	.word	0x6c65732e
+ 2b0:	00000066 	.word	0x00000066
+
+Disassembly of section i.class_newindex_event:
+
+00000000 <class_newindex_event>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e3a01001 	mov	r1, #1
+   c:	ebfffffe 	bl	0 <mrp_type>
+  10:	e3500007 	cmp	r0, #7
+  14:	1a00005b 	bne	188 <class_newindex_event+0x188>
+  18:	e3a01001 	mov	r1, #1
+  1c:	e1a00004 	mov	r0, r4
+  20:	ebfffffe 	bl	0 <mrp_getmetatable>
+  24:	ea00004b 	b	158 <class_newindex_event+0x158>
+  28:	e3a01002 	mov	r1, #2
+  2c:	e1a00004 	mov	r0, r4
+  30:	ebfffffe 	bl	0 <mrp_isnumber>
+  34:	e3500000 	cmp	r0, #0
+  38:	0a000016 	beq	98 <class_newindex_event+0x98>
+  3c:	e28f1f56 	add	r1, pc, #344	; 0x158
+  40:	e1a00004 	mov	r0, r4
+  44:	ebfffffe 	bl	0 <mrp_pushstring>
+  48:	e3e01001 	mvn	r1, #1
+  4c:	e1a00004 	mov	r0, r4
+  50:	ebfffffe 	bl	0 <mrp_rawget>
+  54:	e3e01000 	mvn	r1, #0
+  58:	e1a00004 	mov	r0, r4
+  5c:	ebfffffe 	bl	0 <mrp_type>
+  60:	e3500006 	cmp	r0, #6
+  64:	1a00003b 	bne	158 <class_newindex_event+0x158>
+  68:	e3a01001 	mov	r1, #1
+  6c:	e1a00004 	mov	r0, r4
+  70:	ebfffffe 	bl	0 <mrp_pushvalue>
+  74:	e3a01002 	mov	r1, #2
+  78:	e1a00004 	mov	r0, r4
+  7c:	ebfffffe 	bl	0 <mrp_pushvalue>
+  80:	e3a01003 	mov	r1, #3
+  84:	e1a00004 	mov	r0, r4
+  88:	ebfffffe 	bl	0 <mrp_pushvalue>
+  8c:	e3a02000 	mov	r2, #0
+  90:	e3a01003 	mov	r1, #3
+  94:	ea00001d 	b	110 <class_newindex_event+0x110>
+  98:	e28f1f41 	add	r1, pc, #260	; 0x104
+  9c:	e1a00004 	mov	r0, r4
+  a0:	ebfffffe 	bl	0 <mrp_pushstring>
+  a4:	e3e01001 	mvn	r1, #1
+  a8:	e1a00004 	mov	r0, r4
+  ac:	ebfffffe 	bl	0 <mrp_rawget>
+  b0:	e3e01000 	mvn	r1, #0
+  b4:	e1a00004 	mov	r0, r4
+  b8:	ebfffffe 	bl	0 <mrp_type>
+  bc:	e3500005 	cmp	r0, #5
+  c0:	1a000018 	bne	128 <class_newindex_event+0x128>
+  c4:	e3a01002 	mov	r1, #2
+  c8:	e1a00004 	mov	r0, r4
+  cc:	ebfffffe 	bl	0 <mrp_pushvalue>
+  d0:	e3e01001 	mvn	r1, #1
+  d4:	e1a00004 	mov	r0, r4
+  d8:	ebfffffe 	bl	0 <mrp_rawget>
+  dc:	e3e01000 	mvn	r1, #0
+  e0:	e1a00004 	mov	r0, r4
+  e4:	ebfffffe 	bl	0 <mrp_iscfunction>
+  e8:	e3500000 	cmp	r0, #0
+  ec:	0a00000a 	beq	11c <class_newindex_event+0x11c>
+  f0:	e3a01001 	mov	r1, #1
+  f4:	e1a00004 	mov	r0, r4
+  f8:	ebfffffe 	bl	0 <mrp_pushvalue>
+  fc:	e3a01003 	mov	r1, #3
+ 100:	e1a00004 	mov	r0, r4
+ 104:	ebfffffe 	bl	0 <mrp_pushvalue>
+ 108:	e3a02000 	mov	r2, #0
+ 10c:	e3a01002 	mov	r1, #2
+ 110:	e1a00004 	mov	r0, r4
+ 114:	ebfffffe 	bl	0 <mrp_call>
+ 118:	ea00001d 	b	194 <class_newindex_event+0x194>
+ 11c:	e3e01001 	mvn	r1, #1
+ 120:	e1a00004 	mov	r0, r4
+ 124:	ebfffffe 	bl	0 <mrp_settop>
+ 128:	e3e01001 	mvn	r1, #1
+ 12c:	e1a00004 	mov	r0, r4
+ 130:	ebfffffe 	bl	0 <mrp_settop>
+ 134:	e3e01000 	mvn	r1, #0
+ 138:	e1a00004 	mov	r0, r4
+ 13c:	ebfffffe 	bl	0 <mrp_getmetatable>
+ 140:	e3500000 	cmp	r0, #0
+ 144:	01a00004 	moveq	r0, r4
+ 148:	0bfffffe 	bleq	0 <mrp_pushnil>
+ 14c:	e3e01001 	mvn	r1, #1
+ 150:	e1a00004 	mov	r0, r4
+ 154:	ebfffffe 	bl	0 <mrp_remove>
+ 158:	e3e01000 	mvn	r1, #0
+ 15c:	e1a00004 	mov	r0, r4
+ 160:	ebfffffe 	bl	0 <mrp_type>
+ 164:	e3500005 	cmp	r0, #5
+ 168:	0affffae 	beq	28 <class_newindex_event+0x28>
+ 16c:	e3a01003 	mov	r1, #3
+ 170:	e1a00004 	mov	r0, r4
+ 174:	ebfffffe 	bl	0 <mrp_settop>
+ 178:	e3a01001 	mov	r1, #1
+ 17c:	e1a00004 	mov	r0, r4
+ 180:	ebfffffe 	bl	0 <class_newindex_event>
+ 184:	ea000002 	b	194 <class_newindex_event+0x194>
+ 188:	e3500005 	cmp	r0, #5
+ 18c:	01a00004 	moveq	r0, r4
+ 190:	0bfffffe 	bleq	0 <class_newindex_event>
+ 194:	e3a00000 	mov	r0, #0
+ 198:	e8bd8010 	pop	{r4, pc}
+ 19c:	7465732e 	.word	0x7465732e
+ 1a0:	00000069 	.word	0x00000069
+ 1a4:	7465732e 	.word	0x7465732e
+ 1a8:	00000000 	.word	0x00000000
+
+Disassembly of section i.do_operator:
+
+00000000 <do_operator>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05001 	mov	r5, r1
+   8:	e3a01001 	mov	r1, #1
+   c:	e1a04000 	mov	r4, r0
+  10:	ebfffffe 	bl	0 <mrp_isuserdata>
+  14:	e3500000 	cmp	r0, #0
+  18:	0a000025 	beq	b4 <do_operator+0xb4>
+  1c:	e3a01001 	mov	r1, #1
+  20:	e1a00004 	mov	r0, r4
+  24:	ebfffffe 	bl	0 <mrp_pushvalue>
+  28:	ea00001c 	b	a0 <do_operator+0xa0>
+  2c:	e3e01001 	mvn	r1, #1
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mrp_remove>
+  38:	e1a01005 	mov	r1, r5
+  3c:	e1a00004 	mov	r0, r4
+  40:	ebfffffe 	bl	0 <mrp_pushstring>
+  44:	e3e01001 	mvn	r1, #1
+  48:	e1a00004 	mov	r0, r4
+  4c:	ebfffffe 	bl	0 <mrp_rawget>
+  50:	e3e01000 	mvn	r1, #0
+  54:	e1a00004 	mov	r0, r4
+  58:	ebfffffe 	bl	0 <mrp_type>
+  5c:	e3500006 	cmp	r0, #6
+  60:	1a00000b 	bne	94 <do_operator+0x94>
+  64:	e3a01001 	mov	r1, #1
+  68:	e1a00004 	mov	r0, r4
+  6c:	ebfffffe 	bl	0 <mrp_pushvalue>
+  70:	e3a01002 	mov	r1, #2
+  74:	e1a00004 	mov	r0, r4
+  78:	ebfffffe 	bl	0 <mrp_pushvalue>
+  7c:	e3a02001 	mov	r2, #1
+  80:	e3a01002 	mov	r1, #2
+  84:	e1a00004 	mov	r0, r4
+  88:	ebfffffe 	bl	0 <mrp_call>
+  8c:	e3a00001 	mov	r0, #1
+  90:	e8bd8070 	pop	{r4, r5, r6, pc}
+  94:	e3a01003 	mov	r1, #3
+  98:	e1a00004 	mov	r0, r4
+  9c:	ebfffffe 	bl	0 <mrp_settop>
+  a0:	e3e01000 	mvn	r1, #0
+  a4:	e1a00004 	mov	r0, r4
+  a8:	ebfffffe 	bl	0 <mrp_getmetatable>
+  ac:	e3500000 	cmp	r0, #0
+  b0:	1affffdd 	bne	2c <do_operator+0x2c>
+  b4:	e3a02000 	mov	r2, #0
+  b8:	e28f100c 	add	r1, pc, #12
+  bc:	e1a00004 	mov	r0, r4
+  c0:	ebfffffe 	bl	0 <to_mr_error>
+  c4:	e3a00000 	mov	r0, #0
+  c8:	e8bd8070 	pop	{r4, r5, r6, pc}
+  cc:	65747441 	.word	0x65747441
+  d0:	2074706d 	.word	0x2074706d
+  d4:	70206f74 	.word	0x70206f74
+  d8:	6f667265 	.word	0x6f667265
+  dc:	6f206d72 	.word	0x6f206d72
+  e0:	61726570 	.word	0x61726570
+  e4:	6e6f6974 	.word	0x6e6f6974
+  e8:	206e6f20 	.word	0x206e6f20
+  ec:	69206e61 	.word	0x69206e61
+  f0:	6c61766e 	.word	0x6c61766e
+  f4:	6f206469 	.word	0x6f206469
+  f8:	61726570 	.word	0x61726570
+  fc:	0000646e 	.word	0x0000646e
+
+Disassembly of section i.class_add_event:
+
+00000000 <class_add_event>:
+   0:	e28f1000 	add	r1, pc, #0
+   4:	eafffffe 	b	0 <class_add_event>
+   8:	6464612e 	.word	0x6464612e
+   c:	00000000 	.word	0x00000000
+
+Disassembly of section i.class_sub_event:
+
+00000000 <class_sub_event>:
+   0:	e28f1000 	add	r1, pc, #0
+   4:	eafffffe 	b	0 <class_sub_event>
+   8:	6275732e 	.word	0x6275732e
+   c:	00000000 	.word	0x00000000
+
+Disassembly of section i.class_mul_event:
+
+00000000 <class_mul_event>:
+   0:	e28f1000 	add	r1, pc, #0
+   4:	eafffffe 	b	0 <class_mul_event>
+   8:	6c756d2e 	.word	0x6c756d2e
+   c:	00000000 	.word	0x00000000
+
+Disassembly of section i.class_div_event:
+
+00000000 <class_div_event>:
+   0:	e28f1000 	add	r1, pc, #0
+   4:	eafffffe 	b	0 <class_div_event>
+   8:	7669642e 	.word	0x7669642e
+   c:	00000000 	.word	0x00000000
+
+Disassembly of section i.class_lt_event:
+
+00000000 <class_lt_event>:
+   0:	e28f1000 	add	r1, pc, #0
+   4:	eafffffe 	b	0 <class_lt_event>
+   8:	00746c2e 	.word	0x00746c2e
+
+Disassembly of section i.class_le_event:
+
+00000000 <class_le_event>:
+   0:	e28f1000 	add	r1, pc, #0
+   4:	eafffffe 	b	0 <class_le_event>
+   8:	00656c2e 	.word	0x00656c2e
+
+Disassembly of section i.class_eq_event:
+
+00000000 <class_eq_event>:
+   0:	e28f1000 	add	r1, pc, #0
+   4:	eafffffe 	b	0 <class_eq_event>
+   8:	0071652e 	.word	0x0071652e
+
+Disassembly of section i.class_gc_event:
+
+00000000 <class_gc_event>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05000 	mov	r5, r0
+   8:	e3a01001 	mov	r1, #1
+   c:	ebfffffe 	bl	0 <mrp_touserdata>
+  10:	e5904000 	ldr	r4, [r0]
+  14:	e1a00005 	mov	r0, r5
+  18:	e28f1088 	add	r1, pc, #136	; 0x88
+  1c:	ebfffffe 	bl	0 <mrp_pushstring>
+  20:	e59f108c 	ldr	r1, [pc, #140]	; b4 <class_gc_event+0xb4>
+  24:	e1a00005 	mov	r0, r5
+  28:	ebfffffe 	bl	0 <mrp_rawget>
+  2c:	e1a01004 	mov	r1, r4
+  30:	e1a00005 	mov	r0, r5
+  34:	ebfffffe 	bl	0 <mrp_pushlightuserdata>
+  38:	e3e01001 	mvn	r1, #1
+  3c:	e1a00005 	mov	r0, r5
+  40:	ebfffffe 	bl	0 <mrp_rawget>
+  44:	e3e01000 	mvn	r1, #0
+  48:	e1a00005 	mov	r0, r5
+  4c:	ebfffffe 	bl	0 <mrp_type>
+  50:	e3500006 	cmp	r0, #6
+  54:	1a00000e 	bne	94 <class_gc_event+0x94>
+  58:	e3a01001 	mov	r1, #1
+  5c:	e1a00005 	mov	r0, r5
+  60:	ebfffffe 	bl	0 <mrp_pushvalue>
+  64:	e3a02000 	mov	r2, #0
+  68:	e3a01001 	mov	r1, #1
+  6c:	e1a00005 	mov	r0, r5
+  70:	ebfffffe 	bl	0 <mrp_call>
+  74:	e1a01004 	mov	r1, r4
+  78:	e1a00005 	mov	r0, r5
+  7c:	ebfffffe 	bl	0 <mrp_pushlightuserdata>
+  80:	e1a00005 	mov	r0, r5
+  84:	ebfffffe 	bl	0 <mrp_pushnil>
+  88:	e3e01002 	mvn	r1, #2
+  8c:	e1a00005 	mov	r0, r5
+  90:	ebfffffe 	bl	0 <mrp_rawset>
+  94:	e3e01002 	mvn	r1, #2
+  98:	e1a00005 	mov	r0, r5
+  9c:	ebfffffe 	bl	0 <mrp_settop>
+  a0:	e3a00000 	mov	r0, #0
+  a4:	e8bd8070 	pop	{r4, r5, r6, pc}
+  a8:	6d5f6f74 	.word	0x6d5f6f74
+  ac:	63675f72 	.word	0x63675f72
+  b0:	00000000 	.word	0x00000000
+  b4:	ffffd8f0 	.word	0xffffd8f0
+
+Disassembly of section i.to_mr_moduleevents:
+
+00000000 <to_mr_moduleevents>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e28f1048 	add	r1, pc, #72	; 0x48
+   c:	ebfffffe 	bl	0 <mrp_pushstring>
+  10:	e59f1048 	ldr	r1, [pc, #72]	; 60 <to_mr_moduleevents+0x60>
+  14:	e3a02000 	mov	r2, #0
+  18:	e1a00004 	mov	r0, r4
+  1c:	ebfffffe 	bl	0 <mrp_pushcclosure>
+  20:	e3e01002 	mvn	r1, #2
+  24:	e1a00004 	mov	r0, r4
+  28:	ebfffffe 	bl	0 <mrp_rawset>
+  2c:	e28f1030 	add	r1, pc, #48	; 0x30
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mrp_pushstring>
+  38:	e59f1030 	ldr	r1, [pc, #48]	; 70 <to_mr_moduleevents+0x70>
+  3c:	e3a02000 	mov	r2, #0
+  40:	e1a00004 	mov	r0, r4
+  44:	ebfffffe 	bl	0 <mrp_pushcclosure>
+  48:	e1a00004 	mov	r0, r4
+  4c:	e8bd4010 	pop	{r4, lr}
+  50:	e3e01002 	mvn	r1, #2
+  54:	eafffffe 	b	0 <mrp_rawset>
+  58:	6e695f5f 	.word	0x6e695f5f
+  5c:	00786564 	.word	0x00786564
+  60:	00000000 	.word	0x00000000
+  64:	656e5f5f 	.word	0x656e5f5f
+  68:	646e6977 	.word	0x646e6977
+  6c:	00007865 	.word	0x00007865
+  70:	00000000 	.word	0x00000000
+
+Disassembly of section i.to_mr_ismodulemetatable:
+
+00000000 <to_mr_ismodulemetatable>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a05000 	mov	r5, r0
+   8:	e3a04000 	mov	r4, #0
+   c:	e3e01000 	mvn	r1, #0
+  10:	ebfffffe 	bl	0 <mrp_getmetatable>
+  14:	e3500000 	cmp	r0, #0
+  18:	0a00000e 	beq	58 <to_mr_ismodulemetatable+0x58>
+  1c:	e28f103c 	add	r1, pc, #60	; 0x3c
+  20:	e1a00005 	mov	r0, r5
+  24:	ebfffffe 	bl	0 <mrp_pushstring>
+  28:	e3e01001 	mvn	r1, #1
+  2c:	e1a00005 	mov	r0, r5
+  30:	ebfffffe 	bl	0 <mrp_rawget>
+  34:	e3e01000 	mvn	r1, #0
+  38:	e1a00005 	mov	r0, r5
+  3c:	ebfffffe 	bl	0 <mrp_tocfunction>
+  40:	e59f1020 	ldr	r1, [pc, #32]	; 68 <to_mr_ismodulemetatable+0x68>
+  44:	e1500001 	cmp	r0, r1
+  48:	03a04001 	moveq	r4, #1
+  4c:	e3e01002 	mvn	r1, #2
+  50:	e1a00005 	mov	r0, r5
+  54:	ebfffffe 	bl	0 <mrp_settop>
+  58:	e1a00004 	mov	r0, r4
+  5c:	e8bd8070 	pop	{r4, r5, r6, pc}
+  60:	6e695f5f 	.word	0x6e695f5f
+  64:	00786564 	.word	0x00786564
+  68:	00000000 	.word	0x00000000
+
+Disassembly of section i.to_mr_classevents:
+
+00000000 <to_mr_classevents>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e28f1f62 	add	r1, pc, #392	; 0x188
+   c:	ebfffffe 	bl	0 <mrp_pushstring>
+  10:	e59f1188 	ldr	r1, [pc, #392]	; 1a0 <to_mr_classevents+0x1a0>
+  14:	e3a02000 	mov	r2, #0
+  18:	e1a00004 	mov	r0, r4
+  1c:	ebfffffe 	bl	0 <mrp_pushcclosure>
+  20:	e3e01002 	mvn	r1, #2
+  24:	e1a00004 	mov	r0, r4
+  28:	ebfffffe 	bl	0 <mrp_rawset>
+  2c:	e28f1e17 	add	r1, pc, #368	; 0x170
+  30:	e1a00004 	mov	r0, r4
+  34:	ebfffffe 	bl	0 <mrp_pushstring>
+  38:	e59f1170 	ldr	r1, [pc, #368]	; 1b0 <to_mr_classevents+0x1b0>
+  3c:	e3a02000 	mov	r2, #0
+  40:	e1a00004 	mov	r0, r4
+  44:	ebfffffe 	bl	0 <mrp_pushcclosure>
+  48:	e3e01002 	mvn	r1, #2
+  4c:	e1a00004 	mov	r0, r4
+  50:	ebfffffe 	bl	0 <mrp_rawset>
+  54:	e28f1f56 	add	r1, pc, #344	; 0x158
+  58:	e1a00004 	mov	r0, r4
+  5c:	ebfffffe 	bl	0 <mrp_pushstring>
+  60:	e59f1154 	ldr	r1, [pc, #340]	; 1bc <to_mr_classevents+0x1bc>
+  64:	e3a02000 	mov	r2, #0
+  68:	e1a00004 	mov	r0, r4
+  6c:	ebfffffe 	bl	0 <mrp_pushcclosure>
+  70:	e3e01002 	mvn	r1, #2
+  74:	e1a00004 	mov	r0, r4
+  78:	ebfffffe 	bl	0 <mrp_rawset>
+  7c:	e28f1f4f 	add	r1, pc, #316	; 0x13c
+  80:	e1a00004 	mov	r0, r4
+  84:	ebfffffe 	bl	0 <mrp_pushstring>
+  88:	e59f1138 	ldr	r1, [pc, #312]	; 1c8 <to_mr_classevents+0x1c8>
+  8c:	e3a02000 	mov	r2, #0
+  90:	e1a00004 	mov	r0, r4
+  94:	ebfffffe 	bl	0 <mrp_pushcclosure>
+  98:	e3e01002 	mvn	r1, #2
+  9c:	e1a00004 	mov	r0, r4
+  a0:	ebfffffe 	bl	0 <mrp_rawset>
+  a4:	e28f1e12 	add	r1, pc, #288	; 0x120
+  a8:	e1a00004 	mov	r0, r4
+  ac:	ebfffffe 	bl	0 <mrp_pushstring>
+  b0:	e59f111c 	ldr	r1, [pc, #284]	; 1d4 <to_mr_classevents+0x1d4>
+  b4:	e3a02000 	mov	r2, #0
+  b8:	e1a00004 	mov	r0, r4
+  bc:	ebfffffe 	bl	0 <mrp_pushcclosure>
+  c0:	e3e01002 	mvn	r1, #2
+  c4:	e1a00004 	mov	r0, r4
+  c8:	ebfffffe 	bl	0 <mrp_rawset>
+  cc:	e28f1f41 	add	r1, pc, #260	; 0x104
+  d0:	e1a00004 	mov	r0, r4
+  d4:	ebfffffe 	bl	0 <mrp_pushstring>
+  d8:	e59f1100 	ldr	r1, [pc, #256]	; 1e0 <to_mr_classevents+0x1e0>
+  dc:	e3a02000 	mov	r2, #0
+  e0:	e1a00004 	mov	r0, r4
+  e4:	ebfffffe 	bl	0 <mrp_pushcclosure>
+  e8:	e3e01002 	mvn	r1, #2
+  ec:	e1a00004 	mov	r0, r4
+  f0:	ebfffffe 	bl	0 <mrp_rawset>
+  f4:	e28f10e8 	add	r1, pc, #232	; 0xe8
+  f8:	e1a00004 	mov	r0, r4
+  fc:	ebfffffe 	bl	0 <mrp_pushstring>
+ 100:	e59f10e4 	ldr	r1, [pc, #228]	; 1ec <to_mr_classevents+0x1ec>
+ 104:	e3a02000 	mov	r2, #0
+ 108:	e1a00004 	mov	r0, r4
+ 10c:	ebfffffe 	bl	0 <mrp_pushcclosure>
+ 110:	e3e01002 	mvn	r1, #2
+ 114:	e1a00004 	mov	r0, r4
+ 118:	ebfffffe 	bl	0 <mrp_rawset>
+ 11c:	e28f10cc 	add	r1, pc, #204	; 0xcc
+ 120:	e1a00004 	mov	r0, r4
+ 124:	ebfffffe 	bl	0 <mrp_pushstring>
+ 128:	e59f10c8 	ldr	r1, [pc, #200]	; 1f8 <to_mr_classevents+0x1f8>
+ 12c:	e3a02000 	mov	r2, #0
+ 130:	e1a00004 	mov	r0, r4
+ 134:	ebfffffe 	bl	0 <mrp_pushcclosure>
+ 138:	e3e01002 	mvn	r1, #2
+ 13c:	e1a00004 	mov	r0, r4
+ 140:	ebfffffe 	bl	0 <mrp_rawset>
+ 144:	e28f10b0 	add	r1, pc, #176	; 0xb0
+ 148:	e1a00004 	mov	r0, r4
+ 14c:	ebfffffe 	bl	0 <mrp_pushstring>
+ 150:	e59f10ac 	ldr	r1, [pc, #172]	; 204 <to_mr_classevents+0x204>
+ 154:	e3a02000 	mov	r2, #0
+ 158:	e1a00004 	mov	r0, r4
+ 15c:	ebfffffe 	bl	0 <mrp_pushcclosure>
+ 160:	e3e01002 	mvn	r1, #2
+ 164:	e1a00004 	mov	r0, r4
+ 168:	ebfffffe 	bl	0 <mrp_rawset>
+ 16c:	e28f1094 	add	r1, pc, #148	; 0x94
+ 170:	e1a00004 	mov	r0, r4
+ 174:	ebfffffe 	bl	0 <mrp_pushstring>
+ 178:	e59f1090 	ldr	r1, [pc, #144]	; 210 <to_mr_classevents+0x210>
+ 17c:	e3a02000 	mov	r2, #0
+ 180:	e1a00004 	mov	r0, r4
+ 184:	ebfffffe 	bl	0 <mrp_pushcclosure>
+ 188:	e1a00004 	mov	r0, r4
+ 18c:	e8bd4010 	pop	{r4, lr}
+ 190:	e3e01002 	mvn	r1, #2
+ 194:	eafffffe 	b	0 <mrp_rawset>
+ 198:	6e695f5f 	.word	0x6e695f5f
+ 19c:	00786564 	.word	0x00786564
+ 1a0:	00000000 	.word	0x00000000
+ 1a4:	656e5f5f 	.word	0x656e5f5f
+ 1a8:	646e6977 	.word	0x646e6977
+ 1ac:	00007865 	.word	0x00007865
+ 1b0:	00000000 	.word	0x00000000
+ 1b4:	64615f5f 	.word	0x64615f5f
+ 1b8:	00000064 	.word	0x00000064
+ 1bc:	00000000 	.word	0x00000000
+ 1c0:	75735f5f 	.word	0x75735f5f
+ 1c4:	00000062 	.word	0x00000062
+ 1c8:	00000000 	.word	0x00000000
+ 1cc:	756d5f5f 	.word	0x756d5f5f
+ 1d0:	0000006c 	.word	0x0000006c
+ 1d4:	00000000 	.word	0x00000000
+ 1d8:	69645f5f 	.word	0x69645f5f
+ 1dc:	00000076 	.word	0x00000076
+ 1e0:	00000000 	.word	0x00000000
+ 1e4:	746c5f5f 	.word	0x746c5f5f
+	...
+ 1f0:	656c5f5f 	.word	0x656c5f5f
+	...
+ 1fc:	71655f5f 	.word	0x71655f5f
+	...
+ 208:	63675f5f 	.word	0x63675f5f
+	...

@@ -1,0 +1,309 @@
+
+/tmp/mtk_disasm/mini2011/mr_unzip.obj:     file format elf32-littlearm
+
+
+Disassembly of section i.mr_unzip:
+
+00000000 <mr_unzip>:
+   0:	e92d407f 	push	{r0, r1, r2, r3, r4, r5, r6, lr}
+   4:	e3a05000 	mov	r5, #0
+   8:	e3a04000 	mov	r4, #0
+   c:	e3a01000 	mov	r1, #0
+  10:	e3a00000 	mov	r0, #0
+  14:	ebfffffe 	bl	0 <mr_updcrc>
+  18:	ebfffffe 	bl	0 <mr_inflate>
+  1c:	e3500003 	cmp	r0, #3
+  20:	028f0f45 	addeq	r0, pc, #276	; 0x114
+  24:	0a000002 	beq	34 <mr_unzip+0x34>
+  28:	e3500000 	cmp	r0, #0
+  2c:	0a000004 	beq	44 <mr_unzip+0x44>
+  30:	e28f0f45 	add	r0, pc, #276	; 0x114
+  34:	ebfffffe 	bl	0 <mr_printf>
+  38:	e3e00000 	mvn	r0, #0
+  3c:	e28dd010 	add	sp, sp, #16
+  40:	e8bd8070 	pop	{r4, r5, r6, pc}
+  44:	e59f012c 	ldr	r0, [pc, #300]	; 178 <mr_unzip+0x178>
+  48:	e59f112c 	ldr	r1, [pc, #300]	; 17c <mr_unzip+0x17c>
+  4c:	e590e000 	ldr	lr, [r0]
+  50:	e35e0002 	cmp	lr, #2
+  54:	1a00000e 	bne	94 <mr_unzip+0x94>
+  58:	e5910000 	ldr	r0, [r1]
+  5c:	e5d0200e 	ldrb	r2, [r0, #14]
+  60:	e5d0300f 	ldrb	r3, [r0, #15]
+  64:	e5d0c011 	ldrb	ip, [r0, #17]
+  68:	e1822403 	orr	r2, r2, r3, lsl #8
+  6c:	e5d03010 	ldrb	r3, [r0, #16]
+  70:	e183340c 	orr	r3, r3, ip, lsl #8
+  74:	e1824803 	orr	r4, r2, r3, lsl #16
+  78:	e5d02016 	ldrb	r2, [r0, #22]
+  7c:	e5d03017 	ldrb	r3, [r0, #23]
+  80:	e1822403 	orr	r2, r2, r3, lsl #8
+  84:	e5d03018 	ldrb	r3, [r0, #24]
+  88:	e5d00019 	ldrb	r0, [r0, #25]
+  8c:	e1830400 	orr	r0, r3, r0, lsl #8
+  90:	e1825800 	orr	r5, r2, r0, lsl #16
+  94:	e59f30e4 	ldr	r3, [pc, #228]	; 180 <mr_unzip+0x180>
+  98:	e591c000 	ldr	ip, [r1]
+  9c:	e3a00000 	mov	r0, #0
+  a0:	e1a0600d 	mov	r6, sp
+  a4:	e5931000 	ldr	r1, [r3]
+  a8:	e2812001 	add	r2, r1, #1
+  ac:	e5832000 	str	r2, [r3]
+  b0:	e7dc1001 	ldrb	r1, [ip, r1]
+  b4:	e7c61000 	strb	r1, [r6, r0]
+  b8:	e2800001 	add	r0, r0, #1
+  bc:	e3500008 	cmp	r0, #8
+  c0:	bafffff7 	blt	a4 <mr_unzip+0xa4>
+  c4:	e35e0002 	cmp	lr, #2
+  c8:	0a00000d 	beq	104 <mr_unzip+0x104>
+  cc:	e5dd0000 	ldrb	r0, [sp]
+  d0:	e5dd1001 	ldrb	r1, [sp, #1]
+  d4:	e5dd2003 	ldrb	r2, [sp, #3]
+  d8:	e1800401 	orr	r0, r0, r1, lsl #8
+  dc:	e5dd1002 	ldrb	r1, [sp, #2]
+  e0:	e1811402 	orr	r1, r1, r2, lsl #8
+  e4:	e1804801 	orr	r4, r0, r1, lsl #16
+  e8:	e5dd0004 	ldrb	r0, [sp, #4]
+  ec:	e5dd1005 	ldrb	r1, [sp, #5]
+  f0:	e5dd2007 	ldrb	r2, [sp, #7]
+  f4:	e1800401 	orr	r0, r0, r1, lsl #8
+  f8:	e5dd1006 	ldrb	r1, [sp, #6]
+  fc:	e1811402 	orr	r1, r1, r2, lsl #8
+ 100:	e1805801 	orr	r5, r0, r1, lsl #16
+ 104:	e59f0078 	ldr	r0, [pc, #120]	; 184 <mr_unzip+0x184>
+ 108:	e3a01000 	mov	r1, #0
+ 10c:	e5900000 	ldr	r0, [r0]
+ 110:	ebfffffe 	bl	0 <mr_updcrc>
+ 114:	e1500004 	cmp	r0, r4
+ 118:	128f0068 	addne	r0, pc, #104	; 0x68
+ 11c:	1bfffffe 	blne	0 <mr_printf>
+ 120:	e59f0084 	ldr	r0, [pc, #132]	; 1ac <mr_unzip+0x1ac>
+ 124:	e5900000 	ldr	r0, [r0]
+ 128:	e1550000 	cmp	r5, r0
+ 12c:	128f007c 	addne	r0, pc, #124	; 0x7c
+ 130:	1bfffffe 	blne	0 <mr_printf>
+ 134:	e3a00000 	mov	r0, #0
+ 138:	eaffffbf 	b	3c <mr_unzip+0x3c>
+ 13c:	2074756f 	.word	0x2074756f
+ 140:	6d20666f 	.word	0x6d20666f
+ 144:	726f6d65 	.word	0x726f6d65
+ 148:	00000079 	.word	0x00000079
+ 14c:	61766e69 	.word	0x61766e69
+ 150:	2064696c 	.word	0x2064696c
+ 154:	706d6f63 	.word	0x706d6f63
+ 158:	73736572 	.word	0x73736572
+ 15c:	64206465 	.word	0x64206465
+ 160:	2d617461 	.word	0x2d617461
+ 164:	726f662d 	.word	0x726f662d
+ 168:	2074616d 	.word	0x2074616d
+ 16c:	6c6f6976 	.word	0x6c6f6976
+ 170:	64657461 	.word	0x64657461
+	...
+ 188:	61766e69 	.word	0x61766e69
+ 18c:	2064696c 	.word	0x2064696c
+ 190:	706d6f63 	.word	0x706d6f63
+ 194:	73736572 	.word	0x73736572
+ 198:	64206465 	.word	0x64206465
+ 19c:	2d617461 	.word	0x2d617461
+ 1a0:	6372632d 	.word	0x6372632d
+ 1a4:	72726520 	.word	0x72726520
+ 1a8:	0000726f 	.word	0x0000726f
+ 1ac:	00000000 	.word	0x00000000
+ 1b0:	61766e69 	.word	0x61766e69
+ 1b4:	2064696c 	.word	0x2064696c
+ 1b8:	706d6f63 	.word	0x706d6f63
+ 1bc:	73736572 	.word	0x73736572
+ 1c0:	64206465 	.word	0x64206465
+ 1c4:	2d617461 	.word	0x2d617461
+ 1c8:	6e656c2d 	.word	0x6e656c2d
+ 1cc:	20687467 	.word	0x20687467
+ 1d0:	6f727265 	.word	0x6f727265
+ 1d4:	00000072 	.word	0x00000072
+
+Disassembly of section i.mr_get_method:
+
+00000000 <mr_get_method>:
+   0:	e92d40f8 	push	{r3, r4, r5, r6, r7, lr}
+   4:	e59f61c4 	ldr	r6, [pc, #452]	; 1d0 <mr_get_method+0x1d0>
+   8:	e1a07000 	mov	r7, r0
+   c:	e59f41c0 	ldr	r4, [pc, #448]	; 1d4 <mr_get_method+0x1d4>
+  10:	e3a00008 	mov	r0, #8
+  14:	e5860000 	str	r0, [r6]
+  18:	e5941000 	ldr	r1, [r4]
+  1c:	e59f51b4 	ldr	r5, [pc, #436]	; 1d8 <mr_get_method+0x1d8>
+  20:	e2810001 	add	r0, r1, #1
+  24:	e5840000 	str	r0, [r4]
+  28:	e5952000 	ldr	r2, [r5]
+  2c:	e7d21001 	ldrb	r1, [r2, r1]
+  30:	e5cd1000 	strb	r1, [sp]
+  34:	e2801001 	add	r1, r0, #1
+  38:	e5841000 	str	r1, [r4]
+  3c:	e7d20000 	ldrb	r0, [r2, r0]
+  40:	e3a02002 	mov	r2, #2
+  44:	e28f1e19 	add	r1, pc, #400	; 0x190
+  48:	e5cd0001 	strb	r0, [sp, #1]
+  4c:	e1a0000d 	mov	r0, sp
+  50:	ebfffffe 	bl	0 <memcmp>
+  54:	e3500000 	cmp	r0, #0
+  58:	0a000005 	beq	74 <mr_get_method+0x74>
+  5c:	e3a02002 	mov	r2, #2
+  60:	e28f1f5e 	add	r1, pc, #376	; 0x178
+  64:	e1a0000d 	mov	r0, sp
+  68:	ebfffffe 	bl	0 <memcmp>
+  6c:	e3500000 	cmp	r0, #0
+  70:	1a000043 	bne	184 <mr_get_method+0x184>
+  74:	e5943000 	ldr	r3, [r4]
+  78:	e1a02004 	mov	r2, r4
+  7c:	e2831001 	add	r1, r3, #1
+  80:	e5841000 	str	r1, [r4]
+  84:	e5950000 	ldr	r0, [r5]
+  88:	e7d05003 	ldrb	r5, [r0, r3]
+  8c:	e3550008 	cmp	r5, #8
+  90:	128f0f53 	addne	r0, pc, #332	; 0x14c
+  94:	1a000005 	bne	b0 <mr_get_method+0xb0>
+  98:	e2813001 	add	r3, r1, #1
+  9c:	e5823000 	str	r3, [r2]
+  a0:	e7d01001 	ldrb	r1, [r0, r1]
+  a4:	e3110020 	tst	r1, #32
+  a8:	0a000002 	beq	b8 <mr_get_method+0xb8>
+  ac:	e28f0d05 	add	r0, pc, #320	; 0x140
+  b0:	ebfffffe 	bl	0 <mr_printf>
+  b4:	ea000041 	b	1c0 <mr_get_method+0x1c0>
+  b8:	e3110002 	tst	r1, #2
+  bc:	128f0d05 	addne	r0, pc, #320	; 0x140
+  c0:	1afffffa 	bne	b0 <mr_get_method+0xb0>
+  c4:	e31100c0 	tst	r1, #192	; 0xc0
+  c8:	128f0e15 	addne	r0, pc, #336	; 0x150
+  cc:	1afffff7 	bne	b0 <mr_get_method+0xb0>
+  d0:	e2833001 	add	r3, r3, #1
+  d4:	e5823000 	str	r3, [r2]
+  d8:	e2833001 	add	r3, r3, #1
+  dc:	e5823000 	str	r3, [r2]
+  e0:	e2833001 	add	r3, r3, #1
+  e4:	e5823000 	str	r3, [r2]
+  e8:	e2833001 	add	r3, r3, #1
+  ec:	e5823000 	str	r3, [r2]
+  f0:	e2833002 	add	r3, r3, #2
+  f4:	e3110004 	tst	r1, #4
+  f8:	e5823000 	str	r3, [r2]
+  fc:	0a00000c 	beq	134 <mr_get_method+0x134>
+ 100:	e283c001 	add	ip, r3, #1
+ 104:	e582c000 	str	ip, [r2]
+ 108:	e7d03003 	ldrb	r3, [r0, r3]
+ 10c:	e28ce001 	add	lr, ip, #1
+ 110:	e582e000 	str	lr, [r2]
+ 114:	e7d0c00c 	ldrb	ip, [r0, ip]
+ 118:	e183340c 	orr	r3, r3, ip, lsl #8
+ 11c:	e2433001 	sub	r3, r3, #1
+ 120:	e3730001 	cmn	r3, #1
+ 124:	1592c000 	ldrne	ip, [r2]
+ 128:	128cc001 	addne	ip, ip, #1
+ 12c:	1582c000 	strne	ip, [r2]
+ 130:	1afffff9 	bne	11c <mr_get_method+0x11c>
+ 134:	e2013008 	and	r3, r1, #8
+ 138:	ea000003 	b	14c <mr_get_method+0x14c>
+ 13c:	e5923000 	ldr	r3, [r2]
+ 140:	e283c001 	add	ip, r3, #1
+ 144:	e582c000 	str	ip, [r2]
+ 148:	e7d03003 	ldrb	r3, [r0, r3]
+ 14c:	e3530000 	cmp	r3, #0
+ 150:	1afffff9 	bne	13c <mr_get_method+0x13c>
+ 154:	e2011010 	and	r1, r1, #16
+ 158:	ea000003 	b	16c <mr_get_method+0x16c>
+ 15c:	e5921000 	ldr	r1, [r2]
+ 160:	e2813001 	add	r3, r1, #1
+ 164:	e5823000 	str	r3, [r2]
+ 168:	e7d01001 	ldrb	r1, [r0, r1]
+ 16c:	e3510000 	cmp	r1, #0
+ 170:	1afffff9 	bne	15c <mr_get_method+0x15c>
+ 174:	e3550000 	cmp	r5, #0
+ 178:	ba000012 	blt	1c8 <mr_get_method+0x1c8>
+ 17c:	e1a00005 	mov	r0, r5
+ 180:	e8bd80f8 	pop	{r3, r4, r5, r6, r7, pc}
+ 184:	e5950000 	ldr	r0, [r5]
+ 188:	e3a02004 	mov	r2, #4
+ 18c:	e28f10a0 	add	r1, pc, #160	; 0xa0
+ 190:	ebfffffe 	bl	0 <memcmp>
+ 194:	e3500000 	cmp	r0, #0
+ 198:	1a00000a 	bne	1c8 <mr_get_method+0x1c8>
+ 19c:	e3a00002 	mov	r0, #2
+ 1a0:	e5860000 	str	r0, [r6]
+ 1a4:	e3a00000 	mov	r0, #0
+ 1a8:	e5840000 	str	r0, [r4]
+ 1ac:	e1a00007 	mov	r0, r7
+ 1b0:	e3a05008 	mov	r5, #8
+ 1b4:	ebfffffe 	bl	0 <mr_get_method>
+ 1b8:	e3500000 	cmp	r0, #0
+ 1bc:	0affffee 	beq	17c <mr_get_method+0x17c>
+ 1c0:	e3e00000 	mvn	r0, #0
+ 1c4:	e8bd80f8 	pop	{r3, r4, r5, r6, r7, pc}
+ 1c8:	e28f006c 	add	r0, pc, #108	; 0x6c
+ 1cc:	eaffffb7 	b	b0 <mr_get_method+0xb0>
+	...
+ 1dc:	00008b1f 	.word	0x00008b1f
+ 1e0:	00009e1f 	.word	0x00009e1f
+ 1e4:	6e6b6e75 	.word	0x6e6b6e75
+ 1e8:	206e776f 	.word	0x206e776f
+ 1ec:	6874656d 	.word	0x6874656d
+ 1f0:	0000646f 	.word	0x0000646f
+ 1f4:	65207369 	.word	0x65207369
+ 1f8:	7972636e 	.word	0x7972636e
+ 1fc:	64657470 	.word	0x64657470
+ 200:	00000000 	.word	0x00000000
+ 204:	61207369 	.word	0x61207369
+ 208:	6d206120 	.word	0x6d206120
+ 20c:	69746c75 	.word	0x69746c75
+ 210:	7261702d 	.word	0x7261702d
+ 214:	7a672074 	.word	0x7a672074
+ 218:	66207069 	.word	0x66207069
+ 21c:	00656c69 	.word	0x00656c69
+ 220:	20736168 	.word	0x20736168
+ 224:	45534552 	.word	0x45534552
+ 228:	44455652 	.word	0x44455652
+ 22c:	616c6620 	.word	0x616c6620
+ 230:	00007367 	.word	0x00007367
+ 234:	04034b50 	.word	0x04034b50
+ 238:	00000000 	.word	0x00000000
+ 23c:	697a6f6e 	.word	0x697a6f6e
+ 240:	00000070 	.word	0x00000070
+
+Disassembly of section i.mr_check_zipfile:
+
+00000000 <mr_check_zipfile>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e59f4084 	ldr	r4, [pc, #132]	; 90 <mr_check_zipfile+0x90>
+   8:	e59f107c 	ldr	r1, [pc, #124]	; 8c <mr_check_zipfile+0x8c>
+   c:	e5942000 	ldr	r2, [r4]
+  10:	e5911000 	ldr	r1, [r1]
+  14:	e0811002 	add	r1, r1, r2
+  18:	e5d1301a 	ldrb	r3, [r1, #26]
+  1c:	e5d1c01b 	ldrb	ip, [r1, #27]
+  20:	e5d1e01d 	ldrb	lr, [r1, #29]
+  24:	e183340c 	orr	r3, r3, ip, lsl #8
+  28:	e5d1c01c 	ldrb	ip, [r1, #28]
+  2c:	e18cc40e 	orr	ip, ip, lr, lsl #8
+  30:	e083300c 	add	r3, r3, ip
+  34:	e0832002 	add	r2, r3, r2
+  38:	e282201e 	add	r2, r2, #30
+  3c:	e1520000 	cmp	r2, r0
+  40:	e5842000 	str	r2, [r4]
+  44:	8a00000e 	bhi	84 <mr_check_zipfile+0x84>
+  48:	e5d10000 	ldrb	r0, [r1]
+  4c:	e5d12001 	ldrb	r2, [r1, #1]
+  50:	e5d13003 	ldrb	r3, [r1, #3]
+  54:	e1800402 	orr	r0, r0, r2, lsl #8
+  58:	e5d12002 	ldrb	r2, [r1, #2]
+  5c:	e1822403 	orr	r2, r2, r3, lsl #8
+  60:	e1800802 	orr	r0, r0, r2, lsl #16
+  64:	e59f2028 	ldr	r2, [pc, #40]	; 94 <mr_check_zipfile+0x94>
+  68:	e1500002 	cmp	r0, r2
+  6c:	05d10008 	ldrbeq	r0, [r1, #8]
+  70:	03500008 	cmpeq	r0, #8
+  74:	05d10006 	ldrbeq	r0, [r1, #6]
+  78:	03100001 	tsteq	r0, #1
+  7c:	03a00000 	moveq	r0, #0
+  80:	08bd8010 	popeq	{r4, pc}
+  84:	e3e00000 	mvn	r0, #0
+  88:	e8bd8010 	pop	{r4, pc}
+	...
+  94:	04034b50 	.word	0x04034b50

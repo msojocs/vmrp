@@ -1,0 +1,16 @@
+00000000 a BuildAttributes$$THUMB_ISAv2$M$E$P$PE$A:L22$X:L11$S22$IW$STKCKD$~SHL$OSPACE$PRES8
+00000000 N C$debug_frame12
+         U LG_gzinptr
+         U LG_gzoutcnt
+         w Lib$$Request$$armlib
+         U __rt_stkovf_split_small
+         U memcmp
+000000e4 t mr_check_zipfile
+0000013e T mr_get_method
+         U mr_gzInBuf
+         U mr_gzOutBuf
+         U mr_inflate
+         U mr_printf
+00000000 T mr_unzip
+         U mr_updcrc
+         U mr_zipType

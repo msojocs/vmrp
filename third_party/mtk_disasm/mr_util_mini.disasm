@@ -1,0 +1,27 @@
+
+/tmp/mtk_disasm/mini2011/mr_util.obj:     file format elf32-littlearm
+
+
+Disassembly of section i.mr_updcrc:
+
+00000000 <mr_updcrc>:
+   0:	e3500000 	cmp	r0, #0
+   4:	e59fc040 	ldr	ip, [pc, #64]	; 4c <mr_updcrc+0x4c>
+   8:	03e02000 	mvneq	r2, #0
+   c:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
+  10:	0a00000a 	beq	40 <mr_updcrc+0x40>
+  14:	e59c2000 	ldr	r2, [ip]
+  18:	e3510000 	cmp	r1, #0
+  1c:	0a000007 	beq	40 <mr_updcrc+0x40>
+  20:	e59fe028 	ldr	lr, [pc, #40]	; 50 <mr_updcrc+0x50>
+  24:	e4d03001 	ldrb	r3, [r0], #1
+  28:	e2511001 	subs	r1, r1, #1
+  2c:	e0233002 	eor	r3, r3, r2
+  30:	e20330ff 	and	r3, r3, #255	; 0xff
+  34:	e79e3103 	ldr	r3, [lr, r3, lsl #2]
+  38:	e0232422 	eor	r2, r3, r2, lsr #8
+  3c:	1afffff8 	bne	24 <mr_updcrc+0x24>
+  40:	e1e00002 	mvn	r0, r2
+  44:	e58c2000 	str	r2, [ip]
+  48:	e49df004 	pop	{pc}		; (ldr pc, [sp], #4)
+	...

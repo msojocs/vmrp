@@ -1,0 +1,1192 @@
+
+/tmp/mtk_disasm/mmidsmex/mrp_dove.obj:     file format elf32-littlearm
+
+
+Disassembly of section i.DSM_char2Int:
+
+00000000 <DSM_char2Int>:
+   0:	2200      	movs	r2, #0
+   2:	43d2      	mvns	r2, r2
+   4:	2800      	cmp	r0, #0
+   6:	d01a      	beq.n	3e <DSM_char2Int+0x3e>
+   8:	2901      	cmp	r1, #1
+   a:	d101      	bne.n	10 <DSM_char2Int+0x10>
+   c:	7800      	ldrb	r0, [r0, #0]
+   e:	4770      	bx	lr
+  10:	2902      	cmp	r1, #2
+  12:	d103      	bne.n	1c <DSM_char2Int+0x1c>
+  14:	7801      	ldrb	r1, [r0, #0]
+  16:	7840      	ldrb	r0, [r0, #1]
+  18:	0209      	lsls	r1, r1, #8
+  1a:	e00a      	b.n	32 <DSM_char2Int+0x32>
+  1c:	2904      	cmp	r1, #4
+  1e:	d10a      	bne.n	36 <DSM_char2Int+0x36>
+  20:	7802      	ldrb	r2, [r0, #0]
+  22:	78c1      	ldrb	r1, [r0, #3]
+  24:	0612      	lsls	r2, r2, #24
+  26:	1889      	adds	r1, r1, r2
+  28:	7842      	ldrb	r2, [r0, #1]
+  2a:	7880      	ldrb	r0, [r0, #2]
+  2c:	0412      	lsls	r2, r2, #16
+  2e:	0200      	lsls	r0, r0, #8
+  30:	1810      	adds	r0, r2, r0
+  32:	1808      	adds	r0, r1, r0
+  34:	4770      	bx	lr
+  36:	2900      	cmp	r1, #0
+  38:	d101      	bne.n	3e <DSM_char2Int+0x3e>
+  3a:	2000      	movs	r0, #0
+  3c:	4770      	bx	lr
+  3e:	0010      	movs	r0, r2
+  40:	4770      	bx	lr
+
+Disassembly of section i.DSM_getTLVVal:
+
+00000000 <DSM_getTLVVal>:
+   0:	b570      	push	{r4, r5, r6, lr}
+   2:	4d0f      	ldr	r5, [pc, #60]	; (40 <DSM_getTLVVal+0x40>)
+   4:	2300      	movs	r3, #0
+   6:	001c      	movs	r4, r3
+   8:	00de      	lsls	r6, r3, #3
+   a:	5dae      	ldrb	r6, [r5, r6]
+   c:	4286      	cmp	r6, r0
+   e:	d102      	bne.n	16 <DSM_getTLVVal+0x16>
+  10:	00d8      	lsls	r0, r3, #3
+  12:	1944      	adds	r4, r0, r5
+  14:	e002      	b.n	1c <DSM_getTLVVal+0x1c>
+  16:	1c5b      	adds	r3, r3, #1
+  18:	2b0a      	cmp	r3, #10
+  1a:	dbf5      	blt.n	8 <DSM_getTLVVal+0x8>
+  1c:	2000      	movs	r0, #0
+  1e:	43c0      	mvns	r0, r0
+  20:	2c00      	cmp	r4, #0
+  22:	d004      	beq.n	2e <DSM_getTLVVal+0x2e>
+  24:	2a01      	cmp	r2, #1
+  26:	d103      	bne.n	30 <DSM_getTLVVal+0x30>
+  28:	6860      	ldr	r0, [r4, #4]
+  2a:	6008      	str	r0, [r1, #0]
+  2c:	7860      	ldrb	r0, [r4, #1]
+  2e:	bd70      	pop	{r4, r5, r6, pc}
+  30:	2a00      	cmp	r2, #0
+  32:	d1fc      	bne.n	2e <DSM_getTLVVal+0x2e>
+  34:	7861      	ldrb	r1, [r4, #1]
+  36:	6860      	ldr	r0, [r4, #4]
+  38:	f7ff fffe 	bl	0 <DSM_getTLVVal>
+  3c:	bd70      	pop	{r4, r5, r6, pc}
+  3e:	0000      	.short	0x0000
+  40:	00000144 	.word	0x00000144
+
+Disassembly of section i.DSM_dealCmd:
+
+00000000 <DSM_dealCmd>:
+   0:	b570      	push	{r4, r5, r6, lr}
+   2:	2600      	movs	r6, #0
+   4:	43f6      	mvns	r6, r6
+   6:	2914      	cmp	r1, #20
+   8:	b094      	sub	sp, #80	; 0x50
+   a:	d02b      	beq.n	64 <DSM_dealCmd+0x64>
+   c:	2915      	cmp	r1, #21
+   e:	d173      	bne.n	f8 <DSM_dealCmd+0xf8>
+  10:	2201      	movs	r2, #1
+  12:	2027      	movs	r0, #39	; 0x27
+  14:	a912      	add	r1, sp, #72	; 0x48
+  16:	f7ff fffe 	bl	0 <DSM_dealCmd>
+  1a:	2840      	cmp	r0, #64	; 0x40
+  1c:	9013      	str	r0, [sp, #76]	; 0x4c
+  1e:	d26b      	bcs.n	f8 <DSM_dealCmd+0xf8>
+  20:	2201      	movs	r2, #1
+  22:	2028      	movs	r0, #40	; 0x28
+  24:	a910      	add	r1, sp, #64	; 0x40
+  26:	f7ff fffe 	bl	0 <DSM_dealCmd>
+  2a:	1e05      	subs	r5, r0, #0
+  2c:	dd64      	ble.n	f8 <DSM_dealCmd+0xf8>
+  2e:	2140      	movs	r1, #64	; 0x40
+  30:	4668      	mov	r0, sp
+  32:	f7ff fffe 	bl	0 <__aeabi_memclr4>
+  36:	9a13      	ldr	r2, [sp, #76]	; 0x4c
+  38:	9912      	ldr	r1, [sp, #72]	; 0x48
+  3a:	4668      	mov	r0, sp
+  3c:	f7ff fffe 	bl	0 <__aeabi_memcpy>
+  40:	9813      	ldr	r0, [sp, #76]	; 0x4c
+  42:	1c40      	adds	r0, r0, #1
+  44:	0040      	lsls	r0, r0, #1
+  46:	f7ff fffe 	bl	0 <mr_mem_get_ex>
+  4a:	2800      	cmp	r0, #0
+  4c:	9011      	str	r0, [sp, #68]	; 0x44
+  4e:	d053      	beq.n	f8 <DSM_dealCmd+0xf8>
+  50:	466b      	mov	r3, sp
+  52:	7818      	ldrb	r0, [r3, #0]
+  54:	2841      	cmp	r0, #65	; 0x41
+  56:	d001      	beq.n	5c <DSM_dealCmd+0x5c>
+  58:	2861      	cmp	r0, #97	; 0x61
+  5a:	d171      	bne.n	140 <DSM_dealCmd+0x140>
+  5c:	2201      	movs	r2, #1
+  5e:	0011      	movs	r1, r2
+  60:	2004      	movs	r0, #4
+  62:	e078      	b.n	156 <DSM_dealCmd+0x156>
+  64:	2200      	movs	r2, #0
+  66:	0011      	movs	r1, r2
+  68:	2026      	movs	r0, #38	; 0x26
+  6a:	f7ff fffe 	bl	0 <DSM_dealCmd>
+  6e:	0600      	lsls	r0, r0, #24
+  70:	4957      	ldr	r1, [pc, #348]	; (1d0 <DSM_dealCmd+0x1d0>)
+  72:	0e00      	lsrs	r0, r0, #24
+  74:	280a      	cmp	r0, #10
+  76:	7008      	strb	r0, [r1, #0]
+  78:	d901      	bls.n	7e <DSM_dealCmd+0x7e>
+  7a:	200a      	movs	r0, #10
+  7c:	7008      	strb	r0, [r1, #0]
+  7e:	2201      	movs	r2, #1
+  80:	2024      	movs	r0, #36	; 0x24
+  82:	a913      	add	r1, sp, #76	; 0x4c
+  84:	f7ff fffe 	bl	0 <DSM_dealCmd>
+  88:	2800      	cmp	r0, #0
+  8a:	dd35      	ble.n	f8 <DSM_dealCmd+0xf8>
+  8c:	1c44      	adds	r4, r0, #1
+  8e:	0020      	movs	r0, r4
+  90:	f7ff fffe 	bl	0 <mr_mem_get_ex>
+  94:	2800      	cmp	r0, #0
+  96:	9011      	str	r0, [sp, #68]	; 0x44
+  98:	d02e      	beq.n	f8 <DSM_dealCmd+0xf8>
+  9a:	0021      	movs	r1, r4
+  9c:	f7ff fffe 	bl	0 <__aeabi_memclr>
+  a0:	9913      	ldr	r1, [sp, #76]	; 0x4c
+  a2:	9811      	ldr	r0, [sp, #68]	; 0x44
+  a4:	1e62      	subs	r2, r4, #1
+  a6:	f7ff fffe 	bl	0 <__aeabi_memcpy>
+  aa:	2201      	movs	r2, #1
+  ac:	2025      	movs	r0, #37	; 0x25
+  ae:	a913      	add	r1, sp, #76	; 0x4c
+  b0:	f7ff fffe 	bl	0 <DSM_dealCmd>
+  b4:	2800      	cmp	r0, #0
+  b6:	dd2c      	ble.n	112 <DSM_dealCmd+0x112>
+  b8:	288c      	cmp	r0, #140	; 0x8c
+  ba:	dc2a      	bgt.n	112 <DSM_dealCmd+0x112>
+  bc:	1c44      	adds	r4, r0, #1
+  be:	0020      	movs	r0, r4
+  c0:	f7ff fffe 	bl	0 <mr_mem_get_ex>
+  c4:	2800      	cmp	r0, #0
+  c6:	9010      	str	r0, [sp, #64]	; 0x40
+  c8:	d07f      	beq.n	1ca <DSM_dealCmd+0x1ca>
+  ca:	0021      	movs	r1, r4
+  cc:	f7ff fffe 	bl	0 <__aeabi_memclr>
+  d0:	9913      	ldr	r1, [sp, #76]	; 0x4c
+  d2:	9810      	ldr	r0, [sp, #64]	; 0x40
+  d4:	1e62      	subs	r2, r4, #1
+  d6:	f7ff fffe 	bl	0 <__aeabi_memcpy>
+  da:	2201      	movs	r2, #1
+  dc:	2007      	movs	r0, #7
+  de:	a913      	add	r1, sp, #76	; 0x4c
+  e0:	f7ff fffe 	bl	0 <DSM_dealCmd>
+  e4:	2800      	cmp	r0, #0
+  e6:	dd01      	ble.n	ec <DSM_dealCmd+0xec>
+  e8:	280f      	cmp	r0, #15
+  ea:	dd08      	ble.n	fe <DSM_dealCmd+0xfe>
+  ec:	a811      	add	r0, sp, #68	; 0x44
+  ee:	f7ff fffe 	bl	0 <mr_mem_free_ex>
+  f2:	a810      	add	r0, sp, #64	; 0x40
+  f4:	f7ff fffe 	bl	0 <mr_mem_free_ex>
+  f8:	0030      	movs	r0, r6
+  fa:	b014      	add	sp, #80	; 0x50
+  fc:	bd70      	pop	{r4, r5, r6, pc}
+  fe:	1c44      	adds	r4, r0, #1
+ 100:	0020      	movs	r0, r4
+ 102:	f7ff fffe 	bl	0 <mr_mem_get_ex>
+ 106:	2800      	cmp	r0, #0
+ 108:	9012      	str	r0, [sp, #72]	; 0x48
+ 10a:	d103      	bne.n	114 <DSM_dealCmd+0x114>
+ 10c:	a810      	add	r0, sp, #64	; 0x40
+ 10e:	f7ff fffe 	bl	0 <mr_mem_free_ex>
+ 112:	e05a      	b.n	1ca <DSM_dealCmd+0x1ca>
+ 114:	0021      	movs	r1, r4
+ 116:	f7ff fffe 	bl	0 <__aeabi_memclr>
+ 11a:	9913      	ldr	r1, [sp, #76]	; 0x4c
+ 11c:	9812      	ldr	r0, [sp, #72]	; 0x48
+ 11e:	1e62      	subs	r2, r4, #1
+ 120:	f7ff fffe 	bl	0 <__aeabi_memcpy>
+ 124:	9910      	ldr	r1, [sp, #64]	; 0x40
+ 126:	9811      	ldr	r0, [sp, #68]	; 0x44
+ 128:	2208      	movs	r2, #8
+ 12a:	f7ff fffe 	bl	0 <mr_sendSms>
+ 12e:	a810      	add	r0, sp, #64	; 0x40
+ 130:	f7ff fffe 	bl	0 <mr_mem_free_ex>
+ 134:	a811      	add	r0, sp, #68	; 0x44
+ 136:	f7ff fffe 	bl	0 <mr_mem_free_ex>
+ 13a:	a812      	add	r0, sp, #72	; 0x48
+ 13c:	e041      	b.n	1c2 <DSM_dealCmd+0x1c2>
+ 13e:	e7ff      	b.n	140 <DSM_dealCmd+0x140>
+ 140:	2842      	cmp	r0, #66	; 0x42
+ 142:	d001      	beq.n	148 <DSM_dealCmd+0x148>
+ 144:	2862      	cmp	r0, #98	; 0x62
+ 146:	d103      	bne.n	150 <DSM_dealCmd+0x150>
+ 148:	2218      	movs	r2, #24
+ 14a:	2102      	movs	r1, #2
+ 14c:	2008      	movs	r0, #8
+ 14e:	e002      	b.n	156 <DSM_dealCmd+0x156>
+ 150:	2201      	movs	r2, #1
+ 152:	0011      	movs	r1, r2
+ 154:	2010      	movs	r0, #16
+ 156:	f7ff fffe 	bl	0 <FS_GetDrive>
+ 15a:	466b      	mov	r3, sp
+ 15c:	7018      	strb	r0, [r3, #0]
+ 15e:	1cd8      	adds	r0, r3, #3
+ 160:	9012      	str	r0, [sp, #72]	; 0x48
+ 162:	4668      	mov	r0, sp
+ 164:	f7ff fffe 	bl	0 <mr_fs_separator_vm_to_local>
+ 168:	466c      	mov	r4, sp
+ 16a:	9912      	ldr	r1, [sp, #72]	; 0x48
+ 16c:	1c49      	adds	r1, r1, #1
+ 16e:	9112      	str	r1, [sp, #72]	; 0x48
+ 170:	7808      	ldrb	r0, [r1, #0]
+ 172:	285c      	cmp	r0, #92	; 0x5c
+ 174:	d107      	bne.n	186 <DSM_dealCmd+0x186>
+ 176:	1b0a      	subs	r2, r1, r4
+ 178:	9811      	ldr	r0, [sp, #68]	; 0x44
+ 17a:	4669      	mov	r1, sp
+ 17c:	f7ff fffe 	bl	0 <DSM_dealCmd>
+ 180:	9811      	ldr	r0, [sp, #68]	; 0x44
+ 182:	f7ff fffe 	bl	0 <FS_CreateDir>
+ 186:	9812      	ldr	r0, [sp, #72]	; 0x48
+ 188:	9913      	ldr	r1, [sp, #76]	; 0x4c
+ 18a:	1b00      	subs	r0, r0, r4
+ 18c:	4288      	cmp	r0, r1
+ 18e:	d3ec      	bcc.n	16a <DSM_dealCmd+0x16a>
+ 190:	000a      	movs	r2, r1
+ 192:	9811      	ldr	r0, [sp, #68]	; 0x44
+ 194:	4669      	mov	r1, sp
+ 196:	f7ff fffe 	bl	0 <DSM_dealCmd>
+ 19a:	9811      	ldr	r0, [sp, #68]	; 0x44
+ 19c:	f7ff fffe 	bl	0 <FS_Delete>
+ 1a0:	2101      	movs	r1, #1
+ 1a2:	9811      	ldr	r0, [sp, #68]	; 0x44
+ 1a4:	0409      	lsls	r1, r1, #16
+ 1a6:	f7ff fffe 	bl	0 <FS_Open>
+ 1aa:	1e04      	subs	r4, r0, #0
+ 1ac:	db0d      	blt.n	1ca <DSM_dealCmd+0x1ca>
+ 1ae:	9910      	ldr	r1, [sp, #64]	; 0x40
+ 1b0:	002a      	movs	r2, r5
+ 1b2:	0020      	movs	r0, r4
+ 1b4:	ab13      	add	r3, sp, #76	; 0x4c
+ 1b6:	f7ff fffe 	bl	0 <FS_Write>
+ 1ba:	0020      	movs	r0, r4
+ 1bc:	f7ff fffe 	bl	0 <FS_Close>
+ 1c0:	a811      	add	r0, sp, #68	; 0x44
+ 1c2:	f7ff fffe 	bl	0 <mr_mem_free_ex>
+ 1c6:	2000      	movs	r0, #0
+ 1c8:	e797      	b.n	fa <DSM_dealCmd+0xfa>
+ 1ca:	a811      	add	r0, sp, #68	; 0x44
+ 1cc:	e792      	b.n	f4 <DSM_dealCmd+0xf4>
+ 1ce:	0000      	.short	0x0000
+ 1d0:	00000000 	.word	0x00000000
+
+Disassembly of section i.DSM_smsInd:
+
+00000000 <DSM_smsInd>:
+   0:	b5f7      	push	{r0, r1, r2, r4, r5, r6, r7, lr}
+   2:	0004      	movs	r4, r0
+   4:	000d      	movs	r5, r1
+   6:	2605      	movs	r6, #5
+   8:	2800      	cmp	r0, #0
+   a:	b084      	sub	sp, #16
+   c:	d01f      	beq.n	4e <DSM_smsInd+0x4e>
+   e:	2d00      	cmp	r5, #0
+  10:	d01d      	beq.n	4e <DSM_smsInd+0x4e>
+  12:	2202      	movs	r2, #2
+  14:	0020      	movs	r0, r4
+  16:	a140      	add	r1, pc, #256	; (adr r1, 118 <DSM_smsInd+0x118>)
+  18:	f7ff fffe 	bl	0 <strncmp>
+  1c:	2800      	cmp	r0, #0
+  1e:	d100      	bne.n	22 <DSM_smsInd+0x22>
+  20:	1ca4      	adds	r4, r4, #2
+  22:	4f3e      	ldr	r7, [pc, #248]	; (11c <DSM_smsInd+0x11c>)
+  24:	7838      	ldrb	r0, [r7, #0]
+  26:	2800      	cmp	r0, #0
+  28:	d00a      	beq.n	40 <DSM_smsInd+0x40>
+  2a:	2202      	movs	r2, #2
+  2c:	0020      	movs	r0, r4
+  2e:	a13c      	add	r1, pc, #240	; (adr r1, 120 <DSM_smsInd+0x120>)
+  30:	f7ff fffe 	bl	0 <strncmp>
+  34:	2800      	cmp	r0, #0
+  36:	d103      	bne.n	40 <DSM_smsInd+0x40>
+  38:	7838      	ldrb	r0, [r7, #0]
+  3a:	1e40      	subs	r0, r0, #1
+  3c:	7038      	strb	r0, [r7, #0]
+  3e:	e069      	b.n	114 <DSM_smsInd+0x114>
+  40:	0032      	movs	r2, r6
+  42:	0028      	movs	r0, r5
+  44:	a137      	add	r1, pc, #220	; (adr r1, 124 <DSM_smsInd+0x124>)
+  46:	f7ff fffe 	bl	0 <strncmp>
+  4a:	2800      	cmp	r0, #0
+  4c:	d002      	beq.n	54 <DSM_smsInd+0x54>
+  4e:	2001      	movs	r0, #1
+  50:	b007      	add	sp, #28
+  52:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  54:	9a06      	ldr	r2, [sp, #24]
+  56:	4935      	ldr	r1, [pc, #212]	; (12c <DSM_smsInd+0x12c>)
+  58:	1d68      	adds	r0, r5, #5
+  5a:	1f52      	subs	r2, r2, #5
+  5c:	f7ff fffe 	bl	0 <DSM_smsInd>
+  60:	2200      	movs	r2, #0
+  62:	43d2      	mvns	r2, r2
+  64:	2802      	cmp	r0, #2
+  66:	9003      	str	r0, [sp, #12]
+  68:	db05      	blt.n	76 <DSM_smsInd+0x76>
+  6a:	4830      	ldr	r0, [pc, #192]	; (12c <DSM_smsInd+0x12c>)
+  6c:	7801      	ldrb	r1, [r0, #0]
+  6e:	9803      	ldr	r0, [sp, #12]
+  70:	1e40      	subs	r0, r0, #1
+  72:	4281      	cmp	r1, r0
+  74:	d001      	beq.n	7a <DSM_smsInd+0x7a>
+  76:	0010      	movs	r0, r2
+  78:	e7ea      	b.n	50 <DSM_smsInd+0x50>
+  7a:	f7ff fffe 	bl	0 <GetDsmState>
+  7e:	2800      	cmp	r0, #0
+  80:	d101      	bne.n	86 <DSM_smsInd+0x86>
+  82:	f7ff fffe 	bl	0 <mr_sim_initialize>
+  86:	2401      	movs	r4, #1
+  88:	e041      	b.n	10e <DSM_smsInd+0x10e>
+  8a:	4d28      	ldr	r5, [pc, #160]	; (12c <DSM_smsInd+0x12c>)
+  8c:	5d28      	ldrb	r0, [r5, r4]
+  8e:	1c64      	adds	r4, r4, #1
+  90:	2801      	cmp	r0, #1
+  92:	d13c      	bne.n	10e <DSM_smsInd+0x10e>
+  94:	5d2b      	ldrb	r3, [r5, r4]
+  96:	1c64      	adds	r4, r4, #1
+  98:	1928      	adds	r0, r5, r4
+  9a:	0019      	movs	r1, r3
+  9c:	f7ff fffe 	bl	0 <DSM_smsInd>
+  a0:	9001      	str	r0, [sp, #4]
+  a2:	1c40      	adds	r0, r0, #1
+  a4:	d036      	beq.n	114 <DSM_smsInd+0x114>
+  a6:	18e3      	adds	r3, r4, r3
+  a8:	5ce8      	ldrb	r0, [r5, r3]
+  aa:	1c5b      	adds	r3, r3, #1
+  ac:	2802      	cmp	r0, #2
+  ae:	d131      	bne.n	114 <DSM_smsInd+0x114>
+  b0:	5cec      	ldrb	r4, [r5, r3]
+  b2:	1c5b      	adds	r3, r3, #1
+  b4:	18e8      	adds	r0, r5, r3
+  b6:	0021      	movs	r1, r4
+  b8:	f7ff fffe 	bl	0 <DSM_smsInd>
+  bc:	0007      	movs	r7, r0
+  be:	1c40      	adds	r0, r0, #1
+  c0:	d028      	beq.n	114 <DSM_smsInd+0x114>
+  c2:	1918      	adds	r0, r3, r4
+  c4:	182e      	adds	r6, r5, r0
+  c6:	9002      	str	r0, [sp, #8]
+  c8:	4818      	ldr	r0, [pc, #96]	; (12c <DSM_smsInd+0x12c>)
+  ca:	2400      	movs	r4, #0
+  cc:	0025      	movs	r5, r4
+  ce:	2150      	movs	r1, #80	; 0x50
+  d0:	3850      	subs	r0, #80	; 0x50
+  d2:	f7ff fffe 	bl	0 <__aeabi_memclr4>
+  d6:	4a15      	ldr	r2, [pc, #84]	; (12c <DSM_smsInd+0x12c>)
+  d8:	3a50      	subs	r2, #80	; 0x50
+  da:	e00e      	b.n	fa <DSM_smsInd+0xfa>
+  dc:	5d71      	ldrb	r1, [r6, r5]
+  de:	00e0      	lsls	r0, r4, #3
+  e0:	1c6d      	adds	r5, r5, #1
+  e2:	5411      	strb	r1, [r2, r0]
+  e4:	5d71      	ldrb	r1, [r6, r5]
+  e6:	1880      	adds	r0, r0, r2
+  e8:	1c6d      	adds	r5, r5, #1
+  ea:	7041      	strb	r1, [r0, #1]
+  ec:	1971      	adds	r1, r6, r5
+  ee:	6041      	str	r1, [r0, #4]
+  f0:	7840      	ldrb	r0, [r0, #1]
+  f2:	1c64      	adds	r4, r4, #1
+  f4:	1945      	adds	r5, r0, r5
+  f6:	2c0a      	cmp	r4, #10
+  f8:	da01      	bge.n	fe <DSM_smsInd+0xfe>
+  fa:	42bd      	cmp	r5, r7
+  fc:	dbee      	blt.n	dc <DSM_smsInd+0xdc>
+  fe:	9802      	ldr	r0, [sp, #8]
+ 100:	9901      	ldr	r1, [sp, #4]
+ 102:	19c4      	adds	r4, r0, r7
+ 104:	2000      	movs	r0, #0
+ 106:	f7ff fffe 	bl	0 <DSM_smsInd>
+ 10a:	1c40      	adds	r0, r0, #1
+ 10c:	d002      	beq.n	114 <DSM_smsInd+0x114>
+ 10e:	9803      	ldr	r0, [sp, #12]
+ 110:	4284      	cmp	r4, r0
+ 112:	dbba      	blt.n	8a <DSM_smsInd+0x8a>
+ 114:	2000      	movs	r0, #0
+ 116:	e79b      	b.n	50 <DSM_smsInd+0x50>
+ 118:	00003638 	.word	0x00003638
+ 11c:	00000000 	.word	0x00000000
+ 120:	00003031 	.word	0x00003031
+ 124:	5a35742c 	.word	0x5a35742c
+ 128:	0000002e 	.word	0x0000002e
+ 12c:	00000194 	.word	0x00000194
+
+Disassembly of section i.i_DeleteSms_judge:
+
+00000000 <i_DeleteSms_judge>:
+   0:	b5f1      	push	{r0, r4, r5, r6, r7, lr}
+   2:	4f1d      	ldr	r7, [pc, #116]	; (78 <i_DeleteSms_judge+0x78>)
+   4:	2400      	movs	r4, #0
+   6:	2628      	movs	r6, #40	; 0x28
+   8:	4366      	muls	r6, r4
+   a:	19f5      	adds	r5, r6, r7
+   c:	6a68      	ldr	r0, [r5, #36]	; 0x24
+   e:	2800      	cmp	r0, #0
+  10:	d02c      	beq.n	6c <i_DeleteSms_judge+0x6c>
+  12:	1d28      	adds	r0, r5, #4
+  14:	f7ff fffe 	bl	0 <strlen>
+  18:	0002      	movs	r2, r0
+  1a:	9900      	ldr	r1, [sp, #0]
+  1c:	1d28      	adds	r0, r5, #4
+  1e:	f7ff fffe 	bl	0 <strncmp>
+  22:	2800      	cmp	r0, #0
+  24:	d122      	bne.n	6c <i_DeleteSms_judge+0x6c>
+  26:	f7ff fffe 	bl	0 <mr_getTime>
+  2a:	2128      	movs	r1, #40	; 0x28
+  2c:	4361      	muls	r1, r4
+  2e:	19c9      	adds	r1, r1, r7
+  30:	6a09      	ldr	r1, [r1, #32]
+  32:	1a40      	subs	r0, r0, r1
+  34:	59b9      	ldr	r1, [r7, r6]
+  36:	4288      	cmp	r0, r1
+  38:	d908      	bls.n	4c <i_DeleteSms_judge+0x4c>
+  3a:	f7ff fffe 	bl	0 <GetDsmState>
+  3e:	2800      	cmp	r0, #0
+  40:	d104      	bne.n	4c <i_DeleteSms_judge+0x4c>
+  42:	2128      	movs	r1, #40	; 0x28
+  44:	0028      	movs	r0, r5
+  46:	f7ff fffe 	bl	0 <__aeabi_memclr4>
+  4a:	e012      	b.n	72 <i_DeleteSms_judge+0x72>
+  4c:	59b8      	ldr	r0, [r7, r6]
+  4e:	2801      	cmp	r0, #1
+  50:	db0f      	blt.n	72 <i_DeleteSms_judge+0x72>
+  52:	69e8      	ldr	r0, [r5, #28]
+  54:	2801      	cmp	r0, #1
+  56:	db0c      	blt.n	72 <i_DeleteSms_judge+0x72>
+  58:	1e40      	subs	r0, r0, #1
+  5a:	2800      	cmp	r0, #0
+  5c:	61e8      	str	r0, [r5, #28]
+  5e:	dc03      	bgt.n	68 <i_DeleteSms_judge+0x68>
+  60:	2128      	movs	r1, #40	; 0x28
+  62:	0028      	movs	r0, r5
+  64:	f7ff fffe 	bl	0 <__aeabi_memclr4>
+  68:	2000      	movs	r0, #0
+  6a:	bdf8      	pop	{r3, r4, r5, r6, r7, pc}
+  6c:	1c64      	adds	r4, r4, #1
+  6e:	2c08      	cmp	r4, #8
+  70:	dbc9      	blt.n	6 <i_DeleteSms_judge+0x6>
+  72:	2000      	movs	r0, #0
+  74:	43c0      	mvns	r0, r0
+  76:	bdf8      	pop	{r3, r4, r5, r6, r7, pc}
+  78:	00000004 	.word	0x00000004
+
+Disassembly of section i.mr_smsIndiactionEx:
+
+00000000 <mr_smsIndiactionEx>:
+   0:	b5ff      	push	{r0, r1, r2, r3, r4, r5, r6, r7, lr}
+   2:	0014      	movs	r4, r2
+   4:	0007      	movs	r7, r0
+   6:	001e      	movs	r6, r3
+   8:	2201      	movs	r2, #1
+   a:	0020      	movs	r0, r4
+   c:	b081      	sub	sp, #4
+   e:	a113      	add	r1, pc, #76	; (adr r1, 5c <mr_smsIndiactionEx+0x5c>)
+  10:	f7ff fffe 	bl	0 <strncmp>
+  14:	2800      	cmp	r0, #0
+  16:	d100      	bne.n	1a <mr_smsIndiactionEx+0x1a>
+  18:	1c64      	adds	r4, r4, #1
+  1a:	0025      	movs	r5, r4
+  1c:	d00c      	beq.n	38 <mr_smsIndiactionEx+0x38>
+  1e:	2202      	movs	r2, #2
+  20:	0020      	movs	r0, r4
+  22:	a10f      	add	r1, pc, #60	; (adr r1, 60 <mr_smsIndiactionEx+0x60>)
+  24:	f7ff fffe 	bl	0 <strncmp>
+  28:	2800      	cmp	r0, #0
+  2a:	d100      	bne.n	2e <mr_smsIndiactionEx+0x2e>
+  2c:	1ca5      	adds	r5, r4, #2
+  2e:	0028      	movs	r0, r5
+  30:	f7ff fffe 	bl	0 <mr_smsIndiactionEx>
+  34:	2800      	cmp	r0, #0
+  36:	d006      	beq.n	46 <mr_smsIndiactionEx+0x46>
+  38:	9a02      	ldr	r2, [sp, #8]
+  3a:	0039      	movs	r1, r7
+  3c:	0020      	movs	r0, r4
+  3e:	f7ff fffe 	bl	0 <mr_smsIndiactionEx>
+  42:	2801      	cmp	r0, #1
+  44:	d002      	beq.n	4c <mr_smsIndiactionEx+0x4c>
+  46:	2000      	movs	r0, #0
+  48:	b005      	add	sp, #20
+  4a:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  4c:	9902      	ldr	r1, [sp, #8]
+  4e:	0033      	movs	r3, r6
+  50:	0022      	movs	r2, r4
+  52:	0038      	movs	r0, r7
+  54:	f7ff fffe 	bl	0 <mr_smsIndiaction>
+  58:	e7f6      	b.n	48 <mr_smsIndiactionEx+0x48>
+  5a:	0000      	.short	0x0000
+  5c:	0000002b 	.word	0x0000002b
+  60:	00003638 	.word	0x00003638
+
+Disassembly of section i.i_SetDeleteSmsIfno_add:
+
+00000000 <i_SetDeleteSmsIfno_add>:
+   0:	b5f8      	push	{r3, r4, r5, r6, r7, lr}
+   2:	0004      	movs	r4, r0
+   4:	2500      	movs	r5, #0
+   6:	2728      	movs	r7, #40	; 0x28
+   8:	436f      	muls	r7, r5
+   a:	482c      	ldr	r0, [pc, #176]	; (bc <i_SetDeleteSmsIfno_add+0xbc>)
+   c:	183e      	adds	r6, r7, r0
+   e:	6a70      	ldr	r0, [r6, #36]	; 0x24
+  10:	2800      	cmp	r0, #0
+  12:	d01c      	beq.n	4e <i_SetDeleteSmsIfno_add+0x4e>
+  14:	1d30      	adds	r0, r6, #4
+  16:	f7ff fffe 	bl	0 <strlen>
+  1a:	0002      	movs	r2, r0
+  1c:	1d30      	adds	r0, r6, #4
+  1e:	1d21      	adds	r1, r4, #4
+  20:	f7ff fffe 	bl	0 <strncmp>
+  24:	2800      	cmp	r0, #0
+  26:	d112      	bne.n	4e <i_SetDeleteSmsIfno_add+0x4e>
+  28:	2028      	movs	r0, #40	; 0x28
+  2a:	4368      	muls	r0, r5
+  2c:	4923      	ldr	r1, [pc, #140]	; (bc <i_SetDeleteSmsIfno_add+0xbc>)
+  2e:	580a      	ldr	r2, [r1, r0]
+  30:	6820      	ldr	r0, [r4, #0]
+  32:	4282      	cmp	r2, r0
+  34:	da00      	bge.n	38 <i_SetDeleteSmsIfno_add+0x38>
+  36:	51c8      	str	r0, [r1, r7]
+  38:	1878      	adds	r0, r7, r1
+  3a:	69c0      	ldr	r0, [r0, #28]
+  3c:	69e2      	ldr	r2, [r4, #28]
+  3e:	210c      	movs	r1, #12
+  40:	1880      	adds	r0, r0, r2
+  42:	280c      	cmp	r0, #12
+  44:	61f0      	str	r0, [r6, #28]
+  46:	dc00      	bgt.n	4a <i_SetDeleteSmsIfno_add+0x4a>
+  48:	0001      	movs	r1, r0
+  4a:	61f1      	str	r1, [r6, #28]
+  4c:	e030      	b.n	b0 <i_SetDeleteSmsIfno_add+0xb0>
+  4e:	1c6d      	adds	r5, r5, #1
+  50:	2d08      	cmp	r5, #8
+  52:	dbd8      	blt.n	6 <i_SetDeleteSmsIfno_add+0x6>
+  54:	4a19      	ldr	r2, [pc, #100]	; (bc <i_SetDeleteSmsIfno_add+0xbc>)
+  56:	2000      	movs	r0, #0
+  58:	2501      	movs	r5, #1
+  5a:	2128      	movs	r1, #40	; 0x28
+  5c:	4341      	muls	r1, r0
+  5e:	1889      	adds	r1, r1, r2
+  60:	6a49      	ldr	r1, [r1, #36]	; 0x24
+  62:	2900      	cmp	r1, #0
+  64:	d104      	bne.n	70 <i_SetDeleteSmsIfno_add+0x70>
+  66:	2328      	movs	r3, #40	; 0x28
+  68:	4358      	muls	r0, r3
+  6a:	6821      	ldr	r1, [r4, #0]
+  6c:	5011      	str	r1, [r2, r0]
+  6e:	e016      	b.n	9e <i_SetDeleteSmsIfno_add+0x9e>
+  70:	1c40      	adds	r0, r0, #1
+  72:	2808      	cmp	r0, #8
+  74:	dbf1      	blt.n	5a <i_SetDeleteSmsIfno_add+0x5a>
+  76:	2100      	movs	r1, #0
+  78:	2001      	movs	r0, #1
+  7a:	2328      	movs	r3, #40	; 0x28
+  7c:	434b      	muls	r3, r1
+  7e:	189b      	adds	r3, r3, r2
+  80:	6a1e      	ldr	r6, [r3, #32]
+  82:	2328      	movs	r3, #40	; 0x28
+  84:	4343      	muls	r3, r0
+  86:	189b      	adds	r3, r3, r2
+  88:	6a1b      	ldr	r3, [r3, #32]
+  8a:	429e      	cmp	r6, r3
+  8c:	dd00      	ble.n	90 <i_SetDeleteSmsIfno_add+0x90>
+  8e:	0001      	movs	r1, r0
+  90:	1c40      	adds	r0, r0, #1
+  92:	2808      	cmp	r0, #8
+  94:	dbf1      	blt.n	7a <i_SetDeleteSmsIfno_add+0x7a>
+  96:	2028      	movs	r0, #40	; 0x28
+  98:	4348      	muls	r0, r1
+  9a:	6826      	ldr	r6, [r4, #0]
+  9c:	5016      	str	r6, [r2, r0]
+  9e:	1886      	adds	r6, r0, r2
+  a0:	1d30      	adds	r0, r6, #4
+  a2:	2218      	movs	r2, #24
+  a4:	1d21      	adds	r1, r4, #4
+  a6:	f7ff fffe 	bl	0 <__aeabi_memcpy4>
+  aa:	6275      	str	r5, [r6, #36]	; 0x24
+  ac:	69e0      	ldr	r0, [r4, #28]
+  ae:	61f0      	str	r0, [r6, #28]
+  b0:	f7ff fffe 	bl	0 <mr_getTime>
+  b4:	6230      	str	r0, [r6, #32]
+  b6:	2000      	movs	r0, #0
+  b8:	bdf8      	pop	{r3, r4, r5, r6, r7, pc}
+  ba:	0000      	.short	0x0000
+  bc:	00000004 	.word	0x00000004
+
+Disassembly of section i.mr_dove_set_sms_strategy:
+
+00000000 <mr_dove_set_sms_strategy>:
+   0:	b500      	push	{lr}
+   2:	0001      	movs	r1, r0
+   4:	0013      	movs	r3, r2
+   6:	4310      	orrs	r0, r2
+   8:	b089      	sub	sp, #36	; 0x24
+   a:	d102      	bne.n	12 <mr_dove_set_sms_strategy+0x12>
+   c:	1e40      	subs	r0, r0, #1
+   e:	b009      	add	sp, #36	; 0x24
+  10:	bd00      	pop	{pc}
+  12:	2b00      	cmp	r3, #0
+  14:	d109      	bne.n	2a <mr_dove_set_sms_strategy+0x2a>
+  16:	6908      	ldr	r0, [r1, #16]
+  18:	2217      	movs	r2, #23
+  1a:	9008      	str	r0, [sp, #32]
+  1c:	4807      	ldr	r0, [pc, #28]	; (3c <mr_dove_set_sms_strategy+0x3c>)
+  1e:	1d09      	adds	r1, r1, #4
+  20:	9001      	str	r0, [sp, #4]
+  22:	a802      	add	r0, sp, #8
+  24:	f7ff fffe 	bl	0 <strncpy>
+  28:	e004      	b.n	34 <mr_dove_set_sms_strategy+0x34>
+  2a:	2220      	movs	r2, #32
+  2c:	0019      	movs	r1, r3
+  2e:	a801      	add	r0, sp, #4
+  30:	f7ff fffe 	bl	0 <__aeabi_memcpy4>
+  34:	a801      	add	r0, sp, #4
+  36:	f7ff fffe 	bl	0 <mr_dove_set_sms_strategy>
+  3a:	e7e8      	b.n	e <mr_dove_set_sms_strategy+0xe>
+  3c:	000493e0 	.word	0x000493e0
+
+Disassembly of section i.mr_license_register_validator:
+
+00000000 <mr_license_register_validator>:
+   0:	4901      	ldr	r1, [pc, #4]	; (8 <mr_license_register_validator+0x8>)
+   2:	6008      	str	r0, [r1, #0]
+   4:	4770      	bx	lr
+   6:	0000      	.short	0x0000
+   8:	000002e8 	.word	0x000002e8
+
+Disassembly of section i.mr_license_collect_appinfo:
+
+00000000 <mr_license_collect_appinfo>:
+   0:	b5f0      	push	{r4, r5, r6, r7, lr}
+   2:	0005      	movs	r5, r0
+   4:	000c      	movs	r4, r1
+   6:	b093      	sub	sp, #76	; 0x4c
+   8:	2140      	movs	r1, #64	; 0x40
+   a:	a803      	add	r0, sp, #12
+   c:	f7ff fffe 	bl	0 <__aeabi_memclr4>
+  10:	4f1e      	ldr	r7, [pc, #120]	; (8c <mr_license_collect_appinfo+0x8c>)
+  12:	68b8      	ldr	r0, [r7, #8]
+  14:	2800      	cmp	r0, #0
+  16:	dd37      	ble.n	88 <mr_license_collect_appinfo+0x88>
+  18:	68fe      	ldr	r6, [r7, #12]
+  1a:	2e00      	cmp	r6, #0
+  1c:	d034      	beq.n	88 <mr_license_collect_appinfo+0x88>
+  1e:	2c00      	cmp	r4, #0
+  20:	d032      	beq.n	88 <mr_license_collect_appinfo+0x88>
+  22:	6821      	ldr	r1, [r4, #0]
+  24:	2900      	cmp	r1, #0
+  26:	d02f      	beq.n	88 <mr_license_collect_appinfo+0x88>
+  28:	68e0      	ldr	r0, [r4, #12]
+  2a:	a219      	add	r2, pc, #100	; (adr r2, 90 <mr_license_collect_appinfo+0x90>)
+  2c:	2800      	cmp	r0, #0
+  2e:	d000      	beq.n	32 <mr_license_collect_appinfo+0x32>
+  30:	0002      	movs	r2, r0
+  32:	68a0      	ldr	r0, [r4, #8]
+  34:	466b      	mov	r3, sp
+  36:	c307      	stmia	r3!, {r0, r1, r2}
+  38:	6863      	ldr	r3, [r4, #4]
+  3a:	2401      	movs	r4, #1
+  3c:	0264      	lsls	r4, r4, #9
+  3e:	0021      	movs	r1, r4
+  40:	0030      	movs	r0, r6
+  42:	a214      	add	r2, pc, #80	; (adr r2, 94 <mr_license_collect_appinfo+0x94>)
+  44:	f7ff fffe 	bl	0 <__1snprintf>
+  48:	0006      	movs	r6, r0
+  4a:	2d00      	cmp	r5, #0
+  4c:	d00e      	beq.n	6c <mr_license_collect_appinfo+0x6c>
+  4e:	0428      	lsls	r0, r5, #16
+  50:	0c00      	lsrs	r0, r0, #16
+  52:	f7ff fffe 	bl	0 <GetStringIdOfItem>
+  56:	f7ff fffe 	bl	0 <GetString>
+  5a:	2800      	cmp	r0, #0
+  5c:	d006      	beq.n	6c <mr_license_collect_appinfo+0x6c>
+  5e:	68fa      	ldr	r2, [r7, #12]
+  60:	1ba1      	subs	r1, r4, r6
+  62:	1993      	adds	r3, r2, r6
+  64:	0002      	movs	r2, r0
+  66:	0018      	movs	r0, r3
+  68:	f7ff fffe 	bl	0 <mmi_chset_ucs2_to_utf8_string>
+  6c:	68f8      	ldr	r0, [r7, #12]
+  6e:	f7ff fffe 	bl	0 <strlen>
+  72:	68bb      	ldr	r3, [r7, #8]
+  74:	0002      	movs	r2, r0
+  76:	68f9      	ldr	r1, [r7, #12]
+  78:	0018      	movs	r0, r3
+  7a:	f7ff fffe 	bl	0 <mr_write>
+  7e:	68b8      	ldr	r0, [r7, #8]
+  80:	2201      	movs	r2, #1
+  82:	a108      	add	r1, pc, #32	; (adr r1, a4 <mr_license_collect_appinfo+0xa4>)
+  84:	f7ff fffe 	bl	0 <mr_write>
+  88:	b013      	add	sp, #76	; 0x4c
+  8a:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  8c:	000002e8 	.word	0x000002e8
+  90:	00000000 	.word	0x00000000
+  94:	252c6425 	.word	0x252c6425
+  98:	73252c64 	.word	0x73252c64
+  9c:	2c73252c 	.word	0x2c73252c
+  a0:	00000000 	.word	0x00000000
+  a4:	0000000a 	.word	0x0000000a
+
+Disassembly of section i.mr_license_register_appinfo:
+
+00000000 <mr_license_register_appinfo>:
+   0:	b570      	push	{r4, r5, r6, lr}
+   2:	000c      	movs	r4, r1
+   4:	0015      	movs	r5, r2
+   6:	2900      	cmp	r1, #0
+   8:	b0a6      	sub	sp, #152	; 0x98
+   a:	d007      	beq.n	1c <mr_license_register_appinfo+0x1c>
+   c:	2d00      	cmp	r5, #0
+   e:	d005      	beq.n	1c <mr_license_register_appinfo+0x1c>
+  10:	2800      	cmp	r0, #0
+  12:	d107      	bne.n	24 <mr_license_register_appinfo+0x24>
+  14:	481c      	ldr	r0, [pc, #112]	; (88 <mr_license_register_appinfo+0x88>)
+  16:	6840      	ldr	r0, [r0, #4]
+  18:	2800      	cmp	r0, #0
+  1a:	d003      	beq.n	24 <mr_license_register_appinfo+0x24>
+  1c:	2000      	movs	r0, #0
+  1e:	43c0      	mvns	r0, r0
+  20:	b026      	add	sp, #152	; 0x98
+  22:	bd70      	pop	{r4, r5, r6, pc}
+  24:	2180      	movs	r1, #128	; 0x80
+  26:	a806      	add	r0, sp, #24
+  28:	f7ff fffe 	bl	0 <__aeabi_memclr4>
+  2c:	a804      	add	r0, sp, #16
+  2e:	f7ff fffe 	bl	0 <mr_getDatetime>
+  32:	68a0      	ldr	r0, [r4, #8]
+  34:	466b      	mov	r3, sp
+  36:	7c9a      	ldrb	r2, [r3, #18]
+  38:	68e1      	ldr	r1, [r4, #12]
+  3a:	ae01      	add	r6, sp, #4
+  3c:	c607      	stmia	r6!, {r0, r1, r2}
+  3e:	6862      	ldr	r2, [r4, #4]
+  40:	217f      	movs	r1, #127	; 0x7f
+  42:	9200      	str	r2, [sp, #0]
+  44:	6823      	ldr	r3, [r4, #0]
+  46:	a211      	add	r2, pc, #68	; (adr r2, 8c <mr_license_register_appinfo+0x8c>)
+  48:	a806      	add	r0, sp, #24
+  4a:	f7ff fffe 	bl	0 <__1snprintf>
+  4e:	0006      	movs	r6, r0
+  50:	480d      	ldr	r0, [pc, #52]	; (88 <mr_license_register_appinfo+0x88>)
+  52:	21c0      	movs	r1, #192	; 0xc0
+  54:	38c0      	subs	r0, #192	; 0xc0
+  56:	f7ff fffe 	bl	0 <__aeabi_memclr4>
+  5a:	4a0b      	ldr	r2, [pc, #44]	; (88 <mr_license_register_appinfo+0x88>)
+  5c:	0031      	movs	r1, r6
+  5e:	3ac0      	subs	r2, #192	; 0xc0
+  60:	a806      	add	r0, sp, #24
+  62:	f7ff fffe 	bl	0 <_mr_encode>
+  66:	a009      	add	r0, pc, #36	; (adr r0, 8c <mr_license_register_appinfo+0x8c>)
+  68:	60a8      	str	r0, [r5, #8]
+  6a:	4807      	ldr	r0, [pc, #28]	; (88 <mr_license_register_appinfo+0x88>)
+  6c:	38c0      	subs	r0, #192	; 0xc0
+  6e:	f7ff fffe 	bl	0 <strlen>
+  72:	6068      	str	r0, [r5, #4]
+  74:	4804      	ldr	r0, [pc, #16]	; (88 <mr_license_register_appinfo+0x88>)
+  76:	0021      	movs	r1, r4
+  78:	38c0      	subs	r0, #192	; 0xc0
+  7a:	6028      	str	r0, [r5, #0]
+  7c:	2000      	movs	r0, #0
+  7e:	f7ff fffe 	bl	0 <mr_license_register_appinfo>
+  82:	2000      	movs	r0, #0
+  84:	e7cc      	b.n	20 <mr_license_register_appinfo+0x20>
+  86:	0000      	.short	0x0000
+  88:	000002e8 	.word	0x000002e8
+  8c:	25247325 	.word	0x25247325
+  90:	78252c78 	.word	0x78252c78
+  94:	40732526 	.word	0x40732526
+  98:	00007825 	.word	0x00007825
+
+Disassembly of section i.mr_license_collect_preinstalled_appinfo:
+
+00000000 <mr_license_collect_preinstalled_appinfo>:
+   0:	b5f1      	push	{r0, r4, r5, r6, r7, lr}
+   2:	2400      	movs	r4, #0
+   4:	b0ac      	sub	sp, #176	; 0xb0
+   6:	e067      	b.n	d8 <mr_license_collect_preinstalled_appinfo+0xd8>
+   8:	4f36      	ldr	r7, [pc, #216]	; (e4 <mr_license_collect_preinstalled_appinfo+0xe4>)
+   a:	00a5      	lsls	r5, r4, #2
+   c:	597e      	ldr	r6, [r7, r5]
+   e:	0330      	lsls	r0, r6, #12
+  10:	0f00      	lsrs	r0, r0, #28
+  12:	d05d      	beq.n	d0 <mr_license_collect_preinstalled_appinfo+0xd0>
+  14:	2114      	movs	r1, #20
+  16:	a806      	add	r0, sp, #24
+  18:	f7ff fffe 	bl	0 <__aeabi_memclr4>
+  1c:	19e8      	adds	r0, r5, r7
+  1e:	6881      	ldr	r1, [r0, #8]
+  20:	9107      	str	r1, [sp, #28]
+  22:	6841      	ldr	r1, [r0, #4]
+  24:	910a      	str	r1, [sp, #40]	; 0x28
+  26:	68c0      	ldr	r0, [r0, #12]
+  28:	9006      	str	r0, [sp, #24]
+  2a:	0c30      	lsrs	r0, r6, #16
+  2c:	2802      	cmp	r0, #2
+  2e:	d102      	bne.n	36 <mr_license_collect_preinstalled_appinfo+0x36>
+  30:	9806      	ldr	r0, [sp, #24]
+  32:	4780      	blx	r0
+  34:	9006      	str	r0, [sp, #24]
+  36:	2600      	movs	r6, #0
+  38:	2180      	movs	r1, #128	; 0x80
+  3a:	a80b      	add	r0, sp, #44	; 0x2c
+  3c:	f7ff fffe 	bl	0 <__aeabi_memclr4>
+  40:	a80b      	add	r0, sp, #44	; 0x2c
+  42:	9009      	str	r0, [sp, #36]	; 0x24
+  44:	4827      	ldr	r0, [pc, #156]	; (e4 <mr_license_collect_preinstalled_appinfo+0xe4>)
+  46:	5940      	ldr	r0, [r0, r5]
+  48:	e036      	b.n	b8 <mr_license_collect_preinstalled_appinfo+0xb8>
+  4a:	4826      	ldr	r0, [pc, #152]	; (e4 <mr_license_collect_preinstalled_appinfo+0xe4>)
+  4c:	00a7      	lsls	r7, r4, #2
+  4e:	59c1      	ldr	r1, [r0, r7]
+  50:	0c09      	lsrs	r1, r1, #16
+  52:	2910      	cmp	r1, #16
+  54:	d137      	bne.n	c6 <mr_license_collect_preinstalled_appinfo+0xc6>
+  56:	1838      	adds	r0, r7, r0
+  58:	902b      	str	r0, [sp, #172]	; 0xac
+  5a:	6845      	ldr	r5, [r0, #4]
+  5c:	7828      	ldrb	r0, [r5, #0]
+  5e:	284d      	cmp	r0, #77	; 0x4d
+  60:	d128      	bne.n	b4 <mr_license_collect_preinstalled_appinfo+0xb4>
+  62:	7868      	ldrb	r0, [r5, #1]
+  64:	2852      	cmp	r0, #82	; 0x52
+  66:	d125      	bne.n	b4 <mr_license_collect_preinstalled_appinfo+0xb4>
+  68:	78a8      	ldrb	r0, [r5, #2]
+  6a:	2850      	cmp	r0, #80	; 0x50
+  6c:	d122      	bne.n	b4 <mr_license_collect_preinstalled_appinfo+0xb4>
+  6e:	78e8      	ldrb	r0, [r5, #3]
+  70:	2847      	cmp	r0, #71	; 0x47
+  72:	d11f      	bne.n	b4 <mr_license_collect_preinstalled_appinfo+0xb4>
+  74:	2000      	movs	r0, #0
+  76:	0029      	movs	r1, r5
+  78:	9005      	str	r0, [sp, #20]
+  7a:	9004      	str	r0, [sp, #16]
+  7c:	2204      	movs	r2, #4
+  7e:	3144      	adds	r1, #68	; 0x44
+  80:	a805      	add	r0, sp, #20
+  82:	f7ff fffe 	bl	0 <__aeabi_memcpy>
+  86:	0029      	movs	r1, r5
+  88:	2204      	movs	r2, #4
+  8a:	3150      	adds	r1, #80	; 0x50
+  8c:	a804      	add	r0, sp, #16
+  8e:	f7ff fffe 	bl	0 <__aeabi_memcpy>
+  92:	982b      	ldr	r0, [sp, #172]	; 0xac
+  94:	9905      	ldr	r1, [sp, #20]
+  96:	68c2      	ldr	r2, [r0, #12]
+  98:	9804      	ldr	r0, [sp, #16]
+  9a:	9100      	str	r1, [sp, #0]
+  9c:	9001      	str	r0, [sp, #4]
+  9e:	207f      	movs	r0, #127	; 0x7f
+  a0:	1b81      	subs	r1, r0, r6
+  a2:	002b      	movs	r3, r5
+  a4:	a80b      	add	r0, sp, #44	; 0x2c
+  a6:	9202      	str	r2, [sp, #8]
+  a8:	1980      	adds	r0, r0, r6
+  aa:	3310      	adds	r3, #16
+  ac:	a20e      	add	r2, pc, #56	; (adr r2, e8 <mr_license_collect_preinstalled_appinfo+0xe8>)
+  ae:	f7ff fffe 	bl	0 <__1snprintf>
+  b2:	1986      	adds	r6, r0, r6
+  b4:	480b      	ldr	r0, [pc, #44]	; (e4 <mr_license_collect_preinstalled_appinfo+0xe4>)
+  b6:	59c0      	ldr	r0, [r0, r7]
+  b8:	0400      	lsls	r0, r0, #16
+  ba:	0c00      	lsrs	r0, r0, #16
+  bc:	1904      	adds	r4, r0, r4
+  be:	982c      	ldr	r0, [sp, #176]	; 0xb0
+  c0:	1c64      	adds	r4, r4, #1
+  c2:	4284      	cmp	r4, r0
+  c4:	dbc1      	blt.n	4a <mr_license_collect_preinstalled_appinfo+0x4a>
+  c6:	980a      	ldr	r0, [sp, #40]	; 0x28
+  c8:	a906      	add	r1, sp, #24
+  ca:	f7ff fffe 	bl	0 <mr_license_collect_preinstalled_appinfo>
+  ce:	e003      	b.n	d8 <mr_license_collect_preinstalled_appinfo+0xd8>
+  d0:	0430      	lsls	r0, r6, #16
+  d2:	0c00      	lsrs	r0, r0, #16
+  d4:	1904      	adds	r4, r0, r4
+  d6:	1c64      	adds	r4, r4, #1
+  d8:	982c      	ldr	r0, [sp, #176]	; 0xb0
+  da:	4284      	cmp	r4, r0
+  dc:	db94      	blt.n	8 <mr_license_collect_preinstalled_appinfo+0x8>
+  de:	b02d      	add	sp, #180	; 0xb4
+  e0:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  e2:	0000      	.short	0x0000
+  e4:	00000000 	.word	0x00000000
+  e8:	2c732528 	.word	0x2c732528
+  ec:	252c6425 	.word	0x252c6425
+  f0:	64252c64 	.word	0x64252c64
+  f4:	00000029 	.word	0x00000029
+
+Disassembly of section i.mr_license_mgr_initialize:
+
+00000000 <mr_license_mgr_initialize>:
+   0:	b5f1      	push	{r0, r4, r5, r6, r7, lr}
+   2:	f7ff fffe 	bl	0 <mr_fs_switch_to_root_dir>
+   6:	a01f      	add	r0, pc, #124	; (adr r0, 84 <mr_license_mgr_initialize+0x84>)
+   8:	f7ff fffe 	bl	0 <mr_info>
+   c:	2801      	cmp	r0, #1
+   e:	d102      	bne.n	16 <mr_license_mgr_initialize+0x16>
+  10:	a01c      	add	r0, pc, #112	; (adr r0, 84 <mr_license_mgr_initialize+0x84>)
+  12:	f7ff fffe 	bl	0 <mr_remove>
+  16:	210a      	movs	r1, #10
+  18:	a01a      	add	r0, pc, #104	; (adr r0, 84 <mr_license_mgr_initialize+0x84>)
+  1a:	f7ff fffe 	bl	0 <mr_open>
+  1e:	4d1c      	ldr	r5, [pc, #112]	; (90 <mr_license_mgr_initialize+0x90>)
+  20:	2800      	cmp	r0, #0
+  22:	60a8      	str	r0, [r5, #8]
+  24:	dd04      	ble.n	30 <mr_license_mgr_initialize+0x30>
+  26:	2001      	movs	r0, #1
+  28:	0240      	lsls	r0, r0, #9
+  2a:	f7ff fffe 	bl	0 <mr_mem_get_ex>
+  2e:	60e8      	str	r0, [r5, #12]
+  30:	2400      	movs	r4, #0
+  32:	4f18      	ldr	r7, [pc, #96]	; (94 <mr_license_mgr_initialize+0x94>)
+  34:	0026      	movs	r6, r4
+  36:	e00f      	b.n	58 <mr_license_mgr_initialize+0x58>
+  38:	602e      	str	r6, [r5, #0]
+  3a:	4780      	blx	r0
+  3c:	6828      	ldr	r0, [r5, #0]
+  3e:	2800      	cmp	r0, #0
+  40:	d009      	beq.n	56 <mr_license_mgr_initialize+0x56>
+  42:	4915      	ldr	r1, [pc, #84]	; (98 <mr_license_mgr_initialize+0x98>)
+  44:	4815      	ldr	r0, [pc, #84]	; (9c <mr_license_mgr_initialize+0x9c>)
+  46:	f7ff fffe 	bl	0 <mr_plat>
+  4a:	4915      	ldr	r1, [pc, #84]	; (a0 <mr_license_mgr_initialize+0xa0>)
+  4c:	4308      	orrs	r0, r1
+  4e:	6068      	str	r0, [r5, #4]
+  50:	6829      	ldr	r1, [r5, #0]
+  52:	4788      	blx	r1
+  54:	606e      	str	r6, [r5, #4]
+  56:	1c64      	adds	r4, r4, #1
+  58:	00a0      	lsls	r0, r4, #2
+  5a:	5838      	ldr	r0, [r7, r0]
+  5c:	2800      	cmp	r0, #0
+  5e:	d1eb      	bne.n	38 <mr_license_mgr_initialize+0x38>
+  60:	9800      	ldr	r0, [sp, #0]
+  62:	f7ff fffe 	bl	0 <mr_license_mgr_initialize>
+  66:	68a8      	ldr	r0, [r5, #8]
+  68:	2800      	cmp	r0, #0
+  6a:	d002      	beq.n	72 <mr_license_mgr_initialize+0x72>
+  6c:	f7ff fffe 	bl	0 <mr_close>
+  70:	60ae      	str	r6, [r5, #8]
+  72:	68e8      	ldr	r0, [r5, #12]
+  74:	2800      	cmp	r0, #0
+  76:	d004      	beq.n	82 <mr_license_mgr_initialize+0x82>
+  78:	4805      	ldr	r0, [pc, #20]	; (90 <mr_license_mgr_initialize+0x90>)
+  7a:	300c      	adds	r0, #12
+  7c:	f7ff fffe 	bl	0 <mr_mem_free_ex>
+  80:	60ee      	str	r6, [r5, #12]
+  82:	bdf8      	pop	{r3, r4, r5, r6, r7, pc}
+  84:	69707061 	.word	0x69707061
+  88:	2e6f666e 	.word	0x2e6f666e
+  8c:	00747874 	.word	0x00747874
+  90:	000002e8 	.word	0x000002e8
+  94:	00000000 	.word	0x00000000
+  98:	2e5b9d5f 	.word	0x2e5b9d5f
+  9c:	000004bb 	.word	0x000004bb
+  a0:	80000001 	.word	0x80000001
+
+Disassembly of section i.mrapp_license_validator:
+
+00000000 <mrapp_license_validator>:
+   0:	b510      	push	{r4, lr}
+   2:	0004      	movs	r4, r0
+   4:	b0c0      	sub	sp, #256	; 0x100
+   6:	2164      	movs	r1, #100	; 0x64
+   8:	a827      	add	r0, sp, #156	; 0x9c
+   a:	f7ff fffe 	bl	0 <__aeabi_memclr4>
+   e:	4917      	ldr	r1, [pc, #92]	; (6c <mrapp_license_validator+0x6c>)
+  10:	2214      	movs	r2, #20
+  12:	a807      	add	r0, sp, #28
+  14:	f7ff fffe 	bl	0 <__aeabi_memcpy4>
+  18:	0020      	movs	r0, r4
+  1a:	aa04      	add	r2, sp, #16
+  1c:	a907      	add	r1, sp, #28
+  1e:	f7ff fffe 	bl	0 <mrapp_license_validator>
+  22:	2800      	cmp	r0, #0
+  24:	d120      	bne.n	68 <mrapp_license_validator+0x68>
+  26:	a80c      	add	r0, sp, #48	; 0x30
+  28:	f7ff fffe 	bl	0 <mr_getDatetime>
+  2c:	9905      	ldr	r1, [sp, #20]
+  2e:	9804      	ldr	r0, [sp, #16]
+  30:	aa27      	add	r2, sp, #156	; 0x9c
+  32:	f7ff fffe 	bl	0 <_mr_decode>
+  36:	9809      	ldr	r0, [sp, #36]	; 0x24
+  38:	ab08      	add	r3, sp, #32
+  3a:	7c9a      	ldrb	r2, [r3, #18]
+  3c:	990a      	ldr	r1, [sp, #40]	; 0x28
+  3e:	466c      	mov	r4, sp
+  40:	c407      	stmia	r4!, {r0, r1, r2}
+  42:	a906      	add	r1, sp, #24
+  44:	c90e      	ldmia	r1, {r1, r2, r3}
+  46:	a80e      	add	r0, sp, #56	; 0x38
+  48:	f7ff fffe 	bl	0 <__1sprintf>
+  4c:	aa27      	add	r2, sp, #156	; 0x9c
+  4e:	a90e      	add	r1, sp, #56	; 0x38
+  50:	a007      	add	r0, pc, #28	; (adr r0, 70 <mrapp_license_validator+0x70>)
+  52:	f7ff fffe 	bl	0 <mr_printf>
+  56:	a927      	add	r1, sp, #156	; 0x9c
+  58:	a80e      	add	r0, sp, #56	; 0x38
+  5a:	f7ff fffe 	bl	0 <strcmp>
+  5e:	2800      	cmp	r0, #0
+  60:	d102      	bne.n	68 <mrapp_license_validator+0x68>
+  62:	a00b      	add	r0, pc, #44	; (adr r0, 90 <mrapp_license_validator+0x90>)
+  64:	f7ff fffe 	bl	0 <mr_printf>
+  68:	b040      	add	sp, #256	; 0x100
+  6a:	bd10      	pop	{r4, pc}
+  6c:	0000007c 	.word	0x0000007c
+  70:	7061726d 	.word	0x7061726d
+  74:	696c5f70 	.word	0x696c5f70
+  78:	736e6563 	.word	0x736e6563
+  7c:	61765f65 	.word	0x61765f65
+  80:	6164696c 	.word	0x6164696c
+  84:	3a726f74 	.word	0x3a726f74
+  88:	2c732520 	.word	0x2c732520
+  8c:	00732520 	.word	0x00732520
+  90:	7061726d 	.word	0x7061726d
+  94:	696c5f70 	.word	0x696c5f70
+  98:	736e6563 	.word	0x736e6563
+  9c:	61765f65 	.word	0x61765f65
+  a0:	6164696c 	.word	0x6164696c
+  a4:	20726f74 	.word	0x20726f74
+  a8:	00006b6f 	.word	0x00006b6f
+
+Disassembly of section i.mrapp_license_register:
+
+00000000 <mrapp_license_register>:
+   0:	4801      	ldr	r0, [pc, #4]	; (8 <mrapp_license_register+0x8>)
+   2:	4902      	ldr	r1, [pc, #8]	; (c <mrapp_license_register+0xc>)
+   4:	6008      	str	r0, [r1, #0]
+   6:	4770      	bx	lr
+   8:	00000000 	.word	0x00000000
+   c:	000002e8 	.word	0x000002e8
+
+Disassembly of section i.DSM_asciiNToUnicode:
+
+00000000 <DSM_asciiNToUnicode>:
+   0:	b530      	push	{r4, r5, lr}
+   2:	2400      	movs	r4, #0
+   4:	e005      	b.n	12 <DSM_asciiNToUnicode+0x12>
+   6:	780d      	ldrb	r5, [r1, #0]
+   8:	1c43      	adds	r3, r0, #1
+   a:	1c49      	adds	r1, r1, #1
+   c:	7005      	strb	r5, [r0, #0]
+   e:	1c80      	adds	r0, r0, #2
+  10:	701c      	strb	r4, [r3, #0]
+  12:	1e52      	subs	r2, r2, #1
+  14:	d2f7      	bcs.n	6 <DSM_asciiNToUnicode+0x6>
+  16:	7004      	strb	r4, [r0, #0]
+  18:	7044      	strb	r4, [r0, #1]
+  1a:	bd30      	pop	{r4, r5, pc}
+
+Disassembly of section i.decode64:
+
+00000000 <decode64>:
+   0:	b5f0      	push	{r4, r5, r6, r7, lr}
+   2:	2400      	movs	r4, #0
+   4:	4f18      	ldr	r7, [pc, #96]	; (68 <decode64+0x68>)
+   6:	0023      	movs	r3, r4
+   8:	e027      	b.n	5a <decode64+0x5a>
+   a:	7805      	ldrb	r5, [r0, #0]
+   c:	2d0d      	cmp	r5, #13
+   e:	d022      	beq.n	56 <decode64+0x56>
+  10:	2d0a      	cmp	r5, #10
+  12:	d020      	beq.n	56 <decode64+0x56>
+  14:	7846      	ldrb	r6, [r0, #1]
+  16:	5d7d      	ldrb	r5, [r7, r5]
+  18:	1c5b      	adds	r3, r3, #1
+  1a:	5dbe      	ldrb	r6, [r7, r6]
+  1c:	04ad      	lsls	r5, r5, #18
+  1e:	0336      	lsls	r6, r6, #12
+  20:	1975      	adds	r5, r6, r5
+  22:	0c2e      	lsrs	r6, r5, #16
+  24:	700e      	strb	r6, [r1, #0]
+  26:	7886      	ldrb	r6, [r0, #2]
+  28:	1c49      	adds	r1, r1, #1
+  2a:	1c80      	adds	r0, r0, #2
+  2c:	2e2a      	cmp	r6, #42	; 0x2a
+  2e:	d010      	beq.n	52 <decode64+0x52>
+  30:	5dbe      	ldrb	r6, [r7, r6]
+  32:	1c5b      	adds	r3, r3, #1
+  34:	01b6      	lsls	r6, r6, #6
+  36:	1975      	adds	r5, r6, r5
+  38:	0a2e      	lsrs	r6, r5, #8
+  3a:	700e      	strb	r6, [r1, #0]
+  3c:	7846      	ldrb	r6, [r0, #1]
+  3e:	1c49      	adds	r1, r1, #1
+  40:	1c40      	adds	r0, r0, #1
+  42:	2e2a      	cmp	r6, #42	; 0x2a
+  44:	d005      	beq.n	52 <decode64+0x52>
+  46:	5dbe      	ldrb	r6, [r7, r6]
+  48:	1c40      	adds	r0, r0, #1
+  4a:	1975      	adds	r5, r6, r5
+  4c:	700d      	strb	r5, [r1, #0]
+  4e:	1c49      	adds	r1, r1, #1
+  50:	1c5b      	adds	r3, r3, #1
+  52:	1d24      	adds	r4, r4, #4
+  54:	e001      	b.n	5a <decode64+0x5a>
+  56:	1c40      	adds	r0, r0, #1
+  58:	1c64      	adds	r4, r4, #1
+  5a:	4294      	cmp	r4, r2
+  5c:	dbd5      	blt.n	a <decode64+0xa>
+  5e:	2000      	movs	r0, #0
+  60:	7008      	strb	r0, [r1, #0]
+  62:	0018      	movs	r0, r3
+  64:	bdf0      	pop	{r4, r5, r6, r7, pc}
+  66:	0000      	.short	0x0000
+  68:	00000000 	.word	0x00000000
+
+Disassembly of section i.i_SetDeleteSmsInfo:
+
+00000000 <i_SetDeleteSmsInfo>:
+   0:	b5f8      	push	{r3, r4, r5, r6, r7, lr}
+   2:	0006      	movs	r6, r0
+   4:	1d00      	adds	r0, r0, #4
+   6:	f7ff fffe 	bl	0 <strlen>
+   a:	1e80      	subs	r0, r0, #2
+   c:	2813      	cmp	r0, #19
+   e:	d204      	bcs.n	1a <i_SetDeleteSmsInfo+0x1a>
+  10:	69f0      	ldr	r0, [r6, #28]
+  12:	280c      	cmp	r0, #12
+  14:	dc01      	bgt.n	1a <i_SetDeleteSmsInfo+0x1a>
+  16:	2801      	cmp	r0, #1
+  18:	da02      	bge.n	20 <i_SetDeleteSmsInfo+0x20>
+  1a:	2000      	movs	r0, #0
+  1c:	43c0      	mvns	r0, r0
+  1e:	bdf8      	pop	{r3, r4, r5, r6, r7, pc}
+  20:	6830      	ldr	r0, [r6, #0]
+  22:	2800      	cmp	r0, #0
+  24:	dc1b      	bgt.n	5e <i_SetDeleteSmsInfo+0x5e>
+  26:	4f10      	ldr	r7, [pc, #64]	; (68 <i_SetDeleteSmsInfo+0x68>)
+  28:	2400      	movs	r4, #0
+  2a:	2028      	movs	r0, #40	; 0x28
+  2c:	4360      	muls	r0, r4
+  2e:	19c5      	adds	r5, r0, r7
+  30:	6a68      	ldr	r0, [r5, #36]	; 0x24
+  32:	2800      	cmp	r0, #0
+  34:	d00e      	beq.n	54 <i_SetDeleteSmsInfo+0x54>
+  36:	1d28      	adds	r0, r5, #4
+  38:	f7ff fffe 	bl	0 <strlen>
+  3c:	0002      	movs	r2, r0
+  3e:	1d28      	adds	r0, r5, #4
+  40:	1d31      	adds	r1, r6, #4
+  42:	f7ff fffe 	bl	0 <strncmp>
+  46:	2800      	cmp	r0, #0
+  48:	d104      	bne.n	54 <i_SetDeleteSmsInfo+0x54>
+  4a:	2128      	movs	r1, #40	; 0x28
+  4c:	0028      	movs	r0, r5
+  4e:	f7ff fffe 	bl	0 <__aeabi_memclr4>
+  52:	e002      	b.n	5a <i_SetDeleteSmsInfo+0x5a>
+  54:	1c64      	adds	r4, r4, #1
+  56:	2c08      	cmp	r4, #8
+  58:	dbe7      	blt.n	2a <i_SetDeleteSmsInfo+0x2a>
+  5a:	2000      	movs	r0, #0
+  5c:	bdf8      	pop	{r3, r4, r5, r6, r7, pc}
+  5e:	0030      	movs	r0, r6
+  60:	f7ff fffe 	bl	0 <i_SetDeleteSmsInfo>
+  64:	bdf8      	pop	{r3, r4, r5, r6, r7, pc}
+  66:	0000      	.short	0x0000
+  68:	00000004 	.word	0x00000004

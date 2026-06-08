@@ -1,0 +1,790 @@
+
+/tmp/mtk_disasm/full1968/mr_gc.obj:     file format elf32-littlearm
+
+
+Disassembly of section i.reallymarkobject:
+
+00000000 <reallymarkobject>:
+   0:	e5d12005 	ldrb	r2, [r1, #5]
+   4:	e3822001 	orr	r2, r2, #1
+   8:	e5c12005 	strb	r2, [r1, #5]
+   c:	e5d12004 	ldrb	r2, [r1, #4]
+  10:	e2422005 	sub	r2, r2, #5
+  14:	e3520004 	cmp	r2, #4
+  18:	908ff102 	addls	pc, pc, r2, lsl #2
+  1c:	e12fff1e 	bx	lr
+  20:	ea00000b 	b	54 <reallymarkobject+0x54>
+  24:	ea000007 	b	48 <reallymarkobject+0x48>
+  28:	ea000001 	b	34 <reallymarkobject+0x34>
+  2c:	ea00000b 	b	60 <reallymarkobject+0x60>
+  30:	ea00000d 	b	6c <reallymarkobject+0x6c>
+  34:	e5911008 	ldr	r1, [r1, #8]
+  38:	e5d12005 	ldrb	r2, [r1, #5]
+  3c:	e3120011 	tst	r2, #17
+  40:	0affffee 	beq	0 <reallymarkobject>
+  44:	e12fff1e 	bx	lr
+  48:	e5902000 	ldr	r2, [r0]
+  4c:	e5812008 	str	r2, [r1, #8]
+  50:	ea000007 	b	74 <reallymarkobject+0x74>
+  54:	e5902000 	ldr	r2, [r0]
+  58:	e5812018 	str	r2, [r1, #24]
+  5c:	ea000004 	b	74 <reallymarkobject+0x74>
+  60:	e5902000 	ldr	r2, [r0]
+  64:	e581204c 	str	r2, [r1, #76]	; 0x4c
+  68:	ea000001 	b	74 <reallymarkobject+0x74>
+  6c:	e5902000 	ldr	r2, [r0]
+  70:	e5812040 	str	r2, [r1, #64]	; 0x40
+  74:	e5801000 	str	r1, [r0]
+  78:	e12fff1e 	bx	lr
+
+Disassembly of section i.mr_C_separateudata:
+
+00000000 <mr_C_separateudata>:
+   0:	e92d43f8 	push	{r3, r4, r5, r6, r7, r8, r9, lr}
+   4:	e1a07000 	mov	r7, r0
+   8:	e5900010 	ldr	r0, [r0, #16]
+   c:	e3a09000 	mov	r9, #0
+  10:	e1a0600d 	mov	r6, sp
+  14:	e3a08000 	mov	r8, #0
+  18:	e2805010 	add	r5, r0, #16
+  1c:	e58d9000 	str	r9, [sp]
+  20:	ea00001c 	b	98 <mr_C_separateudata+0x98>
+  24:	e5d40005 	ldrb	r0, [r4, #5]
+  28:	e3100011 	tst	r0, #17
+  2c:	1a000001 	bne	38 <mr_C_separateudata+0x38>
+  30:	e3100002 	tst	r0, #2
+  34:	1a000001 	bne	40 <mr_C_separateudata+0x40>
+  38:	e1a05004 	mov	r5, r4
+  3c:	ea000015 	b	98 <mr_C_separateudata+0x98>
+  40:	e5940008 	ldr	r0, [r4, #8]
+  44:	e5d01006 	ldrb	r1, [r0, #6]
+  48:	e3110004 	tst	r1, #4
+  4c:	1a000005 	bne	68 <mr_C_separateudata+0x68>
+  50:	e5971010 	ldr	r1, [r7, #16]
+  54:	e591205c 	ldr	r2, [r1, #92]	; 0x5c
+  58:	e3a01002 	mov	r1, #2
+  5c:	ebfffffe 	bl	0 <mr_T_gettm>
+  60:	e3500000 	cmp	r0, #0
+  64:	1a000003 	bne	78 <mr_C_separateudata+0x78>
+  68:	e5d40005 	ldrb	r0, [r4, #5]
+  6c:	e20000fd 	and	r0, r0, #253	; 0xfd
+  70:	e5c40005 	strb	r0, [r4, #5]
+  74:	eaffffef 	b	38 <mr_C_separateudata+0x38>
+  78:	e594000c 	ldr	r0, [r4, #12]
+  7c:	e0800008 	add	r0, r0, r8
+  80:	e2808010 	add	r8, r0, #16
+  84:	e5940000 	ldr	r0, [r4]
+  88:	e5850000 	str	r0, [r5]
+  8c:	e5849000 	str	r9, [r4]
+  90:	e5864000 	str	r4, [r6]
+  94:	e1a06004 	mov	r6, r4
+  98:	e5954000 	ldr	r4, [r5]
+  9c:	e3540000 	cmp	r4, #0
+  a0:	1affffdf 	bne	24 <mr_C_separateudata+0x24>
+  a4:	e5970010 	ldr	r0, [r7, #16]
+  a8:	e5900014 	ldr	r0, [r0, #20]
+  ac:	e5860000 	str	r0, [r6]
+  b0:	e59d0000 	ldr	r0, [sp]
+  b4:	e5971010 	ldr	r1, [r7, #16]
+  b8:	e5810014 	str	r0, [r1, #20]
+  bc:	e1a00008 	mov	r0, r8
+  c0:	e8bd83f8 	pop	{r3, r4, r5, r6, r7, r8, r9, pc}
+
+Disassembly of section i.traversetable:
+
+00000000 <traversetable>:
+   0:	e92d47f0 	push	{r4, r5, r6, r7, r8, r9, sl, lr}
+   4:	e1a04001 	mov	r4, r1
+   8:	e5911008 	ldr	r1, [r1, #8]
+   c:	e1a09000 	mov	r9, r0
+  10:	e5d10005 	ldrb	r0, [r1, #5]
+  14:	e3a07000 	mov	r7, #0
+  18:	e3a06000 	mov	r6, #0
+  1c:	e3100011 	tst	r0, #17
+  20:	01a00009 	moveq	r0, r9
+  24:	0bfffffe 	bleq	0 <traversetable>
+  28:	e5940008 	ldr	r0, [r4, #8]
+  2c:	e5d01006 	ldrb	r1, [r0, #6]
+  30:	e3110008 	tst	r1, #8
+  34:	13a00000 	movne	r0, #0
+  38:	1a000003 	bne	4c <traversetable+0x4c>
+  3c:	e5991010 	ldr	r1, [r9, #16]
+  40:	e5912060 	ldr	r2, [r1, #96]	; 0x60
+  44:	e3a01003 	mov	r1, #3
+  48:	ebfffffe 	bl	0 <mr_T_gettm>
+  4c:	e1b05000 	movs	r5, r0
+  50:	0a000021 	beq	dc <traversetable+0xdc>
+  54:	e5950000 	ldr	r0, [r5]
+  58:	e3500004 	cmp	r0, #4
+  5c:	1a00001e 	bne	dc <traversetable+0xdc>
+  60:	e5950004 	ldr	r0, [r5, #4]
+  64:	e3a0106b 	mov	r1, #107	; 0x6b
+  68:	e2800010 	add	r0, r0, #16
+  6c:	ebfffffe 	bl	0 <strchr>
+  70:	e1b07000 	movs	r7, r0
+  74:	e5950004 	ldr	r0, [r5, #4]
+  78:	13a07001 	movne	r7, #1
+  7c:	e3a01076 	mov	r1, #118	; 0x76
+  80:	e2800010 	add	r0, r0, #16
+  84:	ebfffffe 	bl	0 <strchr>
+  88:	e1b06000 	movs	r6, r0
+  8c:	13a06001 	movne	r6, #1
+  90:	e1970006 	orrs	r0, r7, r6
+  94:	0a00000e 	beq	d4 <traversetable+0xd4>
+  98:	e5d40005 	ldrb	r0, [r4, #5]
+  9c:	e1a01087 	lsl	r1, r7, #1
+  a0:	e1811106 	orr	r1, r1, r6, lsl #2
+  a4:	e3c00006 	bic	r0, r0, #6
+  a8:	e1810000 	orr	r0, r1, r0
+  ac:	e3570000 	cmp	r7, #0
+  b0:	e5c40005 	strb	r0, [r4, #5]
+  b4:	02890008 	addeq	r0, r9, #8
+  b8:	0a000002 	beq	c8 <traversetable+0xc8>
+  bc:	e3560000 	cmp	r6, #0
+  c0:	02890004 	addeq	r0, r9, #4
+  c4:	1289000c 	addne	r0, r9, #12
+  c8:	e5901000 	ldr	r1, [r0]
+  cc:	e5841018 	str	r1, [r4, #24]
+  d0:	e5804000 	str	r4, [r0]
+  d4:	e3560000 	cmp	r6, #0
+  d8:	1a00000c 	bne	110 <traversetable+0x110>
+  dc:	e594501c 	ldr	r5, [r4, #28]
+  e0:	ea000008 	b	108 <traversetable+0x108>
+  e4:	e594000c 	ldr	r0, [r4, #12]
+  e8:	e7901185 	ldr	r1, [r0, r5, lsl #3]
+  ec:	e3510004 	cmp	r1, #4
+  f0:	a0800185 	addge	r0, r0, r5, lsl #3
+  f4:	a5901004 	ldrge	r1, [r0, #4]
+  f8:	a5d10005 	ldrbge	r0, [r1, #5]
+  fc:	a3100011 	tstge	r0, #17
+ 100:	01a00009 	moveq	r0, r9
+ 104:	0bfffffe 	bleq	0 <traversetable>
+ 108:	e2555001 	subs	r5, r5, #1
+ 10c:	2afffff4 	bcs	e4 <traversetable+0xe4>
+ 110:	e5d40007 	ldrb	r0, [r4, #7]
+ 114:	e3a01001 	mov	r1, #1
+ 118:	e1a08011 	lsl	r8, r1, r0
+ 11c:	ea000015 	b	178 <traversetable+0x178>
+ 120:	e5940010 	ldr	r0, [r4, #16]
+ 124:	e0881108 	add	r1, r8, r8, lsl #2
+ 128:	e0805101 	add	r5, r0, r1, lsl #2
+ 12c:	e5950008 	ldr	r0, [r5, #8]
+ 130:	e3500000 	cmp	r0, #0
+ 134:	0a00000f 	beq	178 <traversetable+0x178>
+ 138:	e5950000 	ldr	r0, [r5]
+ 13c:	e3500004 	cmp	r0, #4
+ 140:	a5951004 	ldrge	r1, [r5, #4]
+ 144:	a5d10005 	ldrbge	r0, [r1, #5]
+ 148:	a3100011 	tstge	r0, #17
+ 14c:	03570000 	cmpeq	r7, #0
+ 150:	01a00009 	moveq	r0, r9
+ 154:	0bfffffe 	bleq	0 <traversetable>
+ 158:	e5950008 	ldr	r0, [r5, #8]
+ 15c:	e3500004 	cmp	r0, #4
+ 160:	a595100c 	ldrge	r1, [r5, #12]
+ 164:	a5d10005 	ldrbge	r0, [r1, #5]
+ 168:	a3100011 	tstge	r0, #17
+ 16c:	03560000 	cmpeq	r6, #0
+ 170:	01a00009 	moveq	r0, r9
+ 174:	0bfffffe 	bleq	0 <traversetable>
+ 178:	e2588001 	subs	r8, r8, #1
+ 17c:	2affffe7 	bcs	120 <traversetable+0x120>
+ 180:	e8bd87f0 	pop	{r4, r5, r6, r7, r8, r9, sl, pc}
+
+Disassembly of section i.traversestack:
+
+00000000 <traversestack>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a07000 	mov	r7, r0
+   8:	e5910040 	ldr	r0, [r1, #64]	; 0x40
+   c:	e1a05001 	mov	r5, r1
+  10:	e3500004 	cmp	r0, #4
+  14:	a5951044 	ldrge	r1, [r5, #68]	; 0x44
+  18:	a5d10005 	ldrbge	r0, [r1, #5]
+  1c:	a3100011 	tstge	r0, #17
+  20:	01a00007 	moveq	r0, r7
+  24:	0bfffffe 	bleq	0 <traversestack>
+  28:	e5950028 	ldr	r0, [r5, #40]	; 0x28
+  2c:	e5952014 	ldr	r2, [r5, #20]
+  30:	e5956008 	ldr	r6, [r5, #8]
+  34:	ea000003 	b	48 <traversestack+0x48>
+  38:	e5901004 	ldr	r1, [r0, #4]
+  3c:	e2800018 	add	r0, r0, #24
+  40:	e1510006 	cmp	r1, r6
+  44:	81a06001 	movhi	r6, r1
+  48:	e1520000 	cmp	r2, r0
+  4c:	2afffff9 	bcs	38 <traversestack+0x38>
+  50:	e595401c 	ldr	r4, [r5, #28]
+  54:	ea000007 	b	78 <traversestack+0x78>
+  58:	e5940000 	ldr	r0, [r4]
+  5c:	e3500004 	cmp	r0, #4
+  60:	a5941004 	ldrge	r1, [r4, #4]
+  64:	a5d10005 	ldrbge	r0, [r1, #5]
+  68:	a3100011 	tstge	r0, #17
+  6c:	01a00007 	moveq	r0, r7
+  70:	0bfffffe 	bleq	0 <traversestack>
+  74:	e2844008 	add	r4, r4, #8
+  78:	e5950008 	ldr	r0, [r5, #8]
+  7c:	e1500004 	cmp	r0, r4
+  80:	8afffff4 	bhi	58 <traversestack+0x58>
+  84:	e3a00000 	mov	r0, #0
+  88:	e1540006 	cmp	r4, r6
+  8c:	94840008 	strls	r0, [r4], #8
+  90:	9afffffc 	bls	88 <traversestack+0x88>
+  94:	e5950014 	ldr	r0, [r5, #20]
+  98:	e5951028 	ldr	r1, [r5, #40]	; 0x28
+  9c:	e0400001 	sub	r0, r0, r1
+  a0:	e3a01018 	mov	r1, #24
+  a4:	ebfffffe 	bl	0 <__aeabi_idivmod>
+  a8:	e1d512bc 	ldrh	r1, [r5, #44]	; 0x2c
+  ac:	e1510100 	cmp	r1, r0, lsl #2
+  b0:	da000003 	ble	c4 <traversestack+0xc4>
+  b4:	e3510010 	cmp	r1, #16
+  b8:	81a010a1 	lsrhi	r1, r1, #1
+  bc:	81a00005 	movhi	r0, r5
+  c0:	8bfffffe 	blhi	0 <mr_D_reallocCI>
+  c4:	e595001c 	ldr	r0, [r5, #28]
+  c8:	e0460000 	sub	r0, r6, r0
+  cc:	e1a011c0 	asr	r1, r0, #3
+  d0:	e5950020 	ldr	r0, [r5, #32]
+  d4:	e1500101 	cmp	r0, r1, lsl #2
+  d8:	c350005a 	cmpgt	r0, #90	; 0x5a
+  dc:	c0800fa0 	addgt	r0, r0, r0, lsr #31
+  e0:	c1a010c0 	asrgt	r1, r0, #1
+  e4:	c1a00005 	movgt	r0, r5
+  e8:	c8bd41f0 	popgt	{r4, r5, r6, r7, r8, lr}
+  ec:	cafffffe 	bgt	0 <mr_D_reallocstack>
+  f0:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.propagatemarks:
+
+00000000 <propagatemarks>:
+   0:	e92d4010 	push	{r4, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	ea00001a 	b	78 <propagatemarks+0x78>
+   c:	e5d10004 	ldrb	r0, [r1, #4]
+  10:	e3500005 	cmp	r0, #5
+  14:	0a000009 	beq	40 <propagatemarks+0x40>
+  18:	e3500006 	cmp	r0, #6
+  1c:	0a00000c 	beq	54 <propagatemarks+0x54>
+  20:	e3500008 	cmp	r0, #8
+  24:	0a00000f 	beq	68 <propagatemarks+0x68>
+  28:	e3500009 	cmp	r0, #9
+  2c:	05910040 	ldreq	r0, [r1, #64]	; 0x40
+  30:	05840000 	streq	r0, [r4]
+  34:	01a00004 	moveq	r0, r4
+  38:	0bfffffe 	bleq	0 <propagatemarks>
+  3c:	ea00000d 	b	78 <propagatemarks+0x78>
+  40:	e5910018 	ldr	r0, [r1, #24]
+  44:	e5840000 	str	r0, [r4]
+  48:	e1a00004 	mov	r0, r4
+  4c:	ebfffffe 	bl	0 <propagatemarks>
+  50:	ea000008 	b	78 <propagatemarks+0x78>
+  54:	e5910008 	ldr	r0, [r1, #8]
+  58:	e5840000 	str	r0, [r4]
+  5c:	e1a00004 	mov	r0, r4
+  60:	ebfffffe 	bl	0 <propagatemarks>
+  64:	ea000003 	b	78 <propagatemarks+0x78>
+  68:	e591004c 	ldr	r0, [r1, #76]	; 0x4c
+  6c:	e5840000 	str	r0, [r4]
+  70:	e1a00004 	mov	r0, r4
+  74:	ebfffffe 	bl	0 <propagatemarks>
+  78:	e5941000 	ldr	r1, [r4]
+  7c:	e3510000 	cmp	r1, #0
+  80:	1affffe1 	bne	c <propagatemarks+0xc>
+  84:	e8bd8010 	pop	{r4, pc}
+
+Disassembly of section i.cleartablekeys:
+
+00000000 <cleartablekeys>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e3a07001 	mov	r7, #1
+   8:	ea00000e 	b	48 <cleartablekeys+0x48>
+   c:	e1a05000 	mov	r5, r0
+  10:	e5d00007 	ldrb	r0, [r0, #7]
+  14:	e1a04017 	lsl	r4, r7, r0
+  18:	ea000007 	b	3c <cleartablekeys+0x3c>
+  1c:	e5950010 	ldr	r0, [r5, #16]
+  20:	e0841104 	add	r1, r4, r4, lsl #2
+  24:	e0806101 	add	r6, r0, r1, lsl #2
+  28:	e1a00006 	mov	r0, r6
+  2c:	ebfffffe 	bl	0 <cleartablekeys>
+  30:	e3500000 	cmp	r0, #0
+  34:	01a00006 	moveq	r0, r6
+  38:	0bfffffe 	bleq	0 <cleartablekeys>
+  3c:	e2544001 	subs	r4, r4, #1
+  40:	2afffff5 	bcs	1c <cleartablekeys+0x1c>
+  44:	e5950018 	ldr	r0, [r5, #24]
+  48:	e3500000 	cmp	r0, #0
+  4c:	1affffee 	bne	c <cleartablekeys+0xc>
+  50:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.cleartablevalues:
+
+00000000 <cleartablevalues>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	ea00001a 	b	74 <cleartablevalues+0x74>
+   8:	e590501c 	ldr	r5, [r0, #28]
+   c:	e1a04000 	mov	r4, r0
+  10:	e3a07000 	mov	r7, #0
+  14:	ea000005 	b	30 <cleartablevalues+0x30>
+  18:	e594000c 	ldr	r0, [r4, #12]
+  1c:	e0806185 	add	r6, r0, r5, lsl #3
+  20:	e1a00006 	mov	r0, r6
+  24:	ebfffffe 	bl	0 <cleartablevalues>
+  28:	e3500000 	cmp	r0, #0
+  2c:	05867000 	streq	r7, [r6]
+  30:	e2555001 	subs	r5, r5, #1
+  34:	2afffff7 	bcs	18 <cleartablevalues+0x18>
+  38:	e5d40007 	ldrb	r0, [r4, #7]
+  3c:	e3a01001 	mov	r1, #1
+  40:	e1a05011 	lsl	r5, r1, r0
+  44:	ea000007 	b	68 <cleartablevalues+0x68>
+  48:	e5940010 	ldr	r0, [r4, #16]
+  4c:	e0851105 	add	r1, r5, r5, lsl #2
+  50:	e0806101 	add	r6, r0, r1, lsl #2
+  54:	e2860008 	add	r0, r6, #8
+  58:	ebfffffe 	bl	0 <cleartablevalues>
+  5c:	e3500000 	cmp	r0, #0
+  60:	01a00006 	moveq	r0, r6
+  64:	0bfffffe 	bleq	0 <cleartablevalues>
+  68:	e2555001 	subs	r5, r5, #1
+  6c:	2afffff5 	bcs	48 <cleartablevalues+0x48>
+  70:	e5940018 	ldr	r0, [r4, #24]
+  74:	e3500000 	cmp	r0, #0
+  78:	1affffe2 	bne	8 <cleartablevalues+0x8>
+  7c:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.mr_C_callGCTM:
+
+00000000 <mr_C_callGCTM>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e5d07031 	ldrb	r7, [r0, #49]	; 0x31
+   8:	e1a04000 	mov	r4, r0
+   c:	e3a00000 	mov	r0, #0
+  10:	e5c40031 	strb	r0, [r4, #49]	; 0x31
+  14:	e5940008 	ldr	r0, [r4, #8]
+  18:	e3a06007 	mov	r6, #7
+  1c:	e2800008 	add	r0, r0, #8
+  20:	e5840008 	str	r0, [r4, #8]
+  24:	ea000026 	b	c4 <mr_C_callGCTM+0xc4>
+  28:	e5951000 	ldr	r1, [r5]
+  2c:	e5801014 	str	r1, [r0, #20]
+  30:	e5940010 	ldr	r0, [r4, #16]
+  34:	e5900010 	ldr	r0, [r0, #16]
+  38:	e5850000 	str	r0, [r5]
+  3c:	e5940010 	ldr	r0, [r4, #16]
+  40:	e5805010 	str	r5, [r0, #16]
+  44:	e5940008 	ldr	r0, [r4, #8]
+  48:	e5205004 	str	r5, [r0, #-4]!
+  4c:	e5006004 	str	r6, [r0, #-4]
+  50:	e5d50005 	ldrb	r0, [r5, #5]
+  54:	e20000fc 	and	r0, r0, #252	; 0xfc
+  58:	e5c50005 	strb	r0, [r5, #5]
+  5c:	e5950008 	ldr	r0, [r5, #8]
+  60:	e5d01006 	ldrb	r1, [r0, #6]
+  64:	e3110004 	tst	r1, #4
+  68:	13a00000 	movne	r0, #0
+  6c:	1a000003 	bne	80 <mr_C_callGCTM+0x80>
+  70:	e5941010 	ldr	r1, [r4, #16]
+  74:	e591205c 	ldr	r2, [r1, #92]	; 0x5c
+  78:	e3a01002 	mov	r1, #2
+  7c:	ebfffffe 	bl	0 <mr_T_gettm>
+  80:	e3500000 	cmp	r0, #0
+  84:	0a00000e 	beq	c4 <mr_C_callGCTM+0xc4>
+  88:	e5941008 	ldr	r1, [r4, #8]
+  8c:	e5902000 	ldr	r2, [r0]
+  90:	e5812000 	str	r2, [r1]
+  94:	e5900004 	ldr	r0, [r0, #4]
+  98:	e3a02000 	mov	r2, #0
+  9c:	e5810004 	str	r0, [r1, #4]
+  a0:	e5940008 	ldr	r0, [r4, #8]
+  a4:	e5a06008 	str	r6, [r0, #8]!
+  a8:	e5805004 	str	r5, [r0, #4]
+  ac:	e5940008 	ldr	r0, [r4, #8]
+  b0:	e2800010 	add	r0, r0, #16
+  b4:	e2401010 	sub	r1, r0, #16
+  b8:	e5840008 	str	r0, [r4, #8]
+  bc:	e1a00004 	mov	r0, r4
+  c0:	ebfffffe 	bl	0 <mr_D_call>
+  c4:	e5940010 	ldr	r0, [r4, #16]
+  c8:	e5905014 	ldr	r5, [r0, #20]
+  cc:	e3550000 	cmp	r5, #0
+  d0:	1affffd4 	bne	28 <mr_C_callGCTM+0x28>
+  d4:	e5940008 	ldr	r0, [r4, #8]
+  d8:	e2400008 	sub	r0, r0, #8
+  dc:	e5840008 	str	r0, [r4, #8]
+  e0:	e5c47031 	strb	r7, [r4, #49]	; 0x31
+  e4:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.mr_C_sweep:
+
+00000000 <mr_C_sweep>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1b06001 	movs	r6, r1
+   8:	e1a05000 	mov	r5, r0
+   c:	e5950010 	ldr	r0, [r5, #16]
+  10:	13a06c01 	movne	r6, #256	; 0x100
+  14:	e2801010 	add	r1, r0, #16
+  18:	e1a00005 	mov	r0, r5
+  1c:	e1a02006 	mov	r2, r6
+  20:	ebfffffe 	bl	0 <mr_C_sweep>
+  24:	e3a04000 	mov	r4, #0
+  28:	ea000009 	b	54 <mr_C_sweep+0x54>
+  2c:	e5900000 	ldr	r0, [r0]
+  30:	e1a02006 	mov	r2, r6
+  34:	e0801104 	add	r1, r0, r4, lsl #2
+  38:	e1a00005 	mov	r0, r5
+  3c:	ebfffffe 	bl	0 <mr_C_sweep>
+  40:	e5951010 	ldr	r1, [r5, #16]
+  44:	e2844001 	add	r4, r4, #1
+  48:	e5912004 	ldr	r2, [r1, #4]
+  4c:	e0420000 	sub	r0, r2, r0
+  50:	e5810004 	str	r0, [r1, #4]
+  54:	e5950010 	ldr	r0, [r5, #16]
+  58:	e5901008 	ldr	r1, [r0, #8]
+  5c:	e1510004 	cmp	r1, r4
+  60:	cafffff1 	bgt	2c <mr_C_sweep+0x2c>
+  64:	e5950010 	ldr	r0, [r5, #16]
+  68:	e1a02006 	mov	r2, r6
+  6c:	e280100c 	add	r1, r0, #12
+  70:	e1a00005 	mov	r0, r5
+  74:	e8bd4070 	pop	{r4, r5, r6, lr}
+  78:	eafffffe 	b	0 <mr_C_sweep>
+
+Disassembly of section i.mark:
+
+00000000 <mark>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	e5900010 	ldr	r0, [r0, #16]
+   c:	e24dd018 	sub	sp, sp, #24
+  10:	e3a06000 	mov	r6, #0
+  14:	e1a05000 	mov	r5, r0
+  18:	e58d6004 	str	r6, [sp, #4]
+  1c:	e58d600c 	str	r6, [sp, #12]
+  20:	e58d6008 	str	r6, [sp, #8]
+  24:	e58d6010 	str	r6, [sp, #16]
+  28:	e58d0014 	str	r0, [sp, #20]
+  2c:	e5940010 	ldr	r0, [r4, #16]
+  30:	e5901034 	ldr	r1, [r0, #52]	; 0x34
+  34:	e3510004 	cmp	r1, #4
+  38:	a5901038 	ldrge	r1, [r0, #56]	; 0x38
+  3c:	a5d10005 	ldrbge	r0, [r1, #5]
+  40:	a3100011 	tstge	r0, #17
+  44:	028d0004 	addeq	r0, sp, #4
+  48:	0bfffffe 	bleq	0 <mark>
+  4c:	e5940010 	ldr	r0, [r4, #16]
+  50:	e590102c 	ldr	r1, [r0, #44]	; 0x2c
+  54:	e3510004 	cmp	r1, #4
+  58:	a5901030 	ldrge	r1, [r0, #48]	; 0x30
+  5c:	a5d10005 	ldrbge	r0, [r1, #5]
+  60:	a3100011 	tstge	r0, #17
+  64:	028d0004 	addeq	r0, sp, #4
+  68:	0bfffffe 	bleq	0 <mark>
+  6c:	e595103c 	ldr	r1, [r5, #60]	; 0x3c
+  70:	e28d0004 	add	r0, sp, #4
+  74:	ebfffffe 	bl	0 <mark>
+  78:	e595003c 	ldr	r0, [r5, #60]	; 0x3c
+  7c:	e1500004 	cmp	r0, r4
+  80:	0a000004 	beq	98 <mark+0x98>
+  84:	e5d40005 	ldrb	r0, [r4, #5]
+  88:	e3100011 	tst	r0, #17
+  8c:	01a01004 	moveq	r1, r4
+  90:	028d0004 	addeq	r0, sp, #4
+  94:	0bfffffe 	bleq	0 <mark>
+  98:	e28d0004 	add	r0, sp, #4
+  9c:	ebfffffe 	bl	0 <mark>
+  a0:	e59d0010 	ldr	r0, [sp, #16]
+  a4:	ebfffffe 	bl	0 <mark>
+  a8:	e59d000c 	ldr	r0, [sp, #12]
+  ac:	ebfffffe 	bl	0 <mark>
+  b0:	e59d5010 	ldr	r5, [sp, #16]
+  b4:	e1a00004 	mov	r0, r4
+  b8:	e58d6010 	str	r6, [sp, #16]
+  bc:	e58d600c 	str	r6, [sp, #12]
+  c0:	ebfffffe 	bl	0 <mark>
+  c4:	e1a06000 	mov	r6, r0
+  c8:	e59d0014 	ldr	r0, [sp, #20]
+  cc:	e5904014 	ldr	r4, [r0, #20]
+  d0:	ea000006 	b	f0 <mark+0xf0>
+  d4:	e5d40005 	ldrb	r0, [r4, #5]
+  d8:	e1a01004 	mov	r1, r4
+  dc:	e20000fe 	and	r0, r0, #254	; 0xfe
+  e0:	e5c40005 	strb	r0, [r4, #5]
+  e4:	e28d0004 	add	r0, sp, #4
+  e8:	ebfffffe 	bl	0 <mark>
+  ec:	e5944000 	ldr	r4, [r4]
+  f0:	e3540000 	cmp	r4, #0
+  f4:	1afffff6 	bne	d4 <mark+0xd4>
+  f8:	e28d0004 	add	r0, sp, #4
+  fc:	ebfffffe 	bl	0 <mark>
+ 100:	e1a00005 	mov	r0, r5
+ 104:	ebfffffe 	bl	0 <mark>
+ 108:	e59d0008 	ldr	r0, [sp, #8]
+ 10c:	ebfffffe 	bl	0 <mark>
+ 110:	e59d000c 	ldr	r0, [sp, #12]
+ 114:	ebfffffe 	bl	0 <mark>
+ 118:	e59d0010 	ldr	r0, [sp, #16]
+ 11c:	ebfffffe 	bl	0 <mark>
+ 120:	e59d0010 	ldr	r0, [sp, #16]
+ 124:	ebfffffe 	bl	0 <mark>
+ 128:	e1a00006 	mov	r0, r6
+ 12c:	e28dd018 	add	sp, sp, #24
+ 130:	e8bd8070 	pop	{r4, r5, r6, pc}
+
+Disassembly of section i.mr_C_collectgarbage:
+
+00000000 <mr_C_collectgarbage>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a04000 	mov	r4, r0
+   8:	ebfffffe 	bl	0 <mr_C_collectgarbage>
+   c:	e1a06000 	mov	r6, r0
+  10:	e1a00004 	mov	r0, r4
+  14:	e3a01000 	mov	r1, #0
+  18:	ebfffffe 	bl	0 <mr_C_collectgarbage>
+  1c:	e5941010 	ldr	r1, [r4, #16]
+  20:	e5910008 	ldr	r0, [r1, #8]
+  24:	e5911004 	ldr	r1, [r1, #4]
+  28:	e1a02fc0 	asr	r2, r0, #31
+  2c:	e0802f22 	add	r2, r0, r2, lsr #30
+  30:	e1a02142 	asr	r2, r2, #2
+  34:	e1520001 	cmp	r2, r1
+  38:	c3500b02 	cmpgt	r0, #2048	; 0x800
+  3c:	c0800fa0 	addgt	r0, r0, r0, lsr #31
+  40:	c1a010c0 	asrgt	r1, r0, #1
+  44:	c1a00004 	movgt	r0, r4
+  48:	cbfffffe 	blgt	0 <mr_S_resize>
+  4c:	e5940010 	ldr	r0, [r4, #16]
+  50:	e590201c 	ldr	r2, [r0, #28]
+  54:	e3520b02 	cmp	r2, #2048	; 0x800
+  58:	9a000008 	bls	80 <mr_C_collectgarbage+0x80>
+  5c:	e5901018 	ldr	r1, [r0, #24]
+  60:	e1a050a2 	lsr	r5, r2, #1
+  64:	e1a03005 	mov	r3, r5
+  68:	e1a00004 	mov	r0, r4
+  6c:	ebfffffe 	bl	0 <mr_M_realloc>
+  70:	e5941010 	ldr	r1, [r4, #16]
+  74:	e5810018 	str	r0, [r1, #24]
+  78:	e5940010 	ldr	r0, [r4, #16]
+  7c:	e580501c 	str	r5, [r0, #28]
+  80:	e5940010 	ldr	r0, [r4, #16]
+  84:	e5901024 	ldr	r1, [r0, #36]	; 0x24
+  88:	e0661081 	rsb	r1, r6, r1, lsl #1
+  8c:	e5801020 	str	r1, [r0, #32]
+  90:	e1a00004 	mov	r0, r4
+  94:	e8bd4070 	pop	{r4, r5, r6, lr}
+  98:	eafffffe 	b	0 <mr_C_collectgarbage>
+
+Disassembly of section i.mr_C_link:
+
+00000000 <mr_C_link>:
+   0:	e5903010 	ldr	r3, [r0, #16]
+   4:	e593300c 	ldr	r3, [r3, #12]
+   8:	e5813000 	str	r3, [r1]
+   c:	e5900010 	ldr	r0, [r0, #16]
+  10:	e580100c 	str	r1, [r0, #12]
+  14:	e3a00000 	mov	r0, #0
+  18:	e5c10005 	strb	r0, [r1, #5]
+  1c:	e5c12004 	strb	r2, [r1, #4]
+  20:	e12fff1e 	bx	lr
+
+Disassembly of section i.removekey:
+
+00000000 <removekey>:
+   0:	e3a01000 	mov	r1, #0
+   4:	e5801008 	str	r1, [r0, #8]
+   8:	e5901000 	ldr	r1, [r0]
+   c:	e3510004 	cmp	r1, #4
+  10:	a3e01000 	mvnge	r1, #0
+  14:	a5801000 	strge	r1, [r0]
+  18:	e12fff1e 	bx	lr
+
+Disassembly of section i.traverseproto:
+
+00000000 <traverseproto>:
+   0:	e92d4070 	push	{r4, r5, r6, lr}
+   4:	e1a06000 	mov	r6, r0
+   8:	e5910020 	ldr	r0, [r1, #32]
+   c:	e1a04001 	mov	r4, r1
+  10:	e5d01005 	ldrb	r1, [r0, #5]
+  14:	e3811001 	orr	r1, r1, #1
+  18:	e5c01005 	strb	r1, [r0, #5]
+  1c:	e3a00000 	mov	r0, #0
+  20:	ea000008 	b	48 <traverseproto+0x48>
+  24:	e5941008 	ldr	r1, [r4, #8]
+  28:	e7912180 	ldr	r2, [r1, r0, lsl #3]
+  2c:	e3520004 	cmp	r2, #4
+  30:	00811180 	addeq	r1, r1, r0, lsl #3
+  34:	05911004 	ldreq	r1, [r1, #4]
+  38:	e2800001 	add	r0, r0, #1
+  3c:	05d12005 	ldrbeq	r2, [r1, #5]
+  40:	03822001 	orreq	r2, r2, #1
+  44:	05c12005 	strbeq	r2, [r1, #5]
+  48:	e5941028 	ldr	r1, [r4, #40]	; 0x28
+  4c:	e1510000 	cmp	r1, r0
+  50:	cafffff3 	bgt	24 <traverseproto+0x24>
+  54:	e3a00000 	mov	r0, #0
+  58:	e5941024 	ldr	r1, [r4, #36]	; 0x24
+  5c:	e1510000 	cmp	r1, r0
+  60:	c594101c 	ldrgt	r1, [r4, #28]
+  64:	c7911100 	ldrgt	r1, [r1, r0, lsl #2]
+  68:	c2800001 	addgt	r0, r0, #1
+  6c:	c5d12005 	ldrbgt	r2, [r1, #5]
+  70:	c3822001 	orrgt	r2, r2, #1
+  74:	c5c12005 	strbgt	r2, [r1, #5]
+  78:	cafffff6 	bgt	58 <traverseproto+0x58>
+  7c:	e3a05000 	mov	r5, #0
+  80:	ea000006 	b	a0 <traverseproto+0xa0>
+  84:	e5940010 	ldr	r0, [r4, #16]
+  88:	e7901105 	ldr	r1, [r0, r5, lsl #2]
+  8c:	e5d10005 	ldrb	r0, [r1, #5]
+  90:	e3100011 	tst	r0, #17
+  94:	01a00006 	moveq	r0, r6
+  98:	0bfffffe 	bleq	0 <traverseproto>
+  9c:	e2855001 	add	r5, r5, #1
+  a0:	e5940034 	ldr	r0, [r4, #52]	; 0x34
+  a4:	e1500005 	cmp	r0, r5
+  a8:	cafffff5 	bgt	84 <traverseproto+0x84>
+  ac:	e3a00000 	mov	r0, #0
+  b0:	e5941038 	ldr	r1, [r4, #56]	; 0x38
+  b4:	e1510000 	cmp	r1, r0
+  b8:	d8bd8070 	pople	{r4, r5, r6, pc}
+  bc:	e5941018 	ldr	r1, [r4, #24]
+  c0:	e0802080 	add	r2, r0, r0, lsl #1
+  c4:	e7911102 	ldr	r1, [r1, r2, lsl #2]
+  c8:	e2800001 	add	r0, r0, #1
+  cc:	e5d12005 	ldrb	r2, [r1, #5]
+  d0:	e3822001 	orr	r2, r2, #1
+  d4:	e5c12005 	strb	r2, [r1, #5]
+  d8:	eafffff4 	b	b0 <traverseproto+0xb0>
+
+Disassembly of section i.traverseclosure:
+
+00000000 <traverseclosure>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a08000 	mov	r8, r0
+   8:	e5d10006 	ldrb	r0, [r1, #6]
+   c:	e1a04001 	mov	r4, r1
+  10:	e3500000 	cmp	r0, #0
+  14:	0a00000e 	beq	54 <traverseclosure+0x54>
+  18:	e3a05000 	mov	r5, #0
+  1c:	ea000008 	b	44 <traverseclosure+0x44>
+  20:	e0840185 	add	r0, r4, r5, lsl #3
+  24:	e5901010 	ldr	r1, [r0, #16]
+  28:	e3510004 	cmp	r1, #4
+  2c:	a5901014 	ldrge	r1, [r0, #20]
+  30:	a5d10005 	ldrbge	r0, [r1, #5]
+  34:	a3100011 	tstge	r0, #17
+  38:	01a00008 	moveq	r0, r8
+  3c:	0bfffffe 	bleq	0 <traverseclosure>
+  40:	e2855001 	add	r5, r5, #1
+  44:	e5d40007 	ldrb	r0, [r4, #7]
+  48:	e1500005 	cmp	r0, r5
+  4c:	cafffff3 	bgt	20 <traverseclosure+0x20>
+  50:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+  54:	e5941014 	ldr	r1, [r4, #20]
+  58:	e5d10005 	ldrb	r0, [r1, #5]
+  5c:	e3100011 	tst	r0, #17
+  60:	01a00008 	moveq	r0, r8
+  64:	0bfffffe 	bleq	0 <traverseclosure>
+  68:	e594100c 	ldr	r1, [r4, #12]
+  6c:	e5d10005 	ldrb	r0, [r1, #5]
+  70:	e3100011 	tst	r0, #17
+  74:	01a00008 	moveq	r0, r8
+  78:	0bfffffe 	bleq	0 <traverseclosure>
+  7c:	e3a06000 	mov	r6, #0
+  80:	e3a07001 	mov	r7, #1
+  84:	ea00000d 	b	c0 <traverseclosure+0xc0>
+  88:	e0840106 	add	r0, r4, r6, lsl #2
+  8c:	e5905018 	ldr	r5, [r0, #24]
+  90:	e5d50005 	ldrb	r0, [r5, #5]
+  94:	e3500000 	cmp	r0, #0
+  98:	1a000007 	bne	bc <traverseclosure+0xbc>
+  9c:	e595000c 	ldr	r0, [r5, #12]
+  a0:	e3500004 	cmp	r0, #4
+  a4:	a5951010 	ldrge	r1, [r5, #16]
+  a8:	a5d10005 	ldrbge	r0, [r1, #5]
+  ac:	a3100011 	tstge	r0, #17
+  b0:	01a00008 	moveq	r0, r8
+  b4:	0bfffffe 	bleq	0 <traverseclosure>
+  b8:	e5c57005 	strb	r7, [r5, #5]
+  bc:	e2866001 	add	r6, r6, #1
+  c0:	e5d40007 	ldrb	r0, [r4, #7]
+  c4:	e1500006 	cmp	r0, r6
+  c8:	caffffee 	bgt	88 <traverseclosure+0x88>
+  cc:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.valismarked:
+
+00000000 <valismarked>:
+   0:	e5901000 	ldr	r1, [r0]
+   4:	e3510004 	cmp	r1, #4
+   8:	05901004 	ldreq	r1, [r0, #4]
+   c:	05d12005 	ldrbeq	r2, [r1, #5]
+  10:	03822001 	orreq	r2, r2, #1
+  14:	05c12005 	strbeq	r2, [r1, #5]
+  18:	e5901000 	ldr	r1, [r0]
+  1c:	e3510004 	cmp	r1, #4
+  20:	a5900004 	ldrge	r0, [r0, #4]
+  24:	a5d00005 	ldrbge	r0, [r0, #5]
+  28:	a3100001 	tstge	r0, #1
+  2c:	13a00001 	movne	r0, #1
+  30:	03a00000 	moveq	r0, #0
+  34:	e12fff1e 	bx	lr
+
+Disassembly of section i.sweeplist:
+
+00000000 <sweeplist>:
+   0:	e92d41f0 	push	{r4, r5, r6, r7, r8, lr}
+   4:	e1a07000 	mov	r7, r0
+   8:	e1a06002 	mov	r6, r2
+   c:	e3a05000 	mov	r5, #0
+  10:	e1a04001 	mov	r4, r1
+  14:	ea00000a 	b	44 <sweeplist+0x44>
+  18:	e5d10005 	ldrb	r0, [r1, #5]
+  1c:	e1500006 	cmp	r0, r6
+  20:	c20000fe 	andgt	r0, r0, #254	; 0xfe
+  24:	c1a04001 	movgt	r4, r1
+  28:	c5c10005 	strbgt	r0, [r1, #5]
+  2c:	ca000004 	bgt	44 <sweeplist+0x44>
+  30:	e5910000 	ldr	r0, [r1]
+  34:	e2855001 	add	r5, r5, #1
+  38:	e5840000 	str	r0, [r4]
+  3c:	e1a00007 	mov	r0, r7
+  40:	ebfffffe 	bl	0 <sweeplist>
+  44:	e5941000 	ldr	r1, [r4]
+  48:	e3510000 	cmp	r1, #0
+  4c:	1afffff1 	bne	18 <sweeplist+0x18>
+  50:	e1a00005 	mov	r0, r5
+  54:	e8bd81f0 	pop	{r4, r5, r6, r7, r8, pc}
+
+Disassembly of section i.freeobj:
+
+00000000 <freeobj>:
+   0:	e5d12004 	ldrb	r2, [r1, #4]
+   4:	e2422004 	sub	r2, r2, #4
+   8:	e3520006 	cmp	r2, #6
+   c:	908ff102 	addls	pc, pc, r2, lsl #2
+  10:	e12fff1e 	bx	lr
+  14:	ea00000c 	b	4c <freeobj+0x4c>
+  18:	ea000009 	b	44 <freeobj+0x44>
+  1c:	ea000004 	b	34 <freeobj+0x34>
+  20:	ea00000c 	b	58 <freeobj+0x58>
+  24:	ea000007 	b	48 <freeobj+0x48>
+  28:	ea000000 	b	30 <freeobj+0x30>
+  2c:	ea000001 	b	38 <freeobj+0x38>
+  30:	eafffffe 	b	0 <mr_F_freeproto>
+  34:	eafffffe 	b	0 <mr_F_freeclosure>
+  38:	e3a03000 	mov	r3, #0
+  3c:	e3a02014 	mov	r2, #20
+  40:	ea000007 	b	64 <freeobj+0x64>
+  44:	eafffffe 	b	0 <mr_H_free>
+  48:	eafffffe 	b	0 <mr_E_freethread>
+  4c:	e591200c 	ldr	r2, [r1, #12]
+  50:	e2822011 	add	r2, r2, #17
+  54:	ea000001 	b	60 <freeobj+0x60>
+  58:	e591200c 	ldr	r2, [r1, #12]
+  5c:	e2822010 	add	r2, r2, #16
+  60:	e3a03000 	mov	r3, #0
+  64:	eafffffe 	b	0 <mr_M_realloc>
