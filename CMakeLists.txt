@@ -27,6 +27,14 @@ else()
   set(VMRP_BUILD_TESTS_DEFAULT ON)
 endif()
 option(VMRP_BUILD_TESTS "Build unit tests" ${VMRP_BUILD_TESTS_DEFAULT})
+# Sanitizer 支持: cmake -DSANITIZE=address,undefined
+set(SANITIZE "" CACHE STRING "Comma-separated sanitizers: address,undefined,thread")
+if(NOT MSVC AND SANITIZE)
+  set(SAN_FLAGS "-fsanitize=${SANITIZE} -fno-omit-frame-pointer")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SAN_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${SAN_FLAGS}")
+  message(STATUS "Sanitizers enabled: ${SANITIZE}")
+endif()
 if(VMRP_BUILD_SHARED_ONLY)
   set(VMRP_BUILD_SHARED ON CACHE BOOL "" FORCE)
 endif()
@@ -332,6 +340,67 @@ if(VMRP_BUILD_TESTS)
     vmrp_add_link_flags(test_vmrp "-Wl,--allow-multiple-definition")
   endif()
   add_test(NAME vmrp_unit_tests COMMAND test_vmrp)
+  set_tests_properties(vmrp_unit_tests PROPERTIES LABELS "unit")
+
+  # --- API 生命周期测试（独立二进制，stub 掉重型依赖） ---
+  add_executable(test_vmrp_api
+    test/test_api_main.c
+    test/test_api_lifecycle.c
+    ./src/vmrp_api.c
+  )
+  target_compile_definitions(test_vmrp_api PRIVATE VMRP)
+  target_include_directories(test_vmrp_api PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include
+  )
+  if(MSVC)
+    target_link_libraries(test_vmrp_api)
+  else()
+    target_link_libraries(test_vmrp_api m)
+  endif()
+  add_test(NAME vmrp_api_tests COMMAND test_vmrp_api)
+  set_tests_properties(vmrp_api_tests PROPERTIES LABELS "unit")
+
+  # --- fileLib 文件系统测试（链接真实 fileLib + rbtree + utils） ---
+  add_executable(test_vmrp_filelib
+    test/test_filelib_main.c
+    test/test_filelib.c
+    ./src/fileLib.c
+    ./src/rbtree.c
+    ./src/utils.c
+  )
+  target_compile_definitions(test_vmrp_filelib PRIVATE VMRP)
+  target_include_directories(test_vmrp_filelib PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include
+  )
+  if(MSVC)
+    target_link_libraries(test_vmrp_filelib ZLIB::ZLIB unicorn)
+    vmrp_add_link_flags(test_vmrp_filelib "/FORCE:MULTIPLE")
+  else()
+    target_link_libraries(test_vmrp_filelib unicorn "-Wl,--no-as-needed" m z)
+    vmrp_add_link_flags(test_vmrp_filelib "-Wl,--allow-multiple-definition")
+  endif()
+  add_test(NAME vmrp_filelib_tests COMMAND test_vmrp_filelib)
+  set_tests_properties(vmrp_filelib_tests PROPERTIES LABELS "unit")
+
+  # --- 集成测试（shell 脚本） ---
+  # 注册 test/integration/ 下的脚本为 CTest 测试
+  file(GLOB_RECURSE VMRP_INTEGRATION_SCRIPTS "test/integration/*/test_*.sh")
+  foreach(script ${VMRP_INTEGRATION_SCRIPTS})
+    get_filename_component(test_name ${script} NAME_WE)
+    get_filename_component(test_dir ${script} DIRECTORY)
+    get_filename_component(game_name ${test_dir} NAME)
+    add_test(
+      NAME "e2e_${game_name}_${test_name}"
+      COMMAND bash ${script}
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    set_tests_properties("e2e_${game_name}_${test_name}" PROPERTIES
+      LABELS "e2e"
+      TIMEOUT 60
+    )
+  endforeach()
 endif()
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

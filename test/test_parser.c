@@ -104,11 +104,89 @@ int test_parser_syntax_error(void) {
     return 0;
 }
 
+int test_parser_compile_nested_tables(void) {
+    printf("[TEST] compile deeply nested table literals\n");
+    mrp_State *L = mrp_open();
+    if (!L) { printf("  FAIL: mrp_open returned NULL\n"); failures++; return 1; }
+
+    const char *src = "local t = {a={b={c={d={e=1}}}}}";
+    int status = mr_L_loadbuffer(L, src, strlen(src), "nested");
+    ASSERT_INT("nested tables compile", status, 0);
+
+    mrp_close(L);
+    return 0;
+}
+
+int test_parser_compile_string_escapes(void) {
+    printf("[TEST] compile string with escape sequences\n");
+    mrp_State *L = mrp_open();
+    if (!L) { printf("  FAIL: mrp_open returned NULL\n"); failures++; return 1; }
+
+    const char *src = "local s = \"hello\\nworld\\t\\\"quoted\\\"\"";
+    int status = mr_L_loadbuffer(L, src, strlen(src), "escapes");
+    ASSERT_INT("string escapes compile", status, 0);
+
+    mrp_close(L);
+    return 0;
+}
+
+int test_parser_unterminated_string(void) {
+    printf("[TEST] unterminated string is a syntax error\n");
+    mrp_State *L = mrp_open();
+    if (!L) { printf("  FAIL: mrp_open returned NULL\n"); failures++; return 1; }
+
+    const char *src = "local s = \"hello";
+    int status = mr_L_loadbuffer(L, src, strlen(src), "unterm");
+    ASSERT_NEQ("unterminated string detected", status, 0);
+
+    mrp_close(L);
+    return 0;
+}
+
+int test_parser_empty_input(void) {
+    printf("[TEST] empty input compiles without crash\n");
+    mrp_State *L = mrp_open();
+    if (!L) { printf("  FAIL: mrp_open returned NULL\n"); failures++; return 1; }
+
+    int status = mr_L_loadbuffer(L, "", 0, "empty");
+    ASSERT_INT("empty input compiles", status, 0);
+
+    mrp_close(L);
+    return 0;
+}
+
+int test_parser_multiline_function(void) {
+    printf("[TEST] compile multi-line function with local vars\n");
+    mrp_State *L = mrp_open();
+    if (!L) { printf("  FAIL: mrp_open returned NULL\n"); failures++; return 1; }
+
+    const char *src =
+        "def calculate(x, y)\n"
+        "  local sum = x + y\n"
+        "  local diff = x - y\n"
+        "  if sum > 0 then\n"
+        "    return sum\n"
+        "  else\n"
+        "    return diff\n"
+        "  end\n"
+        "end\n";
+    int status = mr_L_loadbuffer(L, src, strlen(src), "multiline");
+    ASSERT_INT("multiline function compiles", status, 0);
+
+    mrp_close(L);
+    return 0;
+}
+
 int test_parser_run_all(void) {
     int before = failures;
     test_parser_compile_simple();
     test_parser_compile_def_keyword();
     test_parser_compile_server_payload();
     test_parser_syntax_error();
+    test_parser_compile_nested_tables();
+    test_parser_compile_string_escapes();
+    test_parser_unterminated_string();
+    test_parser_empty_input();
+    test_parser_multiline_function();
     return failures - before;
 }
