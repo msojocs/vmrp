@@ -1,0 +1,556 @@
+================================================================================
+COMPREHENSIVE DNS RESOLUTION TRACE - FINDINGS SUMMARY
+================================================================================
+
+QUESTION: How does `build/vmrp mythroad/gghjt.mrp` access `rop.skymobiapp.com` 
+and whether/how DNS resolution happens?
+
+ANSWER: DNS resolution is intercepted via a built-in DNS mapping table that 
+redirects `rop.skymobiapp.com` to `127.0.0.1` (localhost).
+
+================================================================================
+1. REFERENCES TO "rop.skymobiapp.com" AND "skymobiapp"
+================================================================================
+
+EXACT REFERENCE FOUND:
+  ✓ File: src/vmrp.c
+    Line: 28
+    Content: #define VMRP_DEFAULT_DNS_MAP "wap.skmeg.com->159.75.119.124;rop.skymobiapp.com->127.0.0.1"
+    
+    This is the ONLY hardcoded reference to "rop.skymobiapp.com" in the source.
+    It maps the domain to 127.0.0.1 (localhost).
+
+NO OTHER DIRECT REFERENCES TO:
+  - "rop.skymobiapp.com" (hardcoded)
+  - "skymobiapp" (any form)
+  - "skymobi" (any form)
+  
+  These domains are NOT mentioned elsewhere; they're only configured in the 
+  DNS mapping table defined at vmrp.c:28.
+
+================================================================================
+2. DNS-RELATED FUNCTIONS FOUND
+================================================================================
+
+DNS RESOLUTION FUNCTIONS:
+  ✓ my_getHostByName() - src/network.c:536
+    Entry point for hostname resolution (sync or async)
+    
+  ✓ my_getHostByNameSync() - src/network.c:480 [***CORE FUNCTION**]
+    Core DNS mapping and resolution logic
+    - Calls getDnsLookupName() to map domain
+    - Calls getaddrinfo() to resolve mapped domain
+    - Returns IP address as 32-bit integer
+    
+  ✓ getDnsLookupName() - src/network.c:161
+    Searches DNS mapping table for domain match
+    Returns mapped domain name or original if no match
+    
+  ✓ my_getHostByNameAsync() - src/network.c:520
+    Async wrapper that runs DNS resolution in pthread
+    Invokes callback with resolved IP
+
+DNS MAP CONFIGURATION FUNCTIONS:
+  ✓ my_configureDnsMap() - src/network.c:125
+    Parses DNS map string, populates dnsMap[] table
+    Splits input by ';', ',', or '\n'
+    
+  ✓ parseDnsMapEntry() - src/network.c:90
+    Parses individual "original->fake" or "original=fake" entry
+    Normalizes domain names (lowercase, trim whitespace)
+    
+  ✓ copyNormalizedDomain() - src/network.c:73
+    Normalizes domain names (lowercase, remove trailing dots)
+
+  ✓ applyStartupDnsMap() - src/vmrp.c:198
+    Calls my_configureDnsMap() at startup
+    
+  ✓ selectStartupDnsMap() - src/vmrp.c:216
+    Priority logic: CLI > Config > Env > Default
+
+NATIVE/WRAPPER FUNCTIONS:
+  ✓ native_getHostByName() - src/native_dsm_funcs.c:178
+    Bridge from mythroad layer to network layer
+    
+  ✓ mr_getHostByName() - src/mythroad/dsm.c:1030
+    MRP API wrapper function for ext calls
+    
+  ✓ mythroad_getHostByName() - src/mythroad/dsm.c:1025
+    MRP API wrapper function for mythroad layer
+    
+  ✓ getHostByName() - src/mythroad/dsm.c:999
+    Common implementation for both mr_getHostByName variants
+
+NO gethostbyname() USAGE:
+  - The code includes gethostbyname() implementation at src/network.c:504
+  - BUT it's #if 0 (commented out/disabled)
+  - MODERN CODE: Uses getaddrinfo() instead (more portable)
+
+================================================================================
+3. NETWORK-RELATED SOURCE FILES
+================================================================================
+
+MAIN NETWORK FILE: src/network.c
+  - 765 lines total
+  - Contains:
+    * DNS mapping table (dnsMap[], dnsMapCount)
+    * DNS resolution functions (my_getHostByName*)
+    * Socket operations (my_socket, my_connect, my_send, my_recv)
+    * Network initialization (my_initNetwork)
+    * CMWAP proxy mode support
+    * Async threading for network operations
+  
+  Key structs:
+    * DnsMapEntry (lines 56-59): stores original→fake domain mapping
+    * mSocket (lines 42-48): socket state tracking
+    * getHostByNameAsyncData_t (lines 471-477): async DNS parameters
+
+RELATED FILES:
+  ✓ src/vmrp.c - Startup and DNS map initialization
+  ✓ src/native_dsm_funcs.c - Native function bridge layer (DNS dispatch)
+  ✓ src/arm_ext_executor.c - ARM SWI handler for mr_getHostByName (case 83)
+  ✓ src/mythroad/dsm.c - MRP wrapper functions
+  ✓ src/include/network.h - Network function declarations
+  ✓ src/include/vmrp_api.h - Public API (vmrp_api_set_dns_map)
+
+NO SEPARATE DNS.C FILE:
+  - All DNS functionality is in network.c
+  - No separate DNS server or resolution implementation
+  - Uses system getaddrinfo() and socket APIs
+
+================================================================================
+4. SOCKET CONNECTION FUNCTIONS
+================================================================================
+
+SOCKET CREATION:
+  ✓ my_socket() - src/network.c:333
+    Creates socket handle, stores in red-black tree
+    Returns integer socket ID (not raw socket descriptor)
+
+CONNECTION OPERATIONS:
+  ✓ my_connect() - src/network.c:280 [CRITICAL]
+    Entry point for socket connections
+    Takes: socket_id, IP address (32-bit), port, connection_type
+    IP address is 32-bit integer (e.g., 0x7F000001 for 127.0.0.1)
+    
+  ✓ my_connectSync() - src/network.c:243 [CRITICAL]
+    Actual socket connection logic
+    Converts IP from 32-bit int to struct sockaddr_in
+    Calls system connect() with sockaddr_in
+    Logs: printf("my_connect('%s', %d)\n", inet_ntoa(...))
+    
+  ✓ my_connectAsync() - src/network.c:260
+    Async wrapper for nonblocking connections (uses pthread)
+
+SOCKET I/O:
+  ✓ my_send() - src/network.c:612
+  ✓ my_recv() - src/network.c:716
+  ✓ my_sendto() - src/network.c:586
+  ✓ my_recvfrom() - src/network.c:682
+  ✓ my_closeSocket() - src/network.c:361
+  ✓ my_getSocketState() - src/network.c:317
+
+CONNECTION WORKFLOW FOR rop.skymobiapp.com:
+  1. mr_getHostByName("rop.skymobiapp.com", callback)
+  2. DNS resolution returns: 0x7F000001 (127.0.0.1)
+  3. mr_connect(socket_id, 0x7F000001, port, NONBLOCK)
+  4. my_connect() creates thread, calls my_connectAsync()
+  5. my_connectSync() calls system connect() to 127.0.0.1
+  6. my_send() sends HTTP request
+  7. my_recv() receives response
+
+CMWAP PROXY MODE:
+  ✓ Special handling at src/network.c:284-289
+  ✓ Special DNS lookup in my_send() at lines 628
+  ✓ Extracts hostname from HTTP CONNECT header
+  ✓ Performs DNS lookup then connects
+
+================================================================================
+5. IP ADDRESS LITERALS IN SOURCE
+================================================================================
+
+LOCALHOST MAPPING:
+  ✓ src/network.c:247
+    Comment: //inet_addr("127.0.0.1")
+    
+  ✓ src/vmrp.c:28
+    Default DNS map: "rop.skymobiapp.com->127.0.0.1"
+    
+  ✓ src/network.c:420
+    Emscripten bridge: "ws://127.0.0.1:8888/socket"
+
+OTHER IP LITERALS:
+  ✓ src/vmrp.c:27
+    Comment mentions: "api.example=localhost" as example format
+
+CMWAP PROXY IP:
+  ✓ src/network.c:284
+    #define: 0x0A0000AC = 10.0.0.172 (CMWAP proxy address)
+
+================================================================================
+6. HTTP REQUEST MECHANISM
+================================================================================
+
+MRP APPLICATION NETWORK API FUNCTIONS:
+  ✓ mr_initNetwork() - Initialize networking (TCP, UDP, CMWAP)
+  ✓ mr_socket() - Create socket
+  ✓ mr_getHostByName() - Resolve hostname [WITH DNS MAPPING]
+  ✓ mr_connect() - Connect socket to remote host
+  ✓ mr_send() - Send data on socket [WITH CMWAP PROXY SUPPORT]
+  ✓ mr_recv() - Receive data from socket
+  ✓ mr_closeNetwork() - Close all network resources
+
+HOW MRP MAKES HTTP REQUESTS:
+  1. mr_initNetwork(callback, "cmnet" or "cmwap") - Initialize
+  2. mr_socket(SOCK_STREAM, IPPROTO_TCP) - Create TCP socket
+  3. mr_getHostByName("rop.skymobiapp.com", callback) - Resolve
+  4. mr_connect(socket, resolved_ip, 80, NONBLOCK) - Connect
+  5. mr_send(socket, "GET /path HTTP/1.1\r\n...") - Send HTTP
+  6. mr_recv(socket, buffer, size) - Receive HTTP response
+
+DNS MAPPING IS TRANSPARENT:
+  - MRP code calls mr_getHostByName("rop.skymobiapp.com", ...)
+  - Network layer intercepts at getDnsLookupName()
+  - Maps to "127.0.0.1"
+  - Calls getaddrinfo("127.0.0.1")
+  - Returns 0x7F000001
+  - MRP code never knows the real server was intercepted
+
+================================================================================
+7. CALL CHAIN DIAGRAM - ARM TO NETWORK LAYER
+================================================================================
+
+COMPLETE EXECUTION PATH FOR mr_getHostByName("rop.skymobiapp.com", cb):
+
+MRP Application Code (ARM bytecode)
+    ↓ ARM SWI/Syscall instruction
+    ↓
+arm_ext_executor.c:1549
+    case 83: mr_getHostByName(arm_str(m, r0), (MR_GET_HOST_CB)(uintptr_t)r1)
+    ↓
+mythroad/dsm.c:1030
+    mr_getHostByName(ptr, cb)
+    ↓
+mythroad/dsm.c:999
+    getHostByName(ptr, cb, isExtCB=1)
+    ↓
+native_dsm_funcs.c:178
+    native_getHostByName(ptr, cb, userData)
+    ↓
+network.c:536
+    my_getHostByName(uc, name, cb, userData)
+    ↓
+    ├─→ If callback: create pthread → my_getHostByNameAsync()
+    └─→ Else: call my_getHostByNameSync()
+    ↓
+network.c:480
+    my_getHostByNameSync(name)
+    ├─1. getDnsLookupName("rop.skymobiapp.com") → "127.0.0.1"
+    ├─2. getaddrinfo("127.0.0.1")
+    └─3. Return 0x7F000001
+    ↓
+Return to callback/app with IP: 0x7F000001
+
+================================================================================
+8. DNS MAPPING TABLE - DATA STRUCTURE
+================================================================================
+
+Location: src/network.c:56-62
+
+typedef struct {
+    char original[256];  // e.g., "rop.skymobiapp.com"
+    char fake[256];      // e.g., "127.0.0.1"
+} DnsMapEntry;
+
+static DnsMapEntry dnsMap[32];  // Max 32 entries
+static int dnsMapCount = 0;     // Current number of entries
+
+DEFAULT CONTENTS (from vmrp.c:28):
+  "wap.skmeg.com->159.75.119.124;rop.skymobiapp.com->127.0.0.1"
+  
+  Becomes:
+  dnsMap[0].original = "wap.skmeg.com"
+  dnsMap[0].fake = "159.75.119.124"
+  dnsMap[1].original = "rop.skymobiapp.com"
+  dnsMap[1].fake = "127.0.0.1"
+  dnsMapCount = 2
+
+LOOKUP ALGORITHM (getDnsLookupName):
+  for (i = dnsMapCount-1; i >= 0; i--) {
+      if (strcmp(dnsMap[i].original, normalized_input) == 0) {
+          return dnsMap[i].fake;  // "127.0.0.1"
+      }
+  }
+  return original_input;  // No match
+
+================================================================================
+9. DNS NORMALIZATION PROCESS
+================================================================================
+
+Function: copyNormalizedDomain() - src/network.c:73
+
+Input: "ROP.SKYMOBIAPP.COM." (example with variation)
+Output: "rop.skymobiapp.com" (normalized)
+
+Steps:
+  1. Skip leading whitespace
+  2. Convert all characters to lowercase
+  3. Remove trailing whitespace
+  4. Remove trailing dots
+  5. Check for invalid whitespace in middle (FAIL if found)
+  6. Check length < 256 (FAIL if ≥ limit)
+  
+Result: Domain names are case-insensitive, trailing-dot tolerant
+
+================================================================================
+10. PRIORITY ORDER FOR DNS CONFIGURATION
+================================================================================
+
+VMRP chooses DNS map in this order (highest to lowest priority):
+
+1. **CLI Argument (--dns-map)** [Highest Priority]
+   vmrp --dns-map "rop.skymobiapp.com->10.0.0.5" mythroad/gghjt.mrp
+   File: src/vmrp.c:158-164
+   Priority: VMRP_DNS_MAP_SOURCE_CLI
+   
+2. **Configuration API Call**
+   vmrp_api_set_dns_map("rop.skymobiapp.com->10.0.0.5")
+   File: src/vmrp.c:212-214
+   Priority: VMRP_DNS_MAP_SOURCE_CONFIG
+   
+3. **Environment Variable (VMRP_DNS_MAP)**
+   export VMRP_DNS_MAP="rop.skymobiapp.com->10.0.0.5"
+   vmrp mythroad/gghjt.mrp
+   File: src/vmrp.c:226-230
+   Priority: VMRP_DNS_MAP_SOURCE_ENV
+   
+4. **Default (Hardcoded)** [Lowest Priority]
+   #define VMRP_DEFAULT_DNS_MAP "wap.skmeg.com->159.75.119.124;rop.skymobiapp.com->127.0.0.1"
+   File: src/vmrp.c:28
+   Priority: VMRP_DNS_MAP_SOURCE_DEFAULT
+
+Selection function: selectStartupDnsMap() - src/vmrp.c:216
+
+================================================================================
+11. DNS RESOLUTION ACTUAL FLOW EXAMPLE
+================================================================================
+
+SCENARIO: MRP app wants to connect to rop.skymobiapp.com on port 80
+
+Input:
+  mr_getHostByName("rop.skymobiapp.com", callback_function)
+
+Step 1: Normalize
+  Input domain: "rop.skymobiapp.com"
+  Normalized: "rop.skymobiapp.com" (already lowercase)
+  
+Step 2: DNS Map Lookup
+  Search dnsMap[] backwards
+  Check dnsMap[1].original: "rop.skymobiapp.com" == "rop.skymobiapp.com" ✓ MATCH!
+  Get mapped name: dnsMap[1].fake = "127.0.0.1"
+  
+Step 3: System DNS Resolution
+  Call getaddrinfo("127.0.0.1", NULL, NULL, &result)
+  Returns struct addrinfo with sin_addr = {127, 0, 0, 1}
+  
+Step 4: Convert to 32-bit Integer
+  struct in_addr addr = {sin_addr}
+  addr.s_addr = 0x7F000001 (in network byte order)
+  result = ntohl(addr.s_addr) = 0x7F000001 (in host byte order)
+  // On x86: both are same since network byte order is big-endian
+  
+Step 5: Return
+  Return 0x7F000001 to callback or MRP app
+  
+Step 6: Socket Connection
+  mr_connect(socket_id, 0x7F000001, 80, NONBLOCK)
+  my_connect() → my_connectSync()
+  struct sockaddr_in sa;
+  sa.sin_addr.s_addr = htonl(0x7F000001) = 0x7F000001
+  connect(socket, (struct sockaddr*)&sa, sizeof(sa))
+  Result: Connected to 127.0.0.1:80 instead of real rop.skymobiapp.com
+
+================================================================================
+12. CONFIGURATION AND INITIALIZATION
+================================================================================
+
+STARTUP CONFIGURATION STRUCTURE:
+  File: src/vmrp.c:56-67
+  
+  typedef struct VmrpStartupConfig {
+      int prepared;
+      const char *mrp_arg;
+      const char *ext_arg;
+      const char *entry_arg;
+      const char *screen_arg;
+      const char *dns_map_arg;
+      char cli_mrp_path[PATH_MAX];
+      char dns_map[2048];      // Stores entire map string
+      int dns_map_set;
+      VmrpDnsMapSource dns_map_source;
+  } VmrpStartupConfig;
+
+INITIALIZATION SEQUENCE:
+  1. main() → prepareVmrpArgs(argc, argv)
+  2. parse_positional_args() → extract CLI arguments
+  3. selectStartupDnsMap() → choose which DNS map to use
+  4. applyStartupDnsMap() → call my_configureDnsMap()
+  5. my_configureDnsMap() → parse string, populate dnsMap[]
+  6. parseDnsMapEntry() → process each "original->fake" entry
+  7. Network initialized with DNS table ready
+  8. MRP app runs with DNS interception active
+
+================================================================================
+13. LOGGING AND DEBUG OUTPUT
+================================================================================
+
+DNS Resolution Debug Statements (output to console):
+
+In getDnsLookupName() - src/network.c:169:
+  printf("dns map: %s -> %s\n", name, mappedName);
+  Example output: "dns map: rop.skymobiapp.com -> 127.0.0.1\n"
+
+In my_getHostByNameSync() - src/network.c:487:
+  printf("getaddrinfo of %s\n", lookupName);
+  Example output: "getaddrinfo of 127.0.0.1\n"
+
+In my_getHostByNameSync() - src/network.c:497:
+  printf("--- IPv4 address: %s\n", inet_ntoa(*addr));
+  Example output: "--- IPv4 address: 127.0.0.1\n"
+
+In my_getHostByNameAsync() - src/network.c:523:
+  printf("my_getHostByNameAsync(): 0x%X\n", r);
+  Example output: "my_getHostByNameAsync(): 0x7F000001\n"
+
+In my_getHostByName() - src/network.c:539:
+  printf("my_getHostByName('%s', 0x%p)\n", name, cb);
+  Example output: "my_getHostByName('rop.skymobiapp.com', 0x12345678)\n"
+
+In my_connectSync() - src/network.c:249:
+  printf("my_connect('%s', %d)\n", inet_ntoa(...), port);
+  Example output: "my_connect('127.0.0.1', 80)\n"
+
+================================================================================
+14. KEY CONSTANTS AND LIMITS
+================================================================================
+
+DNS-Related Constants:
+  VMRP_DNS_MAP_MAX = 32          // Max entries in dnsMap[]
+  VMRP_DNS_NAME_MAX = 255        // Max hostname length
+  VMRP_DNS_MAP_LIMIT = 2048      // Max map string length
+
+Network Constants:
+  MR_SOCK_STREAM = 0             // TCP socket type
+  MR_SOCK_DGRAM = 1              // UDP socket type
+  MR_IPPROTO_TCP = 0             // TCP protocol
+  MR_IPPROTO_UDP = 1             // UDP protocol
+  MR_SOCKET_BLOCK = 0             // Blocking mode
+  MR_SOCKET_NONBLOCK = 1         // Non-blocking mode
+
+Return Values:
+  MR_SUCCESS = 0                 // Operation successful
+  MR_FAILED = -1                 // Operation failed
+  MR_WAITING = 1                 // Async operation in progress
+  MR_IGNORE = -2                 // Feature not supported
+
+Socket State Values (in mSocket):
+  MR_WAITING = 1                 // Connection pending
+  MR_SUCCESS = 0                 // Connected
+  MR_FAILED = -1                 // Connection failed
+
+CMWAP Proxy IP:
+  0x0A0000AC = 10.0.0.172        // Mobile network proxy address
+
+================================================================================
+SUMMARY OF ALL FILES WITH DNS/NETWORK REFERENCES
+================================================================================
+
+src/vmrp.c                        [DNS configuration and startup]
+  Lines 25-28:    DNS map constants and defaults
+  Lines 48-54:    VmrpDnsMapSource enum
+  Lines 56-67:    VmrpStartupConfig struct
+  Lines 81-101:   printVmrpUsage()
+  Lines 103-131:  resolve_cli_mrp_path()
+  Lines 133-186:  parse_positional_args()
+  Lines 198-214:  applyStartupDnsMap()
+  Lines 216-233:  selectStartupDnsMap()
+  Lines 235-282:  prepareVmrpArgs()
+
+src/network.c                     [Core DNS and network implementation]
+  Lines 27-40:    Socket type/protocol enums
+  Lines 42-48:    mSocket struct
+  Lines 50-62:    DNS map table and static variables
+  Lines 64-71:    trimSpaces()
+  Lines 73-88:    copyNormalizedDomain() [NORMALIZATION]
+  Lines 90-123:   parseDnsMapEntry()
+  Lines 125-159:  my_configureDnsMap()
+  Lines 161-174:  getDnsLookupName() [MAPPING LOOKUP]
+  Lines 176-216:  parseHostPort()
+  Lines 243-257:  my_connectSync()
+  Lines 280-309:  my_connect()
+  Lines 333-359:  my_socket()
+  Lines 480-517:  my_getHostByNameSync() [***CORE DNS FUNCTION**]
+  Lines 520-528:  my_getHostByNameAsync()
+  Lines 536-559:  my_getHostByName()
+  Lines 586-656:  my_send() [WITH CMWAP DNS LOOKUP AT LINE 628]
+  Lines 612-656:  my_send()
+  Lines 682-764:  my_recv(), my_recvfrom()
+
+src/arm_ext_executor.c            [ARM system call handler]
+  Line 1549:      SWI case 83 - mr_getHostByName()
+
+src/native_dsm_funcs.c            [Native function bridge]
+  Lines 178-180:  native_getHostByName()
+  Line 789:       Function table entry for getHostByName
+
+src/mythroad/dsm.c                [MRP wrapper functions]
+  Lines 999-1012: getHostByName()
+  Lines 1025-1032: mythroad_getHostByName(), mr_getHostByName()
+  Lines 1039-1047: mr_socket(), mr_connect()
+
+src/include/network.h             [Function declarations]
+  Line 8:         my_configureDnsMap()
+  Line 10:        my_getHostByName()
+  Lines 11-18:    Socket operations
+
+src/include/vmrp_api.h            [Public API]
+                 vmrp_api_set_dns_map()
+
+src/mythroad/mythroad.c           [MRP function table setup]
+  Line 466:       _mr_c_function_table[83] = asm_mr_getHostByName
+
+================================================================================
+CONCLUSION
+================================================================================
+
+The VMRP MRP emulator intercepts DNS resolution for `rop.skymobiapp.com` 
+through a built-in DNS mapping system:
+
+1. DEFAULT MAPPING: Hardcoded at src/vmrp.c:28
+   "rop.skymobiapp.com->127.0.0.1"
+
+2. RESOLUTION MECHANISM: In src/network.c:480 (my_getHostByNameSync)
+   - Maps hostname via getDnsLookupName() → returns "127.0.0.1"
+   - Calls system getaddrinfo() on mapped name
+   - Returns resolved IP as 32-bit integer
+
+3. TRANSPARENT TO APP: MRP code never knows it's accessing localhost
+   - Calls mr_getHostByName("rop.skymobiapp.com")
+   - Receives resolved IP pointing to 127.0.0.1
+   - Connects to localhost instead of real server
+
+4. CUSTOMIZABLE: Can be overridden via:
+   - CLI: --dns-map "rop.skymobiapp.com->10.0.0.5"
+   - Environment: VMRP_DNS_MAP="..."
+   - API: vmrp_api_set_dns_map("...")
+
+5. USES STANDARD APIs:
+   - getaddrinfo() for DNS resolution
+   - socket()/connect() for network I/O
+   - pthread for async operations
+
+NO EXTERNAL DNS SERVER OR CUSTOM DNS PROTOCOL:
+- All DNS mapping happens in memory (dnsMap[] table)
+- System getaddrinfo() performs actual network lookups
+- For mapped hostnames like "127.0.0.1", resolution is immediate (localhost)
+

@@ -173,62 +173,82 @@ static const char* getDnsLookupName(const char* name, char* mappedName, size_t m
     return name;
 }
 
-static int parseHostPort(char* str, char* outHost, int outHostLen, uint16_t* outPort) {
+/* 从 "host" 或 "host:port" 形式的字符串里提取 host 和 port。
+ * h 指向起始位置，遇到 '\0'、'\r'、'\n'、' '、'/' 停止。 */
+static int extractHostPort(const char* h, char* outHost, int outHostLen, uint16_t* outPort) {
     int i;
-    char* h;
-    // 支持 "CONNECT host:port HTTP/x.x" 格式（CMWAP代理格式）
-    if (strncmp(str, "CONNECT ", 8) == 0) {
-        h = str + 8;
-    } else {
-        h = strstr(str, "://");
-        if (h == NULL) {
-            return -1;
-        }
-        h += 3;  // 跳过'://'
-    }
-
-    for (i = 0; i < outHostLen; i++) {
-        if (*h == '\0' || *h == ':' || *h == '/') {
+    for (i = 0; i < outHostLen - 1; i++) {
+        if (*h == '\0' || *h == ':' || *h == '/' || *h == '\r' || *h == '\n' || *h == ' ') {
             break;
         }
         outHost[i] = *h;
         h++;
     }
     outHost[i] = '\0';
+    if (i == 0) return -1;  // 没提取到任何内容
 
-    char* p = strstr(h, ":");
-    if (p == NULL) {
-        *outPort = 80;
-    } else {
+    if (*h == ':') {
         char port[6];
-        p += 1;  // 跳过':'
-        for (i = 0; i < sizeof(port); i++) {
-            if (*p == '\0' || *p == '/') {
+        h++;  // 跳过':'
+        for (i = 0; i < (int)sizeof(port) - 1; i++) {
+            if (*h == '\0' || *h == '/' || *h == '\r' || *h == '\n' || *h == ' ') {
                 break;
             }
-            port[i] = *p;
-            p++;
+            port[i] = *h;
+            h++;
         }
         port[i] = '\0';
         *outPort = (uint16_t)atoi(port);
+    } else {
+        *outPort = 80;
     }
     return 0;
 }
 
-static void my_readLine(char* src, char* dst, size_t dstlen) {
-    if (src != NULL) {
-        dstlen--;
-        while (dstlen > 0) {
-            if (*src == '\0' || *src == '\r') {
-                break;
-            }
-            *dst = *src;
-            src++;
-            dst++;
-            dstlen--;
-        }
+/* 从 HTTP 请求数据中解析目标 host:port。
+ * 支持三种格式：
+ *   1) "CONNECT host:port HTTP/x.x"          — HTTPS 代理隧道
+ *   2) "GET http://host:port/path HTTP/x.x"   — 绝对 URL
+ *   3) "POST /path HTTP/x.x\r\nHost: host:port\r\n..."  — Host 头（netpay 走这个）
+ * buf 是完整的 HTTP 请求数据（不只首行）。 */
+static int parseHostPort(const char* buf, int bufLen, char* outHost, int outHostLen, uint16_t* outPort) {
+    const char* h;
+
+    // 格式 1: CONNECT host:port
+    if (strncmp(buf, "CONNECT ", 8) == 0) {
+        return extractHostPort(buf + 8, outHost, outHostLen, outPort);
     }
-    *dst = '\0';
+
+    // 格式 2: 绝对 URL (GET http://host/...)
+    h = strstr(buf, "://");
+    if (h != NULL && h < buf + bufLen) {
+        return extractHostPort(h + 3, outHost, outHostLen, outPort);
+    }
+
+    // 格式 3: 从 Host 头提取（不区分大小写）
+    // 在 buf 中逐行扫描，查找 "Host:" 头
+    const char* p = buf;
+    const char* end = buf + bufLen;
+    while (p < end) {
+        // 跳到下一行
+        const char* lineEnd = p;
+        while (lineEnd < end && *lineEnd != '\r' && *lineEnd != '\n') lineEnd++;
+
+        int lineLen = (int)(lineEnd - p);
+        if (lineLen >= 5 && strncasecmp(p, "Host:", 5) == 0) {
+            const char* val = p + 5;
+            while (val < lineEnd && *val == ' ') val++;  // 跳过空格
+            return extractHostPort(val, outHost, outHostLen, outPort);
+        }
+
+        // 跳过 \r\n
+        if (lineEnd < end && *lineEnd == '\r') lineEnd++;
+        if (lineEnd < end && *lineEnd == '\n') lineEnd++;
+        if (lineEnd == p) break;  // 防止死循环
+        p = lineEnd;
+    }
+
+    return -1;
 }
 
 #ifndef _MSC_VER
@@ -285,7 +305,7 @@ int32 my_connect(int32 s, int32 ip, uint16 port, int32 type) {
         // 10.0.0.172 是 CMWAP 代理地址，桌面端不存在该代理
         // 伪装连接成功，实际连接在 my_send 第一次发送时根据 CONNECT 头建立
         data->state = MR_SUCCESS;
-        // data->realState = MR_WAITING;
+        data->realState = MR_WAITING;
         return MR_SUCCESS;
     }
     printf("my_connect() type: %s\n", type == MR_SOCKET_BLOCK ? "block" : "async");
@@ -616,20 +636,24 @@ int32 my_send(int32 s, const char* buf, int len) {
 
     data->sendCounter++;
     if (isCMWAP) {  // cmwap模式需要通过代理，这里模拟代理的功能
+        printf("[my_send] cmwap on.\n");
+        printf("[my_send] realState:%d.\n", data->realState);
         if (data->realState == MR_WAITING) {
+            printf("[my_send] sendCounter:%d.\n", data->sendCounter);
             if (data->sendCounter == 1) {  // 第一次发送数据，尝试连接
-                char tmp[256];
                 char host[256];
                 uint16_t port;
-                my_readLine((char*)buf, tmp, sizeof(tmp));
-                if (parseHostPort(tmp, host, sizeof(host), &port) == MR_FAILED) {
+                if (parseHostPort(buf, len, host, sizeof(host), &port) == MR_FAILED) {
+                    printf("[my_send] Failed to parse host.\n");
                     return MR_FAILED;
                 }
                 int32 ip = my_getHostByNameSync(host);
                 if (ip == MR_FAILED) {
+                    printf("[my_send] Failed to get ip.\n");
                     return MR_FAILED;
                 }
                 if (my_connect(s, ip, port, MR_SOCKET_NONBLOCK) == MR_FAILED) {
+                    printf("[my_send] Failed to connect to ip.\n");
                     return MR_FAILED;
                 }
             }
@@ -637,6 +661,8 @@ int32 my_send(int32 s, const char* buf, int len) {
         } else if (data->realState == MR_FAILED) {
             return MR_FAILED;
         }
+    } else {
+        printf("[my_send] cmwap off.\n");
     }
     int ret = checkWritable(data->s);
     if (ret == -1) {

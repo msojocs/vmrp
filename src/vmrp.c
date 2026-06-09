@@ -25,7 +25,7 @@
 #define VMRP_DNS_MAP_LIMIT 2048
 /* Multiple DNS mappings can be separated by ';', ',', or newline:
  * "old.example->127.0.0.1;api.example=localhost" */
-#define VMRP_DEFAULT_DNS_MAP "wap.skmeg.com->159.75.119.124"
+#define VMRP_DEFAULT_DNS_MAP "wap.skmeg.com->159.75.119.124;rop.skymobiapp.com->127.0.0.1"
 
 #include "./include/fileLib.h"
 #include "./include/utils.h"
