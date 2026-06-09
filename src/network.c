@@ -281,11 +281,12 @@ int32 my_connect(int32 s, int32 ip, uint16 port, int32 type) {
 #ifdef NETWORK_SUPPORT
     uIntMap* obj = uIntMap_search(&sockets, (uint32_t)s);
     mSocket* data = (mSocket*)obj->data;
-    if (ip == 0x0A0000AC) {
-        // 10.0.0.172 是 CMWAP 代理地址，桌面端不存在该代理，直接返回失败
-        data->state = MR_FAILED;
-        data->realState = MR_FAILED;
-        return MR_FAILED;
+    if (ip == 0x0A0000AC && isCMWAP) {
+        // 10.0.0.172 是 CMWAP 代理地址，桌面端不存在该代理
+        // 伪装连接成功，实际连接在 my_send 第一次发送时根据 CONNECT 头建立
+        data->state = MR_SUCCESS;
+        // data->realState = MR_WAITING;
+        return MR_SUCCESS;
     }
     printf("my_connect() type: %s\n", type == MR_SOCKET_BLOCK ? "block" : "async");
     if (type == MR_SOCKET_NONBLOCK) {
@@ -533,6 +534,7 @@ static void* my_getHostByNameAsync(void* arg) {
    其他值 同步模式，立即返回的IP地址，不再调用cb 
 */
 int32 my_getHostByName(uc_engine* uc, const char* name, MR_GET_HOST_CB cb, void* userData) {
+    printf("my_getHostByName\n");
 #ifdef NETWORK_SUPPORT
     printf("my_getHostByName('%s', 0x%p)\n", name, cb);
     if (cb != NULL) {

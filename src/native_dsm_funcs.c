@@ -176,10 +176,7 @@ static int32 native_initNetwork(NETWORK_CB cb, const char *mode, void *userData)
 }
 
 static int32 native_getHostByName(const char *ptr, NETWORK_CB cb, void *userData) {
-    (void)ptr;
-    (void)cb;
-    (void)userData;
-    return MR_FAILED;
+    return my_getHostByName(NULL, ptr, (MR_GET_HOST_CB)cb, userData);
 }
 
 #if defined(VMRP_SDL_AUDIO)
