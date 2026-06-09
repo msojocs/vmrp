@@ -1544,7 +1544,10 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         } break;
         /* table[82] mr_closeNetwork()：return success，跟 mr_initNetwork 配对。 */
         case 82: ret = MR_SUCCESS; break;
-        case 83: ret = MR_FAILED; break; /* mr_getHostByName: 回调机制不适用于 Unicorn，暂返回失败 */
+        case 83: {
+            const char *host = arm_str(m, r0);
+            ret = mr_getHostByName(host, (MR_GET_HOST_CB)(uintptr_t)r1);
+        } break;
         case 84: ret = mr_socket((int32)r0, (int32)r1); break;
         case 85: ret = mr_connect((int32)r0, (int32)r1, (uint16)r2, (int32)r3); break;
         case 86: ret = mr_closeSocket((int32)r0); break;
