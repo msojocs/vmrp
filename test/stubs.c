@@ -30,6 +30,8 @@ int arm_ext_call(ArmExtModule *m, int32_t code, const void *input,
 }
 uint32_t arm_ext_helper_addr(ArmExtModule *m) { (void)m; return 0; }
 uint32_t arm_ext_primary_helper(ArmExtModule *m) { (void)m; return 0; }
+/* Unit tests do not instantiate native EXT modules, so no deferred host init exists. */
+int arm_ext_consume_primary_host_init(ArmExtModule *m) { (void)m; return 0; }
 int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t ti) {
     (void)m; (void)is_stop; (void)ti; return -1;
 }
