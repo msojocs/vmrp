@@ -3574,14 +3574,14 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             int code = ((int)to_mr_tonumber(L, 3, 0));
             uint8* output = NULL;
             output_len = 0;
-            {
-                uint32 before_primary = arm_ext_primary_helper(native_ext);
-                ret = arm_ext_call(native_ext, code, (uint8*)input1, (uint32)len, (uint8**)&output, &output_len);
-                uint32 after_primary = arm_ext_primary_helper(native_ext);
-                if (!before_primary && after_primary && code == 0) {
-                    uint8* o2 = NULL; int32 ol2 = 0;
-                    arm_ext_call(native_ext, 0, (uint8*)input1, (uint32)len, &o2, &ol2);
-                }
+            ret = arm_ext_call(native_ext, code, (uint8*)input1, (uint32)len, (uint8**)&output, &output_len);
+            if (code == 0 && arm_ext_consume_primary_host_init(native_ext)) {
+                uint8* o2 = NULL; int32 ol2 = 0;
+                /* Only host-visible table[25] registration needs this extra
+                 * foreground init call. cfunction.ext's internal loader has
+                 * already initialized its child before the host sees primary
+                 * metadata, so the executor leaves the flag clear there. */
+                arm_ext_call(native_ext, 0, (uint8*)input1, (uint32)len, &o2, &ol2);
             }
 
             if (output && output_len) {
