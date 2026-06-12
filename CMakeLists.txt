@@ -214,6 +214,9 @@ add_executable(vmrp
   ./src/native_dsm_funcs.c
   ./src/runtime_native_mythroad.c
   ./src/arm_ext_executor.c
+  ./src/app_compat.c
+  ./src/app_compat_gghjt.c
+  ./src/app_compat_gxdzc.c
   ${VMRP_MYTHROAD_SOURCES}
 )
 target_compile_definitions(vmrp PRIVATE VMRP_NATIVE VMRP_SDL_AUDIO TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
@@ -253,6 +256,9 @@ if(EMCC)
     ./src/native_dsm_funcs.c
     ./src/runtime_native_mythroad.c
     ./src/arm_ext_executor.c
+    ./src/app_compat.c
+    ./src/app_compat_gghjt.c
+    ./src/app_compat_gxdzc.c
     ${VMRP_MYTHROAD_SOURCES}
   )
   # 将相对路径转为绝对路径
@@ -300,6 +306,9 @@ if(VMRP_BUILD_SHARED)
     ./src/native_dsm_funcs.c
     ./src/runtime_native_mythroad.c
     ./src/arm_ext_executor.c
+    ./src/app_compat.c
+    ./src/app_compat_gghjt.c
+    ./src/app_compat_gxdzc.c
     ${VMRP_MYTHROAD_SOURCES}
   )
   target_compile_definitions(vmrp-shared PRIVATE VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
