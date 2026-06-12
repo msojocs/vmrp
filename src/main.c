@@ -135,13 +135,12 @@ char *editGetText(int32 edit) {
 
 void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
     guiDrawBitmapCount++;
-    /* 第 5 次绘制时截屏；设置 VMRP_PPM 后每 30 次再转储一次，使
-     * /tmp/vmrp_screen.ppm 始终反映最近实时画面，便于无显示器环境验证。
-     * （默认仅第 5 次转储，避免常态磁盘开销；SIGUSR1 截屏在 SDL 下不可靠。） */
-    if (guiDrawBitmapCount == 5 ||
-        (guiDrawBitmapCount % 30 == 0 && getenv("VMRP_PPM"))) {
-        dump_screen_ppm("/tmp/vmrp_screen.ppm");
-    }
+    /* Dump after the bitmap is copied to the SDL surface.  Dumping before the
+     * draw captures the previous frame, which makes VMRP_PPM misleading for
+     * foreground handoff bugs where the last visible frame matters.  When
+     * VMRP_PPM is set, the caller has explicitly requested verification, so
+     * keep /tmp/vmrp_screen.ppm equal to the most recent rendered frame. */
+    int should_dump_ppm = getenv("VMRP_PPM") || guiDrawBitmapCount == 5;
     SDL_Surface *surface = SDL_GetWindowSurface(window);
     if (SDL_MUSTLOCK(surface)) {
         if (SDL_LockSurface(surface) != 0) printf("SDL_LockSurface err\n");
@@ -161,6 +160,9 @@ void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
     if (SDL_MUSTLOCK(surface)) SDL_UnlockSurface(surface);
     if (SDL_UpdateWindowSurface(window) != 0)
         printf("SDL_UpdateWindowSurface err\n");
+    if (should_dump_ppm) {
+        dump_screen_ppm("/tmp/vmrp_screen.ppm");
+    }
 }
 
 #ifdef __EMSCRIPTEN__

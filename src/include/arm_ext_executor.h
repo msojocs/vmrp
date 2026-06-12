@@ -14,6 +14,10 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
 uint32 arm_ext_helper_addr(ArmExtModule *m);
 /* 检查 ext 内部是否加载了嵌套 ext（primary），返回 primary helper 地址，0 表示无 */
 uint32 arm_ext_primary_helper(ArmExtModule *m);
+/* Host table[25] only records the child helper; consume this when mythroad.c
+ * needs to deliver the one foreground code=0 call. Internal cfunction.ext
+ * loaders initialize their child themselves and do not set this flag. */
+int arm_ext_consume_primary_host_init(ArmExtModule *m);
 /* 以 wrapper R9 调用嵌套 ext 的 timer dispatch 目标函数（不经过 unicorn hook） */
 int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32 timer_interval);
 int arm_ext_invoke0(ArmExtModule *m, uint32 func, int32 *ret_out);
