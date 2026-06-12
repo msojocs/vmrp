@@ -1,5 +1,7 @@
 #include "./include/arm_ext_executor.h"
 #include "./include/compat_msvc.h"
+#include "./include/arm_ext_internal.h"
+#include "./include/app_compat.h"
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -88,196 +90,6 @@ extern int wstrlen(char *txt);
 /* mrporting.h 中定义的 mr_info 返回值，此处直接使用数值避免引入额外头文件 */
 #define MRP_IS_FILE 1
 
-#define EXT_BASE_ADDR 0x00010000u
-#define EXT_MEM_SIZE  (16u * 1024u * 1024u)
-#define EXT_TABLE_ADDR EXT_BASE_ADDR
-#define EXT_TABLE_COUNT 150u
-#define EXT_STOP_ADDR 0x0007FFF0u
-#define EXT_HEAP_ADDR 0x00200000u
-/* ext code 和 stack 放在高地址，防止 wrapper 的 SP = P + 0x20000 栈
- * 切换落入代码段。heap 在低地址向上增长，code 在高地址，两者不重叠。 */
-#define EXT_STACK_ADDR 0x00E00000u
-#define EXT_STACK_SIZE (512u * 1024u)
-#define EXT_CODE_ADDR  0x00E80000u
-#define EXT_WRAPPER_STACK_SIZE 0x20000u
-#define EXT_CHUNK_MAGIC 0x7FD854EBu
-/* 部分 ARM ext 会跳转到 0x1000 等超出原 0x1000 边界的地址，
- * 扩大低地址映射以覆盖这些跳转目标。 */
-#define EXT_LOW_TABLE_SIZE 0x2000u
-#define EXT_TRACE_PC_RING 64u
-
-#define GAME_TIMER_HEAD_OFFSET             0x008Cu
-
-typedef struct mr_c_function_P_t {
-    uint32 start_of_ER_RW;
-    uint32 ER_RW_Length;
-    int32 ext_type;
-    uint32 mrc_extChunk;
-    int32 stack;
-} mr_c_function_P_t;
-
-/* MRP 文件缓存：预解析 MRP 包内的所有条目并缓存解压后的数据，
- * 避免 ARM ext 在 Unicorn 下做极慢的 MRP 索引扫描。 */
-#define MRP_CACHE_MAX 16
-#define MRP_VFD_MAX 4
-#define MRP_VFD_BASE 0x7FFF0000u
-#define ARM_EXT_NESTED_MODULE_MAX 64
-
-typedef struct MrpCacheEntry {
-    char name[128];
-    uint8_t *data;
-    uint32_t data_len;
-} MrpCacheEntry;
-
-/* 虚拟文件描述符：缓存条目被 open 后通过虚拟 fd 提供 read/seek/close */
-typedef struct MrpVirtualFd {
-    int in_use;
-    const uint8_t *data;
-    uint32_t data_len;
-    uint32_t pos;
-} MrpVirtualFd;
-
-typedef struct ArmExtNestedModule {
-    uint32_t file_addr;
-    uint32_t file_len;
-    uint32_t p_addr;
-    uint32_t helper_addr;
-} ArmExtNestedModule;
-
-typedef struct ArmExtPrimaryChildSnapshot {
-    uint32_t menu_entry_state;
-    uint32_t child_download_state;
-    uint32_t touch_x_state;
-    uint32_t touch_y_state;
-    uint32_t request_active;
-    uint8_t request_block[0x2Cu];
-    uint8_t async_request_block[0x2Cu];
-    uint8_t child_slot_flags[8];
-    uint8_t child_slot_tail[4];
-    uint8_t input_gate_block[0x20];
-    uint8_t child_complete_flag;
-    uint8_t async_complete_flag;
-    uint32_t wrapper_child_event_lists[5][2];
-    int wrapper_child_event_lists_valid;
-    int valid;
-    int loader_confirmed;
-} ArmExtPrimaryChildSnapshot;
-
-struct ArmExtModule {
-    uc_engine *uc;
-    uint8_t *mem;
-    uint8_t *low_table;
-    uint32_t heap_top;
-    uint32_t code_len;
-    const uint8_t *host_code;
-    uint32_t helper_addr;
-    uint32_t p_addr;
-    uint32_t screen_addr;
-    uint32_t screen_len;
-    uint32_t char_bitmap_addr;
-    int32_t screen_w;
-    int32_t screen_h;
-    uint32_t origin_mem_addr;
-    uint32_t origin_mem_len;
-    uint32_t origin_mem_left;
-    uint32_t origin_mem_min;
-    uint32_t origin_mem_top;
-    uint32_t internal_table_addr;
-    uint32_t port_table_addr;
-    uint32_t mr_m0_files_addr;
-    uint32_t vm_state_slot;
-    uint32_t mr_state_slot;
-    uint32_t bi_slot;
-    uint32_t mr_timer_p_slot;
-    uint32_t mr_timer_state_slot;
-    uint32_t mr_timer_run_without_pause_slot;
-    uint32_t mr_gzin_buf_slot;
-    uint32_t mr_gzout_buf_slot;
-    uint32_t lg_gzinptr_slot;
-    uint32_t lg_gzoutcnt_slot;
-    uint32_t mr_sms_cfg_need_save_slot;
-    uint32_t last_file_addr;
-    uint32_t last_file_len;
-    uint8_t *last_file_copy;
-    /* gghjt netpay extraction workaround state (see case 43 below) */
-    uint32_t pending_chk_arm_buf;
-    uint32_t pending_chk_len;
-    uint8_t *pending_chk_decomp;
-    uint32_t pending_chk_decomp_len;
-    uint32_t last_alloc_addr;
-    uint32_t last_alloc_len;
-    uint32_t nested_p_addr;
-    uint32_t active_p_addr;
-    uint32_t active_helper_addr;
-    uint32_t foreground_screen_owner_p_addr;
-    uint32_t foreground_screen_owner_helper_addr;
-    uint8_t *foreground_screen_snapshot;
-    uint32_t foreground_screen_snapshot_len;
-    int foreground_screen_snapshot_valid;
-    uint32_t current_p_addr;
-    uint32_t current_helper_addr;
-    uint32_t primary_p_addr;       // First nested EXT is the app logic; later nested EXTs can be helpers.
-    uint32_t primary_helper_addr;
-    uint32_t primary_file_addr;    // Code base of the first nested EXT (for code[4] updates).
-    uint32_t primary_file_len;
-    int primary_host_init_pending;
-    uint32_t wrapper_timer_dispatch_addr;
-    /* gxdzc 付费路径的 cfunction.ext 反汇编显示，wrapper dispatch 会在
-     * 0xE83B40 BLX 到队列里的回调；该回调可能属于较早加载的 smsend.ext，
-     * 而 active_helper_addr 已经被后续插件覆盖。记录每个 nested EXT 的
-     * 代码范围和 P，使 R9 按实际执行 PC 切换。兼容性：只影响已登记的
-     * nested EXT 代码，验证 test/gxdzc/pay.sh 进入付费界面并运行 ctest。 */
-    ArmExtNestedModule nested_modules[ARM_EXT_NESTED_MODULE_MAX];
-    int nested_module_count;
-    uint32_t outer_r9;
-    uint32_t nested_return_addr;
-    uint32_t screen_write_count;
-    uint32_t thumb_fix_count;
-    uint32_t pc_ring[EXT_TRACE_PC_RING];
-    uint32_t cpsr_ring[EXT_TRACE_PC_RING];
-    uint32_t pc_ring_pos;
-    uint32_t busy_wait_count;
-    /* 忙等开始时的真实 mr_getTime 返回值；用于在 ARM 侧连续轮询时间时
-     * 让宿主时钟推进，并在长时间等待后把控制权还给宿主调度器。 */
-    uint32_t busy_wait_start_ms;
-    int nested_loading;
-    int screen_dirty;
-    int mem_is_mmap;
-    /* R9（rw_base）区域的 GOT 快照：dump/restore 恢复模块内存时用于修复 GOT */
-    uint32_t got_snapshot_base;
-    uint32_t got_snapshot[EXT_TABLE_COUNT];
-    /* 嵌套 ext 覆盖 table[31/32] 的 dispatch 函数地址 */
-    uint32_t dispatch_timer_start;
-    uint32_t dispatch_timer_stop;
-    uint32_t timer_p_addr;
-    uint32_t timer_helper_addr;
-    /* cfunction.ext can load child EXTs internally without calling host
-     * table[25].  After mr_cacheSync we remember that image range and scan
-     * for the wrapper-built extChunk until its helper/P fields are valid. */
-    uint32_t pending_internal_file_addr;
-    uint32_t pending_internal_file_len;
-    ArmExtPrimaryChildSnapshot primary_child_snapshot;
-    int primary_child_reopen_timer_needed;
-    int host_timer_pending;
-    int in_dispatch; /* 防止 dispatch -> wrapper -> table[31/32] -> dispatch 重入 */
-    /* wrapper 进入模态框时 game 的 timer 链表头被清零（dispatch 中检测到），
-     * 保存清零前的值以便 cancel 时恢复。 */
-    uint32_t saved_game_timer_head;
-    /* gxdzc 下载提示被 SOFTRIGHT 取消后，wrapper timer 可能把已经关闭的
-     * 模态 suspend 状态重新写回；在下一次真实下载提示前需要忽略这类残留。 */
-    int gxdzc_modal_cancel_cleared;
-    /* wrapper 模态框直接画到同一 framebuffer 上；cancel/resume
-     * 不会触发底层页面重绘，所以保存进入 suspend 前的画面用于精确恢复。 */
-    uint8_t *modal_screen_snapshot;
-    uint32_t modal_screen_snapshot_len;
-    int modal_screen_snapshot_valid;
-    uc_hook hook;
-    /* MRP 文件缓存：避免 ARM ext 在 Unicorn 下做极慢的 MRP 索引扫描 */
-    MrpCacheEntry mrp_cache[MRP_CACHE_MAX];
-    int mrp_cache_count;
-    MrpVirtualFd mrp_vfds[MRP_VFD_MAX];
-};
-
 extern void _DrawPoint(int16 x, int16 y, uint16 nativecolor);
 extern void _DrawBitmap(uint16 *p, int16 x, int16 y, uint16 w, uint16 h, uint16 rop, uint16 transcoler, int16 sx, int16 sy, int16 mw);
 extern void DrawRect(int16 x, int16 y, int16 w, int16 h, uint8 r, uint8 g, uint8 b);
@@ -298,11 +110,6 @@ extern int32 mr_recv(int32 s, char *buf, int len);
 extern int32 mr_recvfrom(int32 s, char *buf, int len, int32 *ip, uint16 *port);
 extern int32 mr_send(int32 s, const char *buf, int len);
 extern int32 mr_sendto(int32 s, const char *buf, int len, int32 ip, uint16 port);
-
-static void *arm_ptr(ArmExtModule *m, uint32_t addr) {
-    if (addr < EXT_BASE_ADDR || addr >= EXT_BASE_ADDR + EXT_MEM_SIZE) return NULL;
-    return m->mem + (addr - EXT_BASE_ADDR);
-}
 
 static uint32_t arm_addr(ArmExtModule *m, const void *ptr) {
     if (ptr == NULL) return 0;
@@ -325,24 +132,40 @@ static uint32_t reg_read32(uc_engine *uc, int reg) {
     return v;
 }
 
-static int arm_ext_is_gxdzc_pack(void);
-static int arm_ext_is_gghjt_pack(void);
 static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk);
 static void arm_ext_clear_foreground_screen_owner(ArmExtModule *m);
 static void capture_timer_dispatches(ArmExtModule *m);
-static void arm_ext_confirm_primary_child_snapshot(ArmExtModule *m,
-                                                   uint32_t child_p_addr,
-                                                   uint32_t child_helper_addr);
-static int arm_ext_restore_confirmed_closed_child_if_needed(ArmExtModule *m,
-                                                            int32 code,
-                                                            uint32_t input_addr,
-                                                            uint32 input_len);
-static void arm_ext_dump_gghjt_rw_state(ArmExtModule *m, const char *tag,
-                                        int32 code, uint32_t input_addr,
-                                        uint32 input_len);
-static uint32_t arm_ext_primary_rw_base(ArmExtModule *m);
-static uint32_t arm_ext_read_u32_or_zero(ArmExtModule *m, uint32_t addr);
-static uint8_t arm_ext_read_u8_or_zero(ArmExtModule *m, uint32_t addr);
+
+static inline void app_dump_state(ArmExtModule *m, const char *tag,
+                                  int32 code, uint32_t input_addr,
+                                  uint32 input_len) {
+    if (m && m->profile && m->profile->dump_state)
+        m->profile->dump_state(m, m->app_state, tag, code, input_addr, input_len);
+}
+static inline void app_on_child_confirmed(ArmExtModule *m, uint32_t p, uint32_t h) {
+    if (m && m->profile && m->profile->on_child_confirmed)
+        m->profile->on_child_confirmed(m, m->app_state, p, h);
+}
+static inline int app_restore_child_if_closed(ArmExtModule *m, int32 code,
+                                              uint32_t ia, uint32 il) {
+    if (m && m->profile && m->profile->restore_child_if_closed)
+        return m->profile->restore_child_if_closed(m, m->app_state, code, ia, il);
+    return 0;
+}
+static inline int app_should_protect_got_addr(ArmExtModule *m, uint32_t addr) {
+    if (m && m->profile && m->profile->should_protect_got_addr)
+        return m->profile->should_protect_got_addr(m, m->app_state, addr);
+    return 0;
+}
+static inline void app_on_child_reopen_check(ArmExtModule *m) {
+    if (m && m->profile && m->profile->on_child_reopen_check)
+        m->profile->on_child_reopen_check(m, m->app_state);
+}
+static inline void app_on_child_close_complete(ArmExtModule *m) {
+    if (m && m->profile && m->profile->on_child_close_complete)
+        m->profile->on_child_close_complete(m, m->app_state);
+}
+
 
 static void reg_write32(uc_engine *uc, int reg, uint32_t v) {
     uc_reg_write(uc, reg, &v);
@@ -425,92 +248,6 @@ static int arm_ext_has_internal_loader_chunk(ArmExtModule *m,
     return 0;
 }
 
-static int arm_ext_is_gghjt_verdload_child(ArmExtModule *m,
-                                           uint32_t file_addr,
-                                           uint32_t file_len,
-                                           uint32_t helper_addr) {
-    enum {
-        GGHJT_VERDLOAD_LEN = 0x47E4u,
-        GGHJT_VERDLOAD_HELPER_OFF = 0x36DCu,
-        GGHJT_VERDLOAD_ENTRY_OFF = 0x08u
-    };
-    static const uint8_t verdload_entry_prologue[] = {
-        0x10, 0x40, 0x2D, 0xE9
-    };
-
-    if (!m || !arm_ext_is_gghjt_pack()) return 0;
-    if (file_len != GGHJT_VERDLOAD_LEN) return 0;
-    uint32_t helper_pc = helper_addr & ~1u;
-    if (helper_pc < file_addr ||
-        helper_pc - file_addr != GGHJT_VERDLOAD_HELPER_OFF) {
-        return 0;
-    }
-
-    uint8_t *entry = arm_ptr(m, file_addr + GGHJT_VERDLOAD_ENTRY_OFF);
-    if (!entry || !arm_ptr(m, file_addr + file_len - 1u)) return 0;
-    return memcmp(entry, verdload_entry_prologue,
-                  sizeof(verdload_entry_prologue)) == 0;
-}
-
-static void arm_ext_sync_gghjt_verdload_bridge_slots(ArmExtModule *m,
-                                                     uint32_t file_addr,
-                                                     uint32_t file_len,
-                                                     uint32_t p_addr,
-                                                     uint32_t helper_addr,
-                                                     uint32_t rw_base) {
-    enum {
-        VERDLOAD_EXTRA_SRC_OFF = 0x68u,
-        VERDLOAD_EXTRA_DST_OFF = 0x16Cu,
-        VERDLOAD_EXTRA_TABLE_INDEX = 26u,
-        VERDLOAD_BRIDGE_SRC_OFF = 0x0Cu,
-        VERDLOAD_BRIDGE_DST_OFF = 0x170u,
-        VERDLOAD_BRIDGE_FIRST_INDEX = 3u,
-        VERDLOAD_BRIDGE_COUNT = 17u
-    };
-
-    if (!arm_ext_is_gghjt_verdload_child(m, file_addr, file_len, helper_addr)) {
-        return;
-    }
-    if (!p_addr || arm_ext_read_u32_or_zero(m, p_addr) != rw_base) {
-        return;
-    }
-
-    uint32_t module_record = arm_ext_read_u32_or_zero(m, file_addr);
-    if (!module_record ||
-        !arm_ptr(m, module_record + VERDLOAD_EXTRA_SRC_OFF) ||
-        !arm_ptr(m, module_record + VERDLOAD_BRIDGE_SRC_OFF +
-                 (VERDLOAD_BRIDGE_COUNT - 1u) * 4u) ||
-        !arm_ptr(m, rw_base + VERDLOAD_BRIDGE_DST_OFF +
-                 (VERDLOAD_BRIDGE_COUNT - 1u) * 4u)) {
-        return;
-    }
-
-    /*
-     * gghjt cfunction.ext 0xE833A8 stores the private child module record at
-     * file_base[0], then BLXs verdload.ext at file_base+8.  verdload.ext
-     * 0x0308..0x0392 copies bridge veneers from that record into its RW:
-     *   record[0x68]      -> rw+0x16c
-     *   record[0x0c..4c] -> rw+0x170..0x1b0  (table[3..19])
-     *
-     * The reopen path creates a fresh record with those bridge slots empty.
-     * Later, the dialog initializer at verdload 0x24DC reads rw+0x19c for
-     * memset and rw+0x170 at 0x254C/0x2576 before BLXing memcpy at 0x2582.
-     * Synchronize the exact loader contract here, after extChunk/P/helper are
-     * known, and mirror the values into RW because the child entry has already
-     * run by the time the host observes the private load.
-     */
-    uint32_t bridge = EXT_TABLE_ADDR + VERDLOAD_EXTRA_TABLE_INDEX * 4u;
-    memcpy(arm_ptr(m, module_record + VERDLOAD_EXTRA_SRC_OFF), &bridge, 4);
-    memcpy(arm_ptr(m, rw_base + VERDLOAD_EXTRA_DST_OFF), &bridge, 4);
-
-    for (uint32_t i = 0; i < VERDLOAD_BRIDGE_COUNT; ++i) {
-        bridge = EXT_TABLE_ADDR + (VERDLOAD_BRIDGE_FIRST_INDEX + i) * 4u;
-        memcpy(arm_ptr(m, module_record + VERDLOAD_BRIDGE_SRC_OFF + i * 4u),
-               &bridge, 4);
-        memcpy(arm_ptr(m, rw_base + VERDLOAD_BRIDGE_DST_OFF + i * 4u),
-               &bridge, 4);
-    }
-}
 
 static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
                                                uint32_t file_addr,
@@ -540,8 +277,9 @@ static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
             return 0;
         }
 
-        arm_ext_sync_gghjt_verdload_bridge_slots(m, file_addr, file_len,
-                                                 p_addr, helper_addr, rw_base);
+        if (m->profile && m->profile->on_child_synced)
+            m->profile->on_child_synced(m, m->app_state, file_addr, file_len,
+                                        p_addr, helper_addr, rw_base);
 
         /*
          * cfunction.ext's internal loader does not call table[25].  The
@@ -552,7 +290,7 @@ static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
          * same module boundaries the wrapper uses internally.
          */
         arm_ext_record_nested_module(m, file_addr, file_len, p_addr, helper_addr);
-        arm_ext_confirm_primary_child_snapshot(m, p_addr, helper_addr);
+        app_on_child_confirmed(m, p_addr, helper_addr);
         /*
          * Host-visible nested loads (table[25]) make every loaded child the
          * active foreground module.  cfunction.ext's private loader builds
@@ -600,117 +338,7 @@ static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
     return 0;
 }
 
-static uint32_t arm_ext_wrapper_rw_base(ArmExtModule *m) {
-    uint32_t wrapper_rw = 0;
-    if (m && m->p_addr && arm_ptr(m, m->p_addr)) {
-        memcpy(&wrapper_rw, arm_ptr(m, m->p_addr), 4);
-    }
-    return wrapper_rw;
-}
 
-static int arm_ext_is_gghjt_wrapper_child_event_list_addr(ArmExtModule *m,
-                                                          uint32_t addr) {
-    if (!m || !arm_ext_is_gghjt_pack()) {
-        return 0;
-    }
-
-    uint32_t wrapper_rw = arm_ext_wrapper_rw_base(m);
-    uint32_t event_base = wrapper_rw + 0x190u;
-    uint32_t event_end = event_base + 5u * 8u;
-    return wrapper_rw && addr >= event_base && addr < event_end;
-}
-
-static int arm_ext_should_restore_got_snapshot_addr(ArmExtModule *m,
-                                                    uint32_t addr) {
-    /*
-     * cfunction.ext's child event lists live inside the same early RW window as
-     * real table bridge pointers.  They are runtime linked lists, not GOT slots;
-     * restoring low-table-looking values here recreates the 0x1002C self-loop
-     * reached by the 0xE82200 traversal.
-     */
-    return !arm_ext_is_gghjt_wrapper_child_event_list_addr(m, addr);
-}
-
-static int arm_ext_read_gghjt_wrapper_child_event_lists(
-    ArmExtModule *m, uint32_t out[5][2]) {
-    if (!m || !arm_ext_is_gghjt_pack()) {
-        return 0;
-    }
-
-    uint32_t wrapper_rw = arm_ext_wrapper_rw_base(m);
-    if (!wrapper_rw || !arm_ptr(m, wrapper_rw + 0x1B7u)) {
-        return 0;
-    }
-
-    for (uint32_t slot = 0; slot < 5; ++slot) {
-        uint32_t head_addr = wrapper_rw + 0x190u + slot * 8u;
-        memcpy(&out[slot][0], arm_ptr(m, head_addr), 4);
-        memcpy(&out[slot][1], arm_ptr(m, head_addr + 4u), 4);
-    }
-    return 1;
-}
-
-static void arm_ext_save_gghjt_wrapper_child_event_lists(ArmExtModule *m,
-                                                         ArmExtPrimaryChildSnapshot *s) {
-    if (!s) {
-        return;
-    }
-    s->wrapper_child_event_lists_valid =
-        arm_ext_read_gghjt_wrapper_child_event_lists(
-            m, s->wrapper_child_event_lists);
-}
-
-static void arm_ext_restore_gghjt_wrapper_child_event_lists(
-    ArmExtModule *m, const ArmExtPrimaryChildSnapshot *s) {
-    if (!m || !s || !s->wrapper_child_event_lists_valid ||
-        !arm_ext_is_gghjt_pack()) {
-        return;
-    }
-
-    uint32_t wrapper_rw = arm_ext_wrapper_rw_base(m);
-    if (!wrapper_rw || !arm_ptr(m, wrapper_rw + 0x1B7u)) {
-        return;
-    }
-
-    /*
-     * cfunction.ext keeps child-flow event subscribers in five head/tail pairs
-     * at wrapper_rw+0x190.  Disassembly:
-     *   0xE82200..0xE8221A / 0xE82228..0xE82244 traverse
-     *       *(wrapper_rw + 0x190 + slot*8)
-     *   0xE82266..0xE822AA unlinks/relinks the same head/tail pair.
-     *   0xE81082..0xE810A0 inserts the newly loaded child node into the active
-     *       pair and relies on the existing head/tail value.
-     *   0xE80F2E..0xE80F3C immediately walks that same active pair and calls
-     *       0xE83514 on each node to enter wrapper modal suspend.
-     *
-     * verdload.ext copies its module-record bridge table into its RW at
-     * 0x0308..0x0392.  For gghjt's private reload path that destination aliases
-     * wrapper_rw+0x190..0x1B0, so reopen briefly overwrites these list heads
-     * with low-table veneers such as 0x1002C.  If that value is left in the
-     * active list, 0xE8109C chains the new node to a veneer and the 0xE82200
-     * traversal spins in the low table.  Do not clear the lists: persistent
-     * wrapper subscribers are needed for the following 0xE80F36 suspend call,
-     * which is what makes later clicks close the modal.  Restore only the
-     * saved pre-child list pairs after the bad bridge copy and before the
-     * wrapper inserts the new child node.
-     */
-    for (uint32_t slot = 0; slot < 5; ++slot) {
-        uint32_t head_addr = wrapper_rw + 0x190u + slot * 8u;
-        memcpy(arm_ptr(m, head_addr), &s->wrapper_child_event_lists[slot][0],
-               4);
-        memcpy(arm_ptr(m, head_addr + 4u),
-               &s->wrapper_child_event_lists[slot][1], 4);
-    }
-
-    if (m->got_snapshot_base == wrapper_rw) {
-        for (uint32_t off = 0x190u; off < 0x190u + 5u * 8u; off += 4) {
-            uint32_t idx = off / 4u;
-            if (idx < EXT_TABLE_COUNT) {
-                m->got_snapshot[idx] = 0;
-            }
-        }
-    }
-}
 
 
 static int arm_ext_ranges_overlap(uint32_t a, uint32_t a_len,
@@ -853,74 +481,12 @@ static void trace_pc(uc_engine *uc, uint64_t address, uint32_t size, void *user_
     m->cpsr_ring[pos] = reg_read32(uc, UC_ARM_REG_CPSR);
 }
 
-static void hook_gghjt_pc_diag(uc_engine *uc, uint64_t address, uint32_t size,
-                               void *user_data) {
+static void hook_app_pc_diag(uc_engine *uc, uint64_t address, uint32_t size,
+                             void *user_data) {
     (void)size;
     ArmExtModule *m = (ArmExtModule *)user_data;
-    if (!getenv("VMRP_GGHJT_PC_DIAG") || !arm_ext_is_gghjt_pack()) return;
-
-    uint32_t pc = (uint32_t)address & ~1u;
-    const char *tag = NULL;
-    switch (pc) {
-    case 0x6570CAu: tag = "page_load_0218"; break;
-    case 0x6570E4u: tag = "enter_6570e4"; break;
-    case 0x6570EAu: tag = "after_65f764"; break;
-    case 0x6570F0u: tag = "call_666244_2"; break;
-    case 0x659200u: tag = "enter_659200"; break;
-    case 0x659260u: tag = "check_65f764_alt"; break;
-    case 0x6592BCu: tag = "select_gate_ok"; break;
-    case 0x6592F6u: tag = "select_case0"; break;
-    case 0x65930Au: tag = "call_666244_0"; break;
-    case 0x659334u: tag = "select_done"; break;
-    case 0x659336u: tag = "select_case0_fail"; break;
-    case 0x65A2ACu: tag = "dispatch_case_to_6570e4"; break;
-    case 0x65A464u: tag = "enter_65a464"; break;
-    case 0x65F764u: tag = "enter_65f764"; break;
-    case 0x65F772u: tag = "leave_65f764"; break;
-    case 0x65F790u: tag = "enter_65f790"; break;
-    case 0x65F7A0u: tag = "leave_65f790"; break;
-    case 0x666244u: tag = "enter_666244"; break;
-    case 0x6662CEu: tag = "call_65dc9c"; break;
-    case 0x65DC9Cu: tag = "enter_65dc9c"; break;
-    case 0x663070u: tag = "enter_663070"; break;
-    default: return;
-    }
-
-    /*
-     * This diagnostic is intentionally limited to the gghjt menu/download
-     * branch identified in game.ext disassembly.  It shows whether the second
-     * click reaches 0x65A2AC -> 0x6570E4, whether 0x65F764 accepts the
-     * rw+0x13c8 input gate, and whether 0x666244 rebuilds the child request.
-     */
-    uint32_t rw = arm_ext_primary_rw_base(m);
-    printf("GGHJT_PC %s pc=0x%X r0=0x%X r1=0x%X r2=0x%X lr=0x%X r9=0x%X "
-           "menu=0x%X child=0x%X req=0x%X sel1e7=0x%02X sel1e8=0x%02X "
-           "idx224=0x%X max228=0x%X mode13f8=0x%X gate13b0=0x%X gate13c8=0x%X "
-           "async14bc=0x%X md=%u timerP=0x%X timerH=0x%X activeP=0x%X activeH=0x%X reopen=%d\n",
-           tag, pc,
-           reg_read32(uc, UC_ARM_REG_R0),
-           reg_read32(uc, UC_ARM_REG_R1),
-           reg_read32(uc, UC_ARM_REG_R2),
-           reg_read32(uc, UC_ARM_REG_LR),
-           reg_read32(uc, UC_ARM_REG_R9),
-           rw ? arm_ext_read_u32_or_zero(m, rw + 0x0218u) : 0,
-           rw ? arm_ext_read_u32_or_zero(m, rw + 0x022Cu) : 0,
-           rw ? arm_ext_read_u32_or_zero(m, rw + 0x00F8u) : 0,
-           rw ? arm_ext_read_u8_or_zero(m, rw + 0x01E7u) : 0,
-           rw ? arm_ext_read_u8_or_zero(m, rw + 0x01E8u) : 0,
-           rw ? arm_ext_read_u32_or_zero(m, rw + 0x0224u) : 0,
-           rw ? arm_ext_read_u32_or_zero(m, rw + 0x0228u) : 0,
-           rw ? arm_ext_read_u32_or_zero(m, rw + 0x13F8u) : 0,
-           rw ? arm_ext_read_u32_or_zero(m, rw + 0x13B0u) : 0,
-           rw ? arm_ext_read_u32_or_zero(m, rw + 0x13C8u) : 0,
-           rw ? arm_ext_read_u32_or_zero(m, rw + 0x14BCu) : 0,
-           m && m->primary_p_addr && arm_ptr(m, m->primary_p_addr + 12)
-               ? arm_ext_read_u32_or_zero(
-                     m, arm_ext_read_u32_or_zero(m, m->primary_p_addr + 12) + 0x34u)
-               : 0,
-           m->timer_p_addr, m->timer_helper_addr,
-           m->active_p_addr, m->active_helper_addr,
-           m->primary_child_reopen_timer_needed);
+    if (m && m->profile && m->profile->pc_diagnostic)
+        m->profile->pc_diagnostic(uc, address, m, m->app_state);
 }
 
 static void dump_pc_ring(ArmExtModule *m) {
@@ -1712,7 +1278,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                     if (m->got_snapshot[i] >= EXT_TABLE_ADDR &&
                         m->got_snapshot[i] < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4 &&
                         addr >= r0 && addr + 4 <= cpy_end &&
-                        arm_ext_should_restore_got_snapshot_addr(m, addr)) {
+                        !app_should_protect_got_addr(m, addr)) {
                         memcpy(arm_ptr(m, addr), &m->got_snapshot[i], 4);
                     }
                 }
@@ -1738,7 +1304,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                     if (m->got_snapshot[i] >= EXT_TABLE_ADDR &&
                         m->got_snapshot[i] < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4 &&
                         addr >= r0 && addr + 4 <= set_end &&
-                        arm_ext_should_restore_got_snapshot_addr(m, addr)) {
+                        !app_should_protect_got_addr(m, addr)) {
                         memcpy(arm_ptr(m, addr), &m->got_snapshot[i], 4);
                     }
                 }
@@ -1840,14 +1406,9 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             char buf[1024];
             format_arm(m, buf, sizeof(buf), arm_str(m, r0), 1);
             mr_printf("%s", buf);
-            if (m->gxdzc_modal_cancel_cleared && arm_ext_is_gxdzc_pack() &&
-                strcmp(buf, "ht_Exit") == 0) {
-                m->gxdzc_modal_cancel_cleared = 0;
-                /* gxdzc 取消下载提示后，game.ext 的退出处理会在 timer 中
-                 * 反复打印 ht_Exit，却不再落到 table[54]/mr_exit。真机此时
-                 * 已回到主菜单并直接退出；这里仅在刚完成下载模态取消清理后
-                 * 同步宿主退出语义，避免影响普通下载模态和常规退出脚本。 */
-                ret = mr_exit();
+            if (m->profile && m->profile->on_printf &&
+                m->profile->on_printf(m, m->app_state, buf)) {
+                ret = MR_SUCCESS;
                 break;
             }
             ret = 0;
@@ -1908,7 +1469,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             mr_timer_state = 1;
             m->host_timer_pending = 1;
             arm_ext_record_timer_owner(m);
-            arm_ext_dump_gghjt_rw_state(m, "table31_timer_start", -1, 0, 0);
+            app_dump_state(m, "table31_timer_start", -1, 0, 0);
             break;
         case 32:
             ret = mr_timerStop();
@@ -1917,7 +1478,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             m->host_timer_pending = 0;
             m->timer_p_addr = 0;
             m->timer_helper_addr = 0;
-            arm_ext_dump_gghjt_rw_state(m, "table32_timer_stop", -1, 0, 0);
+            app_dump_state(m, "table32_timer_stop", -1, 0, 0);
             break;
         case 33: {
             ret = mr_getTime();
@@ -2016,52 +1577,27 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 43: {
             void *src = arm_ptr(m, r1);
             uint32_t len = r2;
-            /*
-             * Workaround for gghjt.mrp netpay extraction.
-             *
-             * netpay walks its mrp index, reads each chk?.xchk entry, then
-             * writes the decompressed payload to mythroad/gghjt/gghjt.pak via
-             * the fixed scratch buffer at ARM addr 0x2001BC (length 0xBE).
-             * On a real handset its inline inflate runs for every entry; in
-             * our Unicorn emulation the inflate only succeeds on the first
-             * iteration (res.list, 90 -> 190 bytes) and stays stale for the
-             * chk?.xchk entries, so the script writes the same 190 bytes
-             * forever and loops re-extracting.
-             *
-             * Detect the symptom -- writing 0xBE bytes from 0x2001BC right
-             * after a large gzip-headered read -- and substitute the
-             * decompressed payload we captured in case 44 below. We return
-             * the caller-requested byte count so netpay's loop bookkeeping
-             * advances by one record instead of treating the extra bytes as
-             * multiple writes.
-             */
-            uint8_t *consumed_decomp = NULL;
             int substituted = 0;
-            if (r1 == 0x2001BCu && r2 == 0xBEu && m->pending_chk_len > 14000u) {
-                size_t out_cap = (size_t)m->pending_chk_decomp_len;
-                if (m->pending_chk_decomp && out_cap > 0) {
-                    src = m->pending_chk_decomp;
-                    len = (uint32_t)out_cap;
-                    substituted = 1;
-                }
-                /* Hand ownership of the buffer to this call and only free
-                 * after mr_write consumes it. Single-shot: a subsequent
-                 * unrelated write goes through unchanged unless a fresh chk
-                 * read repopulates the buffer. */
-                consumed_decomp = m->pending_chk_decomp;
-                m->pending_chk_decomp = NULL;
-                m->pending_chk_decomp_len = 0;
-                m->pending_chk_len = 0;
+            void *new_src = NULL;
+            uint32_t new_len = 0;
+            if (m->profile && m->profile->intercept_write &&
+                m->profile->intercept_write(m, m->app_state, r0, r1, r2,
+                                            &new_src, &new_len)) {
+                src = new_src;
+                len = new_len;
+                substituted = 1;
             }
             ret = mr_write((int32)r0, src, len);
-            free(consumed_decomp);
-            if (substituted && ret == (int32_t)len) ret = (int32_t)r2;
+            if (substituted) {
+                if (m->profile && m->profile->post_write_cleanup)
+                    m->profile->post_write_cleanup(m->app_state);
+                if (ret == (int32_t)len) ret = (int32_t)r2;
+            }
         } break;
         case 44: {
             void *hp = arm_ptr(m, r1);
             MrpVirtualFd *vf44 = mrp_vfd_get(m, r0);
             if (vf44) {
-                /* 从 MRP 缓存读取 */
                 uint32_t avail = vf44->pos < vf44->data_len ? vf44->data_len - vf44->pos : 0;
                 uint32_t n = r2 < avail ? r2 : avail;
                 if (n && hp) memcpy(hp, vf44->data + vf44->pos, n);
@@ -2070,50 +1606,8 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             } else {
                 ret = mr_read((int32)r0, hp, r2);
             }
-            /* See case 43 for the netpay extraction workaround. Track every
-             * sizable read that looks like a gzip-compressed chunk so we can
-             * substitute the decompressed payload at write time. */
-            if ((int32_t)ret > 256 && hp) {
-                const unsigned char *bp = (const unsigned char *)hp;
-                if (bp[0] == 0x1f && bp[1] == 0x8b) {
-                    m->pending_chk_arm_buf = r1;
-                    m->pending_chk_len = r2;
-                    free(m->pending_chk_decomp);
-                    m->pending_chk_decomp = NULL;
-                    m->pending_chk_decomp_len = 0;
-                    /* Decompress with raw zlib (gzip header) to a host buffer
-                     * sized generously; netpay records exceed 64KB. */
-                    z_stream zs = {0};
-                    zs.next_in = (Bytef *)bp;
-                    zs.avail_in = (uInt)ret;
-                    if (inflateInit2(&zs, 16 + MAX_WBITS) == Z_OK) {
-                        size_t cap = (size_t)ret * 4 + 4096;
-                        for (int tries = 0; tries < 6; ++tries) {
-                            uint8_t *out = (uint8_t *)malloc(cap);
-                            if (!out) break;
-                            zs.next_out = out;
-                            zs.avail_out = (uInt)cap;
-                            int z = inflate(&zs, Z_FINISH);
-                            if (z == Z_STREAM_END) {
-                                m->pending_chk_decomp = out;
-                                m->pending_chk_decomp_len = (uint32_t)zs.total_out;
-                                break;
-                            } else if (z == Z_BUF_ERROR) {
-                                free(out);
-                                inflateReset2(&zs, 16 + MAX_WBITS);
-                                zs.next_in = (Bytef *)bp;
-                                zs.avail_in = (uInt)ret;
-                                cap *= 2;
-                                continue;
-                            } else {
-                                free(out);
-                                break;
-                            }
-                        }
-                        inflateEnd(&zs);
-                    }
-                }
-            }
+            if (m->profile && m->profile->post_read_hook)
+                m->profile->post_read_hook(m, m->app_state, r1, r2, ret, hp);
             /* dump/restore 读回整块模块内存后，需要：
              * 1) 修复 GOT 中的 bridge 函数指针（文件数据中是原始未重定位的值）
              * 2) invalidate Unicorn TB cache（否则执行旧翻译） */
@@ -2130,7 +1624,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                         if (m->got_snapshot[i] >= EXT_TABLE_ADDR &&
                             m->got_snapshot[i] < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4 &&
                             addr >= r1 && addr + 4 <= read_end &&
-                            arm_ext_should_restore_got_snapshot_addr(m, addr)) {
+                            !app_should_protect_got_addr(m, addr)) {
                             memcpy(arm_ptr(m, addr), &m->got_snapshot[i], 4);
                         }
                     }
@@ -2559,7 +2053,7 @@ static void hook_got_write(uc_engine *uc, uc_mem_type type, uint64_t address, in
     if (idx >= EXT_TABLE_COUNT) return;
     if ((uint32_t)value >= EXT_TABLE_ADDR &&
         (uint32_t)value < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4) {
-        if (arm_ext_is_gghjt_wrapper_child_event_list_addr(m, (uint32_t)address)) {
+        if (app_should_protect_got_addr(m, (uint32_t)address)) {
             return;
         }
         /* bridge 函数指针写入 → 记录快照。只在 got_snapshot_base 尚未
@@ -2839,6 +2333,10 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     m->code_len = len;
     m->host_code = code;
 
+    m->profile = app_compat_select(mr_get_pack_filename());
+    if (m->profile && m->profile->init)
+        m->app_state = m->profile->init(m);
+
     uc_err err = uc_open(UC_ARCH_ARM, UC_MODE_ARM, &m->uc);
     if (err != UC_ERR_OK) goto fail;
     err = uc_mem_map_ptr(m->uc, EXT_BASE_ADDR, EXT_MEM_SIZE, UC_PROT_ALL, m->mem);
@@ -2868,9 +2366,9 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
         if (err != UC_ERR_OK) goto fail;
     }
     if (getenv("VMRP_GGHJT_PC_DIAG")) {
-        uc_hook gghjt_pc_hook;
-        err = uc_hook_add(m->uc, &gghjt_pc_hook, UC_HOOK_CODE,
-                          hook_gghjt_pc_diag, m,
+        uc_hook app_pc_hook;
+        err = uc_hook_add(m->uc, &app_pc_hook, UC_HOOK_CODE,
+                          hook_app_pc_diag, m,
                           EXT_BASE_ADDR, EXT_BASE_ADDR + EXT_MEM_SIZE - 1);
         if (err != UC_ERR_OK) goto fail;
     }
@@ -2912,21 +2410,6 @@ fail:
     return MR_FAILED;
 }
 
-static int arm_ext_is_gxdzc_pack(void) {
-    const char *pack = mr_get_pack_filename();
-    if (!pack) return 0;
-    const char *slash = strrchr(pack, '/');
-    const char *name = slash ? slash + 1 : pack;
-    return strcmp(name, "gxdzc.mrp") == 0;
-}
-
-static int arm_ext_is_gghjt_pack(void) {
-    const char *pack = mr_get_pack_filename();
-    if (!pack) return 0;
-    const char *slash = strrchr(pack, '/');
-    const char *name = slash ? slash + 1 : pack;
-    return strcmp(name, "gghjt.mrp") == 0;
-}
 
 static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk) {
     if (!m) return 0;
@@ -2994,330 +2477,16 @@ static int arm_ext_save_modal_screen_snapshot(ArmExtModule *m) {
     return 1;
 }
 
-static uint32_t arm_ext_primary_rw_base(ArmExtModule *m) {
-    uint32_t rw = 0;
-    if (m && m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
-        memcpy(&rw, arm_ptr(m, m->primary_p_addr), 4);
-    return rw;
-}
 
-static int arm_ext_read_u32(ArmExtModule *m, uint32_t addr, uint32_t *out) {
-    if (!m || !out || !addr || !arm_ptr(m, addr)) return 0;
-    memcpy(out, arm_ptr(m, addr), 4);
-    return 1;
-}
-
-static uint32_t arm_ext_read_u32_or_zero(ArmExtModule *m, uint32_t addr) {
-    uint32_t value = 0;
-    arm_ext_read_u32(m, addr, &value);
-    return value;
-}
-
-static uint8_t arm_ext_read_u8_or_zero(ArmExtModule *m, uint32_t addr) {
-    uint8_t value = 0;
-    if (m && addr && arm_ptr(m, addr)) {
-        memcpy(&value, arm_ptr(m, addr), 1);
-    }
-    return value;
-}
-
-static void arm_ext_dump_gghjt_rw_state(ArmExtModule *m, const char *tag,
-                                        int32 code, uint32_t input_addr,
-                                        uint32 input_len) {
-    if (!getenv("VMRP_GGHJT_RW_DIAG") || !arm_ext_is_gghjt_pack()) return;
-    uint32_t rw = arm_ext_primary_rw_base(m);
-    if (!rw || !arm_ptr(m, rw + 0x14E7u)) return;
-
-    int32_t ev[3] = {0, 0, 0};
-    if (input_addr && input_len >= sizeof(ev) && arm_ptr(m, input_addr + sizeof(ev) - 1)) {
-        memcpy(ev, arm_ptr(m, input_addr), sizeof(ev));
-    }
-
-    uint32_t wrapper_rw = 0;
-    if (m->p_addr && arm_ptr(m, m->p_addr)) {
-        memcpy(&wrapper_rw, arm_ptr(m, m->p_addr), 4);
-    }
-    uint32_t q = wrapper_rw ? wrapper_rw + 0x1FCu : 0;
-    uint32_t ext_chunk = 0;
-    if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr + 12)) {
-        memcpy(&ext_chunk, arm_ptr(m, m->primary_p_addr + 12), 4);
-    }
-
-    uint8_t f751 = 0, f12f4 = 0;
-    if (arm_ptr(m, rw + 0x0751u)) memcpy(&f751, arm_ptr(m, rw + 0x0751u), 1);
-    if (arm_ptr(m, rw + 0x12F4u)) memcpy(&f12f4, arm_ptr(m, rw + 0x12F4u), 1);
-
-    printf("GGHJT_RW %s code=%d ev=%d,%d,%d rw=0x%X menu=0x%X child=0x%X req=0x%X tx=0x%X ty=0x%X f751=%u f12f4=%u "
-           "slot854=%08X,%08X tail860=%08X sel1e7=%02X sel1e8=%02X idx224=%08X max228=%08X mode13f8=%08X gate13b0=%08X gate13c8=%08X async14bc=%08X,%08X qh=0x%X qb=0x%X md=%u timerP=0x%X timerH=0x%X activeP=0x%X activeH=0x%X armTimer=%u hostTimer=%d pending=%d reopen=%d\n",
-           tag ? tag : "?",
-           (int)code, ev[0], ev[1], ev[2], rw,
-           arm_ext_read_u32_or_zero(m, rw + 0x0218u),
-           arm_ext_read_u32_or_zero(m, rw + 0x022Cu),
-           arm_ext_read_u32_or_zero(m, rw + 0x00F8u),
-           arm_ext_read_u32_or_zero(m, rw + 0x033Cu),
-           arm_ext_read_u32_or_zero(m, rw + 0x0340u),
-           (unsigned)f751, (unsigned)f12f4,
-           arm_ext_read_u32_or_zero(m, rw + 0x0854u),
-           arm_ext_read_u32_or_zero(m, rw + 0x0858u),
-           arm_ext_read_u32_or_zero(m, rw + 0x0860u),
-           arm_ext_read_u8_or_zero(m, rw + 0x01E7u),
-           arm_ext_read_u8_or_zero(m, rw + 0x01E8u),
-           arm_ext_read_u32_or_zero(m, rw + 0x0224u),
-           arm_ext_read_u32_or_zero(m, rw + 0x0228u),
-           arm_ext_read_u32_or_zero(m, rw + 0x13F8u),
-           arm_ext_read_u32_or_zero(m, rw + 0x13B0u),
-           arm_ext_read_u32_or_zero(m, rw + 0x13C8u),
-           arm_ext_read_u32_or_zero(m, rw + 0x14BCu),
-           arm_ext_read_u32_or_zero(m, rw + 0x14C0u),
-           q ? arm_ext_read_u32_or_zero(m, q + 12) : 0,
-           q ? arm_ext_read_u32_or_zero(m, q + 20) : 0,
-           ext_chunk ? arm_ext_read_u32_or_zero(m, ext_chunk + 0x34u) : 0,
-           m->timer_p_addr, m->timer_helper_addr,
-           m->active_p_addr, m->active_helper_addr,
-           arm_ext_read_u32_or_zero(m, m->mr_timer_state_slot),
-           mr_timer_state, m->host_timer_pending,
-           m->primary_child_reopen_timer_needed);
-}
-
-static int arm_ext_save_primary_child_snapshot(ArmExtModule *m) {
-    uint32_t rw = arm_ext_primary_rw_base(m);
-    if (!m || !rw || !arm_ptr(m, rw + 0x14E7u)) {
-        return 0;
-    }
-
-    ArmExtPrimaryChildSnapshot *s = &m->primary_child_snapshot;
-    memcpy(&s->menu_entry_state, arm_ptr(m, rw + 0x0218u), 4);
-    memcpy(&s->child_download_state, arm_ptr(m, rw + 0x022Cu), 4);
-    memcpy(&s->touch_x_state, arm_ptr(m, rw + 0x033Cu), 4);
-    memcpy(&s->touch_y_state, arm_ptr(m, rw + 0x0340u), 4);
-    memcpy(&s->request_active, arm_ptr(m, rw + 0x00F8u), 4);
-    memcpy(s->request_block, arm_ptr(m, rw + 0x012Cu), sizeof(s->request_block));
-    memcpy(s->async_request_block, arm_ptr(m, rw + 0x14BCu),
-           sizeof(s->async_request_block));
-    memcpy(s->child_slot_flags, arm_ptr(m, rw + 0x0854u), sizeof(s->child_slot_flags));
-    memcpy(s->child_slot_tail, arm_ptr(m, rw + 0x0860u), sizeof(s->child_slot_tail));
-    memcpy(s->input_gate_block, arm_ptr(m, rw + 0x13ACu),
-           sizeof(s->input_gate_block));
-    memcpy(&s->child_complete_flag, arm_ptr(m, rw + 0x0751u), 1);
-    memcpy(&s->async_complete_flag, arm_ptr(m, rw + 0x12F4u), 1);
-    /*
-     * The gghjt wrapper stores modal/child subscribers in wrapper_rw+0x190.
-     * cfunction.ext inserts the private child node into this list, while
-     * verdload.ext can temporarily overwrite the same addresses with copied
-     * bridge-table veneers.  Keep the exact pre-child list so reopen and close
-     * can restore wrapper-owned subscribers without inventing an empty list.
-     */
-    arm_ext_save_gghjt_wrapper_child_event_lists(m, s);
-    s->valid = 1;
-    s->loader_confirmed = 0;
-    return 1;
-}
-
-static void arm_ext_confirm_primary_child_snapshot(ArmExtModule *m,
-                                                   uint32_t child_p_addr,
-                                                   uint32_t child_helper_addr) {
-    if (!m || !arm_ext_is_gghjt_pack()) {
-        return;
-    }
-    ArmExtPrimaryChildSnapshot *s = &m->primary_child_snapshot;
-    if (!s->valid) {
-        return;
-    }
-
-    /*
-     * gghjt's cfunction.ext private loader builds a wrapper extChunk at
-     * 0xE8339C..0xE833D8, calls mr_cacheSync, then BLXs the child entry and
-     * stores its helper in extChunk[8].  Seeing that child P/helper pair is
-     * the authoritative proof that the previously captured primary input state
-     * really opened a foreground child, so later cleanup may restore it.  Plain
-     * menu clicks remain unconfirmed candidates and are ignored.
-     */
-    if (child_p_addr && child_helper_addr) {
-        s->loader_confirmed = 1;
-        if (m->primary_child_reopen_timer_needed) {
-            /*
-             * verdload.ext's entry copies bridge-table fields into
-             * wrapper_rw+0x190..0x1B0 before cfunction.ext registers the new
-             * child node:
-             *   verdload 0x70CB46..0x70CB52 / 0x72D97A..0x72D986
-             *       store source table[11..19] into wrapper child-list slots
-             *   cfunction 0xE8109C later inserts the real child node
-             *
-             * On reopen the source still contains low-table veneers
-             * 0x1002C..0x1004C.  If left in the list head, 0xE8109C links the
-             * new node to 0x1002C and the 0xE82200 traversal spins forever.
-             * This confirmation point is after the bad copy and before
-             * cfunction.ext inserts the real node, so restore the captured
-             * wrapper list contract rather than clearing subscriber state that
-             * the later 0xE80F36 suspend walk still needs.
-             */
-            arm_ext_restore_gghjt_wrapper_child_event_lists(m, s);
-        }
-    }
-    arm_ext_dump_gghjt_rw_state(m, "child_snapshot_confirm", -1, 0, 0);
-}
-
-static void arm_ext_schedule_primary_child_reopen_timer(ArmExtModule *m) {
-    enum { MR_TIMER_STATE_RUNNING_LOCAL = 1 };
-    if (!m || !m->primary_child_reopen_timer_needed) {
-        return;
-    }
-    if (m->host_timer_pending || mr_timer_state == MR_TIMER_STATE_RUNNING_LOCAL) {
-        return;
-    }
-
-    /*
-     * gghjt's cfunction.ext closes internally loaded children through wrapper
-     * resume.  That path stops the wrapper-owned timer and leaves primary input
-     * state ready for the next child entry, but no host tick remains to run the
-     * delayed loader after the next confirm.  Re-arm the wrapper owner only
-     * after a primary mouse-up so the next tick matches the first-entry path
-     * without replaying wrapper cleanup immediately after close.
-     */
-    mr_timerStart(100);
-    mr_timer_state = MR_TIMER_STATE_RUNNING_LOCAL;
-    m->host_timer_pending = 1;
-    m->timer_p_addr = m->p_addr;
-    m->timer_helper_addr = m->helper_addr;
-    internal_slot_write(m, m->mr_timer_state_slot,
-                        MR_TIMER_STATE_RUNNING_LOCAL);
-}
-
-static void arm_ext_schedule_wrapper_resume_timer_after_child_close(ArmExtModule *m) {
-    enum { MR_TIMER_STATE_RUNNING_LOCAL = 1 };
-    if (!m || !m->p_addr || !m->helper_addr) {
-        return;
-    }
-    if (m->host_timer_pending || mr_timer_state == MR_TIMER_STATE_RUNNING_LOCAL) {
-        return;
-    }
-
-    /*
-     * gghjt cfunction.ext resume closes the foreground verdload child through
-     * wrapper code, then game.ext completes the child-close path in a primary
-     * code=2 callback. Disassembly/log verification shows that callback restores
-     * rw+0x218/0x22c/0x14bc state but stops the timer. The real wrapper still
-     * owns the resume/timer queue path that redraws the restored menu; routing
-     * this tick directly to game.ext only flushes a half-updated screen. Re-arm
-     * the wrapper owner once after confirmed child close so cfunction.ext
-     * finishes its resume queue and lets game.ext render the full menu.
-     * Compatibility: this is gated by the confirmed private-loader child-close
-     * state above, and keeps normal primary/reopen timers unchanged.
-     * Verification: the test/gghjt/pay-normal-back.sh click path, captured via
-     * SIGUSR1 final PPM, matches the full game menu; DIAG shows
-     * child_close_after_clear followed by wrapper-owned code=2 ticks, not a
-     * framebuffer copy.
-     */
-    mr_timerStart(50);
-    mr_timer_state = MR_TIMER_STATE_RUNNING_LOCAL;
-    m->host_timer_pending = 1;
-    m->timer_p_addr = m->p_addr;
-    m->timer_helper_addr = m->helper_addr;
-    internal_slot_write(m, m->mr_timer_state_slot,
-                        MR_TIMER_STATE_RUNNING_LOCAL);
-}
-
-static int arm_ext_restore_confirmed_closed_child_if_needed(ArmExtModule *m,
-                                                            int32 code,
-                                                            uint32_t input_addr,
-                                                            uint32 input_len) {
-    uint32_t rw = arm_ext_primary_rw_base(m);
-    if (!rw || !arm_ptr(m, rw + 0x14E7u)) {
-        return 0;
-    }
-
-    /*
-     * gghjt game.ext's close/completion path is visible in disassembly:
-     *   0x6661C8 stores 12 to rw+0x22c and sets rw+0x751.
-     *   0x6636E0..0x663714 copies the async flags to rw+0x12f3/0x12f4.
-     * That path can run from the timer loop after an internally loaded child
-     * has already unwound, so foreground ownership is no longer reliable here.
-     * Reset only the primary page, touch latch, and request/close-path state.
-     * The page state at rw+0x218 is read at 0x6570CA and dispatched through
-     * 0x65A464; leaving it at the close path's temporary value 2 keeps later
-     * clicks on the main-menu handler.  rw+0x33c/rw+0x340 are the active touch
-     * latch used by the same menu flow; after the child close they still point
-     * at the modal button and prevent the next scripted menu click from
-     * reaching the 0x666244 child setup path.  The descriptor at rw+0x14bc is
-     * built by 0x666244 -> 0x65DC9C for 0x663070; if the close leaves the old
-     * descriptor there, the next primary click is treated as an already-active
-     * async request instead of constructing a new child loader request.
-     * The input-gate block at rw+0x13ac is reset by 0x65F750, which the close
-     * routine calls from 0x6661DE..0x6661E8.  The menu entry path
-     * 0x65A2AC -> 0x6570E4 then checks rw+0x13c8 through 0x65F764 before it
-     * can call 0x666244(2); leaving that gate cleared makes the restored menu
-     * state visible but inert on the next click.
-     */
-    ArmExtPrimaryChildSnapshot *s = &m->primary_child_snapshot;
-    if (!s->valid || !s->loader_confirmed) {
-        return 0;
-    }
-
-    uint32_t child_state = 0;
-    uint8_t child_complete = 0, async_complete = 0;
-    memcpy(&child_state, arm_ptr(m, rw + 0x022Cu), 4);
-    memcpy(&child_complete, arm_ptr(m, rw + 0x0751u), 1);
-    memcpy(&async_complete, arm_ptr(m, rw + 0x12F4u), 1);
-    if (child_state != 12u || child_complete == 0 || async_complete == 0) {
-        return 0;
-    }
-
-    arm_ext_dump_gghjt_rw_state(m, "child_close_before_clear", code,
-                                input_addr, input_len);
-
-    memcpy(arm_ptr(m, rw + 0x0218u), &s->menu_entry_state, 4);
-    memcpy(arm_ptr(m, rw + 0x022Cu), &s->child_download_state, 4);
-    memcpy(arm_ptr(m, rw + 0x033Cu), &s->touch_x_state, 4);
-    memcpy(arm_ptr(m, rw + 0x0340u), &s->touch_y_state, 4);
-    memcpy(arm_ptr(m, rw + 0x00F8u), &s->request_active, 4);
-    memcpy(arm_ptr(m, rw + 0x012Cu), s->request_block, sizeof(s->request_block));
-    memcpy(arm_ptr(m, rw + 0x14BCu), s->async_request_block,
-           sizeof(s->async_request_block));
-    memcpy(arm_ptr(m, rw + 0x0854u), s->child_slot_flags, sizeof(s->child_slot_flags));
-    memcpy(arm_ptr(m, rw + 0x0860u), s->child_slot_tail, sizeof(s->child_slot_tail));
-    memcpy(arm_ptr(m, rw + 0x13ACu), s->input_gate_block,
-           sizeof(s->input_gate_block));
-    memcpy(arm_ptr(m, rw + 0x0751u), &s->child_complete_flag, 1);
-    memcpy(arm_ptr(m, rw + 0x12F4u), &s->async_complete_flag, 1);
-    /*
-     * cfunction.ext leaves the just-closed child node in the wrapper
-     * subscriber list when the host observes game.ext's completion flags.
-     * Restoring the saved pre-child list removes that closed node while
-     * preserving the wrapper's persistent modal subscriber; clearing the whole
-     * list prevents the next open from raising extChunk[0x34] and the modal
-     * can no longer be closed by wrapper resume.
-     */
-    arm_ext_restore_gghjt_wrapper_child_event_lists(m, s);
-
-    s->valid = 0;
-    s->loader_confirmed = 0;
-    s->wrapper_child_event_lists_valid = 0;
-    m->primary_child_reopen_timer_needed = 1;
-    arm_ext_schedule_wrapper_resume_timer_after_child_close(m);
-    arm_ext_dump_gghjt_rw_state(m, "child_close_after_clear", code,
-                                input_addr, input_len);
-    return 1;
-}
 
 static int arm_ext_clear_cancelled_download_modal_tail(ArmExtModule *m,
                                                        uint32_t ext_chunk,
                                                        uint32_t game_rw,
                                                        uint32_t timer_head) {
-    if (!m || !m->gxdzc_modal_cancel_cleared || !arm_ext_is_gxdzc_pack()) {
-        return 0;
-    }
-    if (game_rw && timer_head && arm_ptr(m, game_rw + GAME_TIMER_HEAD_OFFSET)) {
-        memcpy(arm_ptr(m, game_rw + GAME_TIMER_HEAD_OFFSET), &timer_head, 4);
-    }
-    if (ext_chunk && arm_ptr(m, ext_chunk + 0x34)) {
-        uint32_t zero_depth = 0;
-        memcpy(arm_ptr(m, ext_chunk + 0x34), &zero_depth, 4);
-    }
-    m->saved_game_timer_head = 0;
-    m->active_helper_addr = m->primary_helper_addr;
-    m->active_p_addr = m->primary_p_addr;
-    arm_ext_clear_foreground_screen_owner(m);
-    return 1;
+    if (!m || !m->profile || !m->profile->clear_modal_tail) return 0;
+    int ret = m->profile->clear_modal_tail(m, m->app_state, ext_chunk, game_rw, timer_head);
+    if (ret) arm_ext_clear_foreground_screen_owner(m);
+    return ret;
 }
 
 int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_len,
@@ -3357,8 +2526,8 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     int wrapper_modal_event_routed = 0;
     int32_t wrapper_modal_event[3] = {0};
     int primary_mouse_up_event = 0;
-    int gxdzc_modal_cancel_release = 0;
-    int gxdzc_modal_closed_by_wrapper = 0;
+    int modal_cancel_release = 0;
+    int modal_closed_by_wrapper = 0;
     int restore_game_timer_after_modal_cancel = 0;
     uint32_t modal_ext_chunk = 0;
     uint32_t modal_suspend_depth_pre = 0;
@@ -3412,7 +2581,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
             if (input_len >= 12 && input_addr) {
                 memcpy(wrapper_modal_event, arm_ptr(m, input_addr), 12);
                 if (wrapper_modal_event[0] == 1 && wrapper_modal_event[1] == 18) {
-                    gxdzc_modal_cancel_release = 1;
+                    modal_cancel_release = 1;
                 }
                 memcpy(arm_ptr(m, input_addr), wrapper_modal_event, 12);
                 call_p_addr = m->p_addr;
@@ -3441,7 +2610,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     uint32_t helper_args[4] = {outp_addr, outl_addr, 0, 0};
     uc_mem_write(m->uc, sp, helper_args, sizeof(helper_args));
     reg_write32(m->uc, UC_ARM_REG_SP, sp);
-    arm_ext_dump_gghjt_rw_state(m, "call_pre", code, input_addr, input_len);
+    app_dump_state(m, "call_pre", code, input_addr, input_len);
 
     /* 保存 arm_ext_call 前的 game state[8] */
     uint32_t _ac_grw = 0, _ac_s8_pre = 0;
@@ -3459,7 +2628,8 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
             memcpy(&event_code, arm_ptr(m, input_addr), 4);
             primary_mouse_up_event = (event_code == 3);
         }
-        arm_ext_save_primary_child_snapshot(m);
+        if (m->profile && m->profile->save_child_snapshot)
+            m->profile->save_child_snapshot(m, m->app_state);
     }
     /* gxdzc 的下载提示可能在普通事件回调或 primary timer(code=2) 中
      * 直接触发 wrapper suspend，而不是等到 wrapper dispatch；回调前
@@ -3482,9 +2652,8 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     m->current_p_addr = 0;
     m->current_helper_addr = 0;
     sync_timer_state_from_arm(m);
-    arm_ext_dump_gghjt_rw_state(m, "call_post", code, input_addr, input_len);
-    arm_ext_restore_confirmed_closed_child_if_needed(m, code, input_addr,
-                                                     input_len);
+    app_dump_state(m, "call_post", code, input_addr, input_len);
+    app_restore_child_if_closed(m, code, input_addr, input_len);
     if (getenv("VMRP_ARM_EXT_DIAG")) {
         uint32_t arm_timer_state = 0;
         internal_slot_read(m, m->mr_timer_state_slot, &arm_timer_state);
@@ -3517,17 +2686,10 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         call_modal_snapshot_candidate) {
         m->modal_screen_snapshot_valid = 1;
     }
-    if (wrapper_modal_event_routed && arm_ext_is_gxdzc_pack() &&
-        modal_suspend_depth_pre > 0 && modal_suspend_depth_post == 0) {
-        /* cfunction.ext resume(0xE83220) decrements extChunk[0x34] and
-         * relinks the wrapper timer when it reaches zero. A right-side touch
-         * button closes the gxdzc download dialog through that resume path
-         * without producing an MR_KEY_SOFTRIGHT event, so key-code-only
-         * detection misses the cancel and leaves game.ext's pending download
-         * fields set. Treat the observed 1->0 suspend-depth transition as
-         * the modal close signal; left-side confirm keeps the depth at 1 and
-         * continues into mr_initNetwork/mr_socket/mr_connect. */
-        gxdzc_modal_closed_by_wrapper = 1;
+    if (wrapper_modal_event_routed &&
+        modal_suspend_depth_pre > 0 && modal_suspend_depth_post == 0 &&
+        !modal_cancel_release) {
+        modal_closed_by_wrapper = 1;
     }
     if (wrapper_modal_event_routed &&
         modal_suspend_depth_pre > 0 &&
@@ -3553,9 +2715,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
             m->timer_helper_addr = 0;
         }
         if (foreground_child_active) {
-            arm_ext_restore_confirmed_closed_child_if_needed(m, code,
-                                                             input_addr,
-                                                             input_len);
+            app_restore_child_if_closed(m, code, input_addr, input_len);
             m->primary_child_reopen_timer_needed = 1;
         }
     }
@@ -3567,73 +2727,35 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         modal_suspend_depth_pre == 0 &&
         call_p_addr == m->primary_p_addr &&
         call_helper_addr == m->primary_helper_addr) {
-        arm_ext_schedule_primary_child_reopen_timer(m);
-        arm_ext_dump_gghjt_rw_state(m, "after_reopen_timer_schedule", code,
+        app_on_child_reopen_check(m);
+        app_dump_state(m, "after_reopen_timer_schedule", code,
                                     input_addr, input_len);
     }
 
     if (restore_game_timer_after_modal_cancel && m->saved_game_timer_head) {
+        if ((modal_cancel_release || modal_closed_by_wrapper) &&
+            m->profile && m->profile->on_modal_cancel) {
+            int32_t ev[3] = {0};
+            if (input_len >= 12 && input_addr && arm_ptr(m, input_addr))
+                memcpy(ev, arm_ptr(m, input_addr), 12);
+            m->profile->on_modal_cancel(m, m->app_state, modal_ext_chunk,
+                                        modal_suspend_depth_pre,
+                                        modal_suspend_depth_post,
+                                        wrapper_modal_event_routed,
+                                        ev, 3);
+        }
         uint32_t ec = 0, sd = 0, grw = 0;
         if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr + 12))
             memcpy(&ec, arm_ptr(m, m->primary_p_addr + 12), 4);
         if (ec && arm_ptr(m, ec + 0x34))
             memcpy(&sd, arm_ptr(m, ec + 0x34), 4);
-        if (gxdzc_modal_cancel_release && arm_ext_is_gxdzc_pack() &&
-            sd > 0 && ec && arm_ptr(m, ec + 0x34)) {
-            uint32_t zero_depth = 0;
-            /* gxdzc 下载提示的 SOFTRIGHT 取消在 VMRP 下可能已关闭控件树，
-             * 但 wrapper suspend depth 仍停在 1。真机会回到底层菜单；
-             * 若不归零，后续“退出游戏”会被当成仍处于下载模态而无法退出。 */
-            memcpy(arm_ptr(m, ec + 0x34), &zero_depth, 4);
-            sd = 0;
-        }
         if (sd == 0 && m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
             memcpy(&grw, arm_ptr(m, m->primary_p_addr), 4);
         if (grw && arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET))
             memcpy(arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET),
                    &m->saved_game_timer_head, 4);
         if (sd == 0) {
-            if ((gxdzc_modal_cancel_release || gxdzc_modal_closed_by_wrapper) &&
-                arm_ext_is_gxdzc_pack() &&
-                grw && arm_ptr(m, grw + 0x1A37)) {
-                uint32_t resource_state = 0x53;
-                uint8_t zero_byte = 0;
-                /* gxdzc game.ext 反汇编定位：
-                 *   0x667C80 进入未完成下载：rw+0x03C8=5, rw+0x0388=1,
-                 *   rw+0x1A34 描述块写入 pending 标志/参数，rw+0x0DC1=1；
-                 *   0x6644D4 填充 rw+0x09F4 的异步请求块。
-                 * wrapper 的取消只关闭外层模态框，不会调用 game 的取消路径；
-                 * 保留这些 pending 字段会让下一次点击被认为已有下载在进行。
-                 * 这里只复位这些“未完成下载”字段，不调用会把状态转成 0x0C
-                 * 的 0x667BF8 完成/失败回调。 */
-                if (arm_ptr(m, grw + 0x09F4 + 0x7F))
-                    memset(arm_ptr(m, grw + 0x09F4), 0, 0x80);
-                memcpy(arm_ptr(m, grw + 0x03C8), &resource_state, 4);
-                memcpy(arm_ptr(m, grw + 0x0388), &zero_byte, 1);
-                if (arm_ptr(m, grw + 0x1A34 + 0x17))
-                    memset(arm_ptr(m, grw + 0x1A34), 0, 0x18);
-                memcpy(arm_ptr(m, grw + 0x0DC1), &zero_byte, 1);
-                /* wrapper 反汇编显示 suspend 会摘掉 game timer 后绘制模态层；
-                 * VMRP 不能像真机窗口系统那样自动露出下面的 framebuffer。
-                 * 在 cancel/resume 后恢复 suspend 前保存的 framebuffer，才会
-                 * 看到进入下载提示前的主菜单画面。 */
-                if (m->modal_screen_snapshot_valid &&
-                    m->modal_screen_snapshot &&
-                    m->modal_screen_snapshot_len == m->screen_len &&
-                    m->screen_addr && arm_ptr(m, m->screen_addr)) {
-                    memcpy(arm_ptr(m, m->screen_addr), m->modal_screen_snapshot, m->screen_len);
-                    if (mr_screenBuf) {
-                        memcpy(mr_screenBuf, m->modal_screen_snapshot, m->screen_len);
-                        mr_drawBitmap(mr_screenBuf, 0, 0, (uint16)m->screen_w, (uint16)m->screen_h);
-                    }
-                    m->modal_screen_snapshot_valid = 0;
-                }
-            }
             m->saved_game_timer_head = 0;
-            if ((gxdzc_modal_cancel_release || gxdzc_modal_closed_by_wrapper) &&
-                arm_ext_is_gxdzc_pack()) {
-                m->gxdzc_modal_cancel_cleared = 1;
-            }
             m->active_helper_addr = m->primary_helper_addr;
             m->active_p_addr = m->primary_p_addr;
             arm_ext_clear_foreground_screen_owner(m);
@@ -3927,6 +3049,9 @@ int arm_ext_invoke3(ArmExtModule *m, uint32 func, uint32 arg0, uint32 arg1,
 
 void arm_ext_unload(ArmExtModule *m) {
     if (!m) return;
+    if (m->profile && m->profile->cleanup)
+        m->profile->cleanup(m->app_state);
+    m->app_state = NULL;
     mrp_cache_free(m);
     if (m->uc) uc_close(m->uc);
     free(m->last_file_copy);
