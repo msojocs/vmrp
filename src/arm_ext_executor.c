@@ -2527,9 +2527,23 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     }
     uint32_t outp_addr = arm_alloc(m, 4);
     uint32_t outl_addr = arm_alloc(m, 4);
-    // Lifecycle/event calls belong to the app EXT, not later helper EXT modules.
-    uint32_t call_p_addr = (code >= 0 && code <= 5 && m->primary_p_addr) ? m->primary_p_addr : (m->active_p_addr ? m->active_p_addr : m->p_addr);
-    uint32_t call_helper_addr = (code >= 0 && code <= 5 && m->primary_helper_addr) ? m->primary_helper_addr : (m->active_helper_addr ? m->active_helper_addr : m->helper_addr);
+    /* 真机上事件(code=1)始终先经 wrapper 的 mrc_extHelper（反汇编
+     * docs/反汇编研究.c:428-476），wrapper 通过 mrc_event 的内部回调链
+     * 分发给 game。code=0/3-5 为生命周期调用，路由到 primary game helper。
+     * code=2 路由到当前定时器所有者（wrapper 或 game）。 */
+    int has_separate_wrapper = m->helper_addr && m->primary_helper_addr &&
+                               m->helper_addr != m->primary_helper_addr;
+    uint32_t call_p_addr, call_helper_addr;
+    if (code == 1 && has_separate_wrapper) {
+        call_p_addr = m->p_addr;
+        call_helper_addr = m->helper_addr;
+    } else if (code >= 0 && code <= 5 && m->primary_p_addr) {
+        call_p_addr = m->primary_p_addr;
+        call_helper_addr = m->primary_helper_addr;
+    } else {
+        call_p_addr = m->active_p_addr ? m->active_p_addr : m->p_addr;
+        call_helper_addr = m->active_helper_addr ? m->active_helper_addr : m->helper_addr;
+    }
     if (code == 2 && m->timer_p_addr && m->timer_helper_addr) {
         call_p_addr = m->timer_p_addr;
         call_helper_addr = m->timer_helper_addr;
@@ -2562,44 +2576,29 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         m->active_helper_addr != m->primary_helper_addr &&
         m->active_p_addr != m->p_addr &&
         m->active_helper_addr != m->helper_addr;
-    if (code == 1 && modal_suspend_depth_pre > 0 && foreground_child_owns_timer) {
-        /*
-         * Some wrapper subflows use the same suspend-depth field as simple
-         * wrapper-owned dialogs, then make a loaded child the foreground module.
-         * In that state the child's timer ownership is the executable evidence
-         * that input belongs to the child, not to the wrapper cancel handler.
-         */
+    if (code == 1 && foreground_child_owns_timer) {
+        /* 前台子模块拥有定时器时，事件直接路由到子模块。子模块有独立的
+         * 事件处理，不经过 wrapper 回调链。 */
         call_p_addr = m->active_p_addr;
         call_helper_addr = m->active_helper_addr;
     }
-    /* wrapper 模态框（extChunk[0x34]>0）活动时，将事件路由到 wrapper helper。
-     * 真机上事件先经 wrapper helper，wrapper 在模态框期间拦截 SOFTRIGHT 并
-     * 调用 resume（0xE83220）关闭模态框恢复前一页。VMRP 的 primary helper
-     * 优先路由跳过了 wrapper，导致取消键被 game helper 静默吞掉（反汇编
-     * 0x66326C：不检查键码始终返回 0）。此处仅在模态框活动时覆写路由目标，
-     * 非模态状态不干预。 */
-    if (code == 1 && m->primary_p_addr &&
-        m->helper_addr && m->helper_addr != m->primary_helper_addr) {
+    /* code=1 路由到 wrapper 时的预处理：
+     * - 修复 extChunk[8]（game helper 指针），确保 wrapper 的 resume
+     *   (0xE83220) 能通过 blx extChunk[8] 正确调用 game 的 resumeApp。
+     *   cfunction.ext ARM 代码运行中会将该槽位清零（gxdzc 反汇编证实）。
+     * - 检测 SOFTRIGHT 取消键释放，用于后续 game timer head 恢复。 */
+    if (code == 1 && has_separate_wrapper && !foreground_child_owns_timer) {
         uint32_t _ec = modal_ext_chunk;
-        uint32_t _sd = modal_suspend_depth_pre;
-        if (_sd > 0 && !foreground_child_owns_timer) {
-            /* wrapper resume(0xE83220) 会通过 extChunk[8] 向 game 派发
-             * resumeApp。gxdzc 的 cfunction.ext 会把该槽位覆盖成 0，
-             * 因此在把 SOFTRIGHT 交给 wrapper 前恢复为 primary helper。 */
-            if (_ec && m->primary_helper_addr && arm_ptr(m, _ec + 8)) {
-                memcpy(arm_ptr(m, _ec + 8), &m->primary_helper_addr, 4);
+        if (_ec && m->primary_helper_addr && arm_ptr(m, _ec + 8)) {
+            memcpy(arm_ptr(m, _ec + 8), &m->primary_helper_addr, 4);
+        }
+        if (input_len >= 12 && input_addr) {
+            memcpy(wrapper_modal_event, arm_ptr(m, input_addr), 12);
+            if (wrapper_modal_event[0] == 1 && wrapper_modal_event[1] == 18) {
+                modal_cancel_release = 1;
             }
-            if (input_len >= 12 && input_addr) {
-                memcpy(wrapper_modal_event, arm_ptr(m, input_addr), 12);
-                if (wrapper_modal_event[0] == 1 && wrapper_modal_event[1] == 18) {
-                    modal_cancel_release = 1;
-                }
-                memcpy(arm_ptr(m, input_addr), wrapper_modal_event, 12);
-                call_p_addr = m->p_addr;
-                call_helper_addr = m->helper_addr;
-                wrapper_modal_event_routed = 1;
-                restore_game_timer_after_modal_cancel = 1;
-            }
+            wrapper_modal_event_routed = 1;
+            restore_game_timer_after_modal_cancel = 1;
         }
     }
 
