@@ -652,13 +652,16 @@ int32 my_send(int32 s, const char* buf, int len) {
                     printf("[my_send] Failed to get ip.\n");
                     return MR_FAILED;
                 }
-                if (my_connect(s, ip, port, MR_SOCKET_NONBLOCK) == MR_FAILED) {
+                // if (port == 6009) port = 8080;
+                if (my_connect(s, ip, port, MR_SOCKET_BLOCK) == MR_FAILED) {
                     printf("[my_send] Failed to connect to ip.\n");
                     return MR_FAILED;
                 }
+                data->realState = MR_SUCCESS;
             }
             return 0;  // 还没连接上，因此返回0表示发送了0字节
         } else if (data->realState == MR_FAILED) {
+            printf("[my_send] realState MR_FAILED\n");
             return MR_FAILED;
         }
     } else {
@@ -769,8 +772,10 @@ int32 my_recv(int32 s, char* buf, int len) {
     }
     ret = recv(data->s, buf, len, 0);
     printf("my_recv(s:%d): recv=%d, errno=%d\n", s, ret, errno);
-    // if (ret == 0) {  // EOF: 对端关闭连接
-    //     printf("my_recv(s:%d): EOF, returning MR_FAILED\n", s);
+    /* recv 返回 0 表示对端关闭了连接（TCP FIN），向 ARM 代码
+     * 返回 MR_FAILED 让其走错误/关闭路径，而不是返回 0 让其
+     * 误以为"暂时没数据"而无限轮询。 */
+    // if (ret == 0) {
     //     return MR_FAILED;
     // }
     if (ret > 0) {
