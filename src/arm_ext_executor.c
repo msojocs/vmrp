@@ -2,6 +2,7 @@
 #include "./include/compat_msvc.h"
 #include "./include/arm_ext_internal.h"
 #include "./include/app_compat.h"
+#include "./include/network.h"
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -317,7 +318,13 @@ static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
         }
         m->pending_internal_file_addr = 0;
         m->pending_internal_file_len = 0;
-        m->primary_child_reopen_timer_needed = 0;
+        /* 不在此处清除 primary_child_reopen_timer_needed 标志。
+         * 该标志由模态框关闭时设置(arm_ext_call code=1 post-processing)，
+         * 表示后续需要重启定时器驱动新加载的子插件。此函数在 run_arm_with_sp
+         * 内部执行（如 game 的 code=2 回调中加载子模块），此时无法启动宿主
+         * 定时器。如果在这里清除标志，arm_ext_call 返回后的定时器检查就无法
+         * 发现需要重启，导致子插件界面无法显示。标志由 arm_ext_call 的
+         * post-processing 在确认定时器已重启后清除。 */
         if (getenv("VMRP_ARM_EXT_DIAG")) {
             uint32_t ext_type = 0, is_pause = 0;
             memcpy(&ext_type, arm_ptr(m, p_addr + 8), 4);
@@ -1680,9 +1687,13 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         } break;
         /* table[82] mr_closeNetwork()：return success，跟 mr_initNetwork 配对。 */
         case 82: ret = MR_SUCCESS; break;
+        /* table[83] mr_getHostByName(name, cb)。
+         * 异步回调 cb 是 ARM 虚拟地址，不能在宿主线程调用（会把 ARM
+         * 地址当宿主函数指针，段错误）。绕过 DSM 回调链直接调用底层
+         * my_getHostByName(cb=NULL) 走同步 DNS 解析路径，返回 IP。 */
         case 83: {
             const char *host = arm_str(m, r0);
-            ret = mr_getHostByName(host, (MR_GET_HOST_CB)(uintptr_t)r1);
+            ret = my_getHostByName(NULL, host, NULL, NULL);
         } break;
         case 84: ret = mr_socket((int32)r0, (int32)r1); break;
         case 85: ret = mr_connect((int32)r0, (int32)r1, (uint16)r2, (int32)r3); break;
@@ -2766,6 +2777,24 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         /* mr_exit() 在存在 old app 时会重启上层并返回；当前 ARM 回调的
          * 控制权已经交给平台层，不能继续读取旧 helper 的 output/R0。 */
         return MR_SUCCESS;
+    }
+
+    /* 模态框确认后加载子插件的定时器恢复。
+     * 流程：模态框关闭(code=1) → primary_child_reopen_timer_needed=1
+     * → 下一次 code=2 由 game 处理 → game 内部加载子插件(arm_ext_sync_
+     * internal_nested_module) → game 停止自身定时器(table[32]) → 返回。
+     * 此时定时器已停止，但新加载的子插件需要定时器驱动才能渲染界面。
+     * 真机上 wrapper 有独立的定时器机制，不依赖 game 的 table[31/32]；
+     * 模拟器里 wrapper 定时器由宿主驱动，需要在此处补启。 */
+    if (m->primary_child_reopen_timer_needed &&
+        !m->host_timer_pending && mr_timer_state == 0 &&
+        m->active_p_addr && m->active_helper_addr &&
+        m->active_p_addr != m->primary_p_addr &&
+        m->active_helper_addr != m->primary_helper_addr) {
+        /* app_on_child_reopen_check 内部读取 primary_child_reopen_timer_needed，
+         * 必须在调用后清除，否则函数会因标志已清零而提前返回 */
+        app_on_child_reopen_check(m);
+        m->primary_child_reopen_timer_needed = 0;
     }
 
     uint32_t arm_output = 0;
