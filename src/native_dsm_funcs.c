@@ -118,7 +118,7 @@ static void native_log(char *msg) {
 
 static void native_exit(void) {
     puts("mythroad exit.");
-    exit(0);
+    vmrp_request_exit();
 }
 
 static int32 native_mem_get(char **mem_base, uint32 *mem_len) {

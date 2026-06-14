@@ -20,10 +20,26 @@
 
 /* startVmrp — 被 vmrp_api_start 调用 */
 static int start_called = 0;
+static int stop_called = 0;
+static int exit_requested = 0;
 int startVmrp(const VmrpArgs *args) {
     (void)args;
     start_called++;
+    exit_requested = 0;
     return 0;
+}
+
+void stopVmrp(void) {
+    stop_called++;
+    exit_requested = 0;
+}
+
+void vmrp_request_exit(void) {
+    exit_requested = 1;
+}
+
+int vmrp_is_exited(void) {
+    return exit_requested;
 }
 
 /* event / timer — 被 vmrp_api_event / vmrp_api_timer 调用 */
@@ -78,6 +94,8 @@ static void reset_counters(void) {
     event_called = 0;
     timer_called = 0;
     last_event_code = -1;
+    stop_called = 0;
+    exit_requested = 0;
 }
 
 /* ── 测试用例 ─────────────────────────────────────────── */
@@ -168,6 +186,7 @@ static void test_destroy_nullifies_screen_buffer(void) {
 
     vmrp_api_destroy();
     ASSERT_PTR_NULL(vmrp_api_get_screen_buffer());
+    ASSERT_INT_EQ(1, stop_called);
 
     TEST_END();
 }
@@ -206,6 +225,46 @@ static void test_start_calls_startVmrp(void) {
     int rc = vmrp_api_start("/tmp/test.mrp", NULL, NULL);
     ASSERT_INT_EQ(0, rc);
     ASSERT_TRUE(start_called >= 1);
+
+    vmrp_api_destroy();
+    TEST_END();
+}
+
+static void test_is_running_tracks_start_and_destroy(void) {
+    TEST_BEGIN("vmrp_api_is_running tracks start and destroy");
+    reset_counters();
+
+    vmrp_api_init(240, 320);
+    ASSERT_INT_EQ(0, vmrp_api_is_running());
+
+    int rc = vmrp_api_start("/tmp/test.mrp", NULL, NULL);
+    ASSERT_INT_EQ(0, rc);
+    ASSERT_INT_EQ(1, vmrp_api_is_running());
+
+    vmrp_api_destroy();
+    ASSERT_INT_EQ(0, vmrp_api_is_running());
+    ASSERT_INT_EQ(1, stop_called);
+    TEST_END();
+}
+
+static void test_exit_stops_api_events_and_timers(void) {
+    TEST_BEGIN("runtime exit stops vmrp_api_event and vmrp_api_timer");
+    reset_counters();
+
+    vmrp_api_init(240, 320);
+    ASSERT_INT_EQ(0, vmrp_api_start("/tmp/test.mrp", NULL, NULL));
+    ASSERT_INT_EQ(1, vmrp_api_is_running());
+
+    vmrp_request_exit();
+    ASSERT_INT_EQ(0, vmrp_api_is_running());
+    ASSERT_INT_EQ(-1, vmrp_api_event(VMRP_KEY_PRESS, VMRP_KEY_5, 0));
+    ASSERT_INT_EQ(-1, vmrp_api_timer());
+    ASSERT_INT_EQ(0, vmrp_api_is_edit_active());
+    ASSERT_INT_EQ(-1, vmrp_api_set_edit_text("ignored"));
+    ASSERT_INT_EQ(-1, vmrp_api_cancel_edit());
+    ASSERT_INT_EQ(0, event_called);
+    ASSERT_INT_EQ(0, timer_called);
+    ASSERT_INT_EQ(0, vmrp_api_get_timer_interval());
 
     vmrp_api_destroy();
     TEST_END();
@@ -308,6 +367,8 @@ int test_api_lifecycle_run_all(void) {
     test_double_destroy_safe();
     test_multiple_init_destroy_cycles();
     test_start_calls_startVmrp();
+    test_is_running_tracks_start_and_destroy();
+    test_exit_stops_api_events_and_timers();
     test_start_null_path_fails();
     test_start_empty_path_fails();
     test_event_forwards_to_runtime();
