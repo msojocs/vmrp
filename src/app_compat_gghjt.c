@@ -1,31 +1,18 @@
 #include "./include/arm_ext_internal.h"
+#include "./include/arm_ext_executor.h"
 #include <zlib.h>
 
 typedef struct {
-    uint32_t menu_entry_state;
-    uint32_t child_download_state;
-    uint32_t touch_x_state;
-    uint32_t touch_y_state;
-    uint32_t request_active;
-    uint8_t request_block[0x2Cu];
-    uint8_t async_request_block[0x2Cu];
-    uint8_t child_slot_flags[8];
-    uint8_t child_slot_tail[4];
-    uint8_t input_gate_block[0x20];
-    uint8_t child_complete_flag;
-    uint8_t async_complete_flag;
     uint32_t wrapper_child_event_lists[5][2];
     int wrapper_child_event_lists_valid;
-    int valid;
-    int loader_confirmed;
-} GghjtChildSnapshot;
+} GghjtWrapperState;
 
 typedef struct {
     uint32_t pending_chk_arm_buf;
     uint32_t pending_chk_len;
     uint8_t *pending_chk_decomp;
     uint32_t pending_chk_decomp_len;
-    GghjtChildSnapshot snapshot;
+    GghjtWrapperState wrapper;
 } GghjtState;
 
 /* --- lifecycle --- */
@@ -143,7 +130,7 @@ static int gghjt_read_wrapper_child_event_lists(ArmExtModule *m,
 }
 
 static void gghjt_write_wrapper_child_event_lists(ArmExtModule *m,
-                                                  const GghjtChildSnapshot *s) {
+                                                  const GghjtWrapperState *s) {
     if (!s->wrapper_child_event_lists_valid) return;
     uint32_t wrapper_rw = arm_ext_wrapper_rw_base_(m);
     if (!wrapper_rw || !arm_ptr(m, wrapper_rw + 0x1B7u)) return;
@@ -167,7 +154,7 @@ static void gghjt_write_wrapper_child_event_lists(ArmExtModule *m,
 static void gghjt_save_wrapper_state(ArmExtModule *m, void *app_state) {
     GghjtState *gs = app_state;
     if (!gs) return;
-    GghjtChildSnapshot *s = &gs->snapshot;
+    GghjtWrapperState *s = &gs->wrapper;
     s->wrapper_child_event_lists_valid =
         gghjt_read_wrapper_child_event_lists(m, s->wrapper_child_event_lists);
 }
@@ -175,7 +162,7 @@ static void gghjt_save_wrapper_state(ArmExtModule *m, void *app_state) {
 static void gghjt_restore_wrapper_state(ArmExtModule *m, void *app_state) {
     GghjtState *gs = app_state;
     if (!gs) return;
-    gghjt_write_wrapper_child_event_lists(m, &gs->snapshot);
+    gghjt_write_wrapper_child_event_lists(m, &gs->wrapper);
 }
 
 /* --- write/read interception (netpay extraction workaround) --- */
@@ -257,140 +244,14 @@ static void gghjt_post_read_hook(ArmExtModule *m, void *app_state,
     }
 }
 
-/* --- child snapshot --- */
-
-static int gghjt_save_child_snapshot(ArmExtModule *m, void *app_state) {
-    GghjtState *gs = app_state;
-    if (!gs) return 0;
-    uint32_t rw = arm_ext_primary_rw_base_(m);
-    if (!m || !rw || !arm_ptr(m, rw + 0x14E7u)) return 0;
-
-    GghjtChildSnapshot *s = &gs->snapshot;
-    memcpy(&s->menu_entry_state, arm_ptr(m, rw + 0x0218u), 4);
-    memcpy(&s->child_download_state, arm_ptr(m, rw + 0x022Cu), 4);
-    memcpy(&s->touch_x_state, arm_ptr(m, rw + 0x033Cu), 4);
-    memcpy(&s->touch_y_state, arm_ptr(m, rw + 0x0340u), 4);
-    memcpy(&s->request_active, arm_ptr(m, rw + 0x00F8u), 4);
-    memcpy(s->request_block, arm_ptr(m, rw + 0x012Cu), sizeof(s->request_block));
-    memcpy(s->async_request_block, arm_ptr(m, rw + 0x14BCu),
-           sizeof(s->async_request_block));
-    memcpy(s->child_slot_flags, arm_ptr(m, rw + 0x0854u), sizeof(s->child_slot_flags));
-    memcpy(s->child_slot_tail, arm_ptr(m, rw + 0x0860u), sizeof(s->child_slot_tail));
-    memcpy(s->input_gate_block, arm_ptr(m, rw + 0x13ACu),
-           sizeof(s->input_gate_block));
-    memcpy(&s->child_complete_flag, arm_ptr(m, rw + 0x0751u), 1);
-    memcpy(&s->async_complete_flag, arm_ptr(m, rw + 0x12F4u), 1);
-    s->wrapper_child_event_lists_valid =
-        gghjt_read_wrapper_child_event_lists(m, s->wrapper_child_event_lists);
-    s->valid = 1;
-    s->loader_confirmed = 0;
-    return 1;
-}
-
 /* --- child confirmed --- */
 
 static void gghjt_on_child_confirmed(ArmExtModule *m, void *app_state,
                                      uint32 child_p, uint32 child_helper) {
     GghjtState *gs = app_state;
     if (!gs) return;
-    GghjtChildSnapshot *s = &gs->snapshot;
-    if (!s->valid) return;
-
-    if (child_p && child_helper) {
-        s->loader_confirmed = 1;
-        if (m->primary_child_reopen_timer_needed)
-            gghjt_write_wrapper_child_event_lists(m, s);
-    }
-}
-
-static void gghjt_on_child_close_complete(ArmExtModule *m, void *app_state);
-
-/* --- restore child if closed --- */
-
-static void gghjt_dump_state_impl(ArmExtModule *m, GghjtState *gs,
-                                  const char *tag, int32 code,
-                                  uint32 input_addr, uint32 input_len);
-
-static int gghjt_restore_child_if_closed(ArmExtModule *m, void *app_state,
-                                         int32 code, uint32 input_addr,
-                                         uint32 input_len) {
-    GghjtState *gs = app_state;
-    if (!gs) return 0;
-    uint32_t rw = arm_ext_primary_rw_base_(m);
-    if (!rw || !arm_ptr(m, rw + 0x14E7u)) return 0;
-
-    GghjtChildSnapshot *s = &gs->snapshot;
-    if (!s->valid || !s->loader_confirmed) return 0;
-
-    uint32_t child_state = 0;
-    uint8_t child_complete = 0, async_complete = 0;
-    memcpy(&child_state, arm_ptr(m, rw + 0x022Cu), 4);
-    memcpy(&child_complete, arm_ptr(m, rw + 0x0751u), 1);
-    memcpy(&async_complete, arm_ptr(m, rw + 0x12F4u), 1);
-    if (child_state != 12u || child_complete == 0 || async_complete == 0)
-        return 0;
-
-    gghjt_dump_state_impl(m, gs, "child_close_before_clear", code,
-                          input_addr, input_len);
-
-    memcpy(arm_ptr(m, rw + 0x0218u), &s->menu_entry_state, 4);
-    memcpy(arm_ptr(m, rw + 0x022Cu), &s->child_download_state, 4);
-    memcpy(arm_ptr(m, rw + 0x033Cu), &s->touch_x_state, 4);
-    memcpy(arm_ptr(m, rw + 0x0340u), &s->touch_y_state, 4);
-    memcpy(arm_ptr(m, rw + 0x00F8u), &s->request_active, 4);
-    memcpy(arm_ptr(m, rw + 0x012Cu), s->request_block, sizeof(s->request_block));
-    memcpy(arm_ptr(m, rw + 0x14BCu), s->async_request_block,
-           sizeof(s->async_request_block));
-    memcpy(arm_ptr(m, rw + 0x0854u), s->child_slot_flags, sizeof(s->child_slot_flags));
-    memcpy(arm_ptr(m, rw + 0x0860u), s->child_slot_tail, sizeof(s->child_slot_tail));
-    memcpy(arm_ptr(m, rw + 0x13ACu), s->input_gate_block,
-           sizeof(s->input_gate_block));
-    memcpy(arm_ptr(m, rw + 0x0751u), &s->child_complete_flag, 1);
-    memcpy(arm_ptr(m, rw + 0x12F4u), &s->async_complete_flag, 1);
-    gghjt_write_wrapper_child_event_lists(m, s);
-
-    s->valid = 0;
-    s->loader_confirmed = 0;
-    s->wrapper_child_event_lists_valid = 0;
-    m->primary_child_reopen_timer_needed = 1;
-
-    /* child 关闭后立即调度 wrapper resume timer，让 cfunction.ext
-     * 完成 resume 队列并重绘菜单。 */
-    gghjt_on_child_close_complete(m, app_state);
-
-    gghjt_dump_state_impl(m, gs, "child_close_after_clear", code,
-                          input_addr, input_len);
-    return 1;
-}
-
-/* --- timer scheduling --- */
-
-static void gghjt_on_child_reopen_check(ArmExtModule *m, void *app_state) {
-    (void)app_state;
-    enum { MR_TIMER_STATE_RUNNING_LOCAL = 1 };
-    if (!m || !m->primary_child_reopen_timer_needed) return;
-    if (m->host_timer_pending || mr_timer_state == MR_TIMER_STATE_RUNNING_LOCAL)
-        return;
-
-    mr_timerStart(100);
-    mr_timer_state = MR_TIMER_STATE_RUNNING_LOCAL;
-    m->host_timer_pending = 1;
-    m->timer_p_addr = m->p_addr;
-    m->timer_helper_addr = m->helper_addr;
-}
-
-static void gghjt_on_child_close_complete(ArmExtModule *m, void *app_state) {
-    (void)app_state;
-    enum { MR_TIMER_STATE_RUNNING_LOCAL = 1 };
-    if (!m || !m->p_addr || !m->helper_addr) return;
-    if (m->host_timer_pending || mr_timer_state == MR_TIMER_STATE_RUNNING_LOCAL)
-        return;
-
-    mr_timerStart(50);
-    mr_timer_state = MR_TIMER_STATE_RUNNING_LOCAL;
-    m->host_timer_pending = 1;
-    m->timer_p_addr = m->p_addr;
-    m->timer_helper_addr = m->helper_addr;
+    if (child_p && child_helper && m->primary_child_reopen_timer_needed)
+        gghjt_write_wrapper_child_event_lists(m, &gs->wrapper);
 }
 
 /* --- diagnostics --- */
@@ -460,66 +321,6 @@ static void gghjt_pc_diagnostic(void *uc_raw, uint64 addr,
            m->primary_child_reopen_timer_needed);
 }
 
-static void gghjt_dump_state_impl(ArmExtModule *m, GghjtState *gs,
-                                  const char *tag, int32 code,
-                                  uint32 input_addr, uint32 input_len) {
-    (void)gs;
-    if (!getenv("VMRP_GGHJT_RW_DIAG")) return;
-    uint32_t rw = arm_ext_primary_rw_base_(m);
-    if (!rw || !arm_ptr(m, rw + 0x14E7u)) return;
-
-    int32_t ev[3] = {0, 0, 0};
-    if (input_addr && input_len >= sizeof(ev) && arm_ptr(m, input_addr + sizeof(ev) - 1))
-        memcpy(ev, arm_ptr(m, input_addr), sizeof(ev));
-
-    uint32_t wrapper_rw = arm_ext_wrapper_rw_base_(m);
-    uint32_t q = wrapper_rw ? wrapper_rw + 0x1FCu : 0;
-    uint32_t ext_chunk = 0;
-    if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr + 12))
-        memcpy(&ext_chunk, arm_ptr(m, m->primary_p_addr + 12), 4);
-
-    uint8_t f751 = 0, f12f4 = 0;
-    if (arm_ptr(m, rw + 0x0751u)) memcpy(&f751, arm_ptr(m, rw + 0x0751u), 1);
-    if (arm_ptr(m, rw + 0x12F4u)) memcpy(&f12f4, arm_ptr(m, rw + 0x12F4u), 1);
-
-    printf("GGHJT_RW %s code=%d ev=%d,%d,%d rw=0x%X menu=0x%X child=0x%X req=0x%X tx=0x%X ty=0x%X f751=%u f12f4=%u "
-           "slot854=%08X,%08X tail860=%08X sel1e7=%02X sel1e8=%02X idx224=%08X max228=%08X mode13f8=%08X gate13b0=%08X gate13c8=%08X async14bc=%08X,%08X qh=0x%X qb=0x%X md=%u timerP=0x%X timerH=0x%X activeP=0x%X activeH=0x%X armTimer=%u hostTimer=%d pending=%d reopen=%d\n",
-           tag ? tag : "?",
-           (int)code, ev[0], ev[1], ev[2], rw,
-           arm_ext_read_u32_or_zero_(m, rw + 0x0218u),
-           arm_ext_read_u32_or_zero_(m, rw + 0x022Cu),
-           arm_ext_read_u32_or_zero_(m, rw + 0x00F8u),
-           arm_ext_read_u32_or_zero_(m, rw + 0x033Cu),
-           arm_ext_read_u32_or_zero_(m, rw + 0x0340u),
-           (unsigned)f751, (unsigned)f12f4,
-           arm_ext_read_u32_or_zero_(m, rw + 0x0854u),
-           arm_ext_read_u32_or_zero_(m, rw + 0x0858u),
-           arm_ext_read_u32_or_zero_(m, rw + 0x0860u),
-           arm_ext_read_u8_or_zero_(m, rw + 0x01E7u),
-           arm_ext_read_u8_or_zero_(m, rw + 0x01E8u),
-           arm_ext_read_u32_or_zero_(m, rw + 0x0224u),
-           arm_ext_read_u32_or_zero_(m, rw + 0x0228u),
-           arm_ext_read_u32_or_zero_(m, rw + 0x13F8u),
-           arm_ext_read_u32_or_zero_(m, rw + 0x13B0u),
-           arm_ext_read_u32_or_zero_(m, rw + 0x13C8u),
-           arm_ext_read_u32_or_zero_(m, rw + 0x14BCu),
-           arm_ext_read_u32_or_zero_(m, rw + 0x14C0u),
-           q ? arm_ext_read_u32_or_zero_(m, q + 12) : 0,
-           q ? arm_ext_read_u32_or_zero_(m, q + 20) : 0,
-           ext_chunk ? arm_ext_read_u32_or_zero_(m, ext_chunk + 0x34u) : 0,
-           m->timer_p_addr, m->timer_helper_addr,
-           m->active_p_addr, m->active_helper_addr,
-           arm_ext_read_u32_or_zero_(m, m->mr_timer_state_slot),
-           mr_timer_state, m->host_timer_pending,
-           m->primary_child_reopen_timer_needed);
-}
-
-static void gghjt_dump_state(ArmExtModule *m, void *app_state,
-                             const char *tag, int32 code,
-                             uint32 input_addr, uint32 input_len) {
-    gghjt_dump_state_impl(m, app_state, tag, code, input_addr, input_len);
-}
-
 /* --- profile definition --- */
 
 const AppCompatProfile app_compat_gghjt = {
@@ -535,10 +336,5 @@ const AppCompatProfile app_compat_gghjt = {
     .intercept_write = gghjt_intercept_write,
     .post_write_cleanup = gghjt_post_write_cleanup,
     .post_read_hook = gghjt_post_read_hook,
-    .save_child_snapshot = gghjt_save_child_snapshot,
-    .restore_child_if_closed = gghjt_restore_child_if_closed,
-    .on_child_reopen_check = gghjt_on_child_reopen_check,
-    .on_child_close_complete = gghjt_on_child_close_complete,
     .pc_diagnostic = gghjt_pc_diagnostic,
-    .dump_state = gghjt_dump_state,
 };
