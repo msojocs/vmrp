@@ -89,8 +89,7 @@ VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h) {
     pending_timer_ms = 0;
     edit_active = 0;
 
-    char *fake_argv[] = {"vmrp", NULL};
-    return prepareVmrpArgs(1, fake_argv);
+    return 0;
 }
 
 VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char *entry) {
@@ -100,18 +99,15 @@ VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char
     if (!mrp_path || !*mrp_path) return -1;
     if (!ext || !*ext) ext = "start.mr";
 
-    char *argv[6];
-    int argc = 0;
-    argv[argc++] = "vmrp";
-    argv[argc++] = (char *)mrp_path;
-    argv[argc++] = (char *)ext;
-    if (entry && *entry) argv[argc++] = (char *)entry;
-    argv[argc] = NULL;
+    VmrpArgs args = vmrp_args_default();
+    args.screen_width = vmrp_config.screen_width;
+    args.screen_height = vmrp_config.screen_height;
+    snprintf(args.mrp_path, sizeof(args.mrp_path), "%s", mrp_path);
+    snprintf(args.ext_name, sizeof(args.ext_name), "%s", ext);
+    if (entry && *entry) snprintf(args.entry, sizeof(args.entry), "%s", entry);
 
-    fprintf(stderr, "[vmrp_api] prepareVmrpArgs...\n"); fflush(stderr);
-    if (prepareVmrpArgs(argc, argv) != 0) return -1;
     fprintf(stderr, "[vmrp_api] startVmrp...\n"); fflush(stderr);
-    int ret = startVmrp(argc, argv);
+    int ret = startVmrp(&args);
     fprintf(stderr, "[vmrp_api] startVmrp returned %d\n", ret); fflush(stderr);
     return ret;
 }

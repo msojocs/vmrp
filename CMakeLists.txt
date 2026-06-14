@@ -143,6 +143,7 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn EXCLUDE_FROM_AL
 
 set(VMRP_CORE_SOURCES
   ./src/vmrp.c
+  ./src/vmrp_args.c
   ./src/utils.c
   ./src/rbtree.c
   ./src/network.c
@@ -356,6 +357,7 @@ if(VMRP_BUILD_TESTS)
     test/test_api_main.c
     test/test_api_lifecycle.c
     ./src/vmrp_api.c
+    ./src/vmrp_args.c
   )
   target_compile_definitions(test_vmrp_api PRIVATE VMRP)
   target_include_directories(test_vmrp_api PRIVATE

@@ -541,10 +541,11 @@ int main(int argc, char *args[]) {
     signal(SIGUSR1, sigusr1_handler);
 #endif
     if (argc > 1 && (strcmp(args[1], "-h") == 0 || strcmp(args[1], "--help") == 0)) {
-        printVmrpUsage(args[0]);
+        vmrp_args_print_usage(args[0]);
         return 0;
     }
-    if (prepareVmrpArgs(argc, args) != MR_SUCCESS) {
+    VmrpArgs vmrp_args;
+    if (vmrp_args_parse(argc, args, &vmrp_args) != MR_SUCCESS) {
         return -1;
     }
 
@@ -572,7 +573,7 @@ int main(int argc, char *args[]) {
         return -1;
     }
 
-    if (startVmrp(argc, args) != MR_SUCCESS) {
+    if (startVmrp(&vmrp_args) != MR_SUCCESS) {
         SDL_DestroyWindow(window);
         SDL_Quit();
         return -1;

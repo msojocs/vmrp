@@ -21,12 +21,6 @@
 #define PATH_MAX 4096
 #endif
 
-#define VMRP_MRP_NAME_LIMIT 128
-#define VMRP_DNS_MAP_LIMIT 2048
-/* Multiple DNS mappings can be separated by ';', ',', or newline:
- * "old.example->127.0.0.1;api.example=localhost" */
-#define VMRP_DEFAULT_DNS_MAP "wap.skmeg.com->159.75.119.124;rop.skymobiapp.com->127.0.0.1;spd.skymobiapp.com->159.75.119.124"
-
 #include "./include/fileLib.h"
 #include "./include/utils.h"
 #include "./include/debug.h"
@@ -44,242 +38,6 @@ VmrpConfig vmrp_config = {
 };
 
 static VmrpRuntime runtime;
-
-typedef enum VmrpDnsMapSource {
-    VMRP_DNS_MAP_SOURCE_NONE = 0,
-    VMRP_DNS_MAP_SOURCE_DEFAULT,
-    VMRP_DNS_MAP_SOURCE_ENV,
-    VMRP_DNS_MAP_SOURCE_CONFIG,
-    VMRP_DNS_MAP_SOURCE_CLI
-} VmrpDnsMapSource;
-
-typedef struct VmrpStartupConfig {
-    int prepared;
-    const char *mrp_arg;
-    const char *ext_arg;
-    const char *entry_arg;
-    const char *screen_arg;
-    const char *dns_map_arg;
-    char cli_mrp_path[PATH_MAX];
-    char dns_map[VMRP_DNS_MAP_LIMIT];
-    int dns_map_set;
-    VmrpDnsMapSource dns_map_source;
-} VmrpStartupConfig;
-
-static VmrpStartupConfig startup_config;
-
-static void resetStartupArgs(void) {
-    startup_config.prepared = 0;
-    startup_config.mrp_arg = NULL;
-    startup_config.ext_arg = NULL;
-    startup_config.entry_arg = NULL;
-    startup_config.screen_arg = NULL;
-    startup_config.dns_map_arg = NULL;
-    startup_config.cli_mrp_path[0] = '\0';
-}
-
-void printVmrpUsage(const char *program) {
-    const char *name = (program && *program) ? program : "vmrp";
-    printf("Usage: %s [OPTIONS] [MRP_PATH] [EXT_NAME] [ENTRY]\n", name);
-    printf("       %s --help\n", name);
-    printf("\n");
-    printf("Options:\n");
-    printf("  --screen WxH        Set screen resolution (default: 240x320)\n");
-    printf("  --dns-map MAP       Resolve original domains using fake domains\n");
-    printf("\n");
-    printf("Environment variables:\n");
-    printf("  VMRP_SCREEN_WIDTH   Screen width  (overridden by --screen)\n");
-    printf("  VMRP_SCREEN_HEIGHT  Screen height (overridden by --screen)\n");
-    printf("  VMRP_DNS_MAP        Domain map, e.g. old.example->new.example\n");
-    printf("\n");
-    printf("Without arguments, vmrp keeps the old behavior and starts VMRP_MRP or dsm_gm.mrp.\n");
-    printf("Examples:\n");
-    printf("  %s /path/to/app.mrp\n", name);
-    printf("  %s --screen 176x220 /path/to/app.mrp\n", name);
-    printf("  %s --dns-map old.example->new.example /path/to/app.mrp\n", name);
-    printf("  %s /path/to/app.mrp start.mr _dsm\n", name);
-}
-
-static int resolve_cli_mrp_path(const char *input, char *output, size_t output_size) {
-    if (!input || !*input) {
-        fprintf(stderr, "vmrp: empty MRP path\n");
-        return MR_FAILED;
-    }
-
-#ifdef _WIN32
-    if (_fullpath(output, input, output_size) == NULL) {
-        fprintf(stderr, "vmrp: unable to resolve '%s'\n", input);
-        return MR_FAILED;
-    }
-#else
-    if (realpath(input, output) == NULL) {
-        fprintf(stderr, "vmrp: unable to resolve '%s': %s\n", input, strerror(errno));
-        return MR_FAILED;
-    }
-#endif
-
-    if (my_info(output) != MR_IS_FILE) {
-        fprintf(stderr, "vmrp: MRP file not found: %s\n", output);
-        return MR_FAILED;
-    }
-    if (strlen(output) >= VMRP_MRP_NAME_LIMIT) {
-        fprintf(stderr, "vmrp: MRP path is too long for Mythroad runtime (%zu >= %d): %s\n",
-                strlen(output), VMRP_MRP_NAME_LIMIT, output);
-        return MR_FAILED;
-    }
-    return MR_SUCCESS;
-}
-
-static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
-                                 const char **ext_arg, const char **entry_arg,
-                                 const char **screen_arg, const char **dns_map_arg) {
-    int positional = 0;
-    int after_dashdash = 0;
-    *mrp_arg = NULL;
-    *ext_arg = NULL;
-    *entry_arg = NULL;
-    *screen_arg = NULL;
-    *dns_map_arg = NULL;
-
-    for (int i = 1; i < argc; i++) {
-        const char *arg = argv[i];
-        if (!after_dashdash && strcmp(arg, "--") == 0) {
-            after_dashdash = 1;
-            continue;
-        }
-        if (!after_dashdash && strcmp(arg, "--screen") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "vmrp: --screen requires an argument (e.g. 176x220)\n");
-                return MR_FAILED;
-            }
-            *screen_arg = argv[++i];
-            continue;
-        }
-        if (!after_dashdash && strcmp(arg, "--dns-map") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "vmrp: --dns-map requires an argument (e.g. old.example->new.example)\n");
-                return MR_FAILED;
-            }
-            *dns_map_arg = argv[++i];
-            continue;
-        }
-        if (!after_dashdash && arg[0] == '-') {
-            fprintf(stderr, "vmrp: unknown option: %s\n", arg);
-            printVmrpUsage(argv[0]);
-            return MR_FAILED;
-        }
-
-        if (positional == 0) {
-            *mrp_arg = arg;
-        } else if (positional == 1) {
-            *ext_arg = arg;
-        } else if (positional == 2) {
-            *entry_arg = arg;
-        } else {
-            fprintf(stderr, "vmrp: too many arguments\n");
-            printVmrpUsage(argv[0]);
-            return MR_FAILED;
-        }
-        positional++;
-    }
-    return MR_SUCCESS;
-}
-
-static int parse_screen_size(const char *str, int *w, int *h) {
-    int tw = 0, th = 0;
-    if (sscanf(str, "%dx%d", &tw, &th) != 2 || tw <= 0 || th <= 0) {
-        return MR_FAILED;
-    }
-    *w = tw;
-    *h = th;
-    return MR_SUCCESS;
-}
-
-static int applyStartupDnsMap(const char *map, VmrpDnsMapSource source) {
-    if (my_configureDnsMap(map) != MR_SUCCESS) return MR_FAILED;
-    if (map && *map) {
-        if (map != startup_config.dns_map) {
-            snprintf(startup_config.dns_map, sizeof(startup_config.dns_map), "%s", map);
-        }
-    } else {
-        startup_config.dns_map[0] = '\0';
-    }
-    startup_config.dns_map_set = 1;
-    startup_config.dns_map_source = source;
-    return MR_SUCCESS;
-}
-
-int configureVmrpDnsMap(const char *map) {
-    return applyStartupDnsMap(map, VMRP_DNS_MAP_SOURCE_CONFIG);
-}
-
-static const char *selectStartupDnsMap(const char *dns_map_arg, VmrpDnsMapSource *source) {
-    if (dns_map_arg) {
-        *source = VMRP_DNS_MAP_SOURCE_CLI;
-        return dns_map_arg;
-    }
-    if (startup_config.dns_map_set &&
-        startup_config.dns_map_source == VMRP_DNS_MAP_SOURCE_CONFIG) {
-        *source = VMRP_DNS_MAP_SOURCE_CONFIG;
-        return startup_config.dns_map;
-    }
-    const char *env_dns_map = getenv("VMRP_DNS_MAP");
-    if (env_dns_map != NULL) {
-        *source = VMRP_DNS_MAP_SOURCE_ENV;
-        return env_dns_map;
-    }
-    *source = VMRP_DNS_MAP_SOURCE_DEFAULT;
-    return VMRP_DEFAULT_DNS_MAP;
-}
-
-int prepareVmrpArgs(int argc, char *argv[]) {
-    const char *mrp_arg = NULL;
-    const char *ext_arg = NULL;
-    const char *entry_arg = NULL;
-    const char *screen_arg = NULL;
-    const char *dns_map_arg = NULL;
-
-    resetStartupArgs();
-    if (parse_positional_args(argc, argv, &mrp_arg, &ext_arg, &entry_arg,
-                              &screen_arg, &dns_map_arg) != MR_SUCCESS) {
-        return MR_FAILED;
-    }
-    if (mrp_arg && resolve_cli_mrp_path(mrp_arg, startup_config.cli_mrp_path,
-                                        sizeof(startup_config.cli_mrp_path)) != MR_SUCCESS) {
-        return MR_FAILED;
-    }
-
-    /* Screen size: CLI --screen > env vars > default */
-    if (screen_arg) {
-        int w, h;
-        if (parse_screen_size(screen_arg, &w, &h) != MR_SUCCESS) {
-            fprintf(stderr, "vmrp: invalid screen size '%s' (expected WxH, e.g. 176x220)\n", screen_arg);
-            return MR_FAILED;
-        }
-        vmrp_config.screen_width = w;
-        vmrp_config.screen_height = h;
-    } else {
-        const char *env_w = getenv("VMRP_SCREEN_WIDTH");
-        const char *env_h = getenv("VMRP_SCREEN_HEIGHT");
-        if (env_w && *env_w) vmrp_config.screen_width = atoi(env_w);
-        if (env_h && *env_h) vmrp_config.screen_height = atoi(env_h);
-    }
-
-    VmrpDnsMapSource dns_map_source = VMRP_DNS_MAP_SOURCE_NONE;
-    const char *dns_map = selectStartupDnsMap(dns_map_arg, &dns_map_source);
-    if (applyStartupDnsMap(dns_map, dns_map_source) != MR_SUCCESS) {
-        fprintf(stderr, "vmrp: invalid DNS map '%s'\n", dns_map ? dns_map : "");
-        return MR_FAILED;
-    }
-
-    startup_config.mrp_arg = mrp_arg;
-    startup_config.ext_arg = ext_arg;
-    startup_config.entry_arg = entry_arg;
-    startup_config.screen_arg = screen_arg;
-    startup_config.dns_map_arg = dns_map_arg;
-    startup_config.prepared = 1;
-    return MR_SUCCESS;
-}
 
 static uint32_t rd32le(const uint8 *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
@@ -438,9 +196,19 @@ int32_t timer() {
     return vmrp_runtime_timer(&runtime);
 }
 
-int startVmrp(int argc, char *argv[]) {
-    if (!startup_config.prepared && prepareVmrpArgs(argc, argv) != MR_SUCCESS) {
-        return MR_FAILED;
+int configureVmrpDnsMap(const char *map) {
+    return my_configureDnsMap(map);
+}
+
+int startVmrp(const VmrpArgs *args) {
+    vmrp_config.screen_width = args->screen_width;
+    vmrp_config.screen_height = args->screen_height;
+
+    if (args->dns_map[0]) {
+        if (my_configureDnsMap(args->dns_map) != MR_SUCCESS) {
+            fprintf(stderr, "vmrp: invalid DNS map '%s'\n", args->dns_map);
+            return MR_FAILED;
+        }
     }
 
     fprintf(stderr, "[startVmrp] vmrp_runtime_init...\n"); fflush(stderr);
@@ -454,17 +222,13 @@ int startVmrp(int argc, char *argv[]) {
         exit(smoke_ret == MR_SUCCESS ? 0 : 1);
     }
 
-    const char *filename = getenv("VMRP_MRP");
-    const char *extName = getenv("VMRP_EXT");
-    const char *entry = getenv("VMRP_ENTRY");
-    if (startup_config.mrp_arg) {
-        filename = startup_config.cli_mrp_path;
-    }
-    if (startup_config.ext_arg) extName = startup_config.ext_arg;
-    if (startup_config.entry_arg) entry = startup_config.entry_arg;
+    const char *filename = args->mrp_path;
+    const char *extName = args->ext_name;
+    const char *entry = args->entry[0] ? args->entry : NULL;
+
     if (!filename || !*filename) filename = "dsm_gm.mrp";
     if (!extName || !*extName) extName = "start.mr";
-    if (entry && !*entry) entry = NULL;
+
     if (strlen(filename) >= VMRP_MRP_NAME_LIMIT) {
         fprintf(stderr, "vmrp: MRP path is too long for Mythroad runtime (%zu >= %d): %s\n",
                 strlen(filename), VMRP_MRP_NAME_LIMIT, filename);
