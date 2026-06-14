@@ -59,24 +59,6 @@ kill -USR1 <vmrp-pid>
 
 ---
 
-## Disable Mouse (VMRP_NO_MOUSE)
-
-### Problem
-In WSLg/Docker, host mouse clicks leak into guest window, corrupting automated tests.
-
-### Solution
-```bash
-export VMRP_NO_MOUSE=1
-export VMRP_AUTO_CLICKS="50,100;150,200"
-./vmrp game.mrp
-```
-
-### Effect
-- **Blocked**: Real mouse clicks (SDL_MOUSEBUTTONDOWN/UP)
-- **Unblocked**: Auto-clicks, keyboard input, timers
-
----
-
 ## SDL Event Flow
 
 ### Sources
@@ -124,8 +106,8 @@ export VMRP_AUTO_CLICKS="50,100;150,200"
 |-------|---------|-------|
 | SDL_KEYDOWN | keyEvent(MR_KEY_PRESS) | Skips if key already down |
 | SDL_KEYUP | keyEvent(MR_KEY_RELEASE) | Checks matching key |
-| SDL_MOUSEBUTTONDOWN | event(MR_MOUSE_DOWN) | Blocked by VMRP_NO_MOUSE |
-| SDL_MOUSEBUTTONUP | event(MR_MOUSE_UP) | Blocked by VMRP_NO_MOUSE |
+| SDL_MOUSEBUTTONDOWN | event(MR_MOUSE_DOWN) | |
+| SDL_MOUSEBUTTONUP | event(MR_MOUSE_UP) | |
 | SDL_MOUSEMOTION | event(MR_MOUSE_MOVE) | Only if isMouseDown=true |
 | timerEventType | timer() → vmrp_runtime_timer() | Custom SDL event |
 
@@ -208,7 +190,6 @@ Uint32 timerCb(Uint32 interval, void *param) {
 |----------|---------|---------|
 | VMRP_AUTO_CLICKS | (unset) | Automated click sequence |
 | VMRP_AUTO_CLICK_DELAY_MS | 800 | Delay between clicks (ms) |
-| VMRP_NO_MOUSE | (unset) | Block real mouse input |
 | VMRP_PPM | (unset) | Continuous PPM dumps every 30 frames |
 | VMRP_SCREEN_WIDTH | 240 | Screen width (overridden by --screen) |
 | VMRP_SCREEN_HEIGHT | 320 | Screen height (overridden by --screen) |

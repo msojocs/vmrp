@@ -5,7 +5,7 @@ The vmrp emulator project has a **multi-layered testing infrastructure** combini
 - **Unit tests** (C-based, cmake/ctest integration)
 - **PPM image-based testing** (for visual regression & headless verification)
 - **Manual automation scripts** (shell-based test scenarios via VMRP_AUTO_CLICKS)
-- **Environment variable-based testing controls** (VMRP_PPM, VMRP_AUTO_CLICKS, VMRP_NO_MOUSE)
+- **Environment variable-based testing controls** (VMRP_PPM, VMRP_AUTO_CLICKS)
 
 ---
 
@@ -104,15 +104,13 @@ static void dump_screen_ppm(const char *path) {
 | `VMRP_PPM` | Enable periodic PPM dumps | boolean | `export VMRP_PPM=1` |
 | `VMRP_AUTO_CLICKS` | Inject automated clicks | `x,y[,delay_ms];x,y[,delay_ms]` | `"0,0,500;228,309,500"` |
 | `VMRP_AUTO_CLICK_DELAY_MS` | Default delay between clicks | milliseconds | `export VMRP_AUTO_CLICK_DELAY_MS=800` |
-| `VMRP_NO_MOUSE` | Block physical mouse input | boolean | `export VMRP_NO_MOUSE=1` |
 
 ### Headless Testing Pattern
 The combination of these variables enables unattended verification:
 1. Set `VMRP_AUTO_CLICKS` to replay test scenario
-2. Set `VMRP_NO_MOUSE` to ignore physical input noise (WSLg environments, remote desktop)
-3. Enable `VMRP_PPM` for continuous output to `/tmp/vmrp_screen.ppm`
-4. Run: `build/vmrp mythroad/game.mrp`
-5. Compare PPM files or parse game state from logs
+2. Enable `VMRP_PPM` for continuous output to `/tmp/vmrp_screen.ppm`
+3. Run: `build/vmrp mythroad/game.mrp`
+4. Compare PPM files or parse game state from logs
 
 ---
 
@@ -241,7 +239,6 @@ identify /tmp/vmrp_screen.ppm  # if ImageMagick installed
 ### Running Headless Payment Test
 ```bash
 export VMRP_AUTO_CLICKS="228,309,500"  # Click coordinate with 500ms delay
-export VMRP_NO_MOUSE=1                  # Block physical input
 export VMRP_PPM=1                       # Capture screenshots
 ./build/vmrp mythroad/gxdzc.mrp
 
@@ -336,7 +333,6 @@ export VMRP_PPM=1                       # Capture screenshots
 | `VMRP_PPM` | bool | unset | Enable periodic PPM dumps (every 30 draws) |
 | `VMRP_AUTO_CLICKS` | string | unset | Click sequence: "x1,y1[,ms];x2,y2[,ms];..." |
 | `VMRP_AUTO_CLICK_DELAY_MS` | int | 800 | Default pause between auto-clicks (ms) |
-| `VMRP_NO_MOUSE` | bool | unset | Block physical mouse (for headless testing) |
 | `VMRP_ARM_EXT_TRACE` | bool | unset | Debug: trace ARM extension execution |
 | `VMRP_ARM_EXT_TRACE_PC` | bool | unset | Debug: trace program counter (verbose) |
 | `VMRP_ARM_EXT_LOAD_CODE` | int | unset | Debug: ARM extension load behavior |

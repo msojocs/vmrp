@@ -45,6 +45,9 @@ int arm_ext_invoke3(ArmExtModule *m, uint32_t func, uint32_t a0,
 }
 uint32_t arm_ext_read_timer_queue(ArmExtModule *m) { (void)m; return 0; }
 void arm_ext_unload(ArmExtModule *m) { (void)m; }
+void arm_ext_host_cache_sync(ArmExtModule *m, const void *data, uint32_t len) {
+    (void)m; (void)data; (void)len;
+}
 
 /* ---------- dsm / platform stubs ---------- */
 /* mythroad 的内存分配器通过 mr_printf → dsmInFuncs->log 打印诊断信息。

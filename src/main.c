@@ -474,10 +474,6 @@ void loop() {
                     }
                     break;
                 case SDL_MOUSEBUTTONDOWN: {
-                    /* WSLg 等环境会把宿主光标的点击透传进窗口，自动化 PPM 验证时
-                     * 这些杂散点击会误触游戏菜单。设置 VMRP_NO_MOUSE 可屏蔽鼠标，
-                     * 配合 VMRP_AUTO_CLICKS 的按键注入做可复现的无人值守验证。 */
-                    if (getenv("VMRP_NO_MOUSE")) break;
                     uint32_t seq = ++clickSeq;
                     printf("[CLICK] #%u down x=%d y=%d\n", seq, ev.button.x, ev.button.y);
                     isMouseDown = true;
@@ -486,7 +482,6 @@ void loop() {
                     break;
                 }
                 case SDL_MOUSEBUTTONUP: {
-                    if (getenv("VMRP_NO_MOUSE")) break; /* 见 SDL_MOUSEBUTTONDOWN 注释 */
                     uint32_t seq = clickSeq;
                     printf("[CLICK] #%u up x=%d y=%d\n", seq, ev.button.x, ev.button.y);
                     isMouseDown = false;

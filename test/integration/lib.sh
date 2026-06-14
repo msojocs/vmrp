@@ -32,8 +32,6 @@ run_vmrp() {
     VMRP_STDERR_FILE="$_TEST_TMPDIR/stderr.log"
     VMRP_SCREEN_FILE="${VMRP_PPM_PATH:-$_TEST_TMPDIR/screen.ppm}"
 
-    # 合并头模式环境变量
-    export VMRP_NO_MOUSE="${VMRP_NO_MOUSE:-1}"
     export VMRP_PPM_PATH="$VMRP_SCREEN_FILE"
 
     VMRP_EXIT_CODE=0
