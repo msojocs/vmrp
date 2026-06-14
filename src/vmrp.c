@@ -38,6 +38,7 @@ VmrpConfig vmrp_config = {
 };
 
 static VmrpRuntime runtime;
+static int vmrp_exit_requested = 0;
 
 static uint32_t rd32le(const uint8 *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
@@ -189,10 +190,12 @@ int32_t c_event(int32_t code, int32_t p1, int32_t p2) {
 #endif
 
 int32_t event(int32_t code, int32_t p1, int32_t p2) {
+    if (vmrp_exit_requested) return MR_FAILED;
     return vmrp_runtime_event(&runtime, code, p1, p2);
 }
 
 int32_t timer() {
+    if (vmrp_exit_requested) return MR_FAILED;
     return vmrp_runtime_timer(&runtime);
 }
 
@@ -201,6 +204,7 @@ int configureVmrpDnsMap(const char *map) {
 }
 
 int startVmrp(const VmrpArgs *args) {
+    vmrp_exit_requested = 0;
     vmrp_config.screen_width = args->screen_width;
     vmrp_config.screen_height = args->screen_height;
 
@@ -245,4 +249,17 @@ int startVmrp(const VmrpArgs *args) {
         return MR_FAILED;
     }
     return MR_SUCCESS;
+}
+
+void stopVmrp(void) {
+    vmrp_runtime_destroy(&runtime);
+    vmrp_exit_requested = 0;
+}
+
+void vmrp_request_exit(void) {
+    vmrp_exit_requested = 1;
+}
+
+int vmrp_is_exited(void) {
+    return vmrp_exit_requested;
 }
