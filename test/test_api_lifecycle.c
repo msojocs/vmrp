@@ -18,19 +18,10 @@
 /* ── 外部依赖的桩 ─────────────────────────────────────────
  * vmrp_api.c 调用这些函数，我们提供轻量实现使其可独立链接。 */
 
-/* prepareVmrpArgs — 在 vmrp.c 中实现，被 vmrp_api_init 调用。
- * 桩总是返回成功。 */
-static int prepare_called = 0;
-int prepareVmrpArgs(int argc, char *argv[]) {
-    (void)argc; (void)argv;
-    prepare_called++;
-    return 0; /* MR_SUCCESS */
-}
-
 /* startVmrp — 被 vmrp_api_start 调用 */
 static int start_called = 0;
-int startVmrp(int argc, char *argv[]) {
-    (void)argc; (void)argv;
+int startVmrp(const VmrpArgs *args) {
+    (void)args;
     start_called++;
     return 0;
 }
@@ -57,9 +48,6 @@ int configureVmrpDnsMap(const char *map) {
     return 0;
 }
 
-/* printVmrpUsage — vmrp.h 声明 */
-void printVmrpUsage(const char *program) { (void)program; }
-
 /* native_platform_memory — 被 editCreate/editRelease/set_edit_text 用到 */
 void *my_mallocExt(uint32_t len) {
     uint32_t *p = malloc((size_t)len + sizeof(uint32_t));
@@ -72,6 +60,12 @@ void my_freeExt(void *p) {
     if (p) free(((uint32_t *)p) - 1);
 }
 
+/* vmrp_args.c 依赖的桩 — 链接器需要这些符号 */
+int32_t my_info(const char *path) {
+    (void)path;
+    return 0;
+}
+
 /* vmrp_config — 在 vmrp.c 中定义，这里提供 */
 VmrpConfig vmrp_config = {
     .screen_width = 240,
@@ -80,7 +74,6 @@ VmrpConfig vmrp_config = {
 
 /* ── 辅助函数 ─────────────────────────────────────────── */
 static void reset_counters(void) {
-    prepare_called = 0;
     start_called = 0;
     event_called = 0;
     timer_called = 0;
@@ -95,7 +88,6 @@ static void test_init_allocates_screen_buffer(void) {
 
     int rc = vmrp_api_init(240, 320);
     ASSERT_INT_EQ(0, rc);
-    ASSERT_INT_EQ(1, prepare_called);
 
     const uint16_t *buf = vmrp_api_get_screen_buffer();
     ASSERT_PTR_NOT_NULL(buf);
@@ -203,8 +195,6 @@ static void test_multiple_init_destroy_cycles(void) {
         vmrp_api_destroy();
         ASSERT_PTR_NULL(vmrp_api_get_screen_buffer());
     }
-    ASSERT_INT_EQ(5, prepare_called);
-
     TEST_END();
 }
 
