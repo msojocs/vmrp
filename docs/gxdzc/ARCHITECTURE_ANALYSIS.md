@@ -76,18 +76,15 @@ loop() main event loop:
   └─ while (isLoop):
      └─ while (SDL_WaitEvent(&ev)):  [line 421]
         └─ if (ev.type == SDL_MOUSEBUTTONDOWN) [line 474]
-           ├─ Check VMRP_NO_MOUSE env var (line 478)
-           │  └─ If set, skip this event
-           ├─ Log click: "[CLICK] #%u down x=%d y=%d" (line 480)
-           ├─ Call: event(MR_MOUSE_DOWN, ev.button.x, ev.button.y) [line 482]
+           ├─ Log click: "[CLICK] #%u down x=%d y=%d"
+           ├─ Call: event(MR_MOUSE_DOWN, ev.button.x, ev.button.y)
            │  └─ Routes to emulated code via vmrp_runtime_event()
-           └─ Log return: "[CLICK] #%u down ret=%d" (line 483)
+           └─ Log return: "[CLICK] #%u down ret=%d"
         
         └─ if (ev.type == SDL_MOUSEBUTTONUP) [line 486]
-           ├─ Check VMRP_NO_MOUSE env var (line 487)
-           ├─ Log: "[CLICK] #%u up x=%d y=%d" (line 489)
-           ├─ Call: event(MR_MOUSE_UP, ev.button.x, ev.button.y) [line 491]
-           └─ Log return: "[CLICK] #%u up ret=%d" (line 492)
+           ├─ Log: "[CLICK] #%u up x=%d y=%d"
+           ├─ Call: event(MR_MOUSE_UP, ev.button.x, ev.button.y)
+           └─ Log return: "[CLICK] #%u up ret=%d"
         
         └─ if (ev.type == SDL_KEYDOWN) [line 457]
            └─ if (isKeyDown == SDLK_UNKNOWN)
@@ -182,46 +179,7 @@ Screenshots are saved as PPM (Portable PixMap) format to `/tmp/vmrp_screen.ppm` 
 
 ---
 
-## 3. VMRP_NO_MOUSE: Disabling Mouse Input
-
-### Problem It Solves
-In WSLg, Docker, or other virtualized environments with cursor sharing, the host system's mouse clicks can leak into the guest window. This causes spurious clicks during automated PPM validation.
-
-### Implementation
-
-**File: src/main.c, loop() function [lines 474-494]**
-
-```c
-case SDL_MOUSEBUTTONDOWN: {
-    if (getenv("VMRP_NO_MOUSE")) break;  // ← Block mouse DOWN
-    // ... handle click
-}
-
-case SDL_MOUSEBUTTONUP: {
-    if (getenv("VMRP_NO_MOUSE")) break;   // ← Block mouse UP
-    // ... handle click
-}
-```
-
-### Effect
-- **When set**: All SDL_MOUSEBUTTONDOWN and SDL_MOUSEBUTTONUP events are silently discarded
-- **Unaffected**: 
-  - Auto-clicks from VMRP_AUTO_CLICKS still work (directly push to SDL queue before event loop checks)
-  - Key events (SDL_KEYDOWN/SDL_KEYUP)
-  - Timer events
-  - Custom key injections via negative x values in VMRP_AUTO_CLICKS
-
-### Usage Pattern
-```bash
-# Enable auto-clicks and disable spurious host clicks
-export VMRP_AUTO_CLICKS="10,50;100,150;50,100"
-export VMRP_NO_MOUSE=1
-vmrp game.mrp
-```
-
----
-
-## 4. SDL Main Loop Architecture
+## 3. SDL Main Loop Architecture
 
 ### Initialization Phase
 
@@ -266,11 +224,9 @@ loop():
   │        ├─ if (ev.type == SDL_MOUSEMOTION)
   │        │  └─ If isMouseDown, call event(MR_MOUSE_MOVE, x, y)
   │        ├─ if (ev.type == SDL_MOUSEBUTTONDOWN)
-  │        │  └─ Check VMRP_NO_MOUSE
-  │        │     └─ Call event(MR_MOUSE_DOWN, x, y)
+  │        │  └─ Call event(MR_MOUSE_DOWN, x, y)
   │        └─ if (ev.type == SDL_MOUSEBUTTONUP)
-  │           └─ Check VMRP_NO_MOUSE
-  │              └─ Call event(MR_MOUSE_UP, x, y)
+  │           └─ Call event(MR_MOUSE_UP, x, y)
   └─ Cleanup: SDL_DestroyWindow(), SDL_Quit()
 ```
 
@@ -415,7 +371,7 @@ VMRP_AUTO_CLICK_DELAY_MS=1000
         │  ├─ SDL_MOUSEBUTTONDOWN  │
         │  ├─ SDL_PushEvent()      ├─ Detects SDL_MOUSEBUTTONDOWN
         │  └─ Sleep 500ms          │  for (50, 100)
-        │  ├─ SDL_MOUSEBUTTONUP    │  ├─ Checks VMRP_NO_MOUSE ✓
+        │  ├─ SDL_MOUSEBUTTONUP    │
         │  ├─ SDL_PushEvent()      │  ├─ Logs "[CLICK] #1 down"
         │  └─ Sleep 1000ms         │  ├─ event(MR_MOUSE_DOWN, 50, 100)
         │                     │     │  │  └─ vmrp_runtime_event()

@@ -593,6 +593,14 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
              * 的无效回调地址——netpay 超时返回的标志性崩溃模式 */
             int lr_in_wrapper = (lr & ~1u) >= EXT_CODE_ADDR &&
                                 (lr & ~1u) < EXT_CODE_ADDR + m->code_len;
+            /* wrapper 内部 loader BLX 到 game code 时 LR 自然指向 wrapper，
+             * 不能把这种合法跳转当作无效回调。game code 在 pending file 范围内
+             * 时排除 lr_in_wrapper 判定，让后续 "fallback to LR" 继续执行。 */
+            if (lr_in_wrapper && m->pending_internal_file_addr &&
+                pc >= m->pending_internal_file_addr &&
+                pc < m->pending_internal_file_addr + m->pending_internal_file_len) {
+                lr_in_wrapper = 0;
+            }
             uint8_t *pcp = (uint8_t *)arm_ptr(m, pc);
             if (pcp && ((pcp[0] == 0xFF && pcp[1] == 0xFF) ||
                        (pcp[0] == 0x00 && pcp[1] == 0x00 && pcp[2] == 0x00 && pcp[3] == 0x00) ||
@@ -1859,6 +1867,11 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
              */
             int internal_loader_staging =
                 (r1 == 9 && arm_ext_has_internal_loader_chunk(m, r2, r3));
+            if (r1 == 9 && internal_loader_staging &&
+                m->last_file_copy && r2 && r3 <= m->last_file_len &&
+                r3 > 8 && arm_ptr(m, r2 + 8)) {
+                memcpy(arm_ptr(m, r2 + 8), m->last_file_copy + 8, r3 - 8);
+            }
             if (r1 == 9 && !internal_loader_staging &&
                 m->last_file_copy && r2 && r3 <= m->last_file_len &&
                 arm_ptr(m, r2)) {
@@ -2611,19 +2624,23 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     m->current_helper_addr = 0;
     sync_timer_state_from_arm(m);
     app_dump_state(m, "call_post", code, input_addr, input_len);
-    if (getenv("VMRP_ARM_EXT_DIAG")) {
-        uint32_t arm_timer_state = 0;
-        internal_slot_read(m, m->mr_timer_state_slot, &arm_timer_state);
-        printf("DIAG arm_ext_call_post code=%d ret=%d armTimer=%u hostTimer=%d pending=%d timerP=0x%X timerH=0x%X activeP=0x%X activeH=0x%X\n",
-               (int)code, call_ret, arm_timer_state, mr_timer_state,
-               m->host_timer_pending, m->timer_p_addr, m->timer_helper_addr,
-               m->active_p_addr, m->active_helper_addr);
-    }
     if (code == 2 && was_host_timer_pending && m->host_timer_pending) {
         internal_slot_write(m, m->mr_timer_state_slot, (uint32_t)mr_timer_state);
     }
     leave_screen_context(m, saved_screenBuf);
     capture_timer_dispatches(m);
+
+    /* wrapper 无 primary module 时（如"请稍后"加载阶段），wrapper 的
+     * code=2 处理完后不会通过 table[31] 重启宿主 timer。宿主需要持续
+     * 给 wrapper 发送 timer tick，直到 wrapper 完成 game 模块的加载并
+     * 注册 primary module。 */
+    if (code == 2 && !m->host_timer_pending &&
+        !m->primary_p_addr && m->wrapper_timer_dispatch_addr) {
+        mr_timerStart(50);
+        mr_timer_state = 1;
+        m->host_timer_pending = 1;
+        internal_slot_write(m, m->mr_timer_state_slot, 1);
+    }
 
     /* arm_ext_call 后检查 game timer head (state[8]) 变化：wrapper 的
      * suspend 会清零 game_rw[0x8C]，保存旧值以便 resume 时恢复。 */
@@ -3048,6 +3065,19 @@ int arm_ext_invoke3(ArmExtModule *m, uint32 func, uint32 arg0, uint32 arg1,
 
     if (ret_out) *ret_out = (int32)reg_read32(m->uc, UC_ARM_REG_R0);
     return MR_SUCCESS;
+}
+
+void arm_ext_host_cache_sync(ArmExtModule *m, const void *host_data, uint32 len) {
+    if (!m || !host_data || !len) return;
+    if (!m->pending_internal_file_addr || !m->pending_internal_file_len) return;
+    uint32_t addr = m->pending_internal_file_addr;
+    uint32_t flen = m->pending_internal_file_len;
+    uint32_t copy_len = len < flen ? len : flen;
+    void *dst = arm_ptr(m, addr);
+    if (!dst) return;
+    memcpy(dst, host_data, copy_len);
+    uc_ctl_remove_cache(m->uc, addr, addr + copy_len);
+    arm_ext_sync_internal_nested_module(m, addr, flen);
 }
 
 void arm_ext_unload(ArmExtModule *m) {

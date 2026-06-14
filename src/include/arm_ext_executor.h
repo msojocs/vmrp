@@ -28,5 +28,6 @@ uint32 arm_ext_read_timer_queue(ArmExtModule *m);
  * 用于 child 流程完整关闭后恢复到 game-only 状态。 */
 void arm_ext_reset_child_modules(ArmExtModule *m);
 void arm_ext_unload(ArmExtModule *m);
+void arm_ext_host_cache_sync(ArmExtModule *m, const void *host_data, uint32 len);
 
 #endif

@@ -3387,6 +3387,9 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
 
         case 9:
             mr_cacheSync((void*)((uint32)(input1) & (~0x0000001F)), ((len + 0x0000001F * 3) & (~0x0000001F)));
+            if (native_ext && input1 && len > 0) {
+                arm_ext_host_cache_sync(native_ext, input1, (uint32)len);
+            }
             return 0;
 
         case 100:

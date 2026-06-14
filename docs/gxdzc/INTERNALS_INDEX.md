@@ -3,9 +3,8 @@
 This directory contains comprehensive analysis of the VMRP (Virtual MythRoad Platform) architecture, focusing on:
 1. **Auto-click injection** (VMRP_AUTO_CLICKS)
 2. **Screen dump mechanism** (PPM format, /tmp/vmrp_screen.ppm)
-3. **Mouse input filtering** (VMRP_NO_MOUSE)
-4. **SDL event loop architecture**
-5. **Thread synchronization**
+3. **SDL event loop architecture**
+4. **Thread synchronization**
 
 ---
 
@@ -28,10 +27,7 @@ Contains:
   - guiDrawBitmap integration
   - Environment control variables
 
-- ✅ VMRP_NO_MOUSE filtering (lines 176-207)
-  - Implementation in event loop
-  - Effect on real vs. auto clicks
-  - Usage patterns
+
 
 - ✅ SDL main loop architecture (lines 211-378)
   - Initialization phase (SDL_Init, window creation)
@@ -56,7 +52,6 @@ Contains:
   - Special key codes (-1 to -4)
   - Timing configuration
 - PPM triggers (automatic, manual via SIGUSR1)
-- VMRP_NO_MOUSE quick usage
 - SDL event flow diagram (compact)
 - Event type table
 - Environment variables table
@@ -214,18 +209,13 @@ Auto-clicks → SDL Event Queue ← Real Input ← SDL Timers
 - SDL event queue is thread-safe → safe to push from multiple threads
 - Main thread serializes all emulator calls → no race conditions
 
-### 2. VMRP_NO_MOUSE is a Content Filter
-- **Does NOT block**: Auto-click injection (happens before event loop)
-- **Does block**: Real mouse input (filtered in event loop)
-- **Use case**: WSLg/Docker where host cursor leaks into guest
-
-### 3. PPM Dumps Don't Block
+### 2. PPM Dumps Don't Block
 - Triggered every 30 frames (when VMRP_PPM set)
 - Happens on main thread (no new thread spawned)
 - Locks SDL surface briefly to read pixels
 - Writes to `/tmp/vmrp_screen.ppm` (usually fast on modern filesystems)
 
-### 4. Timer Events Use Custom SDL Event Type
+### 3. Timer Events Use Custom SDL Event Type
 - Timer callback runs in SDL's timer thread
 - Can't call Unicorn directly (not thread-safe)
 - Instead: Create custom SDL event, push to queue
@@ -262,7 +252,6 @@ To verify your understanding:
 - [ ] I can explain the auto-click format with at least 3 examples
 - [ ] I understand why Unicorn access must be serialized to the main thread
 - [ ] I can trace an SDL_MOUSEBUTTONDOWN event from user input to emulator call
-- [ ] I know what VMRP_NO_MOUSE blocks and what it doesn't
 - [ ] I can explain the timeline of auto-clicks vs. real input
 - [ ] I understand PPM format and the three triggering methods
 - [ ] I know what VMRP_PPM does differently from the default behavior

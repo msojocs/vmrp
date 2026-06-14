@@ -225,7 +225,6 @@ startup sequence:
         ├─ autoClickThread()
         │  └─ getenv("VMRP_AUTO_CLICK_DELAY_MS") ← READ
         └─ [main loop]
-           ├─ getenv("VMRP_NO_MOUSE") ← CHECK per event
            └─ getenv("VMRP_PPM") ← CHECK per draw (guiDrawBitmap)
 ```
 
