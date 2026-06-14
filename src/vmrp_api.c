@@ -9,6 +9,7 @@
 static uint16_t *screen_buf = NULL;
 static int screen_dirty = 0;
 static int pending_timer_ms = 0;
+static int api_running = 0;
 
 static int edit_active = 0;
 static int32_t edit_max_size = 0;
@@ -88,6 +89,7 @@ VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h) {
     screen_dirty = 0;
     pending_timer_ms = 0;
     edit_active = 0;
+    api_running = 0;
 
     return 0;
 }
@@ -109,14 +111,17 @@ VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char
     fprintf(stderr, "[vmrp_api] startVmrp...\n"); fflush(stderr);
     int ret = startVmrp(&args);
     fprintf(stderr, "[vmrp_api] startVmrp returned %d\n", ret); fflush(stderr);
+    api_running = (ret == 0 && !vmrp_is_exited()) ? 1 : 0;
     return ret;
 }
 
 VMRP_EXPORT void vmrp_api_destroy(void) {
+    stopVmrp();
     free(screen_buf);
     screen_buf = NULL;
     screen_dirty = 0;
     pending_timer_ms = 0;
+    api_running = 0;
     if (hold_edit_text) {
         my_freeExt(hold_edit_text);
         hold_edit_text = NULL;
@@ -129,16 +134,49 @@ VMRP_EXPORT int vmrp_api_set_dns_map(const char *map) {
 }
 
 VMRP_EXPORT int vmrp_api_event(int code, int p0, int p1) {
-    return event((int32_t)code, (int32_t)p0, (int32_t)p1);
+    if (!api_running || vmrp_is_exited()) {
+        api_running = 0;
+        pending_timer_ms = 0;
+        return -1;
+    }
+    int ret = event((int32_t)code, (int32_t)p0, (int32_t)p1);
+    if (vmrp_is_exited()) {
+        api_running = 0;
+        pending_timer_ms = 0;
+    }
+    return ret;
 }
 
 VMRP_EXPORT int vmrp_api_timer(void) {
+    if (!api_running || vmrp_is_exited()) {
+        api_running = 0;
+        pending_timer_ms = 0;
+        return -1;
+    }
     pending_timer_ms = 0;
-    return timer();
+    int ret = timer();
+    if (vmrp_is_exited()) {
+        api_running = 0;
+        pending_timer_ms = 0;
+    }
+    return ret;
 }
 
 VMRP_EXPORT int vmrp_api_get_timer_interval(void) {
+    if (!api_running || vmrp_is_exited()) {
+        api_running = 0;
+        pending_timer_ms = 0;
+        return 0;
+    }
     return pending_timer_ms;
+}
+
+VMRP_EXPORT int vmrp_api_is_running(void) {
+    if (api_running && vmrp_is_exited()) {
+        api_running = 0;
+        pending_timer_ms = 0;
+    }
+    return api_running;
 }
 
 VMRP_EXPORT const uint16_t *vmrp_api_get_screen_buffer(void) {
@@ -160,10 +198,16 @@ VMRP_EXPORT int vmrp_api_get_screen_height(void) {
 }
 
 VMRP_EXPORT int vmrp_api_is_edit_active(void) {
+    if (!api_running || vmrp_is_exited()) return 0;
     return edit_active;
 }
 
 VMRP_EXPORT int vmrp_api_set_edit_text(const char *text) {
+    if (!api_running || vmrp_is_exited()) {
+        api_running = 0;
+        pending_timer_ms = 0;
+        return -1;
+    }
     if (!edit_active) return -1;
     if (hold_edit_text) {
         my_freeExt(hold_edit_text);
@@ -190,6 +234,11 @@ VMRP_EXPORT int vmrp_api_set_edit_text(const char *text) {
 }
 
 VMRP_EXPORT int vmrp_api_cancel_edit(void) {
+    if (!api_running || vmrp_is_exited()) {
+        api_running = 0;
+        pending_timer_ms = 0;
+        return -1;
+    }
     if (!edit_active) return -1;
     edit_active = 0;
     /* MR_DIALOG_KEY_CANCEL = 1 */

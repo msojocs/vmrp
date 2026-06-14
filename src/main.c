@@ -423,6 +423,10 @@ void loop() {
         while (SDL_WaitEvent(&ev))
 #endif
         {
+            if (vmrp_is_exited()) {
+                isLoop = false;
+                break;
+            }
             if (ev.type == SDL_QUIT) {
                 isLoop = false;
                 // emscripten_cancel_main_loop();
@@ -489,6 +493,10 @@ void loop() {
                     printf("[CLICK] #%u up ret=%d\n", seq, ret);
                     break;
                 }
+            }
+            if (vmrp_is_exited()) {
+                isLoop = false;
+                break;
             }
         }
     }
@@ -573,12 +581,19 @@ int main(int argc, char *args[]) {
         SDL_Quit();
         return -1;
     }
+    if (vmrp_is_exited()) {
+        stopVmrp();
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 0;
+    }
 
 #if defined(__EMSCRIPTEN__)
     emscripten_set_main_loop(loop, 0, 1);
 #else
     loop();
 #endif
+    stopVmrp();
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;

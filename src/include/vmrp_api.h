@@ -47,6 +47,7 @@ extern "C" {
 VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h);
 VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char *entry);
 VMRP_EXPORT void vmrp_api_destroy(void);
+VMRP_EXPORT int vmrp_api_is_running(void);
 
 /*
  * DNS mapping: when MRP resolves original_domain, VMRP resolves fake_domain
