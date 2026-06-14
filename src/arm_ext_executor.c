@@ -147,24 +147,10 @@ static inline void app_on_child_confirmed(ArmExtModule *m, uint32_t p, uint32_t 
     if (m && m->profile && m->profile->on_child_confirmed)
         m->profile->on_child_confirmed(m, m->app_state, p, h);
 }
-static inline int app_restore_child_if_closed(ArmExtModule *m, int32 code,
-                                              uint32_t ia, uint32 il) {
-    if (m && m->profile && m->profile->restore_child_if_closed)
-        return m->profile->restore_child_if_closed(m, m->app_state, code, ia, il);
-    return 0;
-}
 static inline int app_should_protect_got_addr(ArmExtModule *m, uint32_t addr) {
     if (m && m->profile && m->profile->should_protect_got_addr)
         return m->profile->should_protect_got_addr(m, m->app_state, addr);
     return 0;
-}
-static inline void app_on_child_reopen_check(ArmExtModule *m) {
-    if (m && m->profile && m->profile->on_child_reopen_check)
-        m->profile->on_child_reopen_check(m, m->app_state);
-}
-static inline void app_on_child_close_complete(ArmExtModule *m) {
-    if (m && m->profile && m->profile->on_child_close_complete)
-        m->profile->on_child_close_complete(m, m->app_state);
 }
 
 
@@ -1478,7 +1464,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             arm_ext_record_timer_owner(m);
             app_dump_state(m, "table31_timer_start", -1, 0, 0);
             break;
-        case 32:
+        case 32: {
             ret = mr_timerStop();
             internal_slot_write(m, m->mr_timer_state_slot, 0);
             mr_timer_state = 0;
@@ -1486,7 +1472,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             m->timer_p_addr = 0;
             m->timer_helper_addr = 0;
             app_dump_state(m, "table32_timer_stop", -1, 0, 0);
-            break;
+        } break;
         case 33: {
             ret = mr_getTime();
             /* 部分 ext 用忙等循环反复调 mr_getTime() 等待真实时间流逝（如
@@ -2490,15 +2476,6 @@ static int arm_ext_save_modal_screen_snapshot(ArmExtModule *m) {
 
 
 
-static int arm_ext_clear_cancelled_download_modal_tail(ArmExtModule *m,
-                                                       uint32_t ext_chunk,
-                                                       uint32_t game_rw,
-                                                       uint32_t timer_head) {
-    if (!m || !m->profile || !m->profile->clear_modal_tail) return 0;
-    int ret = m->profile->clear_modal_tail(m, m->app_state, ext_chunk, game_rw, timer_head);
-    if (ret) arm_ext_clear_foreground_screen_owner(m);
-    return ret;
-}
 
 int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_len,
                  uint8 **output, int32 *output_len) {
@@ -2549,26 +2526,13 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         call_helper_addr = m->timer_helper_addr;
     }
     int wrapper_modal_event_routed = 0;
-    int32_t wrapper_modal_event[3] = {0};
-    int primary_mouse_up_event = 0;
-    int modal_cancel_release = 0;
-    int modal_closed_by_wrapper = 0;
-    int restore_game_timer_after_modal_cancel = 0;
+    int reopen_set_this_call = 0;
     uint32_t modal_ext_chunk = 0;
     uint32_t modal_suspend_depth_pre = 0;
     if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr + 12))
         memcpy(&modal_ext_chunk, arm_ptr(m, m->primary_p_addr + 12), 4);
     if (modal_ext_chunk && arm_ptr(m, modal_ext_chunk + 0x34))
         memcpy(&modal_suspend_depth_pre, arm_ptr(m, modal_ext_chunk + 0x34), 4);
-    int foreground_child_owns_timer =
-        m->active_p_addr &&
-        m->active_helper_addr &&
-        m->active_p_addr != m->primary_p_addr &&
-        m->active_helper_addr != m->primary_helper_addr &&
-        m->active_p_addr != m->p_addr &&
-        m->active_helper_addr != m->helper_addr &&
-        m->timer_p_addr == m->active_p_addr &&
-        m->timer_helper_addr == m->active_helper_addr;
     int foreground_child_active =
         m->active_p_addr &&
         m->active_helper_addr &&
@@ -2576,29 +2540,22 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         m->active_helper_addr != m->primary_helper_addr &&
         m->active_p_addr != m->p_addr &&
         m->active_helper_addr != m->helper_addr;
-    if (code == 1 && foreground_child_owns_timer) {
-        /* 前台子模块拥有定时器时，事件直接路由到子模块。子模块有独立的
-         * 事件处理，不经过 wrapper 回调链。 */
-        call_p_addr = m->active_p_addr;
-        call_helper_addr = m->active_helper_addr;
-    }
-    /* code=1 路由到 wrapper 时的预处理：
+    /* 真机上 code=1 事件始终先经 wrapper 的 mrc_extHelper（反汇编
+     * docs/反汇编研究.c:428-476），wrapper 通过内部回调链分发给 game
+     * 或前台子模块。不绕过 wrapper，否则 wrapper 的 suspend/resume
+     * 机制无法正确管理模态框生命周期。
+     *
+     * 预处理：
      * - 修复 extChunk[8]（game helper 指针），确保 wrapper 的 resume
      *   (0xE83220) 能通过 blx extChunk[8] 正确调用 game 的 resumeApp。
-     *   cfunction.ext ARM 代码运行中会将该槽位清零（gxdzc 反汇编证实）。
-     * - 检测 SOFTRIGHT 取消键释放，用于后续 game timer head 恢复。 */
-    if (code == 1 && has_separate_wrapper && !foreground_child_owns_timer) {
+     *   cfunction.ext ARM 代码运行中会将该槽位清零（gxdzc 反汇编证实）。 */
+    if (code == 1 && has_separate_wrapper) {
         uint32_t _ec = modal_ext_chunk;
         if (_ec && m->primary_helper_addr && arm_ptr(m, _ec + 8)) {
             memcpy(arm_ptr(m, _ec + 8), &m->primary_helper_addr, 4);
         }
         if (input_len >= 12 && input_addr) {
-            memcpy(wrapper_modal_event, arm_ptr(m, input_addr), 12);
-            if (wrapper_modal_event[0] == 1 && wrapper_modal_event[1] == 18) {
-                modal_cancel_release = 1;
-            }
             wrapper_modal_event_routed = 1;
-            restore_game_timer_after_modal_cancel = 1;
         }
     }
 
@@ -2629,18 +2586,9 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if (_ac_grw && arm_ptr(m, _ac_grw + GAME_TIMER_HEAD_OFFSET))
         memcpy(&_ac_s8_pre, arm_ptr(m, _ac_grw + GAME_TIMER_HEAD_OFFSET), 4);
     int call_modal_snapshot_candidate = 0;
-    if (code == 1 &&
-        modal_suspend_depth_pre == 0 &&
-        call_p_addr == m->primary_p_addr &&
-        call_helper_addr == m->primary_helper_addr) {
-        if (input_len >= 4 && input_addr) {
-            int32_t event_code = 0;
-            memcpy(&event_code, arm_ptr(m, input_addr), 4);
-            primary_mouse_up_event = (event_code == 3);
-        }
-        if (m->profile && m->profile->save_child_snapshot)
-            m->profile->save_child_snapshot(m, m->app_state);
-    }
+    /* 非模态状态下的 code=1 事件可能触发子模块加载，需要事先保存 game
+     * 的快照以便子模块关闭后恢复。事件经 wrapper 路由时 call_p_addr
+     * 指向 wrapper 而非 primary，但语义不变：game 仍然会收到该事件。 */
     /* gxdzc 的下载提示可能在普通事件回调或 primary timer(code=2) 中
      * 直接触发 wrapper suspend，而不是等到 wrapper dispatch；回调前
      * 保存，回调后确认 [0x34] 0->1 才允许 cancel 使用这张底层页面截图。 */
@@ -2663,7 +2611,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     m->current_helper_addr = 0;
     sync_timer_state_from_arm(m);
     app_dump_state(m, "call_post", code, input_addr, input_len);
-    app_restore_child_if_closed(m, code, input_addr, input_len);
     if (getenv("VMRP_ARM_EXT_DIAG")) {
         uint32_t arm_timer_state = 0;
         internal_slot_read(m, m->mr_timer_state_slot, &arm_timer_state);
@@ -2678,15 +2625,13 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     leave_screen_context(m, saved_screenBuf);
     capture_timer_dispatches(m);
 
-    /* arm_ext_call 后检查 state[8] 变化 */
+    /* arm_ext_call 后检查 game timer head (state[8]) 变化：wrapper 的
+     * suspend 会清零 game_rw[0x8C]，保存旧值以便 resume 时恢复。 */
     if (_ac_grw && _ac_s8_pre) {
         uint32_t _ac_s8_post = 0;
         memcpy(&_ac_s8_post, arm_ptr(m, _ac_grw + GAME_TIMER_HEAD_OFFSET), 4);
         if (_ac_s8_post == 0) {
-            if (!arm_ext_clear_cancelled_download_modal_tail(m, modal_ext_chunk,
-                                                             _ac_grw, _ac_s8_pre)) {
-                m->saved_game_timer_head = _ac_s8_pre;
-            }
+            m->saved_game_timer_head = _ac_s8_pre;
         }
     }
     uint32_t modal_suspend_depth_post = modal_suspend_depth_pre;
@@ -2696,81 +2641,58 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         call_modal_snapshot_candidate) {
         m->modal_screen_snapshot_valid = 1;
     }
-    if (wrapper_modal_event_routed &&
-        modal_suspend_depth_pre > 0 && modal_suspend_depth_post == 0 &&
-        !modal_cancel_release) {
-        modal_closed_by_wrapper = 1;
-    }
-    if (wrapper_modal_event_routed &&
-        modal_suspend_depth_pre > 0 &&
-        modal_suspend_depth_post == 0) {
-        /*
-         * Wrapper resume has closed the foreground layer.  If that layer was a
-         * child EXT loaded by cfunction.ext's private loader, its last screen
-         * claim must stop being authoritative before the next wrapper timer
-         * lets game.ext redraw the menu; otherwise the foreground guard keeps
-         * rejecting the primary redraw as stale.
-         */
+    /* 通用模态框关闭处理（suspend depth >0 → 0）。
+     * 真机上 wrapper 的 resume(0xE83220) 恢复 game 状态（定时器链表头、
+     * pauseApp/resumeApp 回调），模拟器只需做模块级清理：
+     *  - 将前台归还给 primary game
+     *  - 清除子模块残留的定时器归属
+     *  - 恢复 game timer head（wrapper 的 suspend 清零了它）
+     *  - 恢复模态前屏幕快照
+     *  - 补启宿主定时器让 wrapper 完成 resume 队列 */
+    if (modal_suspend_depth_pre > 0 && modal_suspend_depth_post == 0) {
         m->active_helper_addr = m->primary_helper_addr;
         m->active_p_addr = m->primary_p_addr;
         arm_ext_clear_foreground_screen_owner(m);
-        if (foreground_child_active &&
-            m->timer_p_addr == m->p_addr &&
-            m->timer_helper_addr == m->helper_addr) {
-            /* wrapper resume relinks its own bookkeeping timer while closing
-             * the child layer.  Once suspend depth is zero, keeping that timer
-             * as the host owner starves primary code=2 and replays wrapper
-             * cleanup indefinitely. */
-            m->timer_p_addr = 0;
-            m->timer_helper_addr = 0;
-        }
         if (foreground_child_active) {
-            app_restore_child_if_closed(m, code, input_addr, input_len);
-            m->primary_child_reopen_timer_needed = 1;
+            arm_ext_reset_child_modules(m);
+            if (m->timer_p_addr &&
+                m->timer_p_addr != m->primary_p_addr &&
+                m->timer_p_addr != m->p_addr) {
+                m->timer_p_addr = 0;
+                m->timer_helper_addr = 0;
+            }
         }
+        if (m->saved_game_timer_head) {
+            uint32_t grw = 0;
+            if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
+                memcpy(&grw, arm_ptr(m, m->primary_p_addr), 4);
+            if (grw && arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET))
+                memcpy(arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET),
+                       &m->saved_game_timer_head, 4);
+            m->saved_game_timer_head = 0;
+        }
+        if (m->modal_screen_snapshot_valid &&
+            m->modal_screen_snapshot &&
+            m->modal_screen_snapshot_len == m->screen_len &&
+            m->screen_addr && arm_ptr(m, m->screen_addr)) {
+            memcpy(arm_ptr(m, m->screen_addr),
+                   m->modal_screen_snapshot, m->screen_len);
+            extern uint16 *mr_screenBuf;
+            extern void mr_drawBitmap(uint16 *bmp, int16 x, int16 y,
+                                      uint16 w, uint16 h);
+            if (mr_screenBuf) {
+                memcpy(mr_screenBuf, m->modal_screen_snapshot,
+                       m->screen_len);
+                mr_drawBitmap(mr_screenBuf, 0, 0,
+                              (uint16)m->screen_w, (uint16)m->screen_h);
+            }
+            m->modal_screen_snapshot_valid = 0;
+        }
+        m->primary_child_reopen_timer_needed = 1;
+        reopen_set_this_call = 1;
     }
 
     if (call_ret != MR_SUCCESS) return MR_FAILED;
-
-    if (code == 1 &&
-        primary_mouse_up_event &&
-        modal_suspend_depth_pre == 0 &&
-        call_p_addr == m->primary_p_addr &&
-        call_helper_addr == m->primary_helper_addr) {
-        app_on_child_reopen_check(m);
-        app_dump_state(m, "after_reopen_timer_schedule", code,
-                                    input_addr, input_len);
-    }
-
-    if (restore_game_timer_after_modal_cancel && m->saved_game_timer_head) {
-        if ((modal_cancel_release || modal_closed_by_wrapper) &&
-            m->profile && m->profile->on_modal_cancel) {
-            int32_t ev[3] = {0};
-            if (input_len >= 12 && input_addr && arm_ptr(m, input_addr))
-                memcpy(ev, arm_ptr(m, input_addr), 12);
-            m->profile->on_modal_cancel(m, m->app_state, modal_ext_chunk,
-                                        modal_suspend_depth_pre,
-                                        modal_suspend_depth_post,
-                                        wrapper_modal_event_routed,
-                                        ev, 3);
-        }
-        uint32_t ec = 0, sd = 0, grw = 0;
-        if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr + 12))
-            memcpy(&ec, arm_ptr(m, m->primary_p_addr + 12), 4);
-        if (ec && arm_ptr(m, ec + 0x34))
-            memcpy(&sd, arm_ptr(m, ec + 0x34), 4);
-        if (sd == 0 && m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
-            memcpy(&grw, arm_ptr(m, m->primary_p_addr), 4);
-        if (grw && arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET))
-            memcpy(arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET),
-                   &m->saved_game_timer_head, 4);
-        if (sd == 0) {
-            m->saved_game_timer_head = 0;
-            m->active_helper_addr = m->primary_helper_addr;
-            m->active_p_addr = m->primary_p_addr;
-            arm_ext_clear_foreground_screen_owner(m);
-        }
-    }
 
     if (arm_ext_finish_callback_state(m, modal_ext_chunk)) {
         /* mr_exit() 在存在 old app 时会重启上层并返回；当前 ARM 回调的
@@ -2778,22 +2700,23 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         return MR_SUCCESS;
     }
 
-    /* 模态框确认后加载子插件的定时器恢复。
-     * 流程：模态框关闭(code=1) → primary_child_reopen_timer_needed=1
-     * → 下一次 code=2 由 game 处理 → game 内部加载子插件(arm_ext_sync_
-     * internal_nested_module) → game 停止自身定时器(table[32]) → 返回。
-     * 此时定时器已停止，但新加载的子插件需要定时器驱动才能渲染界面。
-     * 真机上 wrapper 有独立的定时器机制，不依赖 game 的 table[31/32]；
-     * 模拟器里 wrapper 定时器由宿主驱动，需要在此处补启。 */
+    /* 模态框关闭后的定时器恢复。
+     * 真机上 game 的 table[31/32] 经 mrc_extTimerStart/Stop 路由到
+     * wrapper 的定时器队列，不影响宿主定时器。模拟器里 game 的
+     * table[32] 直接停掉宿主定时器，需要反复补启直到 game 完成
+     * 内部状态转换。仅在新模态进入时清除标志。 */
     if (m->primary_child_reopen_timer_needed &&
-        !m->host_timer_pending && mr_timer_state == 0 &&
-        m->active_p_addr && m->active_helper_addr &&
-        m->active_p_addr != m->primary_p_addr &&
-        m->active_helper_addr != m->primary_helper_addr) {
-        /* app_on_child_reopen_check 内部读取 primary_child_reopen_timer_needed，
-         * 必须在调用后清除，否则函数会因标志已清零而提前返回 */
-        app_on_child_reopen_check(m);
-        m->primary_child_reopen_timer_needed = 0;
+        !m->host_timer_pending && mr_timer_state == 0) {
+        mr_timerStart(100);
+        mr_timer_state = 1;
+        m->host_timer_pending = 1;
+        m->timer_p_addr = m->p_addr;
+        m->timer_helper_addr = m->helper_addr;
+    }
+    if (m->primary_child_reopen_timer_needed && !reopen_set_this_call) {
+        /* 新模态进入：child 加载成功并进入前台层 */
+        if (modal_suspend_depth_post > 0 && modal_suspend_depth_pre == 0)
+            m->primary_child_reopen_timer_needed = 0;
     }
 
     uint32_t arm_output = 0;
@@ -2862,6 +2785,30 @@ int arm_ext_consume_primary_host_init(ArmExtModule *m) {
     if (!m || !m->primary_host_init_pending) return 0;
     m->primary_host_init_pending = 0;
     return 1;
+}
+
+void arm_ext_reset_child_modules(ArmExtModule *m) {
+    if (!m) return;
+    /* 保留 primary 模块，清除所有其他嵌套模块注册。
+     * child 流程关闭后 nested_modules 里残留的子插件条目会干扰
+     * hook_restore_r9 的 R9 同步和 arm_ext_p_for_code_addr 的
+     * 代码归属判定，导致 wrapper 内部分发走错路径。 */
+    int out = 0;
+    for (int i = 0; i < m->nested_module_count; ++i) {
+        ArmExtNestedModule *mod = &m->nested_modules[i];
+        int is_primary = m->primary_file_addr &&
+                         mod->file_addr == m->primary_file_addr &&
+                         mod->file_len == m->primary_file_len;
+        if (is_primary) {
+            m->nested_modules[out++] = *mod;
+        }
+    }
+    m->nested_module_count = out;
+    m->active_p_addr = m->primary_p_addr;
+    m->active_helper_addr = m->primary_helper_addr;
+    arm_ext_clear_foreground_screen_owner(m);
+
+
 }
 
 uint32 arm_ext_read_timer_queue(ArmExtModule *m) {
@@ -2997,16 +2944,44 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
         if (_grw2 && arm_ptr(m, _grw2 + GAME_TIMER_HEAD_OFFSET))
             memcpy(&_s8_post, arm_ptr(m, _grw2 + GAME_TIMER_HEAD_OFFSET), 4);
         if (_s8_post == 0 && _s8_pre != 0) {
-            if (!arm_ext_clear_cancelled_download_modal_tail(m, ext_chunk,
-                                                             _grw2, _s8_pre)) {
-                m->saved_game_timer_head = _s8_pre;
-            }
+            m->saved_game_timer_head = _s8_pre;
         }
         uint32_t suspend_depth_post = 0;
         if (arm_ptr(m, ext_chunk + 0x34))
             memcpy(&suspend_depth_post, arm_ptr(m, ext_chunk + 0x34), 4);
         if (suspend_depth_pre == 0 && suspend_depth_post > 0 && modal_snapshot_candidate) {
             m->modal_screen_snapshot_valid = 1;
+        }
+        /* 通用模态框关闭：与 arm_ext_call 中相同的通用清理 */
+        if (suspend_depth_pre > 0 && suspend_depth_post == 0) {
+            m->active_helper_addr = m->primary_helper_addr;
+            m->active_p_addr = m->primary_p_addr;
+            arm_ext_clear_foreground_screen_owner(m);
+            arm_ext_reset_child_modules(m);
+            if (m->saved_game_timer_head) {
+                if (_grw2 && arm_ptr(m, _grw2 + GAME_TIMER_HEAD_OFFSET))
+                    memcpy(arm_ptr(m, _grw2 + GAME_TIMER_HEAD_OFFSET),
+                           &m->saved_game_timer_head, 4);
+                m->saved_game_timer_head = 0;
+            }
+            if (m->modal_screen_snapshot_valid &&
+                m->modal_screen_snapshot &&
+                m->modal_screen_snapshot_len == m->screen_len &&
+                m->screen_addr && arm_ptr(m, m->screen_addr)) {
+                memcpy(arm_ptr(m, m->screen_addr),
+                       m->modal_screen_snapshot, m->screen_len);
+                extern uint16 *mr_screenBuf;
+                extern void mr_drawBitmap(uint16 *bmp, int16 x, int16 y,
+                                          uint16 w, uint16 h);
+                if (mr_screenBuf) {
+                    memcpy(mr_screenBuf, m->modal_screen_snapshot,
+                           m->screen_len);
+                    mr_drawBitmap(mr_screenBuf, 0, 0,
+                                  (uint16)m->screen_w, (uint16)m->screen_h);
+                }
+                m->modal_screen_snapshot_valid = 0;
+            }
+            m->primary_child_reopen_timer_needed = 1;
         }
     }
 
