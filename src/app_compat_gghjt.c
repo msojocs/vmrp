@@ -116,6 +116,15 @@ static int gghjt_should_protect_got_addr(ArmExtModule *m, void *app_state,
 
 /* --- wrapper event list state --- */
 
+/*
+ * Retained from the older "下载返回黑屏" fix but intentionally NOT wired into
+ * the AppCompatProfile ABI: the executor never calls save/restore, so
+ * wrapper_child_event_lists_valid is always 0 and gghjt_write_* / on_child_confirmed
+ * no-op.  Kept (not deleted) because the gghjt-continue-reopen-fix work may
+ * re-wire this wrapper_rw+0x190 head/tail capture; until then read/save/restore
+ * are unreferenced statics (-Wall warns, harmless).  See should_protect_got_addr,
+ * which is the live owner of this same region.
+ */
 static int gghjt_read_wrapper_child_event_lists(ArmExtModule *m,
                                                 uint32_t out[5][2]) {
     uint32_t wrapper_rw = arm_ext_wrapper_rw_base_(m);
@@ -254,87 +263,16 @@ static void gghjt_on_child_confirmed(ArmExtModule *m, void *app_state,
         gghjt_write_wrapper_child_event_lists(m, &gs->wrapper);
 }
 
-/* --- diagnostics --- */
-
-static void gghjt_pc_diagnostic(void *uc_raw, uint64 addr,
-                                ArmExtModule *m, void *app_state) {
-    (void)app_state;
-    if (!getenv("VMRP_GGHJT_PC_DIAG")) return;
-    uc_engine *uc = (uc_engine *)uc_raw;
-
-    uint32_t pc = (uint32_t)addr & ~1u;
-    const char *tag = NULL;
-    switch (pc) {
-    case 0x6570CAu: tag = "page_load_0218"; break;
-    case 0x6570E4u: tag = "enter_6570e4"; break;
-    case 0x6570EAu: tag = "after_65f764"; break;
-    case 0x6570F0u: tag = "call_666244_2"; break;
-    case 0x659200u: tag = "enter_659200"; break;
-    case 0x659260u: tag = "check_65f764_alt"; break;
-    case 0x6592BCu: tag = "select_gate_ok"; break;
-    case 0x6592F6u: tag = "select_case0"; break;
-    case 0x65930Au: tag = "call_666244_0"; break;
-    case 0x659334u: tag = "select_done"; break;
-    case 0x659336u: tag = "select_case0_fail"; break;
-    case 0x65A2ACu: tag = "dispatch_case_to_6570e4"; break;
-    case 0x65A464u: tag = "enter_65a464"; break;
-    case 0x65F764u: tag = "enter_65f764"; break;
-    case 0x65F772u: tag = "leave_65f764"; break;
-    case 0x65F790u: tag = "enter_65f790"; break;
-    case 0x65F7A0u: tag = "leave_65f790"; break;
-    case 0x666244u: tag = "enter_666244"; break;
-    case 0x6662CEu: tag = "call_65dc9c"; break;
-    case 0x65DC9Cu: tag = "enter_65dc9c"; break;
-    case 0x663070u: tag = "enter_663070"; break;
-    default: return;
-    }
-
-    uint32_t rw = arm_ext_primary_rw_base_(m);
-    uint32_t r0 = 0, r1 = 0, r2 = 0, lr = 0, r9 = 0;
-    uc_reg_read(uc, UC_ARM_REG_R0, &r0);
-    uc_reg_read(uc, UC_ARM_REG_R1, &r1);
-    uc_reg_read(uc, UC_ARM_REG_R2, &r2);
-    uc_reg_read(uc, UC_ARM_REG_LR, &lr);
-    uc_reg_read(uc, UC_ARM_REG_R9, &r9);
-    printf("GGHJT_PC %s pc=0x%X r0=0x%X r1=0x%X r2=0x%X lr=0x%X r9=0x%X "
-           "menu=0x%X child=0x%X req=0x%X sel1e7=0x%02X sel1e8=0x%02X "
-           "idx224=0x%X max228=0x%X mode13f8=0x%X gate13b0=0x%X gate13c8=0x%X "
-           "async14bc=0x%X md=%u timerP=0x%X timerH=0x%X activeP=0x%X activeH=0x%X reopen=%d\n",
-           tag, pc, r0, r1, r2, lr, r9,
-           rw ? arm_ext_read_u32_or_zero_(m, rw + 0x0218u) : 0,
-           rw ? arm_ext_read_u32_or_zero_(m, rw + 0x022Cu) : 0,
-           rw ? arm_ext_read_u32_or_zero_(m, rw + 0x00F8u) : 0,
-           rw ? arm_ext_read_u8_or_zero_(m, rw + 0x01E7u) : 0,
-           rw ? arm_ext_read_u8_or_zero_(m, rw + 0x01E8u) : 0,
-           rw ? arm_ext_read_u32_or_zero_(m, rw + 0x0224u) : 0,
-           rw ? arm_ext_read_u32_or_zero_(m, rw + 0x0228u) : 0,
-           rw ? arm_ext_read_u32_or_zero_(m, rw + 0x13F8u) : 0,
-           rw ? arm_ext_read_u32_or_zero_(m, rw + 0x13B0u) : 0,
-           rw ? arm_ext_read_u32_or_zero_(m, rw + 0x13C8u) : 0,
-           rw ? arm_ext_read_u32_or_zero_(m, rw + 0x14BCu) : 0,
-           m && m->primary_p_addr && arm_ptr(m, m->primary_p_addr + 12)
-               ? arm_ext_read_u32_or_zero_(
-                     m, arm_ext_read_u32_or_zero_(m, m->primary_p_addr + 12) + 0x34u)
-               : 0,
-           m->timer_p_addr, m->timer_helper_addr,
-           m->active_p_addr, m->active_helper_addr,
-           m->primary_child_reopen_timer_needed);
-}
-
 /* --- profile definition --- */
 
 const AppCompatProfile app_compat_gghjt = {
     .name = "gghjt.mrp",
     .init = gghjt_init,
     .cleanup = gghjt_cleanup,
-    .is_known_child = gghjt_is_known_child,
     .on_child_synced = gghjt_on_child_synced,
     .on_child_confirmed = gghjt_on_child_confirmed,
     .should_protect_got_addr = gghjt_should_protect_got_addr,
-    .save_wrapper_state = gghjt_save_wrapper_state,
-    .restore_wrapper_state = gghjt_restore_wrapper_state,
     .intercept_write = gghjt_intercept_write,
     .post_write_cleanup = gghjt_post_write_cleanup,
     .post_read_hook = gghjt_post_read_hook,
-    .pc_diagnostic = gghjt_pc_diagnostic,
 };

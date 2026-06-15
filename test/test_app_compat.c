@@ -18,10 +18,6 @@ const AppCompatProfile app_compat_gghjt = {
     .name = "gghjt.mrp",
 };
 
-const AppCompatProfile app_compat_gxdzc = {
-    .name = "gxdzc.mrp",
-};
-
 static int write_test_mrp_header(const char *path, const char *internal_name) {
     unsigned char header[240];
     FILE *fp;
@@ -96,9 +92,9 @@ int test_app_compat_run_all(void) {
     }
 
     printf("[TEST] app compat profile selection accepts mixed separators\n");
-    ASSERT_PROFILE("mixed separator gxdzc path",
-                   "D:\\Github\\vmrp/build\\Debug/mythroad\\gxdzc.mrp",
-                   &app_compat_gxdzc);
+    ASSERT_PROFILE("mixed separator gghjt path",
+                   "D:\\Github\\vmrp/build\\Debug/mythroad\\gghjt.mrp",
+                   &app_compat_gghjt);
 
     printf("[TEST] app compat profile selection requires prefix separator\n");
     ASSERT_PROFILE("suffix without prefix separator",
