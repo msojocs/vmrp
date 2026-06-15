@@ -328,6 +328,20 @@ endif()
 if(NOT VMRP_BUILD_SHARED_ONLY)
 # --- 测试 ---
 enable_testing()
+
+# --- app_compat profile 选择测试（不依赖 POSIX mmap，Windows 可单独运行） ---
+add_executable(test_vmrp_app_compat
+  test/test_app_compat_main.c
+  test/test_app_compat.c
+  ./src/app_compat.c
+)
+target_compile_definitions(test_vmrp_app_compat PRIVATE VMRP)
+target_include_directories(test_vmrp_app_compat PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/include
+)
+add_test(NAME vmrp_app_compat_tests COMMAND test_vmrp_app_compat)
+set_tests_properties(vmrp_app_compat_tests PROPERTIES LABELS "unit")
+
 if(VMRP_BUILD_TESTS)
   set(TEST_MYTHROAD_SOURCES ${VMRP_MYTHROAD_SOURCES})
   add_executable(test_vmrp
@@ -335,6 +349,8 @@ if(VMRP_BUILD_TESTS)
     test/test_got_snapshot.c
     test/test_parser.c
     test/test_dns_map.c
+    test/test_app_compat.c
+    ./src/app_compat.c
     ./src/network.c
     test/stubs.c
     ${TEST_MYTHROAD_SOURCES}
