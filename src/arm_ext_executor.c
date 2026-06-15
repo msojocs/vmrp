@@ -1937,6 +1937,24 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 m->last_file_copy && r2 && r3 <= m->last_file_len &&
                 r3 > 8 && arm_ptr(m, r2 + 8)) {
                 memcpy(arm_ptr(m, r2 + 8), m->last_file_copy + 8, r3 - 8);
+                /*
+                 * file_base[0] 是私有 loader 写入的 module record 指针——它是
+                 * EXT_TABLE 的逐槽镜像，被子模块当作自己的 C 函数表基址使用。
+                 * 该 record 把 table[125] (_mr_readFile) 重定向到 wrapper 自身的
+                 * readFile (0xE819xx)。wrapper 的 readFile 工作在 wrapper 的内存
+                 * 模型里，返回的是挂载/索引缓冲(0x66xxxx 区)而非宿主 readFile 解码
+                 * 出的位图像素；子模块据此取位图源指针时拿到的是文件索引/文件名字节，
+                 * 绘制即花屏。把 record 的 readFile 槽还原成宿主 EXT_TABLE 的桥接值，
+                 * 让子模块的资源读取走宿主 readFile，得到正确解码的位图。
+                 * 仅还原 readFile 槽：malloc/free/loader(table[25]) 仍走 wrapper，
+                 * 以保留 wrapper 对子模块内存与子加载的管理。
+                 */
+                uint32_t record_addr = 0;
+                memcpy(&record_addr, arm_ptr(m, r2), 4);
+                if (record_addr && arm_ptr(m, record_addr + 125 * 4)) {
+                    memcpy(arm_ptr(m, record_addr + 125 * 4),
+                           arm_ptr(m, EXT_TABLE_ADDR + 125 * 4), 4);
+                }
             }
             if (r1 == 9 && !internal_loader_staging &&
                 m->last_file_copy && r2 && r3 <= m->last_file_len &&
