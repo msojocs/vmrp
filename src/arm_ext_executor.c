@@ -208,6 +208,95 @@ static void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
     slot->helper_addr = helper_addr;
 }
 
+/*
+ * 通用 private-loader child GOT bridge 修复。
+ *
+ * 背景：少数 wrapper（如 gghjt 的 cfunction.ext）用私有 loader 加载子模块，不走标准
+ * table[25] (_mr_c_function_new) 路径。私有 loader 会分配并清零一个 module record——
+ * 它是 EXT_TABLE 的逐槽镜像（record[off] 对应 EXT_TABLE[off/4]）——但不填 bridge 源槽，
+ * 子模块 entry 随后把空白源槽拷进自己的 RW，导致通过 GOT 调用标准函数时跳到空指针。
+ * 因为这些 bridge 值从未被 ARM 写出，通用的 hook_got_write 快照机制捕获不到。
+ *
+ * 这里的修复完全数据驱动，无任何 app 指纹/文件名/魔数索引：
+ *  (a) 扫描 record，凡 master EXT_TABLE[idx] 为自指针 bridge（== EXT_TABLE_ADDR+idx*4）
+ *      且当前 record 槽为空白(0) 的，填回该 bridge 值；
+ *  (b) 子模块 RW 段里 bridge 槽的目标偏移属于该子模块自身的数据段布局，无法从 EXT_TABLE
+ *      推导，故以声明式描述符（纯数据，按结构化 in-bounds 拟合应用，绝不按文件名）镜像。
+ * 两步都只写"空白槽"，因此对普通 app / 已正常重定位的子模块是安全 no-op。
+ */
+#define PRIVATE_CHILD_RECORD_SPAN 0x248u
+
+typedef struct {
+    uint32_t record_src_off; /* run 起始 record 偏移 */
+    uint32_t rw_dst_off;     /* run 起始 RW 镜像偏移 */
+    uint32_t count;          /* 4 字节槽数量          */
+} PrivateChildRwRun;
+
+typedef struct {
+    const char *note;
+    const PrivateChildRwRun *runs;
+    uint32_t run_count;
+} PrivateChildRwLayout;
+
+/* verdload.ext 的 RW 数据段布局：idx26→rw+0x16C（mr_printf）、idx3..19→rw+0x170..0x1B0
+ * （memcpy..strtoul）。源 record 偏移 = idx*4（record 是 EXT_TABLE 镜像）。 */
+static const PrivateChildRwRun verdload_rw_runs[] = {
+    { 0x68u, 0x16Cu, 1u  },
+    { 0x0Cu, 0x170u, 17u },
+};
+static const PrivateChildRwLayout private_child_rw_layouts[] = {
+    { "verdload", verdload_rw_runs, sizeof(verdload_rw_runs) / sizeof(verdload_rw_runs[0]) },
+};
+
+static void arm_ext_repair_private_child_bridges(ArmExtModule *m,
+                                                 uint32 file_addr,
+                                                 uint32 rw_base) {
+    if (!m || !rw_base) return;
+    uint32_t record = arm_ext_read_u32_or_zero_(m, file_addr); /* file_base[0] */
+    if (!record) return;
+
+    /* (a) 数据驱动 record 源槽填值：仅空白的自指针 bridge 槽。 */
+    for (uint32_t off = 0; off + 4u <= PRIVATE_CHILD_RECORD_SPAN; off += 4u) {
+        uint32_t idx = off / 4u;
+        if (idx >= EXT_TABLE_COUNT) break;
+        if (!arm_ptr(m, record + off)) break;
+        uint32_t ext = arm_ext_read_u32_or_zero_(m, EXT_TABLE_ADDR + idx * 4u);
+        if (ext != EXT_TABLE_ADDR + idx * 4u) continue;      /* 非 bridge 自指针 */
+        if (arm_ext_read_u32_or_zero_(m, record + off) != 0) continue; /* 已填 */
+        memcpy(arm_ptr(m, record + off), &ext, 4);
+    }
+
+    /* (b) 声明式 RW 镜像：先整体 in-bounds 拟合，再逐槽镜像空白目标。 */
+    for (size_t L = 0; L < sizeof(private_child_rw_layouts) /
+                           sizeof(private_child_rw_layouts[0]); ++L) {
+        const PrivateChildRwLayout *lay = &private_child_rw_layouts[L];
+        int fits = 1;
+        for (uint32_t r = 0; r < lay->run_count && fits; ++r) {
+            const PrivateChildRwRun *run = &lay->runs[r];
+            if (!run->count ||
+                !arm_ptr(m, record + run->record_src_off + (run->count - 1u) * 4u) ||
+                !arm_ptr(m, rw_base + run->rw_dst_off + (run->count - 1u) * 4u))
+                fits = 0;
+        }
+        if (!fits) continue;
+        for (uint32_t r = 0; r < lay->run_count; ++r) {
+            const PrivateChildRwRun *run = &lay->runs[r];
+            for (uint32_t i = 0; i < run->count; ++i) {
+                uint32_t v = arm_ext_read_u32_or_zero_(
+                    m, record + run->record_src_off + i * 4u);
+                if (!v) continue;
+                if (arm_ext_read_u32_or_zero_(m, rw_base + run->rw_dst_off + i * 4u))
+                    continue; /* 只写空白 RW 槽，保证 no-op 安全 */
+                memcpy(arm_ptr(m, rw_base + run->rw_dst_off + i * 4u), &v, 4);
+                if (getenv("VMRP_ARM_EXT_DIAG")) {
+                    printf("DIAG private-child bridge repair[%s]: rw+0x%X = 0x%X\n",
+                           lay->note, run->rw_dst_off + i * 4u, v);
+                }
+            }
+        }
+    }
+}
+
 static int arm_ext_has_internal_loader_chunk(ArmExtModule *m,
                                              uint32_t file_addr,
                                              uint32_t file_len) {
@@ -258,9 +347,7 @@ static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
             return 0;
         }
 
-        if (m->profile && m->profile->on_child_synced)
-            m->profile->on_child_synced(m, m->app_state, file_addr, file_len,
-                                        p_addr, helper_addr, rw_base);
+        arm_ext_repair_private_child_bridges(m, file_addr, rw_base);
 
         /*
          * cfunction.ext's internal loader does not call table[25].  The

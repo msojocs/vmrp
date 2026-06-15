@@ -3,16 +3,10 @@
 #include <zlib.h>
 
 typedef struct {
-    uint32_t wrapper_child_event_lists[5][2];
-    int wrapper_child_event_lists_valid;
-} GghjtWrapperState;
-
-typedef struct {
     uint32_t pending_chk_arm_buf;
     uint32_t pending_chk_len;
     uint8_t *pending_chk_decomp;
     uint32_t pending_chk_decomp_len;
-    GghjtWrapperState wrapper;
 } GghjtState;
 
 /* --- lifecycle --- */
@@ -30,78 +24,6 @@ static void gghjt_cleanup(void *app_state) {
     free(s);
 }
 
-/* --- child module detection --- */
-
-enum {
-    GGHJT_VERDLOAD_LEN = 0x47E4u,
-    GGHJT_VERDLOAD_HELPER_OFF = 0x36DCu,
-    GGHJT_VERDLOAD_ENTRY_OFF = 0x08u
-};
-
-static const uint8_t verdload_entry_prologue[] = {
-    0x10, 0x40, 0x2D, 0xE9
-};
-
-static int gghjt_is_known_child(ArmExtModule *m, void *app_state,
-                                uint32 file_addr, uint32 file_len,
-                                uint32 helper_addr) {
-    (void)app_state;
-    if (!m) return 0;
-    if (file_len != GGHJT_VERDLOAD_LEN) return 0;
-    uint32_t helper_pc = helper_addr & ~1u;
-    if (helper_pc < file_addr ||
-        helper_pc - file_addr != GGHJT_VERDLOAD_HELPER_OFF)
-        return 0;
-    uint8_t *entry = arm_ptr(m, file_addr + GGHJT_VERDLOAD_ENTRY_OFF);
-    if (!entry || !arm_ptr(m, file_addr + file_len - 1u)) return 0;
-    return memcmp(entry, verdload_entry_prologue,
-                  sizeof(verdload_entry_prologue)) == 0;
-}
-
-/* --- child synced (verdload bridge slots) --- */
-
-enum {
-    VERDLOAD_EXTRA_SRC_OFF = 0x68u,
-    VERDLOAD_EXTRA_DST_OFF = 0x16Cu,
-    VERDLOAD_EXTRA_TABLE_INDEX = 26u,
-    VERDLOAD_BRIDGE_SRC_OFF = 0x0Cu,
-    VERDLOAD_BRIDGE_DST_OFF = 0x170u,
-    VERDLOAD_BRIDGE_FIRST_INDEX = 3u,
-    VERDLOAD_BRIDGE_COUNT = 17u
-};
-
-static void gghjt_on_child_synced(ArmExtModule *m, void *app_state,
-                                  uint32 file_addr, uint32 file_len,
-                                  uint32 p_addr, uint32 helper_addr,
-                                  uint32 rw_base) {
-    (void)app_state;
-    if (!gghjt_is_known_child(m, app_state, file_addr, file_len, helper_addr))
-        return;
-    if (!p_addr || arm_ext_read_u32_or_zero_(m, p_addr) != rw_base)
-        return;
-
-    uint32_t module_record = arm_ext_read_u32_or_zero_(m, file_addr);
-    if (!module_record ||
-        !arm_ptr(m, module_record + VERDLOAD_EXTRA_SRC_OFF) ||
-        !arm_ptr(m, module_record + VERDLOAD_BRIDGE_SRC_OFF +
-                 (VERDLOAD_BRIDGE_COUNT - 1u) * 4u) ||
-        !arm_ptr(m, rw_base + VERDLOAD_BRIDGE_DST_OFF +
-                 (VERDLOAD_BRIDGE_COUNT - 1u) * 4u))
-        return;
-
-    uint32_t bridge = EXT_TABLE_ADDR + VERDLOAD_EXTRA_TABLE_INDEX * 4u;
-    memcpy(arm_ptr(m, module_record + VERDLOAD_EXTRA_SRC_OFF), &bridge, 4);
-    memcpy(arm_ptr(m, rw_base + VERDLOAD_EXTRA_DST_OFF), &bridge, 4);
-
-    for (uint32_t i = 0; i < VERDLOAD_BRIDGE_COUNT; ++i) {
-        bridge = EXT_TABLE_ADDR + (VERDLOAD_BRIDGE_FIRST_INDEX + i) * 4u;
-        memcpy(arm_ptr(m, module_record + VERDLOAD_BRIDGE_SRC_OFF + i * 4u),
-               &bridge, 4);
-        memcpy(arm_ptr(m, rw_base + VERDLOAD_BRIDGE_DST_OFF + i * 4u),
-               &bridge, 4);
-    }
-}
-
 /* --- GOT protection --- */
 
 static int gghjt_should_protect_got_addr(ArmExtModule *m, void *app_state,
@@ -112,66 +34,6 @@ static int gghjt_should_protect_got_addr(ArmExtModule *m, void *app_state,
     uint32_t event_base = wrapper_rw + 0x190u;
     uint32_t event_end = event_base + 5u * 8u;
     return wrapper_rw && addr >= event_base && addr < event_end;
-}
-
-/* --- wrapper event list state --- */
-
-/*
- * Retained from the older "下载返回黑屏" fix but intentionally NOT wired into
- * the AppCompatProfile ABI: the executor never calls save/restore, so
- * wrapper_child_event_lists_valid is always 0 and gghjt_write_* / on_child_confirmed
- * no-op.  Kept (not deleted) because the gghjt-continue-reopen-fix work may
- * re-wire this wrapper_rw+0x190 head/tail capture; until then read/save/restore
- * are unreferenced statics (-Wall warns, harmless).  See should_protect_got_addr,
- * which is the live owner of this same region.
- */
-static int gghjt_read_wrapper_child_event_lists(ArmExtModule *m,
-                                                uint32_t out[5][2]) {
-    uint32_t wrapper_rw = arm_ext_wrapper_rw_base_(m);
-    if (!wrapper_rw || !arm_ptr(m, wrapper_rw + 0x1B7u)) return 0;
-
-    for (uint32_t slot = 0; slot < 5; ++slot) {
-        uint32_t head_addr = wrapper_rw + 0x190u + slot * 8u;
-        memcpy(&out[slot][0], arm_ptr(m, head_addr), 4);
-        memcpy(&out[slot][1], arm_ptr(m, head_addr + 4u), 4);
-    }
-    return 1;
-}
-
-static void gghjt_write_wrapper_child_event_lists(ArmExtModule *m,
-                                                  const GghjtWrapperState *s) {
-    if (!s->wrapper_child_event_lists_valid) return;
-    uint32_t wrapper_rw = arm_ext_wrapper_rw_base_(m);
-    if (!wrapper_rw || !arm_ptr(m, wrapper_rw + 0x1B7u)) return;
-
-    for (uint32_t slot = 0; slot < 5; ++slot) {
-        uint32_t head_addr = wrapper_rw + 0x190u + slot * 8u;
-        memcpy(arm_ptr(m, head_addr), &s->wrapper_child_event_lists[slot][0], 4);
-        memcpy(arm_ptr(m, head_addr + 4u),
-               &s->wrapper_child_event_lists[slot][1], 4);
-    }
-
-    if (m->got_snapshot_base == wrapper_rw) {
-        for (uint32_t off = 0x190u; off < 0x190u + 5u * 8u; off += 4) {
-            uint32_t idx = off / 4u;
-            if (idx < EXT_TABLE_COUNT)
-                m->got_snapshot[idx] = 0;
-        }
-    }
-}
-
-static void gghjt_save_wrapper_state(ArmExtModule *m, void *app_state) {
-    GghjtState *gs = app_state;
-    if (!gs) return;
-    GghjtWrapperState *s = &gs->wrapper;
-    s->wrapper_child_event_lists_valid =
-        gghjt_read_wrapper_child_event_lists(m, s->wrapper_child_event_lists);
-}
-
-static void gghjt_restore_wrapper_state(ArmExtModule *m, void *app_state) {
-    GghjtState *gs = app_state;
-    if (!gs) return;
-    gghjt_write_wrapper_child_event_lists(m, &gs->wrapper);
 }
 
 /* --- write/read interception (netpay extraction workaround) --- */
@@ -253,24 +115,12 @@ static void gghjt_post_read_hook(ArmExtModule *m, void *app_state,
     }
 }
 
-/* --- child confirmed --- */
-
-static void gghjt_on_child_confirmed(ArmExtModule *m, void *app_state,
-                                     uint32 child_p, uint32 child_helper) {
-    GghjtState *gs = app_state;
-    if (!gs) return;
-    if (child_p && child_helper && m->primary_child_reopen_timer_needed)
-        gghjt_write_wrapper_child_event_lists(m, &gs->wrapper);
-}
-
 /* --- profile definition --- */
 
 const AppCompatProfile app_compat_gghjt = {
     .name = "gghjt.mrp",
     .init = gghjt_init,
     .cleanup = gghjt_cleanup,
-    .on_child_synced = gghjt_on_child_synced,
-    .on_child_confirmed = gghjt_on_child_confirmed,
     .should_protect_got_addr = gghjt_should_protect_got_addr,
     .intercept_write = gghjt_intercept_write,
     .post_write_cleanup = gghjt_post_write_cleanup,
