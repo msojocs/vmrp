@@ -137,12 +137,6 @@ static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk);
 static void arm_ext_clear_foreground_screen_owner(ArmExtModule *m);
 static void capture_timer_dispatches(ArmExtModule *m);
 
-static inline void app_dump_state(ArmExtModule *m, const char *tag,
-                                  int32 code, uint32_t input_addr,
-                                  uint32 input_len) {
-    if (m && m->profile && m->profile->dump_state)
-        m->profile->dump_state(m, m->app_state, tag, code, input_addr, input_len);
-}
 static inline void app_on_child_confirmed(ArmExtModule *m, uint32_t p, uint32_t h) {
     if (m && m->profile && m->profile->on_child_confirmed)
         m->profile->on_child_confirmed(m, m->app_state, p, h);
@@ -472,14 +466,6 @@ static void trace_pc(uc_engine *uc, uint64_t address, uint32_t size, void *user_
     uint32_t pos = m->pc_ring_pos++ % EXT_TRACE_PC_RING;
     m->pc_ring[pos] = (uint32_t)address;
     m->cpsr_ring[pos] = reg_read32(uc, UC_ARM_REG_CPSR);
-}
-
-static void hook_app_pc_diag(uc_engine *uc, uint64_t address, uint32_t size,
-                             void *user_data) {
-    (void)size;
-    ArmExtModule *m = (ArmExtModule *)user_data;
-    if (m && m->profile && m->profile->pc_diagnostic)
-        m->profile->pc_diagnostic(uc, address, m, m->app_state);
 }
 
 static void dump_pc_ring(ArmExtModule *m) {
@@ -1407,11 +1393,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             char buf[1024];
             format_arm(m, buf, sizeof(buf), arm_str(m, r0), 1);
             mr_printf("%s", buf);
-            if (m->profile && m->profile->on_printf &&
-                m->profile->on_printf(m, m->app_state, buf)) {
-                ret = MR_SUCCESS;
-                break;
-            }
             ret = 0;
         } break;
         case 27: {
@@ -1470,7 +1451,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             mr_timer_state = 1;
             m->host_timer_pending = 1;
             arm_ext_record_timer_owner(m);
-            app_dump_state(m, "table31_timer_start", -1, 0, 0);
             break;
         case 32: {
             ret = mr_timerStop();
@@ -1479,7 +1459,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             m->host_timer_pending = 0;
             m->timer_p_addr = 0;
             m->timer_helper_addr = 0;
-            app_dump_state(m, "table32_timer_stop", -1, 0, 0);
         } break;
         case 33: {
             ret = mr_getTime();
@@ -2375,13 +2354,6 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
                           EXT_CODE_ADDR, EXT_CODE_ADDR + len);
         if (err != UC_ERR_OK) goto fail;
     }
-    if (getenv("VMRP_GGHJT_PC_DIAG")) {
-        uc_hook app_pc_hook;
-        err = uc_hook_add(m->uc, &app_pc_hook, UC_HOOK_CODE,
-                          hook_app_pc_diag, m,
-                          EXT_BASE_ADDR, EXT_BASE_ADDR + EXT_MEM_SIZE - 1);
-        if (err != UC_ERR_OK) goto fail;
-    }
     uc_hook restore_hook;
     err = uc_hook_add(m->uc, &restore_hook, UC_HOOK_BLOCK, hook_restore_r9, m,
                       EXT_BASE_ADDR, EXT_BASE_ADDR + EXT_MEM_SIZE - 1);
@@ -2590,7 +2562,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     uint32_t helper_args[4] = {outp_addr, outl_addr, 0, 0};
     uc_mem_write(m->uc, sp, helper_args, sizeof(helper_args));
     reg_write32(m->uc, UC_ARM_REG_SP, sp);
-    app_dump_state(m, "call_pre", code, input_addr, input_len);
 
     /* 保存 arm_ext_call 前的 game state[8] */
     uint32_t _ac_grw = 0, _ac_s8_pre = 0;
@@ -2623,7 +2594,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     m->current_p_addr = 0;
     m->current_helper_addr = 0;
     sync_timer_state_from_arm(m);
-    app_dump_state(m, "call_post", code, input_addr, input_len);
     if (code == 2 && was_host_timer_pending && m->host_timer_pending) {
         internal_slot_write(m, m->mr_timer_state_slot, (uint32_t)mr_timer_state);
     }

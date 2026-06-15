@@ -6,7 +6,6 @@
 // TODO: 后期将改成通用代码，废弃掉这种指定APP硬编码的逻辑
 static const AppCompatProfile *profiles[] = {
     &app_compat_gghjt,
-    &app_compat_gxdzc,
 };
 
 static int app_compat_name_matches(const char *name, const char *profile_name) {
