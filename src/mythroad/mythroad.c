@@ -129,7 +129,7 @@ static int mr_ram_file_len;
 //******************************************
 
 //*******************************
-int8 mr_soundOn = 0;
+int8 mr_soundOn = 1;
 int8 mr_shakeOn = 0;
 //*******************************
 uint8* mr_gzInBuf;

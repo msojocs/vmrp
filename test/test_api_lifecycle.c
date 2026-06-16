@@ -82,6 +82,35 @@ int32_t my_info(const char *path) {
     return 0;
 }
 
+/* native audio — vmrp_api.c 暴露 Flutter 拉流 ABI，单元测试只需验证转发和静音兜底。 */
+static int audio_active = 0;
+static int audio_render_called = 0;
+static int audio_stop_called = 0;
+int native_audio_sample_rate(void) {
+    return 44100;
+}
+
+int native_audio_channels(void) {
+    return 2;
+}
+
+int native_audio_is_active(void) {
+    return audio_active;
+}
+
+int native_audio_render_s16le(void *buffer, int frames) {
+    audio_render_called++;
+    if (buffer && frames > 0) {
+        memset(buffer, 0x11, (size_t)frames * 2u * sizeof(int16_t));
+    }
+    return frames > 0 ? frames : 0;
+}
+
+void native_audio_stop(void) {
+    audio_stop_called++;
+    audio_active = 0;
+}
+
 /* vmrp_config — 在 vmrp.c 中定义，这里提供 */
 VmrpConfig vmrp_config = {
     .screen_width = 240,
@@ -96,6 +125,9 @@ static void reset_counters(void) {
     last_event_code = -1;
     stop_called = 0;
     exit_requested = 0;
+    audio_active = 0;
+    audio_render_called = 0;
+    audio_stop_called = 0;
 }
 
 /* ── 测试用例 ─────────────────────────────────────────── */
@@ -299,6 +331,7 @@ static void test_event_forwards_to_runtime(void) {
     reset_counters();
 
     vmrp_api_init(240, 320);
+    ASSERT_INT_EQ(0, vmrp_api_start("/tmp/test.mrp", NULL, NULL));
     vmrp_api_event(VMRP_KEY_PRESS, VMRP_KEY_5, 0);
     ASSERT_INT_EQ(1, event_called);
     ASSERT_INT_EQ(VMRP_KEY_PRESS, last_event_code);
@@ -312,8 +345,54 @@ static void test_timer_forwards_to_runtime(void) {
     reset_counters();
 
     vmrp_api_init(240, 320);
+    ASSERT_INT_EQ(0, vmrp_api_start("/tmp/test.mrp", NULL, NULL));
     vmrp_api_timer();
     ASSERT_INT_EQ(1, timer_called);
+
+    vmrp_api_destroy();
+    TEST_END();
+}
+
+static void test_audio_api_forwards_when_running(void) {
+    TEST_BEGIN("vmrp_api audio forwards while running");
+    reset_counters();
+
+    int16_t frames[8] = {0};
+    vmrp_api_init(240, 320);
+    ASSERT_INT_EQ(0, vmrp_api_start("/tmp/test.mrp", NULL, NULL));
+    audio_active = 1;
+
+    ASSERT_INT_EQ(44100, vmrp_api_audio_sample_rate());
+    ASSERT_INT_EQ(2, vmrp_api_audio_channels());
+    ASSERT_INT_EQ(1, vmrp_api_audio_is_active());
+    ASSERT_INT_EQ(4, vmrp_api_audio_render_s16le(frames, 4));
+    ASSERT_INT_EQ(1, audio_render_called);
+    ASSERT_TRUE(frames[0] != 0);
+
+    vmrp_api_audio_stop();
+    ASSERT_INT_EQ(1, audio_stop_called);
+    ASSERT_INT_EQ(0, audio_active);
+
+    vmrp_api_destroy();
+    TEST_END();
+}
+
+static void test_audio_render_silences_when_not_running(void) {
+    TEST_BEGIN("vmrp_api audio render returns silence when stopped");
+    reset_counters();
+
+    int16_t frames[4];
+    for (size_t i = 0; i < sizeof(frames) / sizeof(frames[0]); i++) {
+        frames[i] = (int16_t)0x7fff;
+    }
+
+    vmrp_api_init(240, 320);
+    ASSERT_INT_EQ(0, vmrp_api_audio_is_active());
+    ASSERT_INT_EQ(0, vmrp_api_audio_render_s16le(frames, 2));
+    ASSERT_INT_EQ(0, audio_render_called);
+    for (size_t i = 0; i < sizeof(frames) / sizeof(frames[0]); i++) {
+        ASSERT_INT_EQ(0, frames[i]);
+    }
 
     vmrp_api_destroy();
     TEST_END();
@@ -373,6 +452,8 @@ int test_api_lifecycle_run_all(void) {
     test_start_empty_path_fails();
     test_event_forwards_to_runtime();
     test_timer_forwards_to_runtime();
+    test_audio_api_forwards_when_running();
+    test_audio_render_silences_when_not_running();
     test_edit_inactive_by_default();
     test_set_edit_text_without_active_fails();
     test_cancel_edit_without_active_fails();

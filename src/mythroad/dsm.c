@@ -481,6 +481,187 @@ char *get_filename(char *outputbuf, const char *filename) {
     return outputbuf;
 }
 
+typedef struct {
+    int device;
+    int status;
+    uint8 *data;
+    int32 len;
+    int owns_data;
+} DsmMediaDevice;
+
+static DsmMediaDevice dsm_media_devices[ACI_AMR_WB_DEVICE + 1];
+
+static int32 dsm_media_to_sound_type(int device) {
+    switch (device) {
+        case ACI_MIDI_DEVICE: return MR_SOUND_MIDI;
+        case ACI_WAVE_DEVICE: return MR_SOUND_WAV;
+        case ACI_MP3_DEVICE: return MR_SOUND_MP3;
+        case ACI_AMR_DEVICE: return MR_SOUND_AMR;
+        case ACI_PCM_DEVICE: return MR_SOUND_PCM;
+        case ACI_M4A_DEVICE: return MR_SOUND_M4A;
+        case ACI_AMR_WB_DEVICE: return MR_SOUND_AMR_WB;
+        default: return MR_FAILED;
+    }
+}
+
+static void dsm_media_release(DsmMediaDevice *media) {
+    if (media->owns_data && media->data) {
+        mr_free(media->data, (uint32)media->len);
+    }
+    media->data = NULL;
+    media->len = 0;
+    media->owns_data = FALSE;
+    media->status = MR_MEDIA_IDLE;
+}
+
+static void dsm_media_reset_all(void) {
+    /* dsm_init 在 Mythroad 堆重新初始化前调用；上一轮应用的 media 缓冲
+     * 跟随整块堆内存释放，这里只清状态，不能再对旧指针调用 mr_free。 */
+    memset2(dsm_media_devices, 0, sizeof(dsm_media_devices));
+}
+
+static DsmMediaDevice *dsm_media_get(int device, int create) {
+    if (device < ACI_MIDI_DEVICE || device > ACI_AMR_WB_DEVICE) {
+        return NULL;
+    }
+    DsmMediaDevice *media = &dsm_media_devices[device];
+    if (create && media->device == 0) {
+        media->device = device;
+        media->status = MR_MEDIA_IDLE;
+    }
+    return media;
+}
+
+static int32 dsm_media_file_load(DsmMediaDevice *media, uint8 *input, int32 input_len) {
+    if (!media || !input || input_len <= 0) {
+        return MR_FAILED;
+    }
+
+    char fullpathname[DSM_MAX_FILE_LEN];
+    char *path = get_filename(fullpathname, (const char *)input);
+    int32 len = dsmInFuncs->getLen(path);
+    if (len <= 0) {
+        LOGW("MR_MEDIA_FILE_LOAD device=%d path='%s' len=%d", media->device, path, len);
+        return MR_FAILED;
+    }
+
+    uint8 *data = mr_malloc((uint32)len);
+    if (!data) {
+        return MR_FAILED;
+    }
+    int32 f = dsmInFuncs->open(path, MR_FILE_RDONLY);
+    if (f == 0) {
+        mr_free(data, (uint32)len);
+        return MR_FAILED;
+    }
+    int32 got = dsmInFuncs->read(f, data, (uint32)len);
+    dsmInFuncs->close(f);
+    if (got != len) {
+        mr_free(data, (uint32)len);
+        return MR_FAILED;
+    }
+
+    dsm_media_release(media);
+    media->data = data;
+    media->len = len;
+    media->owns_data = TRUE;
+    media->status = MR_MEDIA_LOADED;
+    return MR_SUCCESS;
+}
+
+static int32 dsm_media_buf_load(DsmMediaDevice *media, uint8 *input, int32 input_len) {
+    if (!media || !input || input_len <= 0) {
+        return MR_FAILED;
+    }
+    dsm_media_release(media);
+    media->data = input;
+    media->len = input_len;
+    media->owns_data = FALSE;
+    media->status = MR_MEDIA_LOADED;
+    return MR_SUCCESS;
+}
+
+static int32 dsm_media_play(DsmMediaDevice *media, uint8 *input, int32 input_len) {
+    if (!media || !media->data || media->len <= 0) {
+        return MR_FAILED;
+    }
+    T_DSM_MEDIA_PLAY play;
+    memset2(&play, 0, sizeof(play));
+    if (input && input_len >= (int32)sizeof(play)) {
+        memcpy2(&play, input, sizeof(play));
+    }
+
+    int32 type = dsm_media_to_sound_type(media->device);
+    if (type == MR_FAILED) {
+        return MR_IGNORE;
+    }
+    int32 ret = mr_playSound(type, media->data, (uint32)media->len, play.loop);
+    if (ret == MR_SUCCESS) {
+        media->status = MR_MEDIA_PLAYING;
+    }
+    return ret;
+}
+
+static int32 dsm_media_platEx(int32 cmd, int device, uint8 *input, int32 input_len,
+                              uint8 **output, int32 *output_len) {
+    /* mrc_sound.h 设备接口把命令编码为 cmd * 10 + device。
+     * 这里统一转接到 mr_playSound/mr_stopSound，避免 C SDK 游戏绕过
+     * Lua SoundSet/BgMusicStart 后在平台层静默返回未实现。 */
+    DsmMediaDevice *media = dsm_media_get(device, TRUE);
+    if (!media) {
+        return MR_IGNORE;
+    }
+
+    switch (cmd) {
+        case MR_MEDIA_INIT:
+            dsm_media_release(media);
+            media->device = device;
+            media->status = MR_MEDIA_INITED;
+            return MR_SUCCESS;
+        case MR_MEDIA_FILE_LOAD:
+            return dsm_media_file_load(media, input, input_len);
+        case MR_MEDIA_BUF_LOAD:
+            return dsm_media_buf_load(media, input, input_len);
+        case MR_MEDIA_PLAY_CUR_REQ:
+            return dsm_media_play(media, input, input_len);
+        case MR_MEDIA_PAUSE_REQ:
+        case MR_MEDIA_STOP_REQ:
+            mr_stopSound(dsm_media_to_sound_type(device));
+            media->status = MR_MEDIA_LOADED;
+            return MR_SUCCESS;
+        case MR_MEDIA_RESUME_REQ:
+            return dsm_media_play(media, input, input_len);
+        case MR_MEDIA_CLOSE:
+        case MR_MEDIA_FREE:
+            mr_stopSound(dsm_media_to_sound_type(device));
+            dsm_media_release(media);
+            media->device = device;
+            return MR_SUCCESS;
+        case MR_MEDIA_GET_STATUS:
+            if (output && output_len) {
+                *output = (uint8 *)&media->status;
+                *output_len = sizeof(media->status);
+            }
+            return media->status;
+        case MR_MEDIA_SETPOS:
+        case MR_MEDIA_GETTIME:
+        case MR_MEDIA_GET_TOTAL_TIME:
+        case MR_MEDIA_GET_CURTIME:
+        case MR_MEDIA_GET_CURTIME_MSEC: {
+            static T_MEDIA_TIME media_time;
+            media_time.pos = 0;
+            if (output && output_len) {
+                *output = (uint8 *)&media_time;
+                *output_len = sizeof(media_time);
+            }
+            return MR_SUCCESS;
+        }
+        default:
+            LOGW("mr_platEx(media cmd=%d device=%d) not impl!", cmd, device);
+            return MR_IGNORE;
+    }
+}
+
 int32 mr_open(const char *filename, uint32 mode) {
     char fullpathname[DSM_MAX_FILE_LEN];
     int32 ret = dsmInFuncs->open(get_filename(fullpathname, filename), mode);
@@ -810,6 +991,27 @@ static T_DSM_FREE_SAPCE dsm_free_sapce;
 int32 mr_platEx(int32 code, uint8 *input, int32 input_len, uint8 **output, int32 *output_len, MR_PLAT_EX_CB *cb) {
     LOGI("mr_platEx code=%d in=@%p inlen=%d out=@%p outlen=@%p cb=@%p", code, input, input_len, output, output_len, cb);
 
+    int media_cmd = code / 10;
+    int media_device = code % 10;
+    if (media_device != 0 &&
+        (media_cmd == MR_MEDIA_INIT ||
+         media_cmd == MR_MEDIA_FILE_LOAD ||
+         media_cmd == MR_MEDIA_BUF_LOAD ||
+         media_cmd == MR_MEDIA_PLAY_CUR_REQ ||
+         media_cmd == MR_MEDIA_PAUSE_REQ ||
+         media_cmd == MR_MEDIA_RESUME_REQ ||
+         media_cmd == MR_MEDIA_STOP_REQ ||
+         media_cmd == MR_MEDIA_CLOSE ||
+         media_cmd == MR_MEDIA_GET_STATUS ||
+         media_cmd == MR_MEDIA_SETPOS ||
+         media_cmd == MR_MEDIA_GETTIME ||
+         media_cmd == MR_MEDIA_GET_TOTAL_TIME ||
+         media_cmd == MR_MEDIA_GET_CURTIME ||
+         media_cmd == MR_MEDIA_GET_CURTIME_MSEC ||
+         media_cmd == MR_MEDIA_FREE)) {
+        return dsm_media_platEx(media_cmd, media_device, input, input_len, output, output_len);
+    }
+
     switch (code) {
         case 1012:  //申请内部cache
         case 1013:  //释放内部cache
@@ -931,26 +1133,6 @@ int32 mr_platEx(int32 code, uint8 *input, int32 input_len, uint8 **output, int32
         }
     }
 
-    // int cmd = code / 10;
-    // switch (cmd) {
-    //     case MR_MEDIA_INIT:              //201
-    //     case MR_MEDIA_FILE_LOAD:         //202
-    //     case MR_MEDIA_BUF_LOAD:          //203
-    //     case MR_MEDIA_PLAY_CUR_REQ:      //204
-    //     case MR_MEDIA_PAUSE_REQ:         //205
-    //     case MR_MEDIA_RESUME_REQ:        //206
-    //     case MR_MEDIA_STOP_REQ:          //207
-    //     case MR_MEDIA_CLOSE:             //208
-    //     case MR_MEDIA_GET_STATUS:        //209
-    //     case MR_MEDIA_SETPOS:            //210
-    //     case MR_MEDIA_GET_TOTAL_TIME:    //212
-    //     case MR_MEDIA_GET_CURTIME:       //213
-    //     case MR_MEDIA_GET_CURTIME_MSEC:  //215
-    //     case MR_MEDIA_FREE:              //216
-    //     default:
-    //         LOGW("mr_platEx(code=%d, input=%p, il=%d) not impl!", code, (void *)input, input_len);
-    //         break;
-    // }
     return MR_IGNORE;
 }
 
@@ -1113,6 +1295,7 @@ int32 dsm_init(DSM_REQUIRE_FUNCS *inFuncs) {
     dsmInFuncs = inFuncs;
     dsmStartTime = dsmInFuncs->get_uptime_ms();
     holdTextMem = NULL;
+    dsm_media_reset_all();
 
 #ifdef DSM_FULL
     mr_tm_init();

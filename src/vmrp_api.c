@@ -2,6 +2,7 @@
 #include "./include/vmrp.h"
 #include "./include/bridge.h"
 #include "./include/memory.h"
+#include "./include/native_dsm_funcs.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -195,6 +196,36 @@ VMRP_EXPORT int vmrp_api_get_screen_width(void) {
 
 VMRP_EXPORT int vmrp_api_get_screen_height(void) {
     return vmrp_config.screen_height;
+}
+
+VMRP_EXPORT int vmrp_api_audio_sample_rate(void) {
+    return native_audio_sample_rate();
+}
+
+VMRP_EXPORT int vmrp_api_audio_channels(void) {
+    return native_audio_channels();
+}
+
+VMRP_EXPORT int vmrp_api_audio_is_active(void) {
+    if (!api_running || vmrp_is_exited()) return 0;
+    return native_audio_is_active();
+}
+
+VMRP_EXPORT int vmrp_api_audio_render_s16le(void *buffer, int frames) {
+    if (frames <= 0) {
+        return 0;
+    }
+    if (!api_running || vmrp_is_exited()) {
+        if (buffer) {
+            memset(buffer, 0, (size_t)frames * (size_t)native_audio_channels() * sizeof(int16_t));
+        }
+        return 0;
+    }
+    return native_audio_render_s16le(buffer, frames);
+}
+
+VMRP_EXPORT void vmrp_api_audio_stop(void) {
+    native_audio_stop();
 }
 
 VMRP_EXPORT int vmrp_api_is_edit_active(void) {
