@@ -105,6 +105,9 @@ VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char
     VmrpArgs args = vmrp_args_default();
     args.screen_width = vmrp_config.screen_width;
     args.screen_height = vmrp_config.screen_height;
+    if (vmrp_config.work_dir[0]) {
+        snprintf(args.work_dir, sizeof(args.work_dir), "%s", vmrp_config.work_dir);
+    }
     snprintf(args.mrp_path, sizeof(args.mrp_path), "%s", mrp_path);
     snprintf(args.ext_name, sizeof(args.ext_name), "%s", ext);
     if (entry && *entry) snprintf(args.entry, sizeof(args.entry), "%s", entry);

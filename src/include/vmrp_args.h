@@ -15,6 +15,7 @@
 typedef struct VmrpArgs {
     int screen_width;
     int screen_height;
+    char work_dir[PATH_MAX];
     char mrp_path[PATH_MAX];
     char ext_name[256];
     char entry[256];
