@@ -13,6 +13,7 @@
 typedef struct VmrpConfig {
     int screen_width;
     int screen_height;
+    char work_dir[PATH_MAX];
 } VmrpConfig;
 
 extern VmrpConfig vmrp_config;

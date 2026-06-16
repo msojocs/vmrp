@@ -35,7 +35,7 @@ run_vmrp() {
     export VMRP_PPM_PATH="$VMRP_SCREEN_FILE"
 
     VMRP_EXIT_CODE=0
-    timeout "$VMRP_TIMEOUT" "$VMRP_BIN" "$mrp" \
+    timeout "$VMRP_TIMEOUT" "$VMRP_BIN" --work-dir "${VMRP_WORK_DIR:-.}" "$mrp" \
         >"$VMRP_STDOUT_FILE" 2>"$VMRP_STDERR_FILE" || VMRP_EXIT_CODE=$?
 
     # timeout(1) 返回 124 表示超时

@@ -13,8 +13,10 @@
 #ifndef PATH_MAX
 #define PATH_MAX 260
 #endif
+#define VMRP_CHDIR _chdir
 #else
 #include <unistd.h>
+#define VMRP_CHDIR chdir
 #endif
 
 #ifndef PATH_MAX
@@ -203,10 +205,28 @@ int configureVmrpDnsMap(const char *map) {
     return my_configureDnsMap(map);
 }
 
+static int apply_config_paths(const VmrpArgs *args) {
+    if (args->work_dir[0]) {
+        snprintf(vmrp_config.work_dir, sizeof(vmrp_config.work_dir), "%s", args->work_dir);
+    } else if (!vmrp_config.work_dir[0]) {
+        snprintf(vmrp_config.work_dir, sizeof(vmrp_config.work_dir), ".");
+    }
+
+    if (VMRP_CHDIR(vmrp_config.work_dir) != 0) {
+        fprintf(stderr, "vmrp: unable to switch working directory to '%s': %s\n",
+                vmrp_config.work_dir, strerror(errno));
+        return MR_FAILED;
+    }
+    return MR_SUCCESS;
+}
+
 int startVmrp(const VmrpArgs *args) {
     vmrp_exit_requested = 0;
     vmrp_config.screen_width = args->screen_width;
     vmrp_config.screen_height = args->screen_height;
+    if (apply_config_paths(args) != MR_SUCCESS) {
+        return MR_FAILED;
+    }
 
     if (args->dns_map[0]) {
         if (my_configureDnsMap(args->dns_map) != MR_SUCCESS) {

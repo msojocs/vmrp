@@ -9,6 +9,27 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <unistd.h>
+#ifdef _WIN32
+#include <direct.h>
+#define getcwd _getcwd
+#endif
+
+static void test_setenv(const char *name, const char *value) {
+#ifdef _WIN32
+    _putenv_s(name, value);
+#else
+    setenv(name, value, 1);
+#endif
+}
+
+static void test_unsetenv(const char *name) {
+#ifdef _WIN32
+    _putenv_s(name, "");
+#else
+    unsetenv(name);
+#endif
+}
 
 #define HARNESS_MULTI_FILE
 #include "harness.h"
@@ -433,6 +454,38 @@ static void test_cancel_edit_without_active_fails(void) {
     TEST_END();
 }
 
+static void test_args_parse_env_work_dir(void) {
+    TEST_BEGIN("vmrp_args_parse reads VMRP_WORK_DIR");
+    char cwd[PATH_MAX];
+    char expected[PATH_MAX + 32];
+    char *argv[] = { "vmrp" };
+    VmrpArgs args;
+
+    ASSERT_PTR_NOT_NULL(getcwd(cwd, sizeof(cwd)));
+    snprintf(expected, sizeof(expected), "%s/%s", cwd, "vmrp_env_work");
+    test_setenv("VMRP_WORK_DIR", "vmrp_env_work");
+
+    ASSERT_INT_EQ(MR_SUCCESS, vmrp_args_parse(1, argv, &args));
+    ASSERT_STR_EQ(expected, args.work_dir);
+
+    test_unsetenv("VMRP_WORK_DIR");
+    TEST_END();
+}
+
+static void test_args_parse_cli_work_dir_overrides_env(void) {
+    TEST_BEGIN("vmrp_args_parse --work-dir overrides VMRP_WORK_DIR");
+    char *argv[] = { "vmrp", "--work-dir", "/tmp/vmrp_cli_work" };
+    VmrpArgs args;
+
+    test_setenv("VMRP_WORK_DIR", "/tmp/vmrp_env_work");
+
+    ASSERT_INT_EQ(MR_SUCCESS, vmrp_args_parse(3, argv, &args));
+    ASSERT_STR_EQ("/tmp/vmrp_cli_work", args.work_dir);
+
+    test_unsetenv("VMRP_WORK_DIR");
+    TEST_END();
+}
+
 /* ── 运行所有测试 ─────────────────────────────────────── */
 int test_api_lifecycle_run_all(void) {
     int before = harness_tests_failed;
@@ -457,6 +510,8 @@ int test_api_lifecycle_run_all(void) {
     test_edit_inactive_by_default();
     test_set_edit_text_without_active_fails();
     test_cancel_edit_without_active_fails();
+    test_args_parse_env_work_dir();
+    test_args_parse_cli_work_dir_overrides_env();
 
     return harness_tests_failed - before;
 }
