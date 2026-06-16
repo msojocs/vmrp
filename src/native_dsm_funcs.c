@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <math.h>
+#include <stdint.h>
 #ifndef _MSC_VER
 #include <pthread.h>
 #include <unistd.h>
@@ -14,7 +15,6 @@
 #ifdef __linux__
 #include <sys/mman.h>
 #endif
-
 #if defined(VMRP_SDL_AUDIO)
 #ifdef _MSC_VER
 #include <SDL.h>
@@ -38,10 +38,10 @@ static uint32 native_mem_len;
 static uint64_t native_uptime_base;
 static char readdir_buf[128];
 
-#if defined(VMRP_SDL_AUDIO)
 #define AUDIO_SAMPLE_RATE 44100
 #define AUDIO_CHANNELS 2
 #define AUDIO_FRAMES 1024
+#define AUDIO_BYTES_PER_FRAME ((int)(sizeof(int16_t) * AUDIO_CHANNELS))
 #define MIDI_MAX_EVENTS 4096
 #define MIDI_MAX_TRACKS 32
 #define MIDI_DRUM_CHANNEL 9
@@ -75,8 +75,9 @@ typedef struct {
 } MidiVoice;
 
 typedef struct {
+#if defined(VMRP_SDL_AUDIO)
     SDL_AudioDeviceID device;
-    SDL_AudioSpec spec;
+#endif
     NativeAudioSource source;
     uint8 *pcm;
     uint32 pcm_len;
@@ -108,7 +109,6 @@ enum {
     NATIVE_SOUND_AMR = 5,
     NATIVE_SOUND_AMR_WB = 6
 };
-#endif
 
 static void native_test(void) {}
 
@@ -179,13 +179,24 @@ static int32 native_getHostByName(const char *ptr, NETWORK_CB cb, void *userData
     return my_getHostByName(NULL, ptr, (MR_GET_HOST_CB)cb, userData);
 }
 
-#if defined(VMRP_SDL_AUDIO)
+static int32 native_timerStop(void) {
+    return timerStop();
+}
+
 static uint16 read_be16(const uint8 *p) {
     return (uint16)(((uint16)p[0] << 8) | p[1]);
 }
 
 static uint32 read_be32(const uint8 *p) {
     return ((uint32)p[0] << 24) | ((uint32)p[1] << 16) | ((uint32)p[2] << 8) | p[3];
+}
+
+static uint16 read_le16(const uint8 *p) {
+    return (uint16)(p[0] | ((uint16)p[1] << 8));
+}
+
+static uint32 read_le32(const uint8 *p) {
+    return (uint32)p[0] | ((uint32)p[1] << 8) | ((uint32)p[2] << 16) | ((uint32)p[3] << 24);
 }
 
 static int read_midi_vlq(const uint8 *data, uint32 len, uint32 *pos, uint32 *out) {
@@ -307,7 +318,13 @@ static void midi_reset_playback(NativeAudioState *s) {
     }
 }
 
-static void midi_render(NativeAudioState *s, Sint16 *stream, int frames) {
+static int16_t audio_float_to_s16(float sample) {
+    if (sample > 1.0f) sample = 1.0f;
+    if (sample < -1.0f) sample = -1.0f;
+    return (int16_t)(sample * 32767.0f);
+}
+
+static void midi_render(NativeAudioState *s, int16_t *stream, int frames) {
     for (int i = 0; i < frames; i++) {
         while (s->midi_event_pos < s->midi_event_count &&
                s->midi_events[s->midi_event_pos].tick <= s->midi_tick) {
@@ -353,8 +370,8 @@ static void midi_render(NativeAudioState *s, Sint16 *stream, int frames) {
         if (left < -1.0f) left = -1.0f;
         if (right > 1.0f) right = 1.0f;
         if (right < -1.0f) right = -1.0f;
-        stream[i * 2] = (Sint16)(left * 32767.0f);
-        stream[i * 2 + 1] = (Sint16)(right * 32767.0f);
+        stream[i * 2] = audio_float_to_s16(left);
+        stream[i * 2 + 1] = audio_float_to_s16(right);
 
         s->midi_sample_in_tick++;
         if (s->midi_sample_in_tick >= s->midi_samples_per_tick) {
@@ -373,54 +390,6 @@ static void midi_render(NativeAudioState *s, Sint16 *stream, int frames) {
     }
 }
 
-static void native_audio_callback(void *userdata, Uint8 *stream, int len) {
-    NativeAudioState *s = (NativeAudioState *)userdata;
-    memset(stream, 0, (size_t)len);
-    if (s->source == AUDIO_SOURCE_PCM) {
-        uint32 need = (uint32)len;
-        uint8 *dst = stream;
-        while (need > 0 && s->pcm_len > 0) {
-            uint32 avail = s->pcm_len - s->pcm_pos;
-            uint32 copy = (avail < need) ? avail : need;
-            SDL_memcpy(dst, s->pcm + s->pcm_pos, copy);
-            dst += copy;
-            need -= copy;
-            s->pcm_pos += copy;
-            if (s->pcm_pos >= s->pcm_len) {
-                if (s->loop) {
-                    s->pcm_pos = 0;
-                } else {
-                    s->source = AUDIO_SOURCE_NONE;
-                    break;
-                }
-            }
-        }
-    } else if (s->source == AUDIO_SOURCE_MIDI) {
-        midi_render(s, (Sint16 *)stream, len / (int)(sizeof(Sint16) * AUDIO_CHANNELS));
-    }
-}
-
-static int native_audio_open(void) {
-    if (native_audio.device) {
-        return MR_SUCCESS;
-    }
-    SDL_AudioSpec want;
-    SDL_zero(want);
-    want.freq = AUDIO_SAMPLE_RATE;
-    want.format = AUDIO_S16SYS;
-    want.channels = AUDIO_CHANNELS;
-    want.samples = AUDIO_FRAMES;
-    want.callback = native_audio_callback;
-    want.userdata = &native_audio;
-    native_audio.device = SDL_OpenAudioDevice(NULL, 0, &want, &native_audio.spec, 0);
-    if (!native_audio.device) {
-        printf("native_playSound: SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
-        return MR_FAILED;
-    }
-    SDL_PauseAudioDevice(native_audio.device, 0);
-    return MR_SUCCESS;
-}
-
 static void native_audio_clear_locked(NativeAudioState *s) {
     s->source = AUDIO_SOURCE_NONE;
     free(s->pcm);
@@ -435,63 +404,243 @@ static void native_audio_clear_locked(NativeAudioState *s) {
     memset(s->midi_voices, 0, sizeof(s->midi_voices));
 }
 
-static int native_audio_set_pcm(const void *data, uint32 dataLen, int32 loop,
-                                SDL_AudioFormat format, int freq, int channels) {
-    if (!data || dataLen == 0) {
-        printf("native_playSound: empty PCM/WAV buffer\n");
-        return MR_FAILED;
+static void native_audio_lock(void) {
+#if defined(VMRP_SDL_AUDIO)
+    if (native_audio.device) {
+        SDL_LockAudioDevice(native_audio.device);
     }
-    if (native_audio_open() != MR_SUCCESS) {
-        return MR_FAILED;
+#endif
+}
+
+static void native_audio_unlock(void) {
+#if defined(VMRP_SDL_AUDIO)
+    if (native_audio.device) {
+        SDL_UnlockAudioDevice(native_audio.device);
+    }
+#endif
+}
+
+static int native_audio_render_bytes(NativeAudioState *s, uint8 *stream, int len) {
+    if (!stream || len <= 0) return 0;
+    memset(stream, 0, (size_t)len);
+
+    int frames = len / AUDIO_BYTES_PER_FRAME;
+    if (frames <= 0) return 0;
+
+    NativeAudioSource source = s->source;
+    if (source == AUDIO_SOURCE_PCM) {
+        uint32 need = (uint32)(frames * AUDIO_BYTES_PER_FRAME);
+        uint8 *dst = stream;
+        while (need > 0 && s->pcm_len > 0) {
+            uint32 avail = s->pcm_len - s->pcm_pos;
+            uint32 copy = (avail < need) ? avail : need;
+            memcpy(dst, s->pcm + s->pcm_pos, copy);
+            dst += copy;
+            need -= copy;
+            s->pcm_pos += copy;
+            if (s->pcm_pos >= s->pcm_len) {
+                if (s->loop) {
+                    s->pcm_pos = 0;
+                } else {
+                    native_audio_clear_locked(s);
+                    break;
+                }
+            }
+        }
+    } else if (source == AUDIO_SOURCE_MIDI) {
+        midi_render(s, (int16_t *)stream, frames);
     }
 
-    SDL_AudioCVT cvt;
-    if (SDL_BuildAudioCVT(&cvt, format, (Uint8)channels, freq,
-                          native_audio.spec.format, native_audio.spec.channels,
-                          native_audio.spec.freq) < 0) {
-        printf("native_playSound: SDL_BuildAudioCVT failed: %s\n", SDL_GetError());
-        return MR_FAILED;
-    }
-    cvt.len = (int)dataLen;
-    cvt.buf = (Uint8 *)malloc((size_t)cvt.len * (size_t)cvt.len_mult);
-    if (!cvt.buf) {
-        return MR_FAILED;
-    }
-    memcpy(cvt.buf, data, dataLen);
-    if (SDL_ConvertAudio(&cvt) < 0) {
-        printf("native_playSound: SDL_ConvertAudio failed: %s\n", SDL_GetError());
-        free(cvt.buf);
-        return MR_FAILED;
-    }
+    return source == AUDIO_SOURCE_NONE ? 0 : frames;
+}
 
-    SDL_LockAudioDevice(native_audio.device);
-    native_audio_clear_locked(&native_audio);
-    native_audio.pcm = cvt.buf;
-    native_audio.pcm_len = (uint32)cvt.len_cvt;
-    native_audio.pcm_pos = 0;
-    native_audio.loop = loop ? 1 : 0;
-    native_audio.source = AUDIO_SOURCE_PCM;
-    SDL_UnlockAudioDevice(native_audio.device);
+#if defined(VMRP_SDL_AUDIO)
+static void native_audio_callback(void *userdata, Uint8 *stream, int len) {
+    native_audio_render_bytes((NativeAudioState *)userdata, stream, len);
+}
+#endif
+
+static int native_audio_start_output(void) {
+#if defined(VMRP_SDL_AUDIO)
+    if (native_audio.device) {
+        return MR_SUCCESS;
+    }
+    SDL_AudioSpec want;
+    SDL_zero(want);
+    want.freq = AUDIO_SAMPLE_RATE;
+    want.format = AUDIO_S16SYS;
+    want.channels = AUDIO_CHANNELS;
+    want.samples = AUDIO_FRAMES;
+    want.callback = native_audio_callback;
+    want.userdata = &native_audio;
+    native_audio.device = SDL_OpenAudioDevice(NULL, 0, &want, NULL, 0);
+    if (!native_audio.device) {
+        printf("native_playSound: SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
+        return MR_FAILED;
+    }
+    SDL_PauseAudioDevice(native_audio.device, 0);
+#endif
     return MR_SUCCESS;
 }
 
-static int native_audio_play_wav(const void *data, uint32 dataLen, int32 loop) {
-    SDL_RWops *rw = SDL_RWFromConstMem(data, (int)dataLen);
-    if (!rw) {
-        printf("native_playSound: SDL_RWFromConstMem failed: %s\n", SDL_GetError());
+static int native_audio_take_pcm(uint8 *pcm, uint32 pcm_len, int32 loop) {
+    if (!pcm || pcm_len == 0) {
+        free(pcm);
+        return MR_FAILED;
+    }
+    if (native_audio_start_output() != MR_SUCCESS) {
+        free(pcm);
         return MR_FAILED;
     }
 
-    SDL_AudioSpec wav_spec;
-    Uint8 *wav_buf = NULL;
-    Uint32 wav_len = 0;
-    if (!SDL_LoadWAV_RW(rw, 1, &wav_spec, &wav_buf, &wav_len)) {
-        printf("native_playSound: SDL_LoadWAV_RW failed: %s\n", SDL_GetError());
+    native_audio_lock();
+    native_audio_clear_locked(&native_audio);
+    native_audio.pcm = pcm;
+    native_audio.pcm_len = pcm_len;
+    native_audio.pcm_pos = 0;
+    native_audio.loop = loop ? 1 : 0;
+    native_audio.source = AUDIO_SOURCE_PCM;
+    native_audio_unlock();
+    return MR_SUCCESS;
+}
+
+static int native_audio_pcm_format_supported(int format, int bits_per_sample) {
+    if (format == 1) {
+        return bits_per_sample == 8 || bits_per_sample == 16 ||
+               bits_per_sample == 24 || bits_per_sample == 32;
+    }
+    if (format == 3) {
+        return bits_per_sample == 32;
+    }
+    return 0;
+}
+
+static int16_t native_audio_read_sample_s16(const uint8 *p, int format, int bits_per_sample) {
+    if (format == 3 && bits_per_sample == 32) {
+        float value = 0.0f;
+        memcpy(&value, p, sizeof(value));
+        return audio_float_to_s16(value);
+    }
+
+    switch (bits_per_sample) {
+        case 8:
+            return (int16_t)(((int)p[0] - 128) << 8);
+        case 16:
+            return (int16_t)read_le16(p);
+        case 24: {
+            int32_t value = (int32_t)p[0] | ((int32_t)p[1] << 8) | ((int32_t)p[2] << 16);
+            if (value & 0x800000) value |= ~0xffffff;
+            return (int16_t)(value >> 8);
+        }
+        case 32:
+            return (int16_t)((int32_t)read_le32(p) >> 16);
+        default:
+            return 0;
+    }
+}
+
+static int native_audio_set_pcm(const void *data, uint32 dataLen, int32 loop,
+                                int freq, int channels, int bits_per_sample,
+                                int format, int block_align) {
+    if (!data || dataLen == 0 || freq <= 0 || channels <= 0 || channels > 8 ||
+        !native_audio_pcm_format_supported(format, bits_per_sample)) {
+        printf("native_playSound: unsupported PCM/WAV format fmt=%d hz=%d ch=%d bits=%d len=%u\n",
+               format, freq, channels, bits_per_sample, dataLen);
         return MR_FAILED;
     }
-    int ret = native_audio_set_pcm(wav_buf, wav_len, loop, wav_spec.format, wav_spec.freq, wav_spec.channels);
-    SDL_FreeWAV(wav_buf);
-    return ret;
+
+    int bytes_per_sample = (bits_per_sample + 7) / 8;
+    if (block_align <= 0) {
+        block_align = bytes_per_sample * channels;
+    }
+    if (block_align < bytes_per_sample * channels) {
+        printf("native_playSound: invalid PCM block align %d\n", block_align);
+        return MR_FAILED;
+    }
+
+    uint32 src_frames = dataLen / (uint32)block_align;
+    if (src_frames == 0) {
+        printf("native_playSound: empty PCM/WAV frame buffer\n");
+        return MR_FAILED;
+    }
+
+    uint64_t out_frames64 = ((uint64_t)src_frames * AUDIO_SAMPLE_RATE + (uint32)freq - 1) / (uint32)freq;
+    if (out_frames64 == 0 || out_frames64 > UINT32_MAX / AUDIO_BYTES_PER_FRAME) {
+        printf("native_playSound: converted PCM is too large\n");
+        return MR_FAILED;
+    }
+
+    uint32 out_frames = (uint32)out_frames64;
+    uint32 out_len = out_frames * AUDIO_BYTES_PER_FRAME;
+    uint8 *out = (uint8 *)malloc(out_len);
+    if (!out) return MR_FAILED;
+
+    const uint8 *src = (const uint8 *)data;
+    int16_t *dst = (int16_t *)out;
+    for (uint32 i = 0; i < out_frames; i++) {
+        uint64_t src_index64 = ((uint64_t)i * (uint32)freq) / AUDIO_SAMPLE_RATE;
+        if (src_index64 >= src_frames) src_index64 = src_frames - 1;
+        const uint8 *frame = src + (uint32)src_index64 * (uint32)block_align;
+        int16_t left = native_audio_read_sample_s16(frame, format, bits_per_sample);
+        int16_t right = channels > 1
+            ? native_audio_read_sample_s16(frame + bytes_per_sample, format, bits_per_sample)
+            : left;
+        dst[i * AUDIO_CHANNELS] = left;
+        dst[i * AUDIO_CHANNELS + 1] = right;
+    }
+
+    return native_audio_take_pcm(out, out_len, loop);
+}
+
+static int native_audio_play_wav(const void *data, uint32 dataLen, int32 loop) {
+    const uint8 *bytes = (const uint8 *)data;
+    if (!bytes || dataLen < 12 || memcmp(bytes, "RIFF", 4) != 0 || memcmp(bytes + 8, "WAVE", 4) != 0) {
+        printf("native_playSound: WAV data is not RIFF/WAVE\n");
+        return MR_FAILED;
+    }
+
+    int format = 0;
+    int channels = 0;
+    int sample_rate = 0;
+    int bits_per_sample = 0;
+    int block_align = 0;
+    const uint8 *audio_data = NULL;
+    uint32 audio_len = 0;
+
+    uint32 pos = 12;
+    while (pos + 8 <= dataLen) {
+        const uint8 *chunk = bytes + pos;
+        uint32 chunk_len = read_le32(chunk + 4);
+        pos += 8;
+        if (chunk_len > dataLen - pos) {
+            printf("native_playSound: truncated WAV chunk\n");
+            return MR_FAILED;
+        }
+
+        if (memcmp(chunk, "fmt ", 4) == 0) {
+            if (chunk_len < 16) {
+                printf("native_playSound: invalid WAV fmt chunk\n");
+                return MR_FAILED;
+            }
+            format = (int)read_le16(bytes + pos);
+            channels = (int)read_le16(bytes + pos + 2);
+            sample_rate = (int)read_le32(bytes + pos + 4);
+            block_align = (int)read_le16(bytes + pos + 12);
+            bits_per_sample = (int)read_le16(bytes + pos + 14);
+        } else if (memcmp(chunk, "data", 4) == 0) {
+            audio_data = bytes + pos;
+            audio_len = chunk_len;
+        }
+
+        pos += chunk_len + (chunk_len & 1u);
+    }
+
+    if (!audio_data || audio_len == 0 || !format || !channels || !sample_rate || !bits_per_sample) {
+        printf("native_playSound: missing WAV fmt/data chunk\n");
+        return MR_FAILED;
+    }
+    return native_audio_set_pcm(audio_data, audio_len, loop, sample_rate, channels,
+                                bits_per_sample, format, block_align);
 }
 
 static int midi_add_event(NativeAudioState *s, uint32 tick, uint8 status, uint8 a, uint8 b, uint32 value) {
@@ -562,6 +711,10 @@ static int native_audio_parse_midi(NativeAudioState *s, const uint8 *data, uint3
                 s->midi_loop_ticks = tick;
             }
 
+            if (pos >= end) {
+                printf("native_playSound: missing MIDI event status\n");
+                return MR_FAILED;
+            }
             uint8 b = data[pos];
             uint8 status;
             if (b & 0x80) {
@@ -635,10 +788,10 @@ static int native_audio_parse_midi(NativeAudioState *s, const uint8 *data, uint3
 }
 
 static int native_audio_play_midi(const void *data, uint32 dataLen, int32 loop) {
-    if (native_audio_open() != MR_SUCCESS) {
+    if (native_audio_start_output() != MR_SUCCESS) {
         return MR_FAILED;
     }
-    SDL_LockAudioDevice(native_audio.device);
+    native_audio_lock();
     native_audio_clear_locked(&native_audio);
     int ret = native_audio_parse_midi(&native_audio, (const uint8 *)data, dataLen);
     if (ret == MR_SUCCESS) {
@@ -646,23 +799,22 @@ static int native_audio_play_midi(const void *data, uint32 dataLen, int32 loop) 
         midi_reset_playback(&native_audio);
         native_audio.source = AUDIO_SOURCE_MIDI;
     }
-    SDL_UnlockAudioDevice(native_audio.device);
+    native_audio_unlock();
     return ret;
 }
-#endif
 
 static int32 native_playSound(int type, const void *data, uint32 dataLen, int32 loop) {
-#if defined(VMRP_SDL_AUDIO)
     /* Mythroad 传入的是完整内存音频流：gxdzc 的“是否开启音乐？”确认路径
      * 实测为 MR_SOUND_MIDI + 标准 SMF；MR_SOUND_PCM 按 mrc_base.h 标注处理为
-     * 8KHz/16bit/mono。未实现的压缩格式返回失败，避免旧 stub 那种无声成功。 */
+     * 8KHz/16bit/mono。Flutter 共享库通过 vmrp_api_audio_render_s16le()
+     * 拉取统一的 44.1KHz/S16/stereo PCM，SDL 入口则用同一渲染器回调播放。 */
     switch (type) {
         case NATIVE_SOUND_MIDI:
             return native_audio_play_midi(data, dataLen, loop);
         case NATIVE_SOUND_WAV:
             return native_audio_play_wav(data, dataLen, loop);
         case NATIVE_SOUND_PCM:
-            return native_audio_set_pcm(data, dataLen, loop, AUDIO_S16SYS, 8000, 1);
+            return native_audio_set_pcm(data, dataLen, loop, 8000, 1, 16, 1, 2);
         case NATIVE_SOUND_MP3:
         case NATIVE_SOUND_M4A:
         case NATIVE_SOUND_AMR:
@@ -673,24 +825,13 @@ static int32 native_playSound(int type, const void *data, uint32 dataLen, int32 
             printf("native_playSound: unknown sound type %d len=%u\n", type, dataLen);
             return MR_FAILED;
     }
-#else
-    (void)data;
-    (void)dataLen;
-    (void)loop;
-    printf("native_playSound: SDL audio is not enabled for this build, type=%d\n", type);
-    return MR_FAILED;
-#endif
 }
 
 static int32 native_stopSound(int type) {
     (void)type;
-#if defined(VMRP_SDL_AUDIO)
-    if (native_audio.device) {
-        SDL_LockAudioDevice(native_audio.device);
-        native_audio_clear_locked(&native_audio);
-        SDL_UnlockAudioDevice(native_audio.device);
-    }
-#endif
+    native_audio_lock();
+    native_audio_clear_locked(&native_audio);
+    native_audio_unlock();
     return MR_SUCCESS;
 }
 
@@ -767,7 +908,7 @@ static DSM_REQUIRE_FUNCS native_funcs = {
     .mem_get = native_mem_get,
     .mem_free = native_mem_free,
     .timerStart = timerStart,
-    .timerStop = timerStop,
+    .timerStop = native_timerStop,
     .get_uptime_ms = native_get_uptime_ms,
     .getDatetime = getDatetime,
     .sleep = native_sleep,
@@ -822,14 +963,42 @@ DSM_REQUIRE_FUNCS *native_dsm_funcs_get(void) {
     return &native_funcs;
 }
 
+int native_audio_sample_rate(void) {
+    return AUDIO_SAMPLE_RATE;
+}
+
+int native_audio_channels(void) {
+    return AUDIO_CHANNELS;
+}
+
+int native_audio_is_active(void) {
+    return native_audio.source != AUDIO_SOURCE_NONE;
+}
+
+int native_audio_render_s16le(void *buffer, int frames) {
+    if (!buffer || frames <= 0) {
+        return 0;
+    }
+    native_audio_lock();
+    int rendered = native_audio_render_bytes(&native_audio, (uint8 *)buffer, frames * AUDIO_BYTES_PER_FRAME);
+    native_audio_unlock();
+    return rendered;
+}
+
+void native_audio_stop(void) {
+    native_audio_lock();
+    native_audio_clear_locked(&native_audio);
+    native_audio_unlock();
+}
+
 void native_dsm_funcs_destroy(void) {
 #if defined(VMRP_SDL_AUDIO)
     if (native_audio.device) {
         SDL_CloseAudioDevice(native_audio.device);
         native_audio.device = 0;
     }
-    native_audio_clear_locked(&native_audio);
 #endif
+    native_audio_clear_locked(&native_audio);
 #ifdef __linux__
 #ifdef __x86_64__
     if (native_mem_base != NULL) {

@@ -1,6 +1,6 @@
 # VMRP Flutter 对接指南
 
-本文档说明如何在 Flutter (Android) 项目中集成 VMRP，通过 `dart:ffi` 直接调用 C API 运行 MRP 程序。
+本文档说明如何在 Flutter 项目中集成 VMRP，通过 `dart:ffi` 直接调用 C API 运行 MRP 程序。当前工程已覆盖 Android、Windows、Linux 的 VMRP 共享库构建路径；音频播放通过 Flutter 侧统一消费 VMRP 导出的 PCM 流。
 
 ## 架构概览
 
@@ -9,8 +9,12 @@
 │  Flutter UI (Dart)               │
 │  ┌────────────┐ ┌─────────────┐  │
 │  │ VmrpWidget │ │ VmrpEngine  │  │
-│  │ (渲染屏幕) │ │ (FFI绑定)   │  │
+│  │ (渲染屏幕) │ │ (FFI/调度)  │  │
 │  └────────────┘ └──────┬──────┘  │
+│                 ┌──────▼──────┐  │
+│                 │ VmrpAudio   │  │
+│                 │ + SoLoud    │  │
+│                 └──────┬──────┘  │
 │                        │ dart:ffi│
 ├────────────────────────┼─────────┤
 │  libvmrp.so (C)        │         │
@@ -25,6 +29,7 @@
 **设计要点：**
 - 不依赖 JNI/MethodChannel，`dart:ffi` 直接调 C
 - 屏幕渲染：C 侧维护 RGB565 像素缓冲区，Dart 侧读取后绘制
+- 音频播放：C 侧解码/合成 MIDI/WAV/PCM 为 44.1kHz/S16/stereo PCM，Dart 侧通过 `flutter_soloud` 播放
 - 定时器：Dart 侧轮询 C 的 timer interval，自行用 `Timer` 调度
 - 单线程模型：所有 vmrp C 调用必须在同一个 isolate 中
 
@@ -742,6 +747,24 @@ start() → check getTimerInterval() → 非0 → Timer(ms) → timer()
 ```
 
 每次 `event()` / `timer()` 调用后都应检查 `getTimerInterval()` 和 `getScreenDirty()`。
+
+### 音频模型
+MRP 的 `mr_playSound()` 在 C 侧接收完整内存音频数据。Flutter 共享库不直接打开 SDL 音频设备，而是把支持的 MIDI/WAV/PCM 转成固定格式 PCM，由宿主拉流播放：
+
+- `vmrp_api_audio_sample_rate()`：当前固定返回 `44100`
+- `vmrp_api_audio_channels()`：当前固定返回 `2`
+- `vmrp_api_audio_is_active()`：有正在播放的声音时返回 `1`
+- `vmrp_api_audio_render_s16le(buffer, frames)`：向 `buffer` 写入 signed 16-bit little-endian stereo PCM，返回实际帧数
+- `vmrp_api_audio_stop()`：停止当前声音并清空音频状态
+
+Dart 侧的 `VmrpAudioPlayer` 会在 `start()`、输入事件和 timer 回调之后检查 `audio_is_active`，再通过 `flutter_soloud` 的 `BufferStream` 持续写入 PCM 数据。这样 Android、Windows、Linux 等 Flutter 平台共用同一套 VMRP 解码/合成逻辑，平台差异留给 Flutter 音频插件处理。
+
+当前支持：
+- `MR_SOUND_MIDI`：标准 SMF MIDI，使用 VMRP 内置简化合成器
+- `MR_SOUND_WAV`：RIFF/WAVE PCM 或 float PCM
+- `MR_SOUND_PCM`：按 Mythroad ABI 处理为 8kHz/16-bit/mono PCM
+
+当前不支持 MP3、M4A、AMR、AMR-WB。遇到这些压缩格式时 C API 返回失败并打印日志，避免无声成功造成兼容性误判。
 
 ### ProGuard / R8
 如果使用了代码混淆，确保 JNI 库加载不受影响（`dart:ffi` 的 `DynamicLibrary.open` 不经过 JNI，一般不受影响）。

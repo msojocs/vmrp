@@ -81,6 +81,19 @@ VMRP_EXPORT int vmrp_api_get_screen_width(void);
 VMRP_EXPORT int vmrp_api_get_screen_height(void);
 
 /*
+ * Audio stream: the runtime decodes/synthesizes MRP sound into signed
+ * 16-bit little-endian stereo PCM at vmrp_api_audio_sample_rate().
+ * Hosts without SDL (Flutter) should poll vmrp_api_audio_is_active() and
+ * push frames returned by vmrp_api_audio_render_s16le() to their platform
+ * audio backend. buffer must hold frames * channels * sizeof(int16_t) bytes.
+ */
+VMRP_EXPORT int vmrp_api_audio_sample_rate(void);
+VMRP_EXPORT int vmrp_api_audio_channels(void);
+VMRP_EXPORT int vmrp_api_audio_is_active(void);
+VMRP_EXPORT int vmrp_api_audio_render_s16le(void *buffer, int frames);
+VMRP_EXPORT void vmrp_api_audio_stop(void);
+
+/*
  * Text edit: when MRP requests text input, vmrp_api_is_edit_active()
  * returns 1. The host should display a text input UI, then call
  * vmrp_api_set_edit_text() to confirm or vmrp_api_cancel_edit() to cancel.
