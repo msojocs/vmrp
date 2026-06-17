@@ -89,8 +89,9 @@ int mr_udp_open(mrp_State *L)
 static int meth_send(mrp_State *L) {
    p_tcp tcp = (p_tcp) toptcp(L, 1);
    //int top = mrp_gettop(L);
-   int32 size, sent = MR_FAILED;
-   const char *data = mr_L_checklstring(L, 2, (size_t*)&size);
+   size_t size;
+   int32 sent = MR_FAILED;
+   const char *data = mr_L_checklstring(L, 2, &size);
    long start = (long) mr_L_optnumber(L, 3, 1);
    long end = (long) mr_L_optnumber(L, 4, -1);
 
@@ -105,7 +106,7 @@ static int meth_send(mrp_State *L) {
    if (start <= end) {
       //MRDBGPRINTF("send02, %d", tcp->sock);
       if(tcp->sock!=MR_FAILED){
-         sent = mr_send(tcp->sock, (const char*)data+start-1, end-start+1 );
+         sent = mr_send(tcp->sock, (const char*)data+start-1, (int)(end-start+1));
       }else{
          sent = MR_FAILED;
       }
@@ -132,8 +133,9 @@ static int meth_send(mrp_State *L) {
 static int meth_sendto(mrp_State *L) {
    p_tcp tcp = (p_tcp) toptcp(L, 1);
    //int top = mrp_gettop(L);
-   int32 size, sent = MR_FAILED;
-   const char *data = mr_L_checklstring(L, 2, (size_t*)&size);
+   size_t size;
+   int32 sent = MR_FAILED;
+   const char *data = mr_L_checklstring(L, 2, &size);
    int32 ip =  mr_L_checknumber(L, 3);
    uint16 port = (uint16) mr_L_checknumber(L, 4);
    long start = (long) mr_L_optnumber(L, 5, 1);
@@ -148,7 +150,7 @@ static int meth_sendto(mrp_State *L) {
    //MRDBGPRINTF("before send,start = %d, end = %d, size= %d", start, end, size);
    if (start <= end) {
       if(tcp->sock!=MR_FAILED){
-         sent = mr_sendto(tcp->sock, (const char*)data+start-1, end-start+1, ip, port);
+         sent = mr_sendto(tcp->sock, (const char*)data+start-1, (int)(end-start+1), ip, port);
       }else{
          sent = MR_FAILED;
       }
