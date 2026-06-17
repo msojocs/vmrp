@@ -95,6 +95,17 @@ VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h) {
     return 0;
 }
 
+VMRP_EXPORT int vmrp_api_set_work_dir(const char *work_dir) {
+    int n;
+    if (!work_dir || !*work_dir) return -1;
+    n = snprintf(vmrp_config.work_dir, sizeof(vmrp_config.work_dir), "%s", work_dir);
+    if (n < 0 || (size_t)n >= sizeof(vmrp_config.work_dir)) {
+        vmrp_config.work_dir[0] = '\0';
+        return -1;
+    }
+    return 0;
+}
+
 VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char *entry) {
     fprintf(stderr, "[vmrp_api] start('%s','%s','%s')\n", mrp_path ? mrp_path : "(null)",
             ext ? ext : "(null)", entry ? entry : "(null)");
