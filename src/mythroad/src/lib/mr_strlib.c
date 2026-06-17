@@ -458,7 +458,7 @@ static sint32 posrelat (sint32 pos, size_t len) {
 
 static int str_sub (mrp_State *L) {
   size_t l;
-  const char *s = mr_L_checklstring(L, 1, (size_t*)&l);
+  const char *s = mr_L_checklstring(L, 1, &l);
   sint32 start = posrelat(mr_L_checklong(L, 2), l);
   sint32 end = posrelat(mr_L_optlong(L, 3, -1), l);
   if (start < 1) start = 1;
@@ -474,7 +474,7 @@ static int str_lower (mrp_State *L) {
   size_t l;
   size_t i;
   mr_L_Buffer b;
-  const char *s = mr_L_checklstring(L, 1, (size_t*)&l);
+  const char *s = mr_L_checklstring(L, 1, &l);
   mr_L_buffinit(L, &b);
   for (i=0; i<l; i++)
     mr_L_putchar(&b, mr_tolower(uchar(s[i])));
