@@ -140,6 +140,67 @@ set(UNICORN_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
 set(UNICORN_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(UNICORN_INSTALL OFF CACHE BOOL "" FORCE)
 if(ANDROID_ABI)
+  if(CMAKE_HOST_WIN32)
+    set(_VMRP_POSIX_BIN_HINTS)
+    if(DEFINED ENV{ProgramFiles})
+      list(APPEND _VMRP_POSIX_BIN_HINTS
+        "$ENV{ProgramFiles}/Git/usr/bin"
+        "$ENV{ProgramFiles}/Git/bin")
+    endif()
+    if(DEFINED ENV{ProgramW6432})
+      list(APPEND _VMRP_POSIX_BIN_HINTS
+        "$ENV{ProgramW6432}/Git/usr/bin"
+        "$ENV{ProgramW6432}/Git/bin")
+    endif()
+    if(DEFINED ENV{LOCALAPPDATA})
+      list(APPEND _VMRP_POSIX_BIN_HINTS
+        "$ENV{LOCALAPPDATA}/Programs/Git/usr/bin"
+        "$ENV{LOCALAPPDATA}/Programs/Git/bin")
+    endif()
+
+    find_program(VMRP_GIT_TOOL git)
+    if(VMRP_GIT_TOOL)
+      get_filename_component(_VMRP_GIT_CMD_DIR "${VMRP_GIT_TOOL}" DIRECTORY)
+      get_filename_component(_VMRP_GIT_ROOT "${_VMRP_GIT_CMD_DIR}" DIRECTORY)
+      list(APPEND _VMRP_POSIX_BIN_HINTS
+        "${_VMRP_GIT_ROOT}/usr/bin"
+        "${_VMRP_GIT_ROOT}/bin")
+    endif()
+
+    find_program(VMRP_POSIX_SH sh sh.exe HINTS ${_VMRP_POSIX_BIN_HINTS})
+    if(NOT VMRP_POSIX_SH)
+      message(FATAL_ERROR
+        "Android Unicorn configuration needs a POSIX sh on Windows. "
+        "Install Git for Windows or MSYS2 and make sh.exe available.")
+    endif()
+
+    get_filename_component(_VMRP_POSIX_SH_DIR "${VMRP_POSIX_SH}" DIRECTORY)
+    get_filename_component(_VMRP_POSIX_SH_PARENT "${_VMRP_POSIX_SH_DIR}" DIRECTORY)
+    list(APPEND _VMRP_POSIX_BIN_HINTS "${_VMRP_POSIX_SH_DIR}")
+    set(_VMRP_POSIX_PATH_PREFIX "${_VMRP_POSIX_SH_DIR}")
+    if(EXISTS "${_VMRP_POSIX_SH_PARENT}/usr/bin")
+      list(APPEND _VMRP_POSIX_BIN_HINTS "${_VMRP_POSIX_SH_PARENT}/usr/bin")
+      set(_VMRP_POSIX_PATH_PREFIX
+        "${_VMRP_POSIX_SH_PARENT}/usr/bin;${_VMRP_POSIX_PATH_PREFIX}")
+    endif()
+    # Unicorn's bundled QEMU configure script is POSIX shell based. Flutter
+    # Android builds on Windows do not inherit Git/MSYS usr/bin by default, so
+    # make both sh.exe and core utilities visible only for this CMake process.
+    set(ENV{PATH} "${_VMRP_POSIX_PATH_PREFIX};$ENV{PATH}")
+    foreach(_VMRP_POSIX_TOOL rm mkdir sed expr grep uname cut tr)
+      find_program(_VMRP_POSIX_${_VMRP_POSIX_TOOL}
+        ${_VMRP_POSIX_TOOL}
+        HINTS ${_VMRP_POSIX_BIN_HINTS}
+        NO_DEFAULT_PATH)
+      if(NOT _VMRP_POSIX_${_VMRP_POSIX_TOOL})
+        message(FATAL_ERROR
+          "Android Unicorn configuration needs ${_VMRP_POSIX_TOOL} from a POSIX toolchain. "
+          "Using sh at ${VMRP_POSIX_SH}, but ${_VMRP_POSIX_TOOL} was not found next to it.")
+      endif()
+    endforeach()
+    message(STATUS "Using POSIX shell for Android Unicorn configure: ${VMRP_POSIX_SH}")
+  endif()
+
   get_filename_component(VMRP_ANDROID_TOOLCHAIN_BIN "${CMAKE_C_COMPILER}" DIRECTORY)
   find_program(VMRP_STRINGS_TOOL llvm-strings
     PATHS "${VMRP_ANDROID_TOOLCHAIN_BIN}"
@@ -159,6 +220,15 @@ if(ANDROID_ABI)
   endif()
 endif()
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn EXCLUDE_FROM_ALL)
+if(NOT MSVC AND NOT EXISTS "${CMAKE_BINARY_DIR}/config-host.h")
+  message(FATAL_ERROR
+    "Unicorn did not generate config-host.h. Check the POSIX shell/toolchain "
+    "used by qemu/configure during CMake configuration.")
+endif()
+if(NOT MSVC AND UNICORN_HAS_ARM AND NOT EXISTS "${CMAKE_BINARY_DIR}/arm-softmmu/config-target.h")
+  message(FATAL_ERROR
+    "Unicorn did not generate arm-softmmu/config-target.h. Check qemu/configure output.")
+endif()
 
 set(VMRP_CORE_SOURCES
   ./src/vmrp.c
