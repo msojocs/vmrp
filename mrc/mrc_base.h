@@ -1,23 +1,25 @@
 #ifndef MRC_BASE_H
 #define MRC_BASE_H
 
+#include <stdint.h>
+
 /*
 本头文件中包括了mythroad直接支持的各种函数调用，
 以及入口函数。
 */
 #ifndef SIM_MOD
-	typedef  unsigned long long  uint64;      /* Unsigned 64 bit value */
-	typedef  long long                int64;      /* signed 64 bit value */
+	typedef  uint64_t  uint64;      /* Unsigned 64 bit value */
+	typedef  int64_t   int64;       /* signed 64 bit value */
 #else
 	typedef	unsigned _int64	uint64;
 	typedef	 _int64	int64;
 #endif
-typedef  unsigned short     uint16;      //有符号16bit整型
-typedef  unsigned long int  uint32;      //无符号32bit整型
-typedef  long int                int32;      //有符号32bit整型
-typedef  unsigned char      uint8;        //无符号8bit整型
-typedef  signed char          int8;        //有符号8bit整型
-typedef  signed short         int16;       //有符号16bit整型
+typedef  uint16_t  uint16;      //无符号16bit整型
+typedef  uint32_t  uint32;      //无符号32bit整型
+typedef  int32_t   int32;       //有符号32bit整型
+typedef  uint8_t   uint8;       //无符号8bit整型
+typedef  int8_t    int8;        //有符号8bit整型
+typedef  int16_t   int16;       //有符号16bit整型
 
 #define MR_SUCCESS  0    //成功
 #define MR_FAILED   -1    //失败

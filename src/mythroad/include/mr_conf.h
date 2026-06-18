@@ -2,6 +2,8 @@
 #ifndef mr_config_h
 #define mr_config_h
 
+#include <stdint.h>
+
 #include "../src/mr_limits.h"
 
 
@@ -36,7 +38,7 @@
 
 
 /* type for integer functions */
-#define MRP_INTEGER	long
+#define MRP_INTEGER	int32_t
 
 
 /* mark for all API functions */
@@ -119,11 +121,11 @@
 
 
 /* an unsigned integer with at least 32 bits */
-#define MRP_UINT32	unsigned long
+#define MRP_UINT32	uint32_t
 
 /* a signed integer with at least 32 bits */
-#define MRP_INT32	long
-#define MRP_MAXINT32	LONG_MAX
+#define MRP_INT32	int32_t
+#define MRP_MAXINT32	INT32_MAX
 
 
 /* maximum depth for calls (unsigned short) */
