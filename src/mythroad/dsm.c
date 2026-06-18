@@ -464,8 +464,12 @@ static int isHostAbsolutePath(const char *filename) {
     return 0;
 }
 
+static int isDsmRootPath(const char *filename) {
+    return filename && strncmp2(filename, MYTHROAD_PATH, strlen2(MYTHROAD_PATH)) == 0;
+}
+
 char *get_filename(char *outputbuf, const char *filename) {
-    if (isHostAbsolutePath(filename)) {
+    if (isHostAbsolutePath(filename) || isDsmRootPath(filename)) {
         sprintf_(outputbuf, "%s", filename);
     } else {
         sprintf_(outputbuf, "%s%s", dsmWorkPath, filename);
@@ -665,7 +669,7 @@ static int32 dsm_media_platEx(int32 cmd, int device, uint8 *input, int32 input_l
 int32 mr_open(const char *filename, uint32 mode) {
     char fullpathname[DSM_MAX_FILE_LEN];
     int32 ret = dsmInFuncs->open(get_filename(fullpathname, filename), mode);
-    LOGI("mr_open(%s,%d) fd is: %d", fullpathname, mode, ret);
+    LOGI("mr_open(%s,%d) fd is: %d\n", fullpathname, mode, ret);
     // 应用打开gb12_uc2.adl表示激活gb12字体用于MR_FONT_MEDIUM
     if (ret > 0 && strstr2(filename, "gb12_uc2.adl")) {
         font_medium_use_12 = 1;
