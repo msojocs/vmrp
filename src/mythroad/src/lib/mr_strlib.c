@@ -10,6 +10,8 @@
 #include "../../include/mr_lib.h"
 #include "../../include/mythroad.h"
 
+#include <stddef.h>
+
 #include "../h/mr_string.h"
 #include "../h/mr_gc.h"
 #include "../h/mr_mem.h"
@@ -21,7 +23,7 @@
 #endif
 
 
-typedef long sint32;	/* a signed version for size_t */
+typedef ptrdiff_t sint32;	/* a signed version for size_t */
 
 int mr_isdigit(int ch) {
     return (ch >= '0') && (ch <= '9');
@@ -1368,7 +1370,6 @@ MRPLIB_API int mrp_open_string (mrp_State *L) {
   LUADBGPRINTF("string lib");
   return 1;
 }
-
 
 
 
