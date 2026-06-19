@@ -241,6 +241,7 @@ set(VMRP_CORE_SOURCES
 
 set(VMRP_PLATFORM_SDL_SOURCES
   ./src/main.c
+  ./src/e2e_control.c
 )
 
 set(VMRP_MYTHROAD_SOURCES
@@ -514,6 +515,22 @@ if(VMRP_BUILD_TESTS)
       TIMEOUT 60
     )
   endforeach()
+
+  find_program(NPM_EXECUTABLE npm)
+  if(NPM_EXECUTABLE AND EXISTS "${CMAKE_SOURCE_DIR}/package.json")
+    add_test(
+      NAME e2e_vitest
+      COMMAND ${CMAKE_COMMAND} -E env
+        "VMRP_BIN=$<TARGET_FILE:vmrp>"
+        "VMRP_WORK_DIR=${CMAKE_SOURCE_DIR}"
+        ${NPM_EXECUTABLE} run test:e2e
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    set_tests_properties(e2e_vitest PROPERTIES
+      LABELS "e2e"
+      TIMEOUT 60
+    )
+  endif()
 endif()
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

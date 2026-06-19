@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdbool.h>
 #include <signal.h>
 #include <stdio.h>
@@ -13,6 +14,7 @@
 #endif
 
 #include "./include/bridge.h"
+#include "./include/e2e_control.h"
 #include "./include/vmrp.h"
 #include "./include/memory.h"
 
@@ -45,15 +47,24 @@ static bool isMouseDown = false;
 
 /* PPM 截屏：收到 SIGUSR1 时将当前 SDL surface 转储为 PPM 文件，
  * 用于在无显示器环境下验证画面是否正常渲染。 */
-static uint32_t guiDrawBitmapCount = 0;
+static SDL_atomic_t guiDrawBitmapCount;
 
-static void dump_screen_ppm(const char *path) {
+static const char *screen_dump_path(void) {
+    const char *path = getenv("VMRP_PPM_PATH");
+    return (path && *path) ? path : "/tmp/vmrp_screen.ppm";
+}
+
+static int dump_screen_ppm(const char *path) {
+    if (!window) return -1;
     SDL_Surface *surface = SDL_GetWindowSurface(window);
-    if (!surface) return;
+    if (!surface) return -1;
     FILE *fp = fopen(path, "wb");
-    if (!fp) return;
+    if (!fp) return -1;
     fprintf(fp, "P6\n%d %d\n255\n", surface->w, surface->h);
-    if (SDL_MUSTLOCK(surface)) SDL_LockSurface(surface);
+    if (SDL_MUSTLOCK(surface) && SDL_LockSurface(surface) != 0) {
+        fclose(fp);
+        return -1;
+    }
     for (int y = 0; y < surface->h; y++) {
         for (int x = 0; x < surface->w; x++) {
             Uint32 px = *((Uint32 *)(((Uint8 *)surface->pixels) + surface->pitch * y) + x);
@@ -63,18 +74,38 @@ static void dump_screen_ppm(const char *path) {
         }
     }
     if (SDL_MUSTLOCK(surface)) SDL_UnlockSurface(surface);
+    int ret = ferror(fp) ? -1 : 0;
     fclose(fp);
     // printf("[PPM] dumped to %s (%dx%d)\n", path, surface->w, surface->h);
+    return ret;
 }
 
 static void sigusr1_handler(int sig) {
     (void)sig;
-    dump_screen_ppm("/tmp/vmrp_screen.ppm");
+    dump_screen_ppm(screen_dump_path());
 }
+
+static int e2e_dump_screen_ppm_hook(const char *path, void *userdata) {
+    (void)userdata;
+    return dump_screen_ppm(path);
+}
+
+static const char *e2e_screen_dump_path_hook(void *userdata) {
+    (void)userdata;
+    return screen_dump_path();
+}
+
+static int e2e_draw_count_hook(void *userdata) {
+    (void)userdata;
+    return SDL_AtomicGet(&guiDrawBitmapCount);
+}
+
 /* timerCb 在 SDL 定时器线程中触发，直接调用 timer() 会与主线程的 event()
  * 同时访问同一个 Unicorn ARM 引擎，引发竞态崩溃。改为向 SDL 事件队列推送
  * 自定义事件，由主循环统一调度 timer()，保证单线程串行执行。 */
 static Uint32 timerEventType = 0;
+static Uint32 e2eEventType = (Uint32)-1;
+static VmrpE2eControl *e2eControl = NULL;
 static bool isEditMode = false;
 static int32_t editMaxSize = 0;
 static char *holdEditText = NULL;
@@ -134,13 +165,13 @@ char *editGetText(int32 edit) {
 }
 
 void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
-    guiDrawBitmapCount++;
+    int draw_count = SDL_AtomicAdd(&guiDrawBitmapCount, 1) + 1;
     /* Dump after the bitmap is copied to the SDL surface.  Dumping before the
      * draw captures the previous frame, which makes VMRP_PPM misleading for
      * foreground handoff bugs where the last visible frame matters.  When
      * VMRP_PPM is set, the caller has explicitly requested verification, so
-     * keep /tmp/vmrp_screen.ppm equal to the most recent rendered frame. */
-    int should_dump_ppm = getenv("VMRP_PPM") || guiDrawBitmapCount == 5;
+     * keep the configured PPM path equal to the most recent rendered frame. */
+    int should_dump_ppm = getenv("VMRP_PPM") || draw_count == 5;
     SDL_Surface *surface = SDL_GetWindowSurface(window);
     if (SDL_MUSTLOCK(surface)) {
         if (SDL_LockSurface(surface) != 0) printf("SDL_LockSurface err\n");
@@ -161,7 +192,7 @@ void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
     if (SDL_UpdateWindowSurface(window) != 0)
         printf("SDL_UpdateWindowSurface err\n");
     if (should_dump_ppm) {
-        dump_screen_ppm("/tmp/vmrp_screen.ppm");
+        dump_screen_ppm(screen_dump_path());
     }
 }
 
@@ -296,6 +327,36 @@ static void keyEvent(int16 type, SDL_Keycode code) {
     }
 }
 
+static void dispatch_key_down(SDL_Keycode code) {
+    if (isKeyDown == SDLK_UNKNOWN) {
+        isKeyDown = code;
+        keyEvent(MR_KEY_PRESS, code);
+    }
+}
+
+static void dispatch_key_up(SDL_Keycode code) {
+    if (isKeyDown == code) {
+        isKeyDown = SDLK_UNKNOWN;
+        keyEvent(MR_KEY_RELEASE, code);
+    }
+}
+
+static void dispatch_mouse_down(int x, int y) {
+    uint32_t seq = ++clickSeq;
+    printf("[CLICK] #%u down x=%d y=%d\n", seq, x, y);
+    isMouseDown = true;
+    int32_t ret = event(MR_MOUSE_DOWN, x, y);
+    printf("[CLICK] #%u down ret=%d\n", seq, ret);
+}
+
+static void dispatch_mouse_up(int x, int y) {
+    uint32_t seq = clickSeq;
+    printf("[CLICK] #%u up x=%d y=%d\n", seq, x, y);
+    isMouseDown = false;
+    int32_t ret = event(MR_MOUSE_UP, x, y);
+    printf("[CLICK] #%u up ret=%d\n", seq, ret);
+}
+
 /*
  * 自动点击注入：通过环境变量 VMRP_AUTO_CLICKS 触发一连串模拟点击，便于在没有
  * 真实交互的情况下复现 UI 路径上的 Bug。格式为 "x1,y1;x2,y2;..."，每个点击之间
@@ -410,6 +471,7 @@ void loop() {
     SDL_Event ev;
     bool isLoop = true;
 
+    vmrp_e2e_control_start_if_requested(e2eControl);
     startAutoClicksIfRequested();
 
 #if defined(__EMSCRIPTEN__)
@@ -431,6 +493,10 @@ void loop() {
                 isLoop = false;
                 // emscripten_cancel_main_loop();
                 break;
+            }
+            if (ev.type == e2eEventType) {
+                vmrp_e2e_control_execute(e2eControl, &ev);
+                continue;
             }
             if (isEditMode) {
                 switch (ev.type) {
@@ -461,38 +527,22 @@ void loop() {
                 timer();
             } else switch (ev.type) {
                 case SDL_KEYDOWN:
-                    if (isKeyDown == SDLK_UNKNOWN) {
-                        isKeyDown = ev.key.keysym.sym;
-                        keyEvent(MR_KEY_PRESS, ev.key.keysym.sym);
-                    }
+                    dispatch_key_down(ev.key.keysym.sym);
                     break;
                 case SDL_KEYUP:
-                    if (isKeyDown == ev.key.keysym.sym) {
-                        isKeyDown = SDLK_UNKNOWN;
-                        keyEvent(MR_KEY_RELEASE, ev.key.keysym.sym);
-                    }
+                    dispatch_key_up(ev.key.keysym.sym);
                     break;
                 case SDL_MOUSEMOTION:
                     if (isMouseDown) {
                         event(MR_MOUSE_MOVE, ev.motion.x, ev.motion.y);
                     }
                     break;
-                case SDL_MOUSEBUTTONDOWN: {
-                    uint32_t seq = ++clickSeq;
-                    printf("[CLICK] #%u down x=%d y=%d\n", seq, ev.button.x, ev.button.y);
-                    isMouseDown = true;
-                    int32_t ret = event(MR_MOUSE_DOWN, ev.button.x, ev.button.y);
-                    printf("[CLICK] #%u down ret=%d\n", seq, ret);
+                case SDL_MOUSEBUTTONDOWN:
+                    dispatch_mouse_down(ev.button.x, ev.button.y);
                     break;
-                }
-                case SDL_MOUSEBUTTONUP: {
-                    uint32_t seq = clickSeq;
-                    printf("[CLICK] #%u up x=%d y=%d\n", seq, ev.button.x, ev.button.y);
-                    isMouseDown = false;
-                    int32_t ret = event(MR_MOUSE_UP, ev.button.x, ev.button.y);
-                    printf("[CLICK] #%u up ret=%d\n", seq, ret);
+                case SDL_MOUSEBUTTONUP:
+                    dispatch_mouse_up(ev.button.x, ev.button.y);
                     break;
-                }
             }
             if (vmrp_is_exited()) {
                 isLoop = false;
@@ -563,26 +613,44 @@ int main(int argc, char *args[]) {
         return -1;
     }
     timerEventType = SDL_RegisterEvents(1);
+    e2eEventType = SDL_RegisterEvents(1);
+    if (e2eEventType == (Uint32)-1) {
+        printf("SDL_RegisterEvents for E2E failed: %s\n", SDL_GetError());
+        SDL_Quit();
+        return -1;
+    }
 #ifndef _WIN32
     /* SDL_Init 会重置 SIGUSR1 为默认处理（终止进程），导致截屏信号反而杀掉
      * 进程。此处在 SDL_Init 之后重新安装 SIGUSR1 截屏处理，确保 PPM 转储可用。 */
     signal(SIGUSR1, sigusr1_handler);
 #endif
 
-    window = SDL_CreateWindow("vmrp", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, vmrp_config.screen_width, vmrp_config.screen_height, SDL_WINDOW_OPENGL);
+    /* guiDrawBitmap writes to SDL_GetWindowSurface(); avoiding an OpenGL window
+     * lets the E2E pixel tests run under SDL's dummy video driver in CI. */
+    window = SDL_CreateWindow("vmrp", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, vmrp_config.screen_width, vmrp_config.screen_height, 0);
     if (window == NULL) {
         printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
         SDL_Quit();
         return -1;
     }
+    VmrpE2eHooks e2e_hooks;
+    memset(&e2e_hooks, 0, sizeof(e2e_hooks));
+    e2e_hooks.dump_screen_ppm = e2e_dump_screen_ppm_hook;
+    e2e_hooks.screen_dump_path = e2e_screen_dump_path_hook;
+    e2e_hooks.draw_count = e2e_draw_count_hook;
+    e2eControl = vmrp_e2e_control_create(e2eEventType, &e2e_hooks);
 
     if (startVmrp(&vmrp_args) != MR_SUCCESS) {
+        vmrp_e2e_control_destroy(e2eControl);
+        e2eControl = NULL;
         SDL_DestroyWindow(window);
         SDL_Quit();
         return -1;
     }
     if (vmrp_is_exited()) {
         stopVmrp();
+        vmrp_e2e_control_destroy(e2eControl);
+        e2eControl = NULL;
         SDL_DestroyWindow(window);
         SDL_Quit();
         return 0;
@@ -593,6 +661,8 @@ int main(int argc, char *args[]) {
 #else
     loop();
 #endif
+    vmrp_e2e_control_destroy(e2eControl);
+    e2eControl = NULL;
     stopVmrp();
     SDL_DestroyWindow(window);
     SDL_Quit();

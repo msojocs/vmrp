@@ -6,6 +6,7 @@
 .vscode/settings.json
 build/*
 build-*
+node_modules/
 .cache
 temp
 .omx
