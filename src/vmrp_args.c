@@ -210,6 +210,8 @@ void vmrp_args_print_usage(const char *program) {
     printf("  VMRP_SCREEN_HEIGHT  Screen height (overridden by --screen)\n");
     printf("  VMRP_WORK_DIR       Working directory (overridden by --work-dir)\n");
     printf("  VMRP_DNS_MAP        Domain map, e.g. old.example->new.example\n");
+    printf("  VMRP_PPM_PATH       PPM screen dump path for SIGUSR1/verification\n");
+    printf("  VMRP_E2E_SOCKET     Unix socket path for stepwise E2E control\n");
     printf("\n");
     printf("Without arguments, vmrp keeps the old behavior and starts VMRP_MRP or dsm_gm.mrp.\n");
     printf("Examples:\n");

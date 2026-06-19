@@ -81,6 +81,46 @@ The vmrp emulator project has a **multi-layered testing infrastructure** combini
 ### Purpose
 Visual regression testing and headless environment verification (no display server required).
 
+### TypeScript E2E Pixel Tests
+
+The stable CI path uses an in-process Unix socket instead of desktop tools such
+as `xdotool`/`import`. Set `VMRP_E2E_SOCKET` to make `build/vmrp` listen for
+stepwise test commands; each command is marshalled back onto SDL's main thread
+before it touches input handling or screenshot capture.
+
+Supported commands:
+
+```text
+CLICK x y
+KEY name
+SCREEN path
+DRAW_COUNT
+WAIT_DRAW previous timeout_ms
+QUIT
+```
+
+Run the Vitest example directly:
+
+```bash
+npm ci
+cmake --build build --target vmrp
+npm run test:e2e
+```
+
+The TypeScript harness defaults to `SDL_VIDEODRIVER=dummy` and
+`SDL_AUDIODRIVER=dummy`, so this path does not require `xvfb` or a real desktop
+session.
+
+Or through CTest, which injects the actual built executable path via
+`VMRP_BIN`:
+
+```bash
+ctest --test-dir build --output-on-failure -R e2e_vitest
+```
+
+Example test code lives in `test/e2e/gxdzc-pixel.test.ts`; it sends a click,
+waits for a new draw, takes a PPM screenshot, and checks exact RGB pixels.
+
 ### Implementation Details
 
 #### 2.1 PPM Dump Function (`src/main.c`, line 109-133)
