@@ -54,6 +54,11 @@ typedef struct ArmExtNestedModule {
     uint32_t file_len;
     uint32_t p_addr;
     uint32_t helper_addr;
+    /* 观测到的该模块 GOT 桥块中 memcpy(table[3]=EXT_TABLE_ADDR+0xC) 桥所在的
+     * R9 相对偏移（ARM 重定位写入该桥时记录，0=未观测）。私有 loader 子模块的
+     * GOT 桥块基址随模块链接结果而变，写死会错位；用同族已自重定位实例观测到的
+     * 真实偏移来平移 bridge 修复描述符，避免把桥写到模块代码实际不读取的位置。 */
+    uint32_t got_memcpy_off;
 } ArmExtNestedModule;
 
 struct ArmExtModule {
