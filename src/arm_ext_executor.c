@@ -179,6 +179,21 @@ static ArmExtNestedModule *arm_ext_find_nested_module(ArmExtModule *m, uint32_t 
     return NULL;
 }
 
+/* 在所有覆盖 addr 且记录了 GOT memcpy 偏移(got_memcpy_off)的嵌套模块里，返回最近
+ * 登记(最高索引)的那一个。用于在 bridge 修复时，从与被修复模块代码区间重叠的"已自
+ * 重定位同族实例"借用真实的 GOT 桥块偏移。 */
+static ArmExtNestedModule *arm_ext_find_got_donor(ArmExtModule *m, uint32_t lo, uint32_t hi) {
+    if (!m) return NULL;
+    for (int i = m->nested_module_count - 1; i >= 0; --i) {
+        ArmExtNestedModule *mod = &m->nested_modules[i];
+        if (!mod->got_memcpy_off) continue;
+        if (!mod->file_addr || !mod->file_len) continue;
+        uint32_t mlo = mod->file_addr, mhi = mod->file_addr + mod->file_len;
+        if (mlo < hi && lo < mhi) return mod;   /* 区间重叠 */
+    }
+    return NULL;
+}
+
 static void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
                                          uint32_t file_len, uint32_t p_addr,
                                          uint32_t helper_addr) {
@@ -206,6 +221,7 @@ static void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
     slot->file_len = file_len;
     slot->p_addr = p_addr;
     slot->helper_addr = helper_addr;
+    slot->got_memcpy_off = 0;
 }
 
 /*
@@ -250,6 +266,7 @@ static const PrivateChildRwLayout private_child_rw_layouts[] = {
 
 static void arm_ext_repair_private_child_bridges(ArmExtModule *m,
                                                  uint32 file_addr,
+                                                 uint32 file_len,
                                                  uint32 rw_base) {
     if (!m || !rw_base) return;
     uint32_t record = arm_ext_read_u32_or_zero_(m, file_addr); /* file_base[0] */
@@ -266,31 +283,57 @@ static void arm_ext_repair_private_child_bridges(ArmExtModule *m,
         memcpy(arm_ptr(m, record + off), &ext, 4);
     }
 
-    /* (b) 声明式 RW 镜像：先整体 in-bounds 拟合，再逐槽镜像空白目标。 */
+    /* (b) 声明式 RW 镜像：先整体 in-bounds 拟合，再逐槽镜像空白目标。
+     *
+     * bridge 桥块在子模块 RW 段内的起始偏移随该模块链接结果而变，描述符里写死的
+     * rw_dst_off 只对个别模块(gghjt verdload)正确，对别的模块(如 dota 社区下载库)
+     * 会把桥写到模块代码实际不读取的偏移：代码按 rw+0x188 取 memcpy 桥却拿到
+     * memcmp，正文逐字符拷贝失效、整片空白。
+     *
+     * 这里用观测到的真实偏移平移描述符：若有与本模块代码区间重叠、且已被 ARM 重定位
+     * 写入过 memcpy(table[3]) 桥的同族实例(got_memcpy_off!=0)，按它的真实偏移与描述符
+     * 中 idx3(memcpy) 槽偏移之差平移整张描述符；无可借用观测时按描述符原偏移(保持
+     * gghjt 老行为)。验证：test/dota/community-enter.sh 正文文字显示，gghjt 下载/付费
+     * 脚本与 ctest 保持通过。 */
+    ArmExtNestedModule *donor =
+        arm_ext_find_got_donor(m, file_addr, file_addr + file_len);
     for (size_t L = 0; L < sizeof(private_child_rw_layouts) /
                            sizeof(private_child_rw_layouts[0]); ++L) {
         const PrivateChildRwLayout *lay = &private_child_rw_layouts[L];
+        /* 描述符里 idx3(memcpy，record_src_off==0x0C) 槽的偏移，作为平移基准。 */
+        int32_t shift = 0;
+        if (donor && donor->got_memcpy_off) {
+            for (uint32_t r = 0; r < lay->run_count; ++r) {
+                if (lay->runs[r].record_src_off == 0x0Cu) {
+                    shift = (int32_t)donor->got_memcpy_off -
+                            (int32_t)lay->runs[r].rw_dst_off;
+                    break;
+                }
+            }
+        }
         int fits = 1;
         for (uint32_t r = 0; r < lay->run_count && fits; ++r) {
             const PrivateChildRwRun *run = &lay->runs[r];
+            uint32_t dst = run->rw_dst_off + shift;
             if (!run->count ||
                 !arm_ptr(m, record + run->record_src_off + (run->count - 1u) * 4u) ||
-                !arm_ptr(m, rw_base + run->rw_dst_off + (run->count - 1u) * 4u))
+                !arm_ptr(m, rw_base + dst + (run->count - 1u) * 4u))
                 fits = 0;
         }
         if (!fits) continue;
         for (uint32_t r = 0; r < lay->run_count; ++r) {
             const PrivateChildRwRun *run = &lay->runs[r];
+            uint32_t dst = run->rw_dst_off + shift;
             for (uint32_t i = 0; i < run->count; ++i) {
                 uint32_t v = arm_ext_read_u32_or_zero_(
                     m, record + run->record_src_off + i * 4u);
                 if (!v) continue;
-                if (arm_ext_read_u32_or_zero_(m, rw_base + run->rw_dst_off + i * 4u))
+                if (arm_ext_read_u32_or_zero_(m, rw_base + dst + i * 4u))
                     continue; /* 只写空白 RW 槽，保证 no-op 安全 */
-                memcpy(arm_ptr(m, rw_base + run->rw_dst_off + i * 4u), &v, 4);
+                memcpy(arm_ptr(m, rw_base + dst + i * 4u), &v, 4);
                 if (getenv("VMRP_ARM_EXT_DIAG")) {
-                    printf("DIAG private-child bridge repair[%s]: rw+0x%X = 0x%X\n",
-                           lay->note, run->rw_dst_off + i * 4u, v);
+                    printf("DIAG private-child bridge repair[%s]: shift=%d rw+0x%X = 0x%X\n",
+                           lay->note, shift, dst + i * 4u, v);
                 }
             }
         }
@@ -347,7 +390,7 @@ static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
             return 0;
         }
 
-        arm_ext_repair_private_child_bridges(m, file_addr, rw_base);
+        arm_ext_repair_private_child_bridges(m, file_addr, file_len, rw_base);
 
         /*
          * cfunction.ext's internal loader does not call table[25].  The
@@ -2147,6 +2190,22 @@ static void hook_got_write(uc_engine *uc, uc_mem_type type, uint64_t address, in
     if (idx >= EXT_TABLE_COUNT) return;
     if ((uint32_t)value >= EXT_TABLE_ADDR &&
         (uint32_t)value < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4) {
+        /*
+         * 观测真实重定位偏移：ARM 代码把 memcpy 桥(table[3]=EXT_TABLE_ADDR+0xC)
+         * 写入某个 rw_base 的 GOT 时，记录其 R9 相对偏移到对应嵌套模块记录上。
+         * 这是私有 loader 子模块 GOT 桥块真实基址的可靠信号——bridge 修复据此把
+         * 描述符平移到模块代码实际读取的偏移，而不是写死的 app 专用偏移。 */
+        if ((uint32_t)value == EXT_TABLE_ADDR + 0xCu) {
+            for (int gi = 0; gi < m->nested_module_count; ++gi) {
+                uint32_t nrw = 0;
+                if (arm_ptr(m, m->nested_modules[gi].p_addr))
+                    memcpy(&nrw, arm_ptr(m, m->nested_modules[gi].p_addr), 4);
+                if (nrw && nrw == r9) {
+                    m->nested_modules[gi].got_memcpy_off = (uint32_t)address - r9;
+                    break;
+                }
+            }
+        }
         if (app_should_protect_got_addr(m, (uint32_t)address)) {
             return;
         }
