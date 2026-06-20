@@ -576,7 +576,47 @@ static void arm_ext_sync_r9_for_code_addr(ArmExtModule *m, uint32_t addr) {
         }
     } else {
         ArmExtNestedModule *mod = arm_ext_find_nested_module(m, pc);
-        if (mod) p_addr = mod->p_addr;
+        if (mod) {
+            p_addr = mod->p_addr;
+            /*
+             * 同一份 EXT 代码被 wrapper 实例化多次时（dota 的 screen 模块
+             * 0x661AC0 同时有 loading / menu 等多个实例，file_addr 相同、rw 各异），
+             * arm_ext_find_nested_module 只能按 PC 区间匹配，返回“最后登记”的实例。
+             * 当正在执行的是一个 wrapper 刚 BLX 进去、但尚未登记进 nested_modules
+             * 的新实例时（game 自己已经把 sb 装成新实例的 rw），按“最后登记实例”纠
+             * R9 会把 game 设好的正确值覆盖成旧实例的 rw，使该模块所有 sb 相对全局
+             * 访问错位。dota 实证：menu 屏消息处理器以 loading 实例的 R9 运行，
+             * memset(sb-0xA44) 落到 primary 共享的 cg_1 背景条结构、清 0 其指针，
+             * 主界面 y=80..159 变黑带。
+             *
+             * 判据（数据驱动，无 app 指纹）：仅当该代码段被同 file_addr 的多个实例
+             * 共享（歧义），且当前 R9 不等于任何“已知上下文”的 rw —— 既不是任何
+             * 已登记 nested 实例、也不是 primary、也不是 wrapper(m->p_addr) 的 rw ——
+             * 时，认定它是 game 刚设好的“新建未登记实例”的 sb，予以信任、不覆盖。
+             * 残留的旧 R9 必然等于某个已知上下文的 rw，仍走原纠正逻辑；单实例模块
+             * （same_code==1）完全不受影响。验证：test/dota/hp.sh 黑带消失，
+             * ctest 与 gghjt/gxdzc 回归通过。
+             */
+            int same_code = 0;
+            for (int i = 0; i < m->nested_module_count; ++i) {
+                if (m->nested_modules[i].file_addr == mod->file_addr &&
+                    m->nested_modules[i].file_len)
+                    same_code++;
+            }
+            if (same_code > 1) {
+                uint32_t cur_r9 = reg_read32(m->uc, UC_ARM_REG_R9);
+                int recognized = 0;
+                if (cur_r9 == arm_ext_read_u32_or_zero_(m, m->primary_p_addr) ||
+                    cur_r9 == arm_ext_read_u32_or_zero_(m, m->p_addr))
+                    recognized = 1;
+                for (int i = 0; !recognized && i < m->nested_module_count; ++i) {
+                    if (cur_r9 ==
+                        arm_ext_read_u32_or_zero_(m, m->nested_modules[i].p_addr))
+                        recognized = 1;
+                }
+                if (cur_r9 && !recognized) return; /* 新建未登记实例的 sb，信任 game */
+            }
+        }
     }
     if (!p_addr || !arm_ptr(m, p_addr)) return;
 
