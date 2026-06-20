@@ -2663,6 +2663,46 @@ static int arm_ext_save_modal_screen_snapshot(ArmExtModule *m) {
     return 1;
 }
 
+/* wrapper RW 前台分发区快照范围：覆盖 wrapper 在 RW 内维护的前台模块分发表
+ * 与前台 helper 槽。偏移与长度来自对 cfunction.ext 事件分发路径的反汇编与
+ * 运行时 RW 对比（dota 浏览器插件下载：进入子模块时 wrapper 改写 +0xF4 分发
+ * 表项及 +0x18C/+0x1A0 helper 槽，关闭后未还原导致事件仍走子模块）。 */
+#define MODAL_FG_SNAPSHOT_OFF 0xE0u
+#define MODAL_FG_SNAPSHOT_LEN 0xD0u
+
+static int arm_ext_save_modal_fg_snapshot(ArmExtModule *m) {
+    if (!m || !m->p_addr || !arm_ptr(m, m->p_addr)) return 0;
+    uint32_t rw = 0;
+    memcpy(&rw, arm_ptr(m, m->p_addr), 4);
+    if (!rw || !arm_ptr(m, rw + MODAL_FG_SNAPSHOT_OFF + MODAL_FG_SNAPSHOT_LEN - 1)) {
+        return 0;
+    }
+    if (!m->modal_fg_snapshot) {
+        m->modal_fg_snapshot = (uint8_t *)malloc(MODAL_FG_SNAPSHOT_LEN);
+        if (!m->modal_fg_snapshot) return 0;
+    }
+    memcpy(m->modal_fg_snapshot, arm_ptr(m, rw + MODAL_FG_SNAPSHOT_OFF),
+           MODAL_FG_SNAPSHOT_LEN);
+    m->modal_fg_snapshot_rw = rw;
+    m->modal_fg_snapshot_valid = 0;
+    return 1;
+}
+
+/* 模态子模块关闭时还原 wrapper 前台分发区，使事件路由回到下层页面。
+ * 仅当 wrapper RW 基址未变（同一 wrapper 实例）时还原，避免误写。 */
+static void arm_ext_restore_modal_fg_snapshot(ArmExtModule *m) {
+    if (!m || !m->modal_fg_snapshot || !m->modal_fg_snapshot_valid) return;
+    uint32_t rw = 0;
+    if (m->p_addr && arm_ptr(m, m->p_addr))
+        memcpy(&rw, arm_ptr(m, m->p_addr), 4);
+    if (rw && rw == m->modal_fg_snapshot_rw &&
+        arm_ptr(m, rw + MODAL_FG_SNAPSHOT_OFF + MODAL_FG_SNAPSHOT_LEN - 1)) {
+        memcpy(arm_ptr(m, rw + MODAL_FG_SNAPSHOT_OFF), m->modal_fg_snapshot,
+               MODAL_FG_SNAPSHOT_LEN);
+    }
+    m->modal_fg_snapshot_valid = 0;
+}
+
 
 
 
@@ -2783,6 +2823,8 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if ((code == 1 || code == 2) && modal_suspend_depth_pre == 0) {
         if (_ac_s8_pre != 0)
             call_modal_snapshot_candidate = arm_ext_save_modal_screen_snapshot(m);
+        /* 同步快照 wrapper 前台分发区，供模态子模块关闭后还原事件路由。 */
+        arm_ext_save_modal_fg_snapshot(m);
     }
 
     uint16 *saved_screenBuf = NULL;
@@ -2832,6 +2874,11 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         call_modal_snapshot_candidate) {
         m->modal_screen_snapshot_valid = 1;
     }
+    /* 进入模态（0->1）：标记前台分发区快照有效，供关闭时还原事件路由。 */
+    if (modal_suspend_depth_pre == 0 && modal_suspend_depth_post > 0 &&
+        m->modal_fg_snapshot) {
+        m->modal_fg_snapshot_valid = 1;
+    }
     /* 通用模态框关闭处理（suspend depth >0 → 0）。
      * 真机上 wrapper 的 resume(0xE83220) 恢复 game 状态（定时器链表头、
      * pauseApp/resumeApp 回调），模拟器只需做模块级清理：
@@ -2844,6 +2891,9 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         m->active_helper_addr = m->primary_helper_addr;
         m->active_p_addr = m->primary_p_addr;
         arm_ext_clear_foreground_screen_owner(m);
+        /* 还原 wrapper 前台分发区，使事件路由回到下层页面（修复返回后
+         * 无法二次进入子模块界面）。 */
+        arm_ext_restore_modal_fg_snapshot(m);
         if (foreground_child_active) {
             arm_ext_reset_child_modules(m);
             if (m->timer_p_addr &&
@@ -3087,6 +3137,8 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     if (suspend_depth_pre == 0) {
         if (_s8_pre != 0)
             modal_snapshot_candidate = arm_ext_save_modal_screen_snapshot(m);
+        /* 同步快照 wrapper 前台分发区（timer 内进入模态子模块的路径）。 */
+        arm_ext_save_modal_fg_snapshot(m);
     }
 
     uint16 *saved_screenBuf = NULL;
@@ -3143,11 +3195,16 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
         if (suspend_depth_pre == 0 && suspend_depth_post > 0 && modal_snapshot_candidate) {
             m->modal_screen_snapshot_valid = 1;
         }
+        if (suspend_depth_pre == 0 && suspend_depth_post > 0 && m->modal_fg_snapshot) {
+            m->modal_fg_snapshot_valid = 1;
+        }
         /* 通用模态框关闭：与 arm_ext_call 中相同的通用清理 */
         if (suspend_depth_pre > 0 && suspend_depth_post == 0) {
             m->active_helper_addr = m->primary_helper_addr;
             m->active_p_addr = m->primary_p_addr;
             arm_ext_clear_foreground_screen_owner(m);
+            /* 还原 wrapper 前台分发区，使事件路由回到下层页面。 */
+            arm_ext_restore_modal_fg_snapshot(m);
             arm_ext_reset_child_modules(m);
             if (m->saved_game_timer_head) {
                 if (_grw2 && arm_ptr(m, _grw2 + GAME_TIMER_HEAD_OFFSET))
@@ -3263,6 +3320,7 @@ void arm_ext_unload(ArmExtModule *m) {
     if (m->uc) uc_close(m->uc);
     free(m->last_file_copy);
     free(m->modal_screen_snapshot);
+    free(m->modal_fg_snapshot);
     free(m->foreground_screen_snapshot);
     free(m->low_table);
     if (m->mem_is_mmap) {

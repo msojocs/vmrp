@@ -144,6 +144,17 @@ struct ArmExtModule {
     uint8_t *modal_screen_snapshot;
     uint32_t modal_screen_snapshot_len;
     int modal_screen_snapshot_valid;
+    /* 模态框（wrapper suspend）进入前 wrapper RW 前台分发区的快照。
+     * wrapper 在 RW 内维护一张前台模块分发表（事件先派发到该表项指向的
+     * 模块 helper）。进入下载提示等模态子模块时，wrapper 的私有 loader 会把
+     * 子模块写进该表并改写若干 helper 槽；模拟器用 reset_child_modules 仅做
+     * 模块级清理，并不会像真机那样在子模块退出时让 wrapper 还原这张表，
+     * 导致返回后事件仍被派发给已关闭的子模块（dota 浏览器插件下载返回后无法
+     * 二次进入即此因）。进入模态前快照、关闭时还原该区域即可恢复事件路由。
+     * 仅覆盖前台分发表与 helper 槽所在的小段 RW，避免影响其它状态。 */
+    uint8_t *modal_fg_snapshot;
+    uint32_t modal_fg_snapshot_rw;
+    int modal_fg_snapshot_valid;
     uc_hook hook;
     MrpCacheEntry mrp_cache[MRP_CACHE_MAX];
     int mrp_cache_count;
