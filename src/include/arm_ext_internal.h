@@ -80,6 +80,11 @@ struct ArmExtModule {
     uint32_t origin_mem_left;
     uint32_t origin_mem_min;
     uint32_t origin_mem_top;
+    /* MR_MALLOC_SCRRAM/MR_FREE_SCRRAM return ARM-addressable scratch RAM.
+     * Native code uses that RAM as ordinary pixel/data storage, so the host
+     * must keep the allocation inside Unicorn's mapped address space. */
+    uint32_t exram_addr;
+    uint32_t exram_len;
     uint32_t internal_table_addr;
     uint32_t port_table_addr;
     uint32_t mr_m0_files_addr;
