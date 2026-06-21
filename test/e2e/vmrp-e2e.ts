@@ -20,6 +20,17 @@ export interface PpmImage {
   pixel(x: number, y: number): Rgb;
 }
 
+type KeyName =
+  | "ENTER" | "SELECT"
+  | "ESC" | "ESCAPE" | "POWER"
+  | "SOFTLEFT" | "LEFT_SOFT"
+  | "SOFTRIGHT" | "RIGHT_SOFT"
+  | "UP" | "DOWN" | "LEFT" | "RIGHT"
+  | "SEND"
+  | "STAR" | "*" 
+  | "POUND" | "HASH" | "#"
+  | `${number}`
+
 export class VmrpE2e {
   readonly tmpDir: string;
   readonly socketPath: string;
@@ -88,7 +99,7 @@ export class VmrpE2e {
    * ENTER/SELECT, ESC/ESCAPE/POWER, SOFTLEFT/LEFT_SOFT, SOFTRIGHT/RIGHT_SOFT,
    * UP, DOWN, LEFT, RIGHT, SEND, STAR/*, POUND/HASH/#, digits 0-9, letters A-Z.
    */
-  async key(name: string, timeoutMs = 2_000): Promise<void> {
+  async key(name: KeyName, timeoutMs = 2_000): Promise<void> {
     const previous = await this.drawCount();
     await this.command(`KEY ${name}`);
     await this.waitDrawAfter(previous, timeoutMs);

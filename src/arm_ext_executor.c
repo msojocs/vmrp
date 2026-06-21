@@ -135,6 +135,9 @@ static uint32_t reg_read32(uc_engine *uc, int reg) {
 
 static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk);
 static void arm_ext_clear_foreground_screen_owner(ArmExtModule *m);
+static void arm_ext_finish_accepted_screen_write(ArmExtModule *m,
+                                                 uint32_t claim_p_addr,
+                                                 uint32_t claim_helper_addr);
 static void capture_timer_dispatches(ArmExtModule *m);
 
 static inline void app_on_child_confirmed(ArmExtModule *m, uint32_t p, uint32_t h) {
@@ -1119,6 +1122,89 @@ static void leave_screen_context(ArmExtModule *m, uint16 *saved_screen) {
     m->screen_dirty = 0;
 }
 
+typedef struct ArmExtScreenContext {
+    uint16 *saved_screen;
+    int32 saved_w;
+    int32 saved_h;
+    uint32_t target_addr;
+    int active;
+} ArmExtScreenContext;
+
+static int arm_ext_read_table_u32_slot(ArmExtModule *m, uint32_t idx,
+                                       uint32_t *value) {
+    if (value) *value = 0;
+    if (!m || idx >= EXT_TABLE_COUNT) return 0;
+
+    uint32_t screen_slot = 0;
+    void *slotp = arm_ptr(m, EXT_TABLE_ADDR + idx * 4);
+    if (!slotp) return 0;
+    memcpy(&screen_slot, slotp, 4);
+    if (!screen_slot || !arm_ptr(m, screen_slot)) return 0;
+
+    uint32_t slot_value = 0;
+    memcpy(&slot_value, arm_ptr(m, screen_slot), 4);
+    if (value) *value = slot_value;
+    return 1;
+}
+
+static int arm_ext_push_draw_screen_context(ArmExtModule *m,
+                                            ArmExtScreenContext *ctx) {
+    if (!ctx) return 0;
+    memset(ctx, 0, sizeof(*ctx));
+    ctx->saved_screen = mr_screenBuf;
+    ctx->saved_w = mr_screen_w;
+    ctx->saved_h = mr_screen_h;
+    if (!m) return 0;
+
+    uint32_t screen_addr = 0;
+    uint32_t screen_w = 0;
+    uint32_t screen_h = 0;
+    if (!arm_ext_read_table_u32_slot(m, 91, &screen_addr) ||
+        !screen_addr || !arm_ptr(m, screen_addr)) {
+        return 0;
+    }
+    if (!arm_ext_read_table_u32_slot(m, 92, &screen_w) ||
+        !arm_ext_read_table_u32_slot(m, 93, &screen_h) ||
+        screen_w == 0 || screen_h == 0) {
+        return 0;
+    }
+
+    /*
+     * table[91/92/93] are the ARM-visible mr_screenBuf/mr_screen_w/mr_screen_h
+     * variables. Native code may repoint them to an off-screen cache with a
+     * wider stride while composing a scrolling background, so host-rendered
+     * screen-cache APIs must use the current ARM values for the duration of
+     * each call.
+     */
+    mr_screenBuf = (uint16 *)arm_ptr(m, screen_addr);
+    mr_screen_w = (int32)screen_w;
+    mr_screen_h = (int32)screen_h;
+    ctx->target_addr = screen_addr;
+    ctx->active = 1;
+    return 1;
+}
+
+static void arm_ext_pop_draw_screen_context(ArmExtScreenContext *ctx) {
+    if (!ctx || !ctx->active) return;
+    mr_screenBuf = ctx->saved_screen;
+    mr_screen_w = ctx->saved_w;
+    mr_screen_h = ctx->saved_h;
+}
+
+static int arm_ext_screen_context_targets_primary(ArmExtModule *m,
+                                                  const ArmExtScreenContext *ctx) {
+    return m && ctx && ctx->active && ctx->target_addr == m->screen_addr;
+}
+
+static void arm_ext_finish_screen_cache_write(ArmExtModule *m,
+                                              const ArmExtScreenContext *ctx,
+                                              uint32_t claim_p_addr,
+                                              uint32_t claim_helper_addr) {
+    if (!arm_ext_screen_context_targets_primary(m, ctx)) return;
+    m->screen_dirty = 1;
+    arm_ext_finish_accepted_screen_write(m, claim_p_addr, claim_helper_addr);
+}
+
 static void arm_ext_clear_foreground_screen_owner(ArmExtModule *m) {
     if (!m) return;
     m->foreground_screen_owner_p_addr = 0;
@@ -1658,6 +1744,40 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 36: ret = mr_sleep(r0); break;
         case 37: ret = mr_plat((int32)r0, (int32)r1); break;
         case 38: {
+            /*
+             * MR_MALLOC_SCRRAM/MR_FREE_SCRRAM provide scratch RAM that native
+             * code treats as ARM-visible storage, often for large off-screen
+             * framebuffers. Allocate it from the emulated ARM heap so later
+             * pointer arithmetic and blits can access the returned address.
+             */
+            if (r0 == 1014) {
+                uint32_t outp = r3, outlenp = arg_read(m, 4);
+                uint32_t want = (uint32_t)r2;
+                uint32_t a = 0;
+                if (want) {
+                    if (m->exram_addr && want <= m->exram_len) {
+                        a = m->exram_addr;          /* 复用已有 exRam（幂等） */
+                    } else {
+                        a = arm_alloc(m, want);
+                        if (a) {
+                            m->exram_addr = a;
+                            m->exram_len = want;
+                            void *ep = arm_ptr(m, a);
+                            if (ep) memset(ep, 0, want);
+                        }
+                    }
+                }
+                if (a) {
+                    if (outp) uc_mem_write(m->uc, outp, &a, 4);
+                    if (outlenp) uc_mem_write(m->uc, outlenp, &want, 4);
+                }
+                ret = a ? MR_SUCCESS : MR_FAILED;
+                break;
+            }
+            if (r0 == 1015) {
+                ret = MR_SUCCESS;
+                break;
+            }
             uint32_t outputp_addr = r3;
             uint32_t output_lenp_addr = arg_read(m, 4);
             uint32_t arm_output = 0;
@@ -1894,10 +2014,17 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 uint32_t claim_p = 0, claim_helper = 0;
                 if (arm_ext_should_accept_screen_write(m, &claim_p,
                                                        &claim_helper)) {
-                    ret = _DispUpEx((int16)r0, (int16)r1,
-                                    (uint16)r2, (uint16)r3);
-                    arm_ext_finish_accepted_screen_write(m, claim_p,
-                                                         claim_helper);
+                    ArmExtScreenContext screen_ctx;
+                    if (arm_ext_push_draw_screen_context(m, &screen_ctx) &&
+                        arm_ext_screen_context_targets_primary(m, &screen_ctx)) {
+                        ret = _DispUpEx((int16)r0, (int16)r1,
+                                        (uint16)r2, (uint16)r3);
+                        arm_ext_finish_accepted_screen_write(m, claim_p,
+                                                             claim_helper);
+                    } else {
+                        ret = 0;
+                    }
+                    arm_ext_pop_draw_screen_context(&screen_ctx);
                 } else {
                     ret = 0;
                 }
@@ -1908,10 +2035,14 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 uint32_t claim_p = 0, claim_helper = 0;
                 if (arm_ext_should_accept_screen_write(m, &claim_p,
                                                        &claim_helper)) {
-                    _DrawPoint((int16)r0, (int16)r1, (uint16)r2);
-                    m->screen_dirty = 1;
-                    arm_ext_finish_accepted_screen_write(m, claim_p,
-                                                         claim_helper);
+                    ArmExtScreenContext screen_ctx;
+                    if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
+                        _DrawPoint((int16)r0, (int16)r1, (uint16)r2);
+                        arm_ext_pop_draw_screen_context(&screen_ctx);
+                        arm_ext_finish_screen_cache_write(m, &screen_ctx,
+                                                          claim_p,
+                                                          claim_helper);
+                    }
                 }
             }
             ret = 0;
@@ -1919,18 +2050,24 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 120:
             {
                 uint32_t claim_p = 0, claim_helper = 0;
-                if (arm_ext_should_accept_screen_write(m, &claim_p,
-                                                       &claim_helper)) {
-                    _DrawBitmap(arm_ptr(m, r0), (int16)r1, (int16)r2,
-                                (uint16)r3, (uint16)arg_read(m, 4),
-                                (uint16)arg_read(m, 5),
-                                (uint16)arg_read(m, 6),
-                                (int16)arg_read(m, 7),
-                                (int16)arg_read(m, 8),
-                                (int16)arg_read(m, 9));
-                    m->screen_dirty = 1;
-                    arm_ext_finish_accepted_screen_write(m, claim_p,
-                                                         claim_helper);
+                uint16_t h = (uint16_t)arg_read(m, 4);
+                uint16_t rop = (uint16_t)arg_read(m, 5);
+                uint16_t trans = (uint16_t)arg_read(m, 6);
+                int16_t sx = (int16)arg_read(m, 7);
+                int16_t sy = (int16)arg_read(m, 8);
+                int16_t mw = (int16)arg_read(m, 9);
+                int accept = arm_ext_should_accept_screen_write(m, &claim_p,
+                                                                &claim_helper);
+                if (accept) {
+                    ArmExtScreenContext screen_ctx;
+                    if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
+                        _DrawBitmap(arm_ptr(m, r0), (int16)r1, (int16)r2,
+                                    (uint16)r3, h, rop, trans, sx, sy, mw);
+                        arm_ext_pop_draw_screen_context(&screen_ctx);
+                        arm_ext_finish_screen_cache_write(m, &screen_ctx,
+                                                          claim_p,
+                                                          claim_helper);
+                    }
                 }
             }
             ret = 0;
@@ -1940,13 +2077,17 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 uint32_t claim_p = 0, claim_helper = 0;
                 if (arm_ext_should_accept_screen_write(m, &claim_p,
                                                        &claim_helper)) {
-                    DrawRect((int16)r0, (int16)r1, (int16)r2, (int16)r3,
-                             (uint8)arg_read(m, 4),
-                             (uint8)arg_read(m, 5),
-                             (uint8)arg_read(m, 6));
-                    m->screen_dirty = 1;
-                    arm_ext_finish_accepted_screen_write(m, claim_p,
-                                                         claim_helper);
+                    ArmExtScreenContext screen_ctx;
+                    if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
+                        DrawRect((int16)r0, (int16)r1, (int16)r2, (int16)r3,
+                                 (uint8)arg_read(m, 4),
+                                 (uint8)arg_read(m, 5),
+                                 (uint8)arg_read(m, 6));
+                        arm_ext_pop_draw_screen_context(&screen_ctx);
+                        arm_ext_finish_screen_cache_write(m, &screen_ctx,
+                                                          claim_p,
+                                                          claim_helper);
+                    }
                 }
             }
             ret = 0;
@@ -1956,20 +2097,37 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 uint32_t claim_p = 0, claim_helper = 0;
                 if (arm_ext_should_accept_screen_write(m, &claim_p,
                                                        &claim_helper)) {
-                    ret = _DrawText(arm_str(m, r0), (int16)r1, (int16)r2,
-                                    (uint8)r3, (uint8)arg_read(m, 4),
-                                    (uint8)arg_read(m, 5),
-                                    (int)arg_read(m, 6),
-                                    (uint16)arg_read(m, 7));
-                    m->screen_dirty = 1;
-                    arm_ext_finish_accepted_screen_write(m, claim_p,
-                                                         claim_helper);
+                    ArmExtScreenContext screen_ctx;
+                    if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
+                        ret = _DrawText(arm_str(m, r0), (int16)r1, (int16)r2,
+                                        (uint8)r3, (uint8)arg_read(m, 4),
+                                        (uint8)arg_read(m, 5),
+                                        (int)arg_read(m, 6),
+                                        (uint16)arg_read(m, 7));
+                        arm_ext_pop_draw_screen_context(&screen_ctx);
+                        arm_ext_finish_screen_cache_write(m, &screen_ctx,
+                                                          claim_p,
+                                                          claim_helper);
+                    } else {
+                        ret = 0;
+                    }
                 } else {
                     ret = 0;
                 }
             }
             break;
-        case 124: ret = _BitmapCheck(arm_ptr(m, r0), (int16)r1, (int16)r2, (uint16)r3, (uint16)arg_read(m, 4), (uint16)arg_read(m, 5), (uint16)arg_read(m, 6)); break;
+        case 124: {
+            ArmExtScreenContext screen_ctx;
+            if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
+                ret = _BitmapCheck(arm_ptr(m, r0), (int16)r1, (int16)r2,
+                                   (uint16)r3, (uint16)arg_read(m, 4),
+                                   (uint16)arg_read(m, 5),
+                                   (uint16)arg_read(m, 6));
+                arm_ext_pop_draw_screen_context(&screen_ctx);
+            } else {
+                ret = 0;
+            }
+        } break;
         case 125: {
             int fl = 0;
             uint32_t packp = 0, ramp_slot = 0, raml_slot = 0, ramp = 0, raml = 0;
@@ -2112,11 +2270,15 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 uint32_t claim_p = 0, claim_helper = 0;
                 if (arm_ext_should_accept_screen_write(m, &claim_p,
                                                        &claim_helper)) {
-                    mr_platDrawChar((uint16)r0, (int32)r1, (int32)r2,
-                                    (uint32)r3);
-                    m->screen_dirty = 1;
-                    arm_ext_finish_accepted_screen_write(m, claim_p,
-                                                         claim_helper);
+                    ArmExtScreenContext screen_ctx;
+                    if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
+                        mr_platDrawChar((uint16)r0, (int32)r1, (int32)r2,
+                                        (uint32)r3);
+                        arm_ext_pop_draw_screen_context(&screen_ctx);
+                        arm_ext_finish_screen_cache_write(m, &screen_ctx,
+                                                          claim_p,
+                                                          claim_helper);
+                    }
                 }
             }
             ret = 0;
