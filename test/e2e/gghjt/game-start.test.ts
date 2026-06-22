@@ -85,4 +85,59 @@ describe("gghjt 开始游戏", () => {
     }
 
   });
+  it("游戏直接开始 - 不缺渲染", async () => {
+    // 删除后，继续游戏会进入下载netpay插件界面。
+    if (!fs.existsSync('mythroad/plugins/netpay.mrp')) {
+      fs.cpSync('test/fixtures/plugins/netpay.mrp', 'mythroad/plugins/netpay.mrp');
+    }
+    fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
+    vmrp = await VmrpE2e.start("mythroad/gghjt.mrp");
+
+    await vmrp.delay(4000);
+    const boot = await vmrp.screen("bgm-select");
+    // rgb(72,88,0)
+    expect(boot.pixel(227, 308)).toEqual([0, 0, 0]);
+
+    // 是否开启音乐？-> 否
+    await vmrp.click(230, 308, 1_000);
+    await vmrp.delay(1_000);
+
+    // 跳过启动剧情
+    await vmrp.click(227, 308, 1_000);
+    await vmrp.delay(1_000);
+    await vmrp.click(227, 308, 1_000);
+    await vmrp.delay(1_000);
+    await vmrp.click(227, 308, 1_000);
+    await vmrp.delay(1_000);
+    await vmrp.click(227, 308, 1_000);
+    await vmrp.delay(1_000);
+
+    // 进入主菜单
+    const wake = await vmrp.screen("menu");
+    // rgb(152, 112, 32)
+    expect(wake.pixel(110, 27)).toEqual([152, 112, 32]);
+    {
+      // 点击开始游戏，进入游戏界面
+      await vmrp.click(116, 291, 3_000);
+      await vmrp.delay(3_000);
+      const screen = await vmrp.screen("game-start");
+      // rgb(248, 252, 0)
+      expect(screen.pixel(42, 140)).toEqual([248, 252, 0]);
+    }
+
+    {
+      // 六次回车，对话确认后，渲染场景
+      for (let i=0; i<6; i++) {
+        await vmrp.key('ENTER', 3_000);
+        await vmrp.delay(1_000);
+      }
+      const screen = await vmrp.screen("scene-render");
+      // rgb(192, 148, 96)
+      expect(screen.pixel(55, 302)).toEqual([192, 148, 96]);
+      // 火车顶部场景；这些点覆盖离屏背景和底部栏，防止只显示中间视口。
+      expect(screen.pixel(120, 20)).toEqual([8, 8, 0]);
+      expect(screen.pixel(120, 300)).toEqual([192, 148, 96]);
+    }
+
+  });
 });
