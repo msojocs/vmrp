@@ -133,6 +133,7 @@ struct ArmExtModule {
     uint32_t busy_wait_start_ms;
     int nested_loading;
     int screen_dirty;
+    int screen_presented_in_callback;
     int mem_is_mmap;
     uint32_t got_snapshot_base;
     uint32_t got_snapshot[EXT_TABLE_COUNT];

@@ -1099,7 +1099,12 @@ static void note_origin_mem_free(ArmExtModule *m, uint32_t len) {
 
 static void enter_screen_context(ArmExtModule *m, uint16 **saved_screen) {
     *saved_screen = mr_screenBuf;
+    if (m) m->screen_presented_in_callback = 0;
     if (m->screen_addr) mr_screenBuf = (uint16 *)arm_ptr(m, m->screen_addr);
+}
+
+static void arm_ext_note_screen_presented(ArmExtModule *m) {
+    if (m) m->screen_presented_in_callback = 1;
 }
 
 static void leave_screen_context(ArmExtModule *m, uint16 *saved_screen) {
@@ -1114,12 +1119,19 @@ static void leave_screen_context(ArmExtModule *m, uint16 *saved_screen) {
         memcpy(saved_screen, arm_ptr(m, m->screen_addr), m->screen_len);
     }
     mr_screenBuf = saved_screen;
-    /* 真机上 ext 写屏幕缓冲区后由 OS 的 VSync/刷新机制送显。模拟器里
-     * ARM 缓冲区已 memcpy 到宿主 screenBuf，直接调 mr_drawBitmap 送显。 */
-    if (saved_screen) {
+    /*
+     * Native apps often clear the whole screen buffer, repaint only dirty
+     * regions, then explicitly present those regions with mr_drawBitmap or
+     * DispUpEx.  A forced full-screen present at callback exit would expose
+     * cleared-but-not-presented pixels.  Keep the host shadow buffer synced,
+     * but only synthesize a full-screen present for callbacks that performed
+     * screen writes without any explicit platform present.
+     */
+    if (saved_screen && m && m->screen_dirty && !m->screen_presented_in_callback) {
         mr_drawBitmap(saved_screen, 0, 0, (uint16)m->screen_w, (uint16)m->screen_h);
     }
     m->screen_dirty = 0;
+    if (m) m->screen_presented_in_callback = 0;
 }
 
 typedef struct ArmExtScreenContext {
@@ -1673,6 +1685,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             if (bmp && arm_ext_should_accept_screen_write(m, &claim_p,
                                                           &claim_helper)) {
                 mr_drawBitmap(bmp, (int16)r1, (int16)r2, (uint16)r3, h);
+                arm_ext_note_screen_presented(m);
                 arm_ext_mirror_draw_bitmap_to_screen(m, r0, (int16)r1,
                                                      (int16)r2,
                                                      (uint16)r3, h);
@@ -2019,6 +2032,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                         arm_ext_screen_context_targets_primary(m, &screen_ctx)) {
                         ret = _DispUpEx((int16)r0, (int16)r1,
                                         (uint16)r2, (uint16)r3);
+                        arm_ext_note_screen_presented(m);
                         arm_ext_finish_accepted_screen_write(m, claim_p,
                                                              claim_helper);
                     } else {
