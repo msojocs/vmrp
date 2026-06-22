@@ -9,7 +9,7 @@
   - `src/`：模拟器核心、SDL 平台入口、文件/网络/调试桥接、ARM EXT 执行器。
   - `src/mythroad/`：从 `vmrp_arm` 复制过来的 Mythroad/DSM 层，按独立子项目维护。
   - `mrc/`：研究 MRP 编译和格式的辅助资料，不直接参与 VMRP 主程序。
-  - `test/`：单元测试和可复现的模拟器回归脚本。
+  - `test/`：Vitest e2e 测试、测试夹具和可复现的模拟器回归资源。
   - `wasm/`：WebAssembly 运行资源与构建产物。
   - `third_party/unicorn/`：vendored Unicorn/QEMU 源码，通常只作为上游依赖使用。
 
@@ -20,13 +20,9 @@
   cmake -S . -B build
   cmake --build build
   ```
-- 运行单元测试：
+- 运行 Vitest e2e 测试：
   ```bash
-  ctest --test-dir build --output-on-failure
-  ```
-  或直接运行：
-  ```bash
-  ./build/test_vmrp
+  pnpm test:e2e
   ```
 - 共享库构建：
   ```bash
@@ -42,7 +38,7 @@
   ```bash
   cmake --build build --target vmrp-wasm
   ```
-- `test/*/*.sh` 是面向真实 MRP 样本的回归脚本，通常假定可执行文件位于 `build/vmrp`，并依赖 `mythroad/*.mrp` 等运行资源。
+- `test/e2e/` 是面向真实 MRP 样本的 Vitest 回归用例，通常假定可执行文件位于 `build/vmrp`，并依赖 `test/fixtures/*.mrp` 等运行资源。
 
 ## 开发要求
 
@@ -79,14 +75,12 @@
 
 ## 验证要求
 
-- 修改构建系统、核心运行时、Mythroad 层、ARM EXT 执行器或公共 API 后，至少运行 `ctest --test-dir build --output-on-failure`。
-- 修改事件、定时器、UI、支付/下载/退出流程后，优先运行相关脚本，例如：
+- 修改构建系统、核心运行时、Mythroad 层、ARM EXT 执行器或公共 API 后，至少运行 `cmake --build build --target vmrp` 和相关 Vitest e2e 用例。
+- 修改事件、定时器、UI、支付/下载/退出流程后，优先运行相关 Vitest 用例，例如：
   ```bash
-  test/gxdzc/exit.sh
-  test/gxdzc/download-resource-confirm.sh
-  test/gghjt/pay-normal-back.sh
-  test/mpc/exit.sh
-  test/mssj/dsm_gm-boot-and-exit.sh
+  pnpm vitest run test/e2e/gxdzc-pixel.test.ts
+  pnpm vitest run test/e2e/gghjt/game-start.test.ts
+  pnpm vitest run test/e2e/dota/download-plugin.test.ts
   ```
 - 修改 Wasm 路径时，在有 `emcc` 的环境下构建 `vmrp-wasm`，并确认 `wasm/dist` 资源路径没有被破坏。
 - 无法运行某项验证时，在最终说明中写清楚原因和剩余风险。
