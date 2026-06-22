@@ -61,6 +61,12 @@ typedef struct ArmExtNestedModule {
     uint32_t got_memcpy_off;
 } ArmExtNestedModule;
 
+typedef struct ArmExtRowSpans {
+    uint16_t *min_x;
+    uint16_t *max_x;
+    uint32_t rows;
+} ArmExtRowSpans;
+
 struct ArmExtModule {
     uc_engine *uc;
     uint8_t *mem;
@@ -109,9 +115,7 @@ struct ArmExtModule {
     uint32_t active_helper_addr;
     uint32_t foreground_screen_owner_p_addr;
     uint32_t foreground_screen_owner_helper_addr;
-    uint8_t *foreground_screen_snapshot;
-    uint32_t foreground_screen_snapshot_len;
-    int foreground_screen_snapshot_valid;
+    ArmExtRowSpans foreground_cover;
     uint32_t current_p_addr;
     uint32_t current_helper_addr;
     uint32_t primary_p_addr;
@@ -134,6 +138,9 @@ struct ArmExtModule {
     int nested_loading;
     int screen_dirty;
     int screen_presented_in_callback;
+    uint32_t screen_present_depth;
+    ArmExtRowSpans screen_damage;
+    ArmExtRowSpans screen_present;
     int mem_is_mmap;
     uint32_t got_snapshot_base;
     uint32_t got_snapshot[EXT_TABLE_COUNT];
