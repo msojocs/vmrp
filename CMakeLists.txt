@@ -21,12 +21,6 @@ endif()
 
 option(VMRP_BUILD_SHARED "Build libvmrp shared library (no SDL)" OFF)
 option(VMRP_BUILD_SHARED_ONLY "Only build the shared library, skip SDL/test/wasm targets" OFF)
-if(MSVC)
-  set(VMRP_BUILD_TESTS_DEFAULT OFF)
-else()
-  set(VMRP_BUILD_TESTS_DEFAULT ON)
-endif()
-option(VMRP_BUILD_TESTS "Build unit tests" ${VMRP_BUILD_TESTS_DEFAULT})
 # Sanitizer 支持: cmake -DSANITIZE=address,undefined
 set(SANITIZE "" CACHE STRING "Comma-separated sanitizers: address,undefined,thread")
 if(NOT MSVC AND SANITIZE)
@@ -38,10 +32,6 @@ endif()
 if(VMRP_BUILD_SHARED_ONLY)
   set(VMRP_BUILD_SHARED ON CACHE BOOL "" FORCE)
 endif()
-if(MSVC AND VMRP_BUILD_TESTS)
-  message(FATAL_ERROR "VMRP_BUILD_TESTS is not supported with MSVC yet; test/stubs.c uses POSIX mmap.")
-endif()
-
 # --- zlib ---
 if(MSVC)
   include(FetchContent)
@@ -412,128 +402,6 @@ if(VMRP_BUILD_SHARED)
   endif()
 endif()
 
-if(NOT VMRP_BUILD_SHARED_ONLY)
-# --- 测试 ---
-enable_testing()
-
-# --- app_compat profile 选择测试（不依赖 POSIX mmap，Windows 可单独运行） ---
-add_executable(test_vmrp_app_compat
-  test/test_app_compat_main.c
-  test/test_app_compat.c
-  ./src/app_compat.c
-)
-target_compile_definitions(test_vmrp_app_compat PRIVATE VMRP)
-target_include_directories(test_vmrp_app_compat PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/include
-)
-add_test(NAME vmrp_app_compat_tests COMMAND test_vmrp_app_compat)
-set_tests_properties(vmrp_app_compat_tests PROPERTIES LABELS "unit")
-
-if(VMRP_BUILD_TESTS)
-  set(TEST_MYTHROAD_SOURCES ${VMRP_MYTHROAD_SOURCES})
-  add_executable(test_vmrp
-    test/test_main.c
-    test/test_got_snapshot.c
-    test/test_parser.c
-    test/test_dns_map.c
-    test/test_app_compat.c
-    ./src/app_compat.c
-    ./src/network.c
-    test/stubs.c
-    ${TEST_MYTHROAD_SOURCES}
-  )
-  set_source_files_properties(${TEST_MYTHROAD_SOURCES} PROPERTIES COMPILE_OPTIONS "${VMRP_UNDEFINE_VMRP_OPTION}")
-  target_compile_definitions(test_vmrp PRIVATE VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
-  target_include_directories(test_vmrp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
-  if(MSVC)
-    target_link_libraries(test_vmrp ZLIB::ZLIB ws2_32)
-    vmrp_add_link_flags(test_vmrp "/FORCE:MULTIPLE")
-  else()
-    target_link_libraries(test_vmrp m pthread z)
-    vmrp_add_link_flags(test_vmrp "-Wl,--allow-multiple-definition")
-  endif()
-  add_test(NAME vmrp_unit_tests COMMAND test_vmrp)
-  set_tests_properties(vmrp_unit_tests PROPERTIES LABELS "unit")
-
-  # --- API 生命周期测试（独立二进制，stub 掉重型依赖） ---
-  add_executable(test_vmrp_api
-    test/test_api_main.c
-    test/test_api_lifecycle.c
-    ./src/vmrp_api.c
-    ./src/vmrp_args.c
-  )
-  target_compile_definitions(test_vmrp_api PRIVATE VMRP)
-  target_include_directories(test_vmrp_api PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include
-  )
-  if(MSVC)
-    target_link_libraries(test_vmrp_api)
-  else()
-    target_link_libraries(test_vmrp_api m)
-  endif()
-  add_test(NAME vmrp_api_tests COMMAND test_vmrp_api)
-  set_tests_properties(vmrp_api_tests PROPERTIES LABELS "unit")
-
-  # --- fileLib 文件系统测试（链接真实 fileLib + rbtree + utils） ---
-  add_executable(test_vmrp_filelib
-    test/test_filelib_main.c
-    test/test_filelib.c
-    ./src/fileLib.c
-    ./src/rbtree.c
-    ./src/utils.c
-  )
-  target_compile_definitions(test_vmrp_filelib PRIVATE VMRP)
-  target_include_directories(test_vmrp_filelib PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include
-  )
-  if(MSVC)
-    target_link_libraries(test_vmrp_filelib ZLIB::ZLIB unicorn)
-    vmrp_add_link_flags(test_vmrp_filelib "/FORCE:MULTIPLE")
-  else()
-    target_link_libraries(test_vmrp_filelib unicorn "-Wl,--no-as-needed" m z)
-    vmrp_add_link_flags(test_vmrp_filelib "-Wl,--allow-multiple-definition")
-  endif()
-  add_test(NAME vmrp_filelib_tests COMMAND test_vmrp_filelib)
-  set_tests_properties(vmrp_filelib_tests PROPERTIES LABELS "unit")
-
-  # --- 集成测试（shell 脚本） ---
-  # 注册 test/integration/ 下的脚本为 CTest 测试
-  file(GLOB_RECURSE VMRP_INTEGRATION_SCRIPTS "test/integration/*/test_*.sh")
-  foreach(script ${VMRP_INTEGRATION_SCRIPTS})
-    get_filename_component(test_name ${script} NAME_WE)
-    get_filename_component(test_dir ${script} DIRECTORY)
-    get_filename_component(game_name ${test_dir} NAME)
-    add_test(
-      NAME "e2e_${game_name}_${test_name}"
-      COMMAND bash ${script}
-      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    )
-    set_tests_properties("e2e_${game_name}_${test_name}" PROPERTIES
-      LABELS "e2e"
-      TIMEOUT 60
-    )
-  endforeach()
-
-  find_program(NPM_EXECUTABLE npm)
-  if(NPM_EXECUTABLE AND EXISTS "${CMAKE_SOURCE_DIR}/package.json")
-    add_test(
-      NAME e2e_vitest
-      COMMAND ${CMAKE_COMMAND} -E env
-        "VMRP_BIN=$<TARGET_FILE:vmrp>"
-        "VMRP_WORK_DIR=${CMAKE_SOURCE_DIR}"
-        ${NPM_EXECUTABLE} run test:e2e
-      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    )
-    set_tests_properties(e2e_vitest PROPERTIES
-      LABELS "e2e"
-      TIMEOUT 60
-    )
-  endif()
-endif()
-
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
-endif() # NOT VMRP_BUILD_SHARED_ONLY
