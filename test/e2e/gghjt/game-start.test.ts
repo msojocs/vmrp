@@ -42,13 +42,14 @@ describe("gghjt 开始游戏", () => {
     const wake = await vmrp.screen("menu");
     // rgb(152, 112, 32)
     expect(wake.pixel(110, 27)).toEqual([152, 112, 32]);
-
-    // 切换菜单
-    await vmrp.click(162, 291, 3_000);
-    await vmrp.delay(1_000);
-    // rgb(232, 196, 104)
-    expect(wake.pixel(162, 291)).toEqual([232, 196, 104 ]);
-
+    {
+      // 切换菜单
+      await vmrp.click(162, 291, 3_000);
+      await vmrp.delay(1_000);
+      const screen = await vmrp.screen("menu-continue");
+      // rgb(232, 196, 104)
+      expect(screen.pixel(162, 291)).toEqual([232, 196, 104 ]);
+    }
     {
       // 点击继续游戏，进入付费界面
       await vmrp.click(116, 291, 3_000);
