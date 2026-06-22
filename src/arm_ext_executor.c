@@ -138,6 +138,17 @@ static void arm_ext_clear_foreground_screen_owner(ArmExtModule *m);
 static void arm_ext_finish_accepted_screen_write(ArmExtModule *m,
                                                  uint32_t claim_p_addr,
                                                  uint32_t claim_helper_addr);
+static void arm_ext_note_screen_presented(ArmExtModule *m);
+static int arm_ext_screen_owner_is_visible(ArmExtModule *m,
+                                           uint32_t owner_p_addr,
+                                           uint32_t owner_helper_addr);
+static void arm_ext_claim_foreground_screen_rect(ArmExtModule *m,
+                                                 uint32_t owner_p_addr,
+                                                 uint32_t owner_helper_addr,
+                                                 int32_t x,
+                                                 int32_t y,
+                                                 int32_t w,
+                                                 int32_t h);
 static void capture_timer_dispatches(ArmExtModule *m);
 
 static inline void app_on_child_confirmed(ArmExtModule *m, uint32_t p, uint32_t h) {
@@ -296,8 +307,7 @@ static void arm_ext_repair_private_child_bridges(ArmExtModule *m,
      * 这里用观测到的真实偏移平移描述符：若有与本模块代码区间重叠、且已被 ARM 重定位
      * 写入过 memcpy(table[3]) 桥的同族实例(got_memcpy_off!=0)，按它的真实偏移与描述符
      * 中 idx3(memcpy) 槽偏移之差平移整张描述符；无可借用观测时按描述符原偏移(保持
-     * gghjt 老行为)。验证：test/dota/community-enter.sh 正文文字显示，gghjt 下载/付费
-     * 脚本与 ctest 保持通过。 */
+     * gghjt 老行为)。验证：dota/gghjt/gxdzc Vitest e2e 流程保持通过。 */
     ArmExtNestedModule *donor =
         arm_ext_find_got_donor(m, file_addr, file_addr + file_len);
     for (size_t L = 0; L < sizeof(private_child_rw_layouts) /
@@ -501,7 +511,7 @@ static void arm_ext_restore_primary_mapping_after_dump0(ArmExtModule *m,
      * 弹出坏 PC=0x9A000004。这里按真实内存恢复结果重建代码归属，不在
      * run_arm_with_sp() 里吞异常；兼容性：只在大块读回完整覆盖 primary
      * ext 映像时触发，普通插件 staging 仍由 table[131]/mr_cacheSync 处理。
-     * 验证：test/gxdzc/pay-cancel.sh 不再打印 invalid memory，ctest 通过。
+     * 验证：gxdzc 相关 e2e 不再触发 invalid memory。
      */
     int out = 0;
     for (int i = 0; i < m->nested_module_count; ++i) {
@@ -562,6 +572,38 @@ static uint32_t arm_ext_p_for_code_addr(ArmExtModule *m, uint32_t addr,
     return 0;
 }
 
+static int arm_ext_has_foreground_child(ArmExtModule *m) {
+    return m &&
+           m->primary_p_addr && m->primary_helper_addr &&
+           m->active_p_addr && m->active_helper_addr &&
+           m->active_p_addr != m->primary_p_addr &&
+           m->active_helper_addr != m->primary_helper_addr &&
+           m->active_p_addr != m->p_addr &&
+           m->active_helper_addr != m->helper_addr;
+}
+
+static int arm_ext_screen_owner_is_visible(ArmExtModule *m,
+                                           uint32_t owner_p_addr,
+                                           uint32_t owner_helper_addr) {
+    if (!m || !owner_p_addr) return 1;
+    if (!arm_ext_has_foreground_child(m)) return 1;
+    return owner_p_addr == m->active_p_addr ||
+           owner_helper_addr == m->active_helper_addr;
+}
+
+static int arm_ext_current_screen_owner_is_visible(ArmExtModule *m) {
+    if (!m) return 1;
+    uint32_t helper_addr = 0;
+    uint32_t p_addr =
+        arm_ext_p_for_code_addr(m, reg_read32(m->uc, UC_ARM_REG_PC),
+                                &helper_addr);
+    if (!p_addr) {
+        p_addr = m->current_p_addr;
+        helper_addr = m->current_helper_addr;
+    }
+    return arm_ext_screen_owner_is_visible(m, p_addr, helper_addr);
+}
+
 static void arm_ext_sync_r9_for_code_addr(ArmExtModule *m, uint32_t addr) {
     uint32_t pc = addr & ~1u;
     uint32_t p_addr = 0;
@@ -597,8 +639,8 @@ static void arm_ext_sync_r9_for_code_addr(ArmExtModule *m, uint32_t addr) {
              * 已登记 nested 实例、也不是 primary、也不是 wrapper(m->p_addr) 的 rw ——
              * 时，认定它是 game 刚设好的“新建未登记实例”的 sb，予以信任、不覆盖。
              * 残留的旧 R9 必然等于某个已知上下文的 rw，仍走原纠正逻辑；单实例模块
-             * （same_code==1）完全不受影响。验证：test/dota/hp.sh 黑带消失，
-             * ctest 与 gghjt/gxdzc 回归通过。
+             * （same_code==1）完全不受影响。验证：dota/gghjt/gxdzc e2e
+             * 回归通过。
              */
             int same_code = 0;
             for (int i = 0; i < m->nested_module_count; ++i) {
@@ -1055,8 +1097,8 @@ static void arm_ext_record_timer_owner(ArmExtModule *m) {
         /*
          * table[31] owner is normally identified from LR's code range. The
          * current/active path is kept for host-synthetic entries whose LR is
-         * outside every loaded EXT image. Verification: test/gxdzc/pay.sh and
-         * ctest.
+         * outside every loaded EXT image. Verification: gxdzc e2e payment
+         * routing remains stable.
          */
         owner_p = m->current_p_addr ? m->current_p_addr :
                   (m->active_p_addr ? m->active_p_addr : m->p_addr);
@@ -1097,38 +1139,647 @@ static void note_origin_mem_free(ArmExtModule *m, uint32_t len) {
     if (m->origin_mem_left > m->origin_mem_len) m->origin_mem_left = m->origin_mem_len;
 }
 
-static void enter_screen_context(ArmExtModule *m, uint16 **saved_screen) {
+static void arm_ext_free_row_spans(ArmExtRowSpans *spans) {
+    if (!spans) return;
+    free(spans->min_x);
+    free(spans->max_x);
+    spans->min_x = NULL;
+    spans->max_x = NULL;
+    spans->rows = 0;
+}
+
+static void arm_ext_clear_row_spans(ArmExtRowSpans *spans) {
+    if (!spans || !spans->min_x || !spans->max_x) return;
+    for (uint32_t y = 0; y < spans->rows; ++y) {
+        spans->min_x[y] = UINT16_MAX;
+        spans->max_x[y] = 0;
+    }
+}
+
+static int arm_ext_ensure_row_spans(ArmExtRowSpans *spans, uint32_t rows) {
+    if (!spans || rows == 0) return 0;
+    if (spans->rows == rows && spans->min_x && spans->max_x) return 1;
+
+    arm_ext_free_row_spans(spans);
+    spans->min_x = (uint16_t *)malloc(rows * sizeof(uint16_t));
+    spans->max_x = (uint16_t *)malloc(rows * sizeof(uint16_t));
+    if (!spans->min_x || !spans->max_x) {
+        arm_ext_free_row_spans(spans);
+        return 0;
+    }
+    spans->rows = rows;
+    arm_ext_clear_row_spans(spans);
+    return 1;
+}
+
+static int arm_ext_has_row_spans(const ArmExtRowSpans *spans) {
+    if (!spans || !spans->min_x || !spans->max_x) return 0;
+    for (uint32_t y = 0; y < spans->rows; ++y) {
+        if (spans->min_x[y] < spans->max_x[y]) return 1;
+    }
+    return 0;
+}
+
+static int arm_ext_ensure_screen_regions(ArmExtModule *m) {
+    if (!m || m->screen_h <= 0) return 0;
+    uint32_t rows = (uint32_t)m->screen_h;
+    return arm_ext_ensure_row_spans(&m->screen_damage, rows) &&
+           arm_ext_ensure_row_spans(&m->screen_present, rows);
+}
+
+static void arm_ext_clear_screen_regions(ArmExtModule *m) {
+    if (!arm_ext_ensure_screen_regions(m)) return;
+    arm_ext_clear_row_spans(&m->screen_damage);
+    arm_ext_clear_row_spans(&m->screen_present);
+}
+
+static int arm_ext_ensure_foreground_cover_regions(ArmExtModule *m) {
+    if (!m || m->screen_h <= 0) return 0;
+    if (!arm_ext_ensure_row_spans(&m->foreground_cover, (uint32_t)m->screen_h))
+        return 0;
+    if (!arm_ext_has_row_spans(&m->foreground_cover))
+        arm_ext_clear_row_spans(&m->foreground_cover);
+    return 1;
+}
+
+static void arm_ext_clear_foreground_cover_regions(ArmExtModule *m) {
+    if (!arm_ext_ensure_foreground_cover_regions(m)) return;
+    arm_ext_clear_row_spans(&m->foreground_cover);
+}
+
+static void arm_ext_diag_dump_layer_state(ArmExtModule *m, const char *tag) {
+    if (!m || !getenv("VMRP_ARM_EXT_DIAG")) return;
+    uint32_t primary_chunk = 0;
+    uint32_t active_chunk = 0;
+    uint32_t primary_rw = 0;
+    uint32_t active_rw = 0;
+    if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr + 12)) {
+        memcpy(&primary_rw, arm_ptr(m, m->primary_p_addr), 4);
+        memcpy(&primary_chunk, arm_ptr(m, m->primary_p_addr + 12), 4);
+    }
+    if (m->active_p_addr && arm_ptr(m, m->active_p_addr + 12)) {
+        memcpy(&active_rw, arm_ptr(m, m->active_p_addr), 4);
+        memcpy(&active_chunk, arm_ptr(m, m->active_p_addr + 12), 4);
+    }
+    uint32_t pc = reg_read32(m->uc, UC_ARM_REG_PC);
+    uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
+    uint32_t r9 = reg_read32(m->uc, UC_ARM_REG_R9);
+    uint16_t cover0 = UINT16_MAX;
+    uint16_t cover1 = 0;
+    if (arm_ext_ensure_foreground_cover_regions(m) &&
+        m->foreground_cover.rows > 27) {
+        cover0 = m->foreground_cover.min_x[27];
+        cover1 = m->foreground_cover.max_x[27];
+    }
+    uint32_t p24 = 0, p28 = 0, p34 = 0;
+    uint32_t a24 = 0, a28 = 0, a34 = 0;
+    if (primary_chunk) {
+        p24 = arm_ext_read_u32_or_zero_(m, primary_chunk + 0x24);
+        p28 = arm_ext_read_u32_or_zero_(m, primary_chunk + 0x28);
+        p34 = arm_ext_read_u32_or_zero_(m, primary_chunk + 0x34);
+    }
+    if (active_chunk) {
+        a24 = arm_ext_read_u32_or_zero_(m, active_chunk + 0x24);
+        a28 = arm_ext_read_u32_or_zero_(m, active_chunk + 0x28);
+        a34 = arm_ext_read_u32_or_zero_(m, active_chunk + 0x34);
+    }
+    printf("DIAG layer %s pc=0x%X lr=0x%X r9=0x%X activeP=0x%X activeH=0x%X activeRW=0x%X activeChunk=0x%X active[24]=0x%X active[28]=0x%X active[34]=0x%X primaryP=0x%X primaryH=0x%X primaryRW=0x%X primaryChunk=0x%X primary[24]=0x%X primary[28]=0x%X primary[34]=0x%X timerP=0x%X timerH=0x%X cover27=%u..%u fgOwnerP=0x%X fgOwnerH=0x%X fgValid=%d hostTimer=%d mrTimer=%d\n",
+           tag ? tag : "?",
+           pc, lr, r9,
+           m->active_p_addr, m->active_helper_addr, active_rw, active_chunk,
+           a24, a28, a34,
+           m->primary_p_addr, m->primary_helper_addr, primary_rw, primary_chunk,
+           p24, p28, p34,
+           m->timer_p_addr, m->timer_helper_addr,
+           cover0, cover1,
+           m->foreground_screen_owner_p_addr,
+           m->foreground_screen_owner_helper_addr,
+           (m->foreground_screen_owner_p_addr != 0),
+           m->host_timer_pending, mr_timer_state);
+}
+
+static void arm_ext_mark_row_spans(ArmExtRowSpans *spans,
+                                   int32_t screen_w,
+                                   int32_t screen_h,
+                                   int32_t x,
+                                   int32_t y,
+                                   int32_t w,
+                                   int32_t h) {
+    if (!spans || !spans->min_x || !spans->max_x || spans->rows == 0 ||
+        screen_w <= 0 ||
+        screen_h <= 0 || w <= 0 || h <= 0) {
+        return;
+    }
+
+    int32_t min_x = x < 0 ? 0 : x;
+    int32_t min_y = y < 0 ? 0 : y;
+    int32_t max_x = x + w;
+    int32_t max_y = y + h;
+    if (max_x > screen_w) max_x = screen_w;
+    if (max_y > screen_h) max_y = screen_h;
+    if (min_x >= max_x || min_y >= max_y) return;
+
+    uint16_t ux0 = (uint16_t)min_x;
+    uint16_t ux1 = (uint16_t)max_x;
+    for (int32_t yy = min_y; yy < max_y && (uint32_t)yy < spans->rows; ++yy) {
+        if (ux0 < spans->min_x[yy]) spans->min_x[yy] = ux0;
+        if (ux1 > spans->max_x[yy]) spans->max_x[yy] = ux1;
+    }
+}
+
+static void arm_ext_note_screen_damage_rect(ArmExtModule *m,
+                                            int32_t x,
+                                            int32_t y,
+                                            int32_t w,
+                                            int32_t h) {
+    if (!m || !arm_ext_ensure_screen_regions(m)) return;
+    arm_ext_mark_row_spans(&m->screen_damage, m->screen_w, m->screen_h,
+                           x, y, w, h);
+}
+
+static void arm_ext_note_screen_damage_addr_range(ArmExtModule *m,
+                                                  uint64_t address,
+                                                  int size) {
+    if (!m || !m->screen_addr || m->screen_w <= 0 || size <= 0 ||
+        address < m->screen_addr) {
+        return;
+    }
+    uint64_t start_byte = address - m->screen_addr;
+    uint64_t end_byte = start_byte + (uint64_t)size - 1u;
+    uint64_t max_byte = (uint64_t)m->screen_len - 1u;
+    if (start_byte > max_byte) return;
+    if (end_byte > max_byte) end_byte = max_byte;
+
+    uint64_t start_pixel = start_byte / sizeof(uint16_t);
+    uint64_t end_pixel = end_byte / sizeof(uint16_t);
+    uint32_t screen_w = (uint32_t)m->screen_w;
+    uint32_t y0 = (uint32_t)(start_pixel / screen_w);
+    uint32_t y1 = (uint32_t)(end_pixel / screen_w);
+    uint32_t x0 = (uint32_t)(start_pixel % screen_w);
+    uint32_t x1 = (uint32_t)(end_pixel % screen_w) + 1u;
+
+    if (y0 == y1) {
+        arm_ext_note_screen_damage_rect(m, (int32_t)x0, (int32_t)y0,
+                                        (int32_t)(x1 - x0), 1);
+        return;
+    }
+    arm_ext_note_screen_damage_rect(m, (int32_t)x0, (int32_t)y0,
+                                    m->screen_w - (int32_t)x0, 1);
+    for (uint32_t y = y0 + 1u; y < y1; ++y) {
+        arm_ext_note_screen_damage_rect(m, 0, (int32_t)y, m->screen_w, 1);
+    }
+    arm_ext_note_screen_damage_rect(m, 0, (int32_t)y1, (int32_t)x1, 1);
+}
+
+static void arm_ext_note_screen_present_rect(ArmExtModule *m,
+                                             int32_t x,
+                                             int32_t y,
+                                             int32_t w,
+                                             int32_t h) {
+    if (!m || !arm_ext_ensure_screen_regions(m)) return;
+    arm_ext_mark_row_spans(&m->screen_present, m->screen_w, m->screen_h,
+                           x, y, w, h);
+}
+
+static void arm_ext_note_foreground_cover_rect(ArmExtModule *m,
+                                               int32_t x,
+                                               int32_t y,
+                                               int32_t w,
+                                               int32_t h) {
+    if (!m || !arm_ext_ensure_foreground_cover_regions(m)) return;
+    arm_ext_mark_row_spans(&m->foreground_cover, m->screen_w, m->screen_h,
+                           x, y, w, h);
+}
+
+static int arm_ext_has_foreground_cover(ArmExtModule *m) {
+    if (!m || !arm_ext_has_foreground_child(m) ||
+        !arm_ext_ensure_foreground_cover_regions(m)) {
+        return 0;
+    }
+    return arm_ext_has_row_spans(&m->foreground_cover);
+}
+
+static int arm_ext_suspend_depth_for_p(ArmExtModule *m,
+                                       uint32_t p_addr,
+                                       uint32_t *suspend_depth) {
+    uint32_t ext_chunk = 0;
+    if (suspend_depth) *suspend_depth = 0;
+    if (m && p_addr && arm_ptr(m, p_addr + 12)) {
+        memcpy(&ext_chunk, arm_ptr(m, p_addr + 12), 4);
+    }
+    if (!ext_chunk || !arm_ptr(m, ext_chunk + 0x34) || !suspend_depth) return 0;
+    memcpy(suspend_depth, arm_ptr(m, ext_chunk + 0x34), 4);
+    return 1;
+}
+
+static int arm_ext_foreground_cover_is_nonmodal(ArmExtModule *m) {
+    uint32_t suspend_depth = 0;
+    return arm_ext_has_foreground_child(m) &&
+           arm_ext_suspend_depth_for_p(m, m->active_p_addr, &suspend_depth) &&
+           suspend_depth == 0;
+}
+
+static void arm_ext_retire_nonmodal_foreground_cover_rect(ArmExtModule *m,
+                                                          int32_t x,
+                                                          int32_t y,
+                                                          int32_t w,
+                                                          int32_t h) {
+    if (!arm_ext_has_foreground_cover(m) ||
+        !arm_ext_foreground_cover_is_nonmodal(m)) {
+        return;
+    }
+
+    int32_t min_x = x < 0 ? 0 : x;
+    int32_t min_y = y < 0 ? 0 : y;
+    int32_t max_x = x + w;
+    int32_t max_y = y + h;
+    if (max_x > m->screen_w) max_x = m->screen_w;
+    if (max_y > m->screen_h) max_y = m->screen_h;
+    if (min_x >= max_x || min_y >= max_y) return;
+
+    int changed = 0;
+    for (int32_t yy = min_y; yy < max_y; ++yy) {
+        uint16_t c0 = m->foreground_cover.min_x[yy];
+        uint16_t c1 = m->foreground_cover.max_x[yy];
+        if (c0 >= c1 || max_x <= c0 || min_x >= c1) continue;
+
+        /*
+         * A readable extChunk[0x34] == 0 marks a non-modal overlay, not a
+         * suspended page.  When the covered layer later explicitly presents a
+         * rectangle over the overlay span, the visible owner for that span has
+         * moved back to the covered layer.  Unknown or modal depths keep the
+         * existing cover until wrapper resume clears active ownership.
+         * Compatibility impact is limited to explicit present calls; cache-only
+         * writes remain invisible behind foreground cover.  Verification is the
+         * opbzqe RIGHT-key PPM check plus the existing plugin and pixel e2e
+         * cases listed in docs/opbzqe-advbar-black-region-debug.md.
+         */
+        if (min_x <= c0 && max_x >= c1) {
+            m->foreground_cover.min_x[yy] = UINT16_MAX;
+            m->foreground_cover.max_x[yy] = 0;
+            changed = 1;
+        } else if (min_x <= c0) {
+            m->foreground_cover.min_x[yy] = (uint16_t)max_x;
+            changed = 1;
+        } else if (max_x >= c1) {
+            m->foreground_cover.max_x[yy] = (uint16_t)min_x;
+            changed = 1;
+        }
+    }
+
+    if (changed && !arm_ext_has_foreground_cover(m)) {
+        m->foreground_screen_owner_p_addr = 0;
+        m->foreground_screen_owner_helper_addr = 0;
+    }
+}
+
+static int arm_ext_owner_is_foreground_child(ArmExtModule *m,
+                                             uint32_t owner_p_addr,
+                                             uint32_t owner_helper_addr) {
+    return arm_ext_has_foreground_child(m) &&
+           owner_p_addr &&
+           (owner_p_addr == m->active_p_addr ||
+            owner_helper_addr == m->active_helper_addr);
+}
+
+static int arm_ext_owner_is_covered_by_foreground(ArmExtModule *m,
+                                                  uint32_t owner_p_addr,
+                                                  uint32_t owner_helper_addr) {
+    return arm_ext_has_foreground_cover(m) &&
+           !arm_ext_owner_is_foreground_child(m, owner_p_addr,
+                                              owner_helper_addr);
+}
+
+static uint32_t arm_ext_screen_caller_owner(ArmExtModule *m,
+                                            uint32_t *caller_helper_addr) {
+    uint32_t helper_addr = 0;
+    uint32_t p_addr = 0;
+    if (m) {
+        p_addr = arm_ext_p_for_code_addr(m, reg_read32(m->uc, UC_ARM_REG_LR),
+                                         &helper_addr);
+        if (!p_addr) {
+            p_addr = m->current_p_addr;
+            helper_addr = m->current_helper_addr;
+        }
+    }
+    if (caller_helper_addr) *caller_helper_addr = helper_addr;
+    return p_addr;
+}
+
+static void arm_ext_note_visible_present_rect(ArmExtModule *m,
+                                              int32_t x,
+                                              int32_t y,
+                                              int32_t w,
+                                              int32_t h) {
+    arm_ext_note_screen_presented(m);
+    arm_ext_note_screen_present_rect(m, x, y, w, h);
+}
+
+typedef int (*ArmExtPresentSegmentFn)(ArmExtModule *m,
+                                      void *ctx,
+                                      int32_t x,
+                                      int32_t y,
+                                      int32_t w);
+
+static int arm_ext_submit_uncovered_present_segments(
+    ArmExtModule *m,
+    int32_t x,
+    int32_t y,
+    int32_t w,
+    int32_t h,
+    ArmExtPresentSegmentFn submit,
+    void *submit_ctx) {
+    if (!m || !submit || w <= 0 || h <= 0) return 0;
+
+    int32_t min_x = x < 0 ? 0 : x;
+    int32_t min_y = y < 0 ? 0 : y;
+    int32_t max_x = x + w;
+    int32_t max_y = y + h;
+    if (max_x > m->screen_w) max_x = m->screen_w;
+    if (max_y > m->screen_h) max_y = m->screen_h;
+    if (min_x >= max_x || min_y >= max_y) return 0;
+
+    int drew = 0;
+    for (int32_t yy = min_y; yy < max_y; ++yy) {
+        uint16_t c0 = m->foreground_cover.min_x[yy];
+        uint16_t c1 = m->foreground_cover.max_x[yy];
+        if (c0 >= c1) {
+            if (submit(m, submit_ctx, min_x, yy, max_x - min_x)) {
+                arm_ext_note_visible_present_rect(m, min_x, yy,
+                                                  max_x - min_x, 1);
+                drew = 1;
+            }
+            continue;
+        }
+        if (min_x < c0) {
+            int32_t sx1 = c0 < max_x ? c0 : max_x;
+            if (min_x < sx1 &&
+                submit(m, submit_ctx, min_x, yy, sx1 - min_x)) {
+                arm_ext_note_visible_present_rect(m, min_x, yy,
+                                                  sx1 - min_x, 1);
+                drew = 1;
+            }
+        }
+        if (c1 < max_x) {
+            int32_t sx0 = c1 > min_x ? c1 : min_x;
+            if (sx0 < max_x &&
+                submit(m, submit_ctx, sx0, yy, max_x - sx0)) {
+                arm_ext_note_visible_present_rect(m, sx0, yy,
+                                                  max_x - sx0, 1);
+                drew = 1;
+            }
+        }
+    }
+    return drew;
+}
+
+static int arm_ext_submit_bitmap_segment(ArmExtModule *m,
+                                         void *ctx,
+                                         int32_t x,
+                                         int32_t y,
+                                         int32_t w) {
+    (void)m;
+    mr_drawBitmap((uint16_t *)ctx, (int16)x, (int16)y, (uint16)w, 1);
+    return 1;
+}
+
+static int arm_ext_submit_dispup_segment(ArmExtModule *m,
+                                         void *ctx,
+                                         int32_t x,
+                                         int32_t y,
+                                         int32_t w) {
+    (void)m;
+    (void)ctx;
+    return _DispUpEx((int16)x, (int16)y, (uint16)w, 1) == MR_SUCCESS;
+}
+
+static int arm_ext_present_bitmap_rect(ArmExtModule *m,
+                                       uint16_t *bmp,
+                                       int32_t x,
+                                       int32_t y,
+                                       int32_t w,
+                                       int32_t h,
+                                       int covered_by_foreground) {
+    if (!bmp || w <= 0 || h <= 0) return 0;
+    if (covered_by_foreground) {
+        arm_ext_retire_nonmodal_foreground_cover_rect(m, x, y, w, h);
+        covered_by_foreground = arm_ext_has_foreground_cover(m);
+    }
+    if (!covered_by_foreground || !arm_ext_has_foreground_cover(m)) {
+        mr_drawBitmap(bmp, (int16)x, (int16)y, (uint16)w, (uint16)h);
+        arm_ext_note_visible_present_rect(m, x, y, w, h);
+        return 1;
+    }
+
+    return arm_ext_submit_uncovered_present_segments(
+        m, x, y, w, h, arm_ext_submit_bitmap_segment, bmp);
+}
+
+static int arm_ext_dispup_rect(ArmExtModule *m,
+                               int32_t x,
+                               int32_t y,
+                               int32_t w,
+                               int32_t h,
+                               int covered_by_foreground) {
+    if (w <= 0 || h <= 0) return 0;
+    if (covered_by_foreground) {
+        arm_ext_retire_nonmodal_foreground_cover_rect(m, x, y, w, h);
+        covered_by_foreground = arm_ext_has_foreground_cover(m);
+    }
+    if (!covered_by_foreground || !arm_ext_has_foreground_cover(m)) {
+        int32 ret = _DispUpEx((int16)x, (int16)y, (uint16)w, (uint16)h);
+        arm_ext_note_visible_present_rect(m, x, y, w, h);
+        return ret;
+    }
+
+    return arm_ext_submit_uncovered_present_segments(
+        m, x, y, w, h, arm_ext_submit_dispup_segment, NULL)
+        ? MR_SUCCESS : 0;
+}
+
+static int arm_ext_has_screen_damage(ArmExtModule *m) {
+    if (!m || !arm_ext_ensure_screen_regions(m)) return 0;
+    for (uint32_t y = 0; y < m->screen_damage.rows; ++y) {
+        if (m->screen_damage.min_x[y] < m->screen_damage.max_x[y]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void arm_ext_note_screen_damage_diff(ArmExtModule *m,
+                                            const uint16_t *before) {
+    if (!m || !before || !m->screen_addr || !arm_ext_ensure_screen_regions(m) ||
+        m->screen_w <= 0 || m->screen_h <= 0) {
+        return;
+    }
+    const uint16_t *after = (const uint16_t *)arm_ptr(m, m->screen_addr);
+    if (!after) return;
+
+    for (int32_t y = 0; y < m->screen_h; ++y) {
+        int32_t min_x = m->screen_w;
+        int32_t max_x = -1;
+        const uint16_t *before_row = before + (uint32_t)y * (uint32_t)m->screen_w;
+        const uint16_t *after_row = after + (uint32_t)y * (uint32_t)m->screen_w;
+        for (int32_t x = 0; x < m->screen_w; ++x) {
+            if (before_row[x] != after_row[x]) {
+                if (x < min_x) min_x = x;
+                max_x = x;
+            }
+        }
+        if (max_x >= min_x) {
+            arm_ext_note_screen_damage_rect(m, min_x, y, max_x - min_x + 1, 1);
+        }
+    }
+}
+
+static void arm_ext_present_uncovered_screen_damage(ArmExtModule *m,
+                                                    uint16_t *screen) {
+    if (!m || !screen || !m->screen_dirty || !m->screen_presented_in_callback ||
+        !arm_ext_ensure_screen_regions(m)) {
+        return;
+    }
+
+    /*
+     * Native EXT code can compose through host screen-cache APIs, then present
+     * only a smaller dirty rectangle.  The ARM framebuffer is copied back to
+     * the host shadow buffer at callback exit, but SDL has only seen the
+     * explicit present rectangles.  Submit the row spans that were changed by
+     * host-executed drawing APIs and were not covered by those presents.
+     */
+    for (uint32_t y = 0; y < m->screen_damage.rows; ++y) {
+        uint16_t d0 = m->screen_damage.min_x[y];
+        uint16_t d1 = m->screen_damage.max_x[y];
+        if (d0 >= d1) continue;
+
+        uint16_t p0 = m->screen_present.min_x[y];
+        uint16_t p1 = m->screen_present.max_x[y];
+        if (p0 >= p1) {
+            mr_drawBitmap(screen, d0, (int16)y, (uint16)(d1 - d0), 1);
+            continue;
+        }
+        if (d0 < p0) {
+            mr_drawBitmap(screen, d0, (int16)y, (uint16)(p0 - d0), 1);
+        }
+        if (p1 < d1) {
+            mr_drawBitmap(screen, p1, (int16)y, (uint16)(d1 - p1), 1);
+        }
+    }
+}
+
+static void arm_ext_present_screen_damage(ArmExtModule *m, uint16_t *screen) {
+    if (!m || !screen || !m->screen_dirty || !arm_ext_ensure_screen_regions(m)) {
+        return;
+    }
+
+    for (uint32_t y = 0; y < m->screen_damage.rows; ++y) {
+        uint16_t d0 = m->screen_damage.min_x[y];
+        uint16_t d1 = m->screen_damage.max_x[y];
+        if (d0 < d1) {
+            mr_drawBitmap(screen, d0, (int16)y, (uint16)(d1 - d0), 1);
+        }
+    }
+}
+
+static void arm_ext_merge_uncovered_screen_damage(ArmExtModule *m,
+                                                  uint32_t owner_p_addr,
+                                                  uint32_t owner_helper_addr) {
+    if (!m || !m->screen_dirty || !m->screen_presented_in_callback ||
+        !arm_ext_ensure_screen_regions(m)) {
+        return;
+    }
+
+    for (uint32_t y = 0; y < m->screen_damage.rows; ++y) {
+        uint16_t d0 = m->screen_damage.min_x[y];
+        uint16_t d1 = m->screen_damage.max_x[y];
+        if (d0 >= d1) continue;
+
+        uint16_t p0 = m->screen_present.min_x[y];
+        uint16_t p1 = m->screen_present.max_x[y];
+        if (p0 >= p1) {
+            arm_ext_claim_foreground_screen_rect(m, owner_p_addr,
+                                                 owner_helper_addr,
+                                                 d0, (int32_t)y,
+                                                 d1 - d0, 1);
+            continue;
+        }
+        if (d0 < p0) {
+            arm_ext_claim_foreground_screen_rect(m, owner_p_addr,
+                                                 owner_helper_addr,
+                                                 d0, (int32_t)y,
+                                                 p0 - d0, 1);
+        }
+        if (p1 < d1) {
+            arm_ext_claim_foreground_screen_rect(m, owner_p_addr,
+                                                 owner_helper_addr,
+                                                 p1, (int32_t)y,
+                                                 d1 - p1, 1);
+        }
+    }
+}
+
+static void enter_screen_context(ArmExtModule *m,
+                                 uint16 **saved_screen,
+                                 uint32_t *present_depth_before) {
     *saved_screen = mr_screenBuf;
-    if (m) m->screen_presented_in_callback = 0;
+    if (m) {
+        if (present_depth_before) {
+            *present_depth_before = m->screen_present_depth;
+        }
+        m->screen_presented_in_callback = 0;
+        arm_ext_clear_screen_regions(m);
+    } else if (present_depth_before) {
+        *present_depth_before = 0;
+    }
     if (m->screen_addr) mr_screenBuf = (uint16 *)arm_ptr(m, m->screen_addr);
 }
 
 static void arm_ext_note_screen_presented(ArmExtModule *m) {
-    if (m) m->screen_presented_in_callback = 1;
+    if (m) {
+        m->screen_presented_in_callback = 1;
+        m->screen_present_depth++;
+    }
 }
 
-static void leave_screen_context(ArmExtModule *m, uint16 *saved_screen) {
-    if (m && m->foreground_screen_snapshot_valid &&
-        m->foreground_screen_snapshot &&
-        m->foreground_screen_snapshot_len == m->screen_len &&
-        m->screen_addr && arm_ptr(m, m->screen_addr)) {
-        memcpy(arm_ptr(m, m->screen_addr),
-               m->foreground_screen_snapshot, m->screen_len);
-    }
+static uint16_t *arm_ext_snapshot_screen(ArmExtModule *m) {
+    if (!m || !m->screen_addr || !m->screen_len || !arm_ptr(m, m->screen_addr))
+        return NULL;
+    uint16_t *snapshot = (uint16_t *)malloc(m->screen_len);
+    if (!snapshot) return NULL;
+    memcpy(snapshot, arm_ptr(m, m->screen_addr), m->screen_len);
+    return snapshot;
+}
+
+static void leave_screen_context(ArmExtModule *m,
+                                 uint16 *saved_screen,
+                                 uint32_t present_depth_before) {
     if (m->screen_addr && saved_screen && m->screen_len) {
         memcpy(saved_screen, arm_ptr(m, m->screen_addr), m->screen_len);
     }
     mr_screenBuf = saved_screen;
+    if (saved_screen && m && m->screen_dirty && m->screen_presented_in_callback) {
+        arm_ext_merge_uncovered_screen_damage(m, m->foreground_screen_owner_p_addr,
+                                              m->foreground_screen_owner_helper_addr);
+        arm_ext_present_uncovered_screen_damage(m, saved_screen);
+        m->screen_dirty = 0;
+    }
+    /*
+     * Keep foreground screen ownership as visible-layer metadata only.
+     * A foreground overlay may present its own covered rows and later proxy
+     * still-visible rows from the shared ARM screen cache.  Auto-restoring a
+     * host-side copy into that cache would erase the producer's next frame.
+     */
     /*
      * Native apps often clear the whole screen buffer, repaint only dirty
      * regions, then explicitly present those regions with mr_drawBitmap or
      * DispUpEx.  A forced full-screen present at callback exit would expose
-     * cleared-but-not-presented pixels.  Keep the host shadow buffer synced,
-     * but only synthesize a full-screen present for callbacks that performed
-     * screen writes without any explicit platform present.
+     * cleared-but-not-presented pixels, so callback-exit synthesis is limited
+     * to row spans that were explicitly tracked as screen damage.
      */
-    if (saved_screen && m && m->screen_dirty && !m->screen_presented_in_callback) {
-        mr_drawBitmap(saved_screen, 0, 0, (uint16)m->screen_w, (uint16)m->screen_h);
+    if (saved_screen && m && m->screen_dirty &&
+        m->screen_present_depth == present_depth_before &&
+        arm_ext_has_screen_damage(m)) {
+        arm_ext_present_screen_damage(m, saved_screen);
     }
     m->screen_dirty = 0;
     if (m) m->screen_presented_in_callback = 0;
@@ -1208,11 +1859,21 @@ static int arm_ext_screen_context_targets_primary(ArmExtModule *m,
     return m && ctx && ctx->active && ctx->target_addr == m->screen_addr;
 }
 
+static int arm_ext_should_track_screen_cache_damage(ArmExtModule *m) {
+    /*
+     * The screen cache is backing storage.  When a foreground child owns the
+     * visible layer, cache-only writes from either layer must remain invisible
+     * until that owner explicitly presents a rectangle.
+     */
+    return !arm_ext_has_foreground_child(m);
+}
+
 static void arm_ext_finish_screen_cache_write(ArmExtModule *m,
                                               const ArmExtScreenContext *ctx,
                                               uint32_t claim_p_addr,
                                               uint32_t claim_helper_addr) {
     if (!arm_ext_screen_context_targets_primary(m, ctx)) return;
+    if (!arm_ext_should_track_screen_cache_damage(m)) return;
     m->screen_dirty = 1;
     arm_ext_finish_accepted_screen_write(m, claim_p_addr, claim_helper_addr);
 }
@@ -1221,34 +1882,42 @@ static void arm_ext_clear_foreground_screen_owner(ArmExtModule *m) {
     if (!m) return;
     m->foreground_screen_owner_p_addr = 0;
     m->foreground_screen_owner_helper_addr = 0;
-    m->foreground_screen_snapshot_valid = 0;
+    arm_ext_clear_foreground_cover_regions(m);
 }
 
-static void arm_ext_note_foreground_screen_write(ArmExtModule *m,
+static int arm_ext_claim_foreground_screen_owner(ArmExtModule *m,
                                                  uint32_t owner_p_addr,
                                                  uint32_t owner_helper_addr) {
-    if (!m || !m->screen_addr || !m->screen_len ||
-        !arm_ptr(m, m->screen_addr)) {
-        return;
+    if (!m || !owner_p_addr) {
+        return 0;
     }
-    if (m->foreground_screen_snapshot_len != m->screen_len) {
-        free(m->foreground_screen_snapshot);
-        m->foreground_screen_snapshot = NULL;
-        m->foreground_screen_snapshot_len = 0;
-        m->foreground_screen_snapshot_valid = 0;
-    }
-    if (!m->foreground_screen_snapshot) {
-        m->foreground_screen_snapshot = (uint8_t *)malloc(m->screen_len);
-        if (m->foreground_screen_snapshot)
-            m->foreground_screen_snapshot_len = m->screen_len;
-    }
-    if (!m->foreground_screen_snapshot) return;
-
-    memcpy(m->foreground_screen_snapshot, arm_ptr(m, m->screen_addr),
-           m->screen_len);
     m->foreground_screen_owner_p_addr = owner_p_addr;
     m->foreground_screen_owner_helper_addr = owner_helper_addr;
-    m->foreground_screen_snapshot_valid = 1;
+    return 1;
+}
+
+static void arm_ext_claim_foreground_screen_rect(ArmExtModule *m,
+                                                 uint32_t owner_p_addr,
+                                                 uint32_t owner_helper_addr,
+                                                 int32_t x,
+                                                 int32_t y,
+                                                 int32_t w,
+                                                 int32_t h) {
+    (void)x;
+    (void)y;
+    (void)w;
+    (void)h;
+    arm_ext_claim_foreground_screen_owner(m, owner_p_addr,
+                                          owner_helper_addr);
+}
+
+static void arm_ext_claim_foreground_screen_diff(ArmExtModule *m,
+                                                 uint32_t owner_p_addr,
+                                                 uint32_t owner_helper_addr,
+                                                 const uint16_t *before) {
+    (void)before;
+    arm_ext_claim_foreground_screen_owner(m, owner_p_addr,
+                                          owner_helper_addr);
 }
 
 static int arm_ext_should_accept_screen_write(ArmExtModule *m,
@@ -1281,7 +1950,7 @@ static int arm_ext_should_accept_screen_write(ArmExtModule *m,
             printf("DIAG screen_claim callerP=0x%X callerH=0x%X activeP=0x%X activeH=0x%X valid=%d\n",
                    caller_p_addr, caller_helper_addr,
                    m->active_p_addr, m->active_helper_addr,
-                   m->foreground_screen_snapshot_valid);
+                   (m->foreground_screen_owner_p_addr != 0));
         }
         return 1;
     }
@@ -1309,7 +1978,7 @@ static int arm_ext_should_accept_screen_write(ArmExtModule *m,
             printf("DIAG screen_reject primary callerP=0x%X callerH=0x%X activeP=0x%X activeH=0x%X valid=%d\n",
                    caller_p_addr, caller_helper_addr,
                    m->active_p_addr, m->active_helper_addr,
-                   m->foreground_screen_snapshot_valid);
+                   (m->foreground_screen_owner_p_addr != 0));
         }
         return 0;
     }
@@ -1319,10 +1988,37 @@ static int arm_ext_should_accept_screen_write(ArmExtModule *m,
             printf("DIAG screen_reject wrapper callerP=0x%X callerH=0x%X activeP=0x%X activeH=0x%X valid=%d\n",
                    caller_p_addr, caller_helper_addr,
                    m->active_p_addr, m->active_helper_addr,
-                   m->foreground_screen_snapshot_valid);
+                   (m->foreground_screen_owner_p_addr != 0));
         }
         return 0;
     }
+    return 1;
+}
+
+static int arm_ext_should_accept_visible_present(ArmExtModule *m,
+                                                 uint32_t *claim_p_addr,
+                                                 uint32_t *claim_helper_addr) {
+    if (arm_ext_should_accept_screen_write(m, claim_p_addr,
+                                           claim_helper_addr)) {
+        return 1;
+    }
+
+    uint32_t owner_helper_addr = 0;
+    uint32_t owner_p_addr = arm_ext_screen_caller_owner(m, &owner_helper_addr);
+    /*
+     * A foreground child can own only part of the visible screen, for example
+     * a top overlay while the primary game remains visible
+     * underneath.  Explicit presents from the covered layer are therefore not
+     * discarded; the draw path clips them against the child-owned cover rows.
+     * Cache-only writes still use arm_ext_should_accept_screen_write() above
+     * and remain invisible until an explicit present reaches this path.
+     */
+    if (!arm_ext_owner_is_covered_by_foreground(m, owner_p_addr,
+                                                owner_helper_addr)) {
+        return 0;
+    }
+    if (claim_p_addr) *claim_p_addr = owner_p_addr;
+    if (claim_helper_addr) *claim_helper_addr = owner_helper_addr;
     return 1;
 }
 
@@ -1331,12 +2027,15 @@ static void arm_ext_finish_accepted_screen_write(ArmExtModule *m,
                                                  uint32_t claim_helper_addr) {
     if (!claim_p_addr) return;
     /*
-     * A foreground child is claimed by executable owner, but the framebuffer
-     * must be captured after the accepted draw completes.  Capturing before the
-     * draw preserves the old primary/menu pixels and lets leave_screen_context()
-     * flush those stale pixels over the child UI.
+     * Foreground ownership is metadata only.  Visible pixels are protected by
+     * foreground_cover row spans; keeping an extra full-screen snapshot made
+     * the advbar fix harder to audit and no longer feeds any restore path.
+     * Compatibility impact: cache-only writes still stay hidden behind cover,
+     * while explicit presents update cover/present spans as before.  Verified
+     * with the opbzqe RIGHT-key PPM/vitest flow and related plugin e2e cases.
      */
-    arm_ext_note_foreground_screen_write(m, claim_p_addr, claim_helper_addr);
+    arm_ext_claim_foreground_screen_owner(m, claim_p_addr,
+                                          claim_helper_addr);
 }
 
 static void arm_ext_mirror_draw_bitmap_to_screen(ArmExtModule *m,
@@ -1378,11 +2077,13 @@ static void arm_ext_mirror_draw_bitmap_to_screen(ArmExtModule *m,
          * host mr_drawBitmap() flushes a rectangle from a full screen-stride
          * source buffer; mirror that same visible rectangle into the ARM
          * framebuffer so later context exit cannot restore the covered layer.
+         * Do not mark it dirty here: the explicit present already reached SDL,
+         * and screen_dirty is reserved for cache writes that still need a
+         * synthesized submit.
          */
         memcpy(dst_screen + offset_pixels, src_row,
                (size_t)row_pixels * sizeof(uint16_t));
     }
-    m->screen_dirty = 1;
 }
 
 static void capture_timer_dispatches(ArmExtModule *m) {
@@ -1674,23 +2375,49 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 29: {
             void *bmp = arm_ptr(m, r0);
             uint16_t h = (uint16_t)arg_read(m, 4);
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
-                printf("DIAG drawBitmap bmp=0x%X x=%d y=%d w=%u h=%u currentP=0x%X currentH=0x%X activeP=0x%X activeH=0x%X\n",
-                       r0, (int16)r1, (int16)r2, (uint16)r3,
-                       h, m->current_p_addr,
-                       m->current_helper_addr, m->active_p_addr,
-                       m->active_helper_addr);
-            }
             uint32_t claim_p = 0, claim_helper = 0;
-            if (bmp && arm_ext_should_accept_screen_write(m, &claim_p,
-                                                          &claim_helper)) {
-                mr_drawBitmap(bmp, (int16)r1, (int16)r2, (uint16)r3, h);
-                arm_ext_note_screen_presented(m);
+            if (bmp) {
+                int accept = arm_ext_should_accept_visible_present(m, &claim_p,
+                                                                   &claim_helper);
+                if (getenv("VMRP_ARM_EXT_DIAG")) {
+                    int covered_diag = arm_ext_owner_is_covered_by_foreground(
+                        m, claim_p, claim_helper);
+                    printf("DIAG present29 x=%d y=%d w=%u h=%u accept=%d claimP=0x%X claimH=0x%X covered=%d\n",
+                           (int16)r1, (int16)r2, (uint16)r3, h, accept,
+                           claim_p, claim_helper, covered_diag);
+                    arm_ext_diag_dump_layer_state(m, "present29");
+                }
+                if (accept) {
+                    int covered = arm_ext_owner_is_covered_by_foreground(
+                        m, claim_p, claim_helper);
+                    arm_ext_present_bitmap_rect(m, bmp, (int16)r1, (int16)r2,
+                                                (uint16)r3, h, covered);
+                }
+                /*
+                 * A rejected foreground present is still a write into the
+                 * shared backing screen cache when its source is a bitmap.
+                 * Foreground overlays can later proxy uncovered regions from
+                 * that cache; skipping this mirror leaves those regions black
+                 * even though the visible submit was correctly blocked.
+                 */
                 arm_ext_mirror_draw_bitmap_to_screen(m, r0, (int16)r1,
                                                      (int16)r2,
                                                      (uint16)r3, h);
-                arm_ext_finish_accepted_screen_write(m, claim_p,
-                                                     claim_helper);
+                if (accept) {
+                    arm_ext_finish_accepted_screen_write(m, claim_p,
+                                                         claim_helper);
+                    arm_ext_claim_foreground_screen_rect(m, claim_p,
+                                                         claim_helper,
+                                                         (int16)r1,
+                                                         (int16)r2,
+                                                         (uint16)r3, h);
+                    if (arm_ext_owner_is_foreground_child(m, claim_p,
+                                                          claim_helper)) {
+                        arm_ext_note_foreground_cover_rect(m, (int16)r1,
+                                                           (int16)r2,
+                                                           (uint16)r3, h);
+                    }
+                }
             }
             ret = MR_SUCCESS;
         } break;
@@ -2025,16 +2752,40 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             }
             {
                 uint32_t claim_p = 0, claim_helper = 0;
-                if (arm_ext_should_accept_screen_write(m, &claim_p,
-                                                       &claim_helper)) {
+                int accept = arm_ext_should_accept_visible_present(m, &claim_p,
+                                                                   &claim_helper);
+                if (getenv("VMRP_ARM_EXT_DIAG")) {
+                    int covered_diag = arm_ext_owner_is_covered_by_foreground(
+                        m, claim_p, claim_helper);
+                    printf("DIAG present118 x=%d y=%d w=%u h=%u accept=%d claimP=0x%X claimH=0x%X covered=%d\n",
+                           (int16)r0, (int16)r1, (uint16)r2, (uint16)r3,
+                           accept, claim_p, claim_helper, covered_diag);
+                    arm_ext_diag_dump_layer_state(m, "present118");
+                }
+                if (accept) {
                     ArmExtScreenContext screen_ctx;
                     if (arm_ext_push_draw_screen_context(m, &screen_ctx) &&
                         arm_ext_screen_context_targets_primary(m, &screen_ctx)) {
-                        ret = _DispUpEx((int16)r0, (int16)r1,
-                                        (uint16)r2, (uint16)r3);
-                        arm_ext_note_screen_presented(m);
+                        int covered = arm_ext_owner_is_covered_by_foreground(
+                            m, claim_p, claim_helper);
+                        ret = arm_ext_dispup_rect(m, (int16)r0, (int16)r1,
+                                                  (uint16)r2, (uint16)r3,
+                                                  covered);
                         arm_ext_finish_accepted_screen_write(m, claim_p,
                                                              claim_helper);
+                        arm_ext_claim_foreground_screen_rect(m, claim_p,
+                                                             claim_helper,
+                                                             (int16)r0,
+                                                             (int16)r1,
+                                                             (uint16)r2,
+                                                             (uint16)r3);
+                        if (arm_ext_owner_is_foreground_child(m, claim_p,
+                                                              claim_helper)) {
+                            arm_ext_note_foreground_cover_rect(m, (int16)r0,
+                                                               (int16)r1,
+                                                               (uint16)r2,
+                                                               (uint16)r3);
+                        }
                     } else {
                         ret = 0;
                     }
@@ -2047,16 +2798,24 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 119:
             {
                 uint32_t claim_p = 0, claim_helper = 0;
-                if (arm_ext_should_accept_screen_write(m, &claim_p,
-                                                       &claim_helper)) {
-                    ArmExtScreenContext screen_ctx;
-                    if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
-                        _DrawPoint((int16)r0, (int16)r1, (uint16)r2);
-                        arm_ext_pop_draw_screen_context(&screen_ctx);
-                        arm_ext_finish_screen_cache_write(m, &screen_ctx,
-                                                          claim_p,
-                                                          claim_helper);
-                    }
+                if (!arm_ext_should_accept_screen_write(m, &claim_p,
+                                                        &claim_helper)) {
+                    claim_p = 0;
+                    claim_helper = 0;
+                }
+                ArmExtScreenContext screen_ctx;
+                if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
+                    _DrawPoint((int16)r0, (int16)r1, (uint16)r2);
+                    arm_ext_pop_draw_screen_context(&screen_ctx);
+                    arm_ext_note_screen_damage_rect(m, (int16)r0,
+                                                    (int16)r1, 1, 1);
+                    arm_ext_claim_foreground_screen_rect(m, claim_p,
+                                                         claim_helper,
+                                                         (int16)r0,
+                                                         (int16)r1, 1, 1);
+                    arm_ext_finish_screen_cache_write(m, &screen_ctx,
+                                                      claim_p,
+                                                      claim_helper);
                 }
             }
             ret = 0;
@@ -2070,18 +2829,25 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 int16_t sx = (int16)arg_read(m, 7);
                 int16_t sy = (int16)arg_read(m, 8);
                 int16_t mw = (int16)arg_read(m, 9);
-                int accept = arm_ext_should_accept_screen_write(m, &claim_p,
-                                                                &claim_helper);
-                if (accept) {
-                    ArmExtScreenContext screen_ctx;
-                    if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
-                        _DrawBitmap(arm_ptr(m, r0), (int16)r1, (int16)r2,
-                                    (uint16)r3, h, rop, trans, sx, sy, mw);
-                        arm_ext_pop_draw_screen_context(&screen_ctx);
-                        arm_ext_finish_screen_cache_write(m, &screen_ctx,
-                                                          claim_p,
-                                                          claim_helper);
-                    }
+                if (!arm_ext_should_accept_screen_write(m, &claim_p,
+                                                        &claim_helper)) {
+                    claim_p = 0;
+                    claim_helper = 0;
+                }
+                ArmExtScreenContext screen_ctx;
+                if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
+                    uint16_t *before = arm_ext_snapshot_screen(m);
+                    _DrawBitmap(arm_ptr(m, r0), (int16)r1, (int16)r2,
+                                (uint16)r3, h, rop, trans, sx, sy, mw);
+                    arm_ext_pop_draw_screen_context(&screen_ctx);
+                    arm_ext_note_screen_damage_diff(m, before);
+                    arm_ext_claim_foreground_screen_diff(m, claim_p,
+                                                         claim_helper,
+                                                         before);
+                    free(before);
+                    arm_ext_finish_screen_cache_write(m, &screen_ctx,
+                                                      claim_p,
+                                                      claim_helper);
                 }
             }
             ret = 0;
@@ -2089,19 +2855,31 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 122:
             {
                 uint32_t claim_p = 0, claim_helper = 0;
-                if (arm_ext_should_accept_screen_write(m, &claim_p,
-                                                       &claim_helper)) {
-                    ArmExtScreenContext screen_ctx;
-                    if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
-                        DrawRect((int16)r0, (int16)r1, (int16)r2, (int16)r3,
-                                 (uint8)arg_read(m, 4),
-                                 (uint8)arg_read(m, 5),
-                                 (uint8)arg_read(m, 6));
-                        arm_ext_pop_draw_screen_context(&screen_ctx);
-                        arm_ext_finish_screen_cache_write(m, &screen_ctx,
-                                                          claim_p,
-                                                          claim_helper);
-                    }
+                if (!arm_ext_should_accept_screen_write(m, &claim_p,
+                                                        &claim_helper)) {
+                    claim_p = 0;
+                    claim_helper = 0;
+                }
+                ArmExtScreenContext screen_ctx;
+                if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
+                    DrawRect((int16)r0, (int16)r1, (int16)r2, (int16)r3,
+                             (uint8)arg_read(m, 4),
+                             (uint8)arg_read(m, 5),
+                             (uint8)arg_read(m, 6));
+                    arm_ext_pop_draw_screen_context(&screen_ctx);
+                    arm_ext_note_screen_damage_rect(m, (int16)r0,
+                                                    (int16)r1,
+                                                    (int16)r2,
+                                                    (int16)r3);
+                    arm_ext_claim_foreground_screen_rect(m, claim_p,
+                                                         claim_helper,
+                                                         (int16)r0,
+                                                         (int16)r1,
+                                                         (int16)r2,
+                                                         (int16)r3);
+                    arm_ext_finish_screen_cache_write(m, &screen_ctx,
+                                                      claim_p,
+                                                      claim_helper);
                 }
             }
             ret = 0;
@@ -2109,22 +2887,28 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 123:
             {
                 uint32_t claim_p = 0, claim_helper = 0;
-                if (arm_ext_should_accept_screen_write(m, &claim_p,
-                                                       &claim_helper)) {
-                    ArmExtScreenContext screen_ctx;
-                    if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
-                        ret = _DrawText(arm_str(m, r0), (int16)r1, (int16)r2,
-                                        (uint8)r3, (uint8)arg_read(m, 4),
-                                        (uint8)arg_read(m, 5),
-                                        (int)arg_read(m, 6),
-                                        (uint16)arg_read(m, 7));
-                        arm_ext_pop_draw_screen_context(&screen_ctx);
-                        arm_ext_finish_screen_cache_write(m, &screen_ctx,
-                                                          claim_p,
-                                                          claim_helper);
-                    } else {
-                        ret = 0;
-                    }
+                if (!arm_ext_should_accept_screen_write(m, &claim_p,
+                                                        &claim_helper)) {
+                    claim_p = 0;
+                    claim_helper = 0;
+                }
+                ArmExtScreenContext screen_ctx;
+                if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
+                    uint16_t *before = arm_ext_snapshot_screen(m);
+                    ret = _DrawText(arm_str(m, r0), (int16)r1, (int16)r2,
+                                    (uint8)r3, (uint8)arg_read(m, 4),
+                                    (uint8)arg_read(m, 5),
+                                    (int)arg_read(m, 6),
+                                    (uint16)arg_read(m, 7));
+                    arm_ext_pop_draw_screen_context(&screen_ctx);
+                    arm_ext_note_screen_damage_diff(m, before);
+                    arm_ext_claim_foreground_screen_diff(m, claim_p,
+                                                         claim_helper,
+                                                         before);
+                    free(before);
+                    arm_ext_finish_screen_cache_write(m, &screen_ctx,
+                                                      claim_p,
+                                                      claim_helper);
                 } else {
                     ret = 0;
                 }
@@ -2282,17 +3066,25 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 145:
             {
                 uint32_t claim_p = 0, claim_helper = 0;
-                if (arm_ext_should_accept_screen_write(m, &claim_p,
-                                                       &claim_helper)) {
-                    ArmExtScreenContext screen_ctx;
-                    if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
-                        mr_platDrawChar((uint16)r0, (int32)r1, (int32)r2,
-                                        (uint32)r3);
-                        arm_ext_pop_draw_screen_context(&screen_ctx);
-                        arm_ext_finish_screen_cache_write(m, &screen_ctx,
-                                                          claim_p,
-                                                          claim_helper);
-                    }
+                if (!arm_ext_should_accept_screen_write(m, &claim_p,
+                                                        &claim_helper)) {
+                    claim_p = 0;
+                    claim_helper = 0;
+                }
+                ArmExtScreenContext screen_ctx;
+                if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
+                    uint16_t *before = arm_ext_snapshot_screen(m);
+                    mr_platDrawChar((uint16)r0, (int32)r1, (int32)r2,
+                                    (uint32)r3);
+                    arm_ext_pop_draw_screen_context(&screen_ctx);
+                    arm_ext_note_screen_damage_diff(m, before);
+                    arm_ext_claim_foreground_screen_diff(m, claim_p,
+                                                         claim_helper,
+                                                         before);
+                    free(before);
+                    arm_ext_finish_screen_cache_write(m, &screen_ctx,
+                                                      claim_p,
+                                                      claim_helper);
                 }
             }
             ret = 0;
@@ -2449,7 +3241,17 @@ static void hook_screen_write(uc_engine *uc, uc_mem_type type, uint64_t address,
     (void)value;
     ArmExtModule *m = (ArmExtModule *)user_data;
     m->screen_write_count++;
-    m->screen_dirty = 1;
+    /*
+     * The ARM screen buffer is shared storage, not the visible layer owner.
+     * When a foreground child is active, covered primary/wrapper code may
+     * still repaint that memory; those writes must not synthesize a host
+     * present over the child that already owns the visible screen.
+     */
+    if (!arm_ext_has_foreground_child(m) &&
+        arm_ext_current_screen_owner_is_visible(m)) {
+        m->screen_dirty = 1;
+        arm_ext_note_screen_damage_addr_range(m, address, size);
+    }
     if (getenv("VMRP_ARM_EXT_TRACE") && m->screen_write_count <= 20) {
         printf("arm_ext_executor: screen write #%u addr=0x%llX size=%d value=0x%llX\n",
                m->screen_write_count, (unsigned long long)address, size, (unsigned long long)value);
@@ -2475,7 +3277,7 @@ static void hook_restore_r9(uc_engine *uc, uint64_t address, uint32_t size, void
      * R9-relative globals, so R9 must follow the code range currently being
      * executed rather than the last active helper. The hook runs per basic
      * block and only writes R9 when PC enters a known EXT image. Verification:
-     * test/gxdzc/pay.sh reaches the payment UI and ctest stays green.
+     * gxdzc e2e reaches the payment UI.
      */
     arm_ext_sync_r9_for_code_addr(m, (uint32_t)address);
 }
@@ -2496,7 +3298,7 @@ static uint32_t find_wrapper_timer_dispatch(const uint8_t *code, uint32_t len) {
              * queue dispatcher：它从 wrapper RW+0x1FC 取队列并在 0xE83B46
              * BLX 节点回调。Thumb LDR literal 的立即数字段随代码布局变，
              * 其余指令序列稳定。兼容性：只在扫描到该队列消费函数时启用
-             * wrapper timer dispatch；验证 test/gxdzc/pay.sh 与 ctest。 */
+             * wrapper timer dispatch；验证 gxdzc e2e 付费路径。 */
             if (i == 0 || i == 16) continue;
             if (code[off + i] != pat[i]) {
                 match = 0;
@@ -2757,9 +3559,10 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
 
     reg_write32(m->uc, UC_ARM_REG_R0, (uint32_t)load_code);
     uint16 *saved_screenBuf = NULL;
-    enter_screen_context(m, &saved_screenBuf);
+    uint32_t present_depth_before = 0;
+    enter_screen_context(m, &saved_screenBuf, &present_depth_before);
     int load_ret = run_arm(m, EXT_CODE_ADDR + 8);
-    leave_screen_context(m, saved_screenBuf);
+    leave_screen_context(m, saved_screenBuf, present_depth_before);
     if (load_ret != MR_SUCCESS) goto fail;
     capture_timer_dispatches(m);
     /* 将 ARM 代码 mr_c_function_load() 的返回值 (R0) 传给调用者，
@@ -2973,6 +3776,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
                m->primary_helper_addr, m->timer_p_addr, m->timer_helper_addr,
                modal_suspend_depth_pre);
     }
+    arm_ext_diag_dump_layer_state(m, "call-pre");
     if (rw_base) reg_write32(m->uc, UC_ARM_REG_R9, rw_base);
     reg_write32(m->uc, UC_ARM_REG_R0, call_p_addr);
     reg_write32(m->uc, UC_ARM_REG_R1, (uint32_t)code);
@@ -3004,7 +3808,8 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     }
 
     uint16 *saved_screenBuf = NULL;
-    enter_screen_context(m, &saved_screenBuf);
+    uint32_t present_depth_before = 0;
+    enter_screen_context(m, &saved_screenBuf, &present_depth_before);
     sync_internal_state_to_arm(m);
     int was_host_timer_pending = m->host_timer_pending;
     if (code == 2) {
@@ -3019,8 +3824,9 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if (code == 2 && was_host_timer_pending && m->host_timer_pending) {
         internal_slot_write(m, m->mr_timer_state_slot, (uint32_t)mr_timer_state);
     }
-    leave_screen_context(m, saved_screenBuf);
+    leave_screen_context(m, saved_screenBuf, present_depth_before);
     capture_timer_dispatches(m);
+    arm_ext_diag_dump_layer_state(m, "call-post");
 
     /* wrapper 无 primary module 时（如"请稍后"加载阶段），wrapper 的
      * code=2 处理完后不会通过 table[31] 重启宿主 timer。宿主需要持续
@@ -3266,7 +4072,7 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
          * 0xE83A34，下一次宿主 timer 必须进入 0xE83A80 的队列消费逻辑；
          * extChunk[0x28] 是事件/控件分发入口 0xE830BD，会把节点重新挂回
          * 队列而不是执行到 0xE83B46 的回调。验证：gxdzc 付费点击后
-         * 0x66FFBD 回调被消费并显示 netpay 付费界面，ctest 仍通过。
+         * 0x66FFBD 回调被消费并显示 netpay 付费界面。
          */
         func = m->wrapper_timer_dispatch_addr;
     }
@@ -3318,7 +4124,8 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     }
 
     uint16 *saved_screenBuf = NULL;
-    enter_screen_context(m, &saved_screenBuf);
+    uint32_t present_depth_before = 0;
+    enter_screen_context(m, &saved_screenBuf, &present_depth_before);
     sync_internal_state_to_arm(m);
     m->current_p_addr = m->p_addr;
     m->current_helper_addr = m->helper_addr;
@@ -3326,7 +4133,7 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     m->current_p_addr = 0;
     m->current_helper_addr = 0;
     sync_timer_state_from_arm(m);
-    leave_screen_context(m, saved_screenBuf);
+    leave_screen_context(m, saved_screenBuf, present_depth_before);
     capture_timer_dispatches(m);
     if (wrapper_timer_owner) {
         uint32_t queue_head = 0;
@@ -3431,7 +4238,8 @@ int arm_ext_invoke0(ArmExtModule *m, uint32 func, int32 *ret_out) {
     reg_write32(m->uc, UC_ARM_REG_R3, 0);
 
     uint16 *saved_screenBuf = NULL;
-    enter_screen_context(m, &saved_screenBuf);
+    uint32_t present_depth_before = 0;
+    enter_screen_context(m, &saved_screenBuf, &present_depth_before);
     sync_internal_state_to_arm(m);
     m->current_p_addr = m->active_p_addr ? m->active_p_addr : m->p_addr;
     m->current_helper_addr = func;
@@ -3439,7 +4247,7 @@ int arm_ext_invoke0(ArmExtModule *m, uint32 func, int32 *ret_out) {
     m->current_p_addr = 0;
     m->current_helper_addr = 0;
     sync_timer_state_from_arm(m);
-    leave_screen_context(m, saved_screenBuf);
+    leave_screen_context(m, saved_screenBuf, present_depth_before);
     if (call_ret != MR_SUCCESS) return MR_FAILED;
 
     if (ret_out) *ret_out = (int32)reg_read32(m->uc, UC_ARM_REG_R0);
@@ -3459,7 +4267,8 @@ int arm_ext_invoke3(ArmExtModule *m, uint32 func, uint32 arg0, uint32 arg1,
     reg_write32(m->uc, UC_ARM_REG_R2, arg2);
 
     uint16 *saved_screenBuf = NULL;
-    enter_screen_context(m, &saved_screenBuf);
+    uint32_t present_depth_before = 0;
+    enter_screen_context(m, &saved_screenBuf, &present_depth_before);
     sync_internal_state_to_arm(m);
     m->current_p_addr = m->active_p_addr ? m->active_p_addr : m->p_addr;
     m->current_helper_addr = func;
@@ -3467,7 +4276,7 @@ int arm_ext_invoke3(ArmExtModule *m, uint32 func, uint32 arg0, uint32 arg1,
     m->current_p_addr = 0;
     m->current_helper_addr = 0;
     sync_timer_state_from_arm(m);
-    leave_screen_context(m, saved_screenBuf);
+    leave_screen_context(m, saved_screenBuf, present_depth_before);
     if (call_ret != MR_SUCCESS) return MR_FAILED;
 
     if (ret_out) *ret_out = (int32)reg_read32(m->uc, UC_ARM_REG_R0);
@@ -3497,7 +4306,9 @@ void arm_ext_unload(ArmExtModule *m) {
     free(m->last_file_copy);
     free(m->modal_screen_snapshot);
     free(m->modal_fg_snapshot);
-    free(m->foreground_screen_snapshot);
+    arm_ext_free_row_spans(&m->screen_damage);
+    arm_ext_free_row_spans(&m->screen_present);
+    arm_ext_free_row_spans(&m->foreground_cover);
     free(m->low_table);
     if (m->mem_is_mmap) {
 #ifdef _MSC_VER

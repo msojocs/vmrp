@@ -24,8 +24,8 @@ static int app_compat_name_matches(const char *name, const char *profile_name) {
      * e.g. 018982845369-gghjt.mrp.  The app still extracts resources and
      * saves under its original directory, so the existing profile must follow
      * this stable suffix.  ABI and save paths are unchanged; verified by
-     * vmrp_app_compat_tests and a cold gghjt boot after deleting only the test
-     * save directory. */
+     * cold gghjt Vitest boot coverage after deleting only the test save
+     * directory. */
     return name[name_len - profile_len - 1] == '-' &&
            strcmp(name + name_len - profile_len, profile_name) == 0;
 }
@@ -53,8 +53,8 @@ static void app_compat_read_mrp_header_name(const char *pack_filename,
     /* MRP app info keeps the original 12-byte filename at offset 16.  App
      * compat hooks are tied to the packaged EXT behavior rather than the host
      * filename, so renamed dumps such as test.mrp must still select the same
-     * profile.  Save/resource paths are not changed; verified by
-     * vmrp_app_compat_tests and cold boots of renamed gghjt packages. */
+     * profile.  Save/resource paths are not changed; verified by cold Vitest
+     * boots of renamed gghjt packages. */
     for (size_t i = 0; i < 12 && i + 1 < out_size; ++i) {
         if (header[16 + i] == '\0')
             break;
@@ -71,8 +71,8 @@ const AppCompatProfile *app_compat_select(const char *pack_filename) {
         slash = backslash;
     /* Windows CLI paths keep backslashes in pack_filename.  This only changes
      * profile selection (no ABI impact) so hooks like gghjt resource unpacking
-     * run on both Windows and Linux.  Verified by vmrp_app_compat_tests and a
-     * cold Windows gghjt.mrp boot after deleting the test save directory. */
+     * run on both Windows and Linux.  Verified by cold gghjt.mrp boot coverage
+     * after deleting the test save directory. */
     const char *name = slash ? slash + 1 : pack_filename;
 
     for (int i = 0; i < (int)(sizeof(profiles) / sizeof(profiles[0])); i++) {
