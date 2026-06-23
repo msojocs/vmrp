@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { VmrpE2e } from "./vmrp-e2e.js";
+import { VmrpE2e } from "../vmrp-e2e.js";
 
 describe("gxdzc pixel flow", () => {
   let vmrp: VmrpE2e | undefined;
@@ -10,7 +10,7 @@ describe("gxdzc pixel flow", () => {
   });
 
   it("checks screen pixels after each click", async () => {
-    vmrp = await VmrpE2e.start("mythroad/gxdzc.mrp");
+    vmrp = await VmrpE2e.start("test/fixtures/gxdzc.mrp");
 
     const boot = await vmrp.screen("boot");
     expect(boot.pixel(120, 160)).toEqual([0, 0, 0]);

@@ -13,6 +13,8 @@ describe("gghjt pixel flow", () => {
   it("下载付费插件 - 返回", async () => {
     // 删除后，继续游戏会进入下载netpay插件界面。
     fs.rmSync('mythroad/plugins/netpay.mrp', { force: true });
+    fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
+    fs.cpSync('test/fixtures/gghjt', 'mythroad/gghjt', { recursive: true });
     vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp");
 
     await vmrp.delay(4000);
@@ -55,7 +57,9 @@ describe("gghjt pixel flow", () => {
   it("下载付费插件 - 返回重进", async () => {
     // 删除后，继续游戏会进入下载netpay插件界面。
     fs.rmSync('mythroad/plugins/netpay.mrp', { force: true });
-    vmrp = await VmrpE2e.start("mythroad/gghjt.mrp");
+    fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
+    fs.cpSync('test/fixtures/gghjt', 'mythroad/gghjt', { recursive: true });
+    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp");
 
     await vmrp.delay(4000);
     const boot = await vmrp.screen("bgm-select");
@@ -115,7 +119,9 @@ describe("gghjt pixel flow", () => {
   it("下载付费插件 - 下载完毕", async () => {
     // 删除后，继续游戏会进入下载netpay插件界面。
     fs.rmSync('mythroad/plugins/netpay.mrp', { force: true });
-    vmrp = await VmrpE2e.start("mythroad/gghjt.mrp");
+    fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
+    fs.cpSync('test/fixtures/gghjt', 'mythroad/gghjt', { recursive: true });
+    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp");
 
     await vmrp.delay(4000);
     const boot = await vmrp.screen("bgm-select");
@@ -177,7 +183,9 @@ describe("gghjt pixel flow", () => {
   it("下载付费插件 - 下载完毕返回重进", async () => {
     // 删除后，继续游戏会进入下载netpay插件界面。
     fs.rmSync('mythroad/plugins/netpay.mrp', { force: true });
-    vmrp = await VmrpE2e.start("mythroad/gghjt.mrp");
+    fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
+    fs.cpSync('test/fixtures/gghjt', 'mythroad/gghjt', { recursive: true });
+    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp");
 
     await vmrp.delay(4000);
     const boot = await vmrp.screen("bgm-select");
@@ -265,7 +273,9 @@ describe("gghjt pixel flow", () => {
   it("下载付费插件 - 下载完毕付费超时返回重进", async () => {
     // 删除后，继续游戏会进入下载netpay插件界面。
     fs.rmSync('mythroad/plugins/netpay.mrp', { force: true });
-    vmrp = await VmrpE2e.start("mythroad/gghjt.mrp");
+    fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
+    fs.cpSync('test/fixtures/gghjt', 'mythroad/gghjt', { recursive: true });
+    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp");
 
     await vmrp.delay(4000);
     const boot = await vmrp.screen("bgm-select");

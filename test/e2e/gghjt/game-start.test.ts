@@ -17,7 +17,7 @@ describe("gghjt 开始游戏", () => {
     }
     fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
     fs.cpSync('test/fixtures/gghjt', 'mythroad/gghjt', { recursive: true });
-    vmrp = await VmrpE2e.start("mythroad/gghjt.mrp");
+    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp");
 
     await vmrp.delay(4000);
     const boot = await vmrp.screen("bgm-select");
