@@ -233,7 +233,7 @@ my_recv(s:2): recv=0, errno=11
 在分析与解决过程中，把进度定期保存至文档中。
 
 
-分析并修复执行测试用例`pnpm vitest run test/e2e/opbzqe/game-prepare.test.ts`自动进入游戏界面，但是顶部广告条没有消失。
+分析并修复执行测试用例`pnpm vitest run test/e2e/optwar/game-prepare.test.ts`自动进入游戏界面，但是顶部广告条没有消失。
 
 预期结果：广告条可以消失。
 实际结果：点击左方向键或右方向键后广告条应该要消失，然后菜单能切换。
@@ -247,4 +247,3 @@ my_recv(s:2): recv=0, errno=11
 不能写特定场景代码，如if(is_xxx_app()) {...}
 
 在分析与解决过程中，把进度定期保存至文档中。
-`docs/opbzqe-advbar-black-region-debug.md`

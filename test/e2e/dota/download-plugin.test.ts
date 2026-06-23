@@ -13,7 +13,7 @@ describe("dota pixel flow", () => {
   it("下载浏览器插件 - 返回重进", async () => {
     // 删除后，继续游戏会进入下载浏览器插件界面。
     fs.rmSync('mythroad/plugins/browser.mrp', { force: true });
-    vmrp = await VmrpE2e.start("mythroad/dota.mrp");
+    vmrp = await VmrpE2e.start("test/fixtures/dota.mrp");
 
     await vmrp.delay(6000);
     const boot = await vmrp.screen("bgm-select");
