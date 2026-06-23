@@ -1450,6 +1450,29 @@ static int arm_ext_owner_is_covered_by_foreground(ArmExtModule *m,
                                               owner_helper_addr);
 }
 
+static void arm_ext_clear_empty_nonmodal_foreground_owner(ArmExtModule *m) {
+    if (!m || !m->foreground_screen_owner_p_addr) return;
+    if (m->foreground_screen_owner_p_addr != m->active_p_addr ||
+        m->foreground_screen_owner_helper_addr != m->active_helper_addr) {
+        return;
+    }
+    if (arm_ext_has_foreground_cover(m) ||
+        !arm_ext_foreground_cover_is_nonmodal(m)) {
+        return;
+    }
+
+    /*
+     * Non-modal overlays such as advbar keep their EXT module active after the
+     * covered game presents over the overlay rows.  Cache-only writes from the
+     * still-active child can refresh foreground_screen_owner_* without adding
+     * any foreground_cover rows, but owner metadata alone is not a visible
+     * occlusion mask.  Once the row spans are empty, the lower layer must be
+     * allowed to present normally; modal children keep using suspend depth.
+     */
+    m->foreground_screen_owner_p_addr = 0;
+    m->foreground_screen_owner_helper_addr = 0;
+}
+
 static uint32_t arm_ext_screen_caller_owner(ArmExtModule *m,
                                             uint32_t *caller_helper_addr) {
     uint32_t helper_addr = 0;
@@ -1954,6 +1977,7 @@ static int arm_ext_should_accept_screen_write(ArmExtModule *m,
         }
         return 1;
     }
+    arm_ext_clear_empty_nonmodal_foreground_owner(m);
     if (m->foreground_screen_owner_p_addr != m->active_p_addr ||
         m->foreground_screen_owner_helper_addr != m->active_helper_addr) {
         return 1;
@@ -3733,7 +3757,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         call_p_addr = m->timer_p_addr;
         call_helper_addr = m->timer_helper_addr;
     }
-    int wrapper_modal_event_routed = 0;
+    int wrapper_raw_event_routed = 0;
     int reopen_set_this_call = 0;
     uint32_t modal_ext_chunk = 0;
     uint32_t modal_suspend_depth_pre = 0;
@@ -3762,8 +3786,16 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         if (_ec && m->primary_helper_addr && arm_ptr(m, _ec + 8)) {
             memcpy(arm_ptr(m, _ec + 8), &m->primary_helper_addr, 4);
         }
-        if (input_len >= 12 && input_addr) {
-            wrapper_modal_event_routed = 1;
+        /*
+         * Host-originated code=1 packets carry five int32 fields.  The wrapper
+         * sees those raw events before Lua dealevent; return success for them
+         * so a key press is not replayed by Lua's later 12-byte _strCom(801)
+         * forwarding path.  Keep 12-byte internal forwards on the helper's real
+         * return value, which lets non-modal overlays decline events after
+         * their visible state has already been cleared.
+         */
+        if (input_len >= 20 && input_addr) {
+            wrapper_raw_event_routed = 1;
         }
     }
 
@@ -3852,6 +3884,9 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     uint32_t modal_suspend_depth_post = modal_suspend_depth_pre;
     if (modal_ext_chunk && arm_ptr(m, modal_ext_chunk + 0x34))
         memcpy(&modal_suspend_depth_post, arm_ptr(m, modal_ext_chunk + 0x34), 4);
+    int wrapper_entered_modal =
+        code == 1 && has_separate_wrapper && input_len >= 12 && input_addr &&
+        modal_suspend_depth_pre == 0 && modal_suspend_depth_post > 0;
     if (modal_suspend_depth_pre == 0 && modal_suspend_depth_post > 0 &&
         call_modal_snapshot_candidate) {
         m->modal_screen_snapshot_valid = 1;
@@ -3949,9 +3984,11 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if (output_len) *output_len = (int32)arm_output_len;
     if (output) *output = arm_output ? (uint8 *)arm_ptr(m, arm_output) : NULL;
 
-    /* 模态层的原始事件已经由 wrapper 控件树处理。这里向宿主返回
-     * MR_SUCCESS，避免同一个 mouse-up 在模态关闭后继续落到 game 菜单。 */
-    if (wrapper_modal_event_routed) return MR_SUCCESS;
+    /* 20-byte 原始事件已经先经过 wrapper；这里向宿主返回 MR_SUCCESS，
+     * 避免同一个输入随后又经 Lua 的 12-byte _strCom(801) 转发重复处理。
+     * 事件导致 0->1 进入模态时也必须消费；12-byte 内部转发仍返回
+     * helper 的真实 R0，供非模态前台模块在清掉可见层后继续把事件交给 game/Lua。 */
+    if (wrapper_raw_event_routed || wrapper_entered_modal) return MR_SUCCESS;
     return (int32_t)reg_read32(m->uc, UC_ARM_REG_R0);
 }
 
