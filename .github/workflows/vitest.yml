@@ -1,0 +1,45 @@
+name: Vitest
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  vitest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libsdl2-dev pkg-config zlib1g-dev
+
+      # The e2e harness runs SDL without xvfb, matching docs/TESTING.md.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure
+        run: cmake -S . -B build
+
+      - name: Build vmrp
+        run: cmake --build build --target vmrp --parallel
+
+      - name: Run Vitest
+        run: pnpm test:e2e
