@@ -18,6 +18,7 @@ export interface PpmImage {
   width: number;
   height: number;
   pixel(x: number, y: number): Rgb;
+  uniqueColorCount(): number;
 }
 
 type KeyName =
@@ -74,7 +75,9 @@ export class VmrpE2e {
         await this.waitForExit(2_000);
       }
     }
-    await rm(this.tmpDir, { recursive: true, force: true });
+    if (process.env.VMRP_E2E_KEEP_TMP !== "1") {
+      await rm(this.tmpDir, { recursive: true, force: true });
+    }
   }
 
   async drawCount(): Promise<number> {
@@ -139,7 +142,7 @@ export class VmrpE2e {
     this.process = spawn(this.bin, ["--work-dir", this.workDir, mrpPath], {
       env: {
         ...process.env,
-        SDL_VIDEODRIVER: process.env.SDL_VIDEODRIVER ?? "dummy",
+        // SDL_VIDEODRIVER: process.env.SDL_VIDEODRIVER ?? "dummy",
         SDL_AUDIODRIVER: process.env.SDL_AUDIODRIVER ?? "dummy",
         VMRP_E2E_SOCKET: this.socketPath,
         VMRP_PPM_PATH: this.defaultScreenPath
@@ -226,6 +229,13 @@ export async function readPpm(filePath: string): Promise<PpmImage> {
       }
       const index = (y * width + x) * 3;
       return [pixels[index], pixels[index + 1], pixels[index + 2]];
+    },
+    uniqueColorCount(): number {
+      const colors = new Set<number>();
+      for (let i = 0; i < expectedBytes; i += 3) {
+        colors.add((pixels[i] << 16) | (pixels[i + 1] << 8) | pixels[i + 2]);
+      }
+      return colors.size;
     }
   };
 }
