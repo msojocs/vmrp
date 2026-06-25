@@ -16,9 +16,17 @@ describe("gghjt 开始游戏", () => {
       fs.cpSync('test/fixtures/plugins/netpay.mrp', 'mythroad/plugins/netpay.mrp');
     }
     fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
+    fs.rmSync('mythroad/cache', { force: true, recursive: true });
     fs.cpSync('test/fixtures/gghjt', 'mythroad/gghjt', { recursive: true });
     vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp");
 
+    {
+      // 检测内存
+      await vmrp.delay(1_000);
+      await vmrp.key('LEFT_SOFT', 1_000);
+      await vmrp.delay(1_000);
+
+    }
     await vmrp.delay(4000);
     const boot = await vmrp.screen("bgm-select");
     // rgb(72,88,0)
@@ -90,9 +98,17 @@ describe("gghjt 开始游戏", () => {
     if (!fs.existsSync('mythroad/plugins/netpay.mrp')) {
       fs.cpSync('test/fixtures/plugins/netpay.mrp', 'mythroad/plugins/netpay.mrp');
     }
+    fs.rmSync('mythroad/cache', { force: true, recursive: true });
     fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
     vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp");
 
+    {
+      // 检测内存
+      await vmrp.delay(1_000);
+      await vmrp.key('LEFT_SOFT', 1_000);
+      await vmrp.delay(1_000);
+
+    }
     await vmrp.delay(4000);
     const boot = await vmrp.screen("bgm-select");
     // rgb(72,88,0)
