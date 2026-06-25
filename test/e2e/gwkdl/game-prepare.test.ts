@@ -38,7 +38,7 @@ describe("gwkdl 进入准备界面", () => {
 
     // 是否开启音乐？-> 否
     await vmrp.click(227, 301, 1_000);
-    await vmrp.delay(10_000);
+    await vmrp.delay(3_000);
 
     // 进入“请按任意键界面”
     const wake = await vmrp.screen("menu");
