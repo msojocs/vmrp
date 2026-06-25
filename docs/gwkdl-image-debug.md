@@ -1096,3 +1096,98 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
   - `mem-check.ppm` 和 `bgm-select.ppm` 仍是预期的文字/选择页 2 色画面。
 - 结论：目标用例自动进入“请按任意键”界面后，`zm.bmp`/logo 类位图像素已
   进入最终 framebuffer；不再是纯色背景。
+
+## 2026-06-25 21:23 CST — full e2e regression surface
+
+- 继续原目标：gwkdl 已通过，但需要修复 `ce382f4` 后其它 e2e 回归。
+- 当前工作树复查：存在已暂存的 `src/arm_ext_executor.c` 修正，内容为移除
+  早期 gwkdl 调查中未最终采用的 `compact-sdk` RW bridge 镜像，仅保留
+  `verdload` 已反汇编确认的 RW 布局；`docs/prompt.md` 仍是用户已有修改。
+- 构建：`cmake --build build --target vmrp` 通过。
+- 完整命令：`pnpm vitest run test/e2e`。结果 5 个测试文件通过、2 个失败：
+  - 通过：`gwkdl/game-prepare`、`dota/download-plugin`、`optwar/game-prepare`、
+    `opbzqe/game-prepare`、`gxdzc/gxdzc-pixel`。
+  - 失败：`gghjt/download-plugin` 4 个用例、`gghjt/game-start` 2 个用例。
+- 失败形态：
+  - `download-plugin` 的“返回重进”和 `game-start` 的“游戏正式开始”卡在
+    `WAIT_DRAW`，draw count 不再增加。
+  - 其它下载完成/付费路径在 `pay-start` 采样点 `(104,147)` 读到
+    `[184,144,64]`，预期为 `[104,104,224]`，说明仍停留在前一层/错误画面。
+  - `game-start` 的“游戏直接开始”第二次启动 30s 内 socket 未 ready。
+- 子 Agent 结论与当前修正方向一致：`compact-sdk` RW bridge 镜像是高风险
+  回归点，因为 RW 偏移是 private child 私有布局，不是通用 ABI；但完整 e2e
+  证明仅移除该镜像还不足以恢复 gghjt 所有路径。
+- 下一步 focused rerun：用 `VMRP_E2E_KEEP_TMP=1` 保留 gghjt 失败用例 artifact，
+  对比 `ce382f4` 新增的平台/version/origin memory 改动是否改变 gghjt
+  启动、下载、pay modal 的 private child 状态。
+
+## 2026-06-25 21:31 CST — gghjt focused diagnosis
+
+- 最小复现：
+  `env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gghjt/download-plugin.test.ts -t "下载付费插件 - 下载完毕$"`。
+  artifact `/tmp/vmrp-e2e-Mq81aa`，失败点仍是 `pay-start.ppm`
+  `(104,147)=[184,144,64]`，预期 `[104,104,224]`。
+- PPM 证据：
+  - `download-plugin.ppm`、`download-ing.ppm`、`download-end.ppm` 均为下载 UI
+    色系，说明 `verdload` 下载子模块能显示、文件写入也成功。
+  - `stdout.log` 有 `mr_remove(mythroad/plugins/netpay.mrp) ret:-1` 和
+    `mr_rename(mythroad/vld/7530a10/7530a1.t to mythroad/plugins/netpay.mrp)`，
+    说明插件落盘成功。
+  - 点击“确定”后 `pay-start.ppm` 变回主菜单色系，未进入 netpay/pay modal。
+- `VMRP_ARM_EXT_DIAG=1` artifact `/tmp/vmrp-e2e-EnIs6V`：
+  - 下载过程中 active child 为 `P=0x39D548/H=0x32B2FD`，primary
+    `extChunk[0x34]=1`，foreground cover 是全屏，符合模态 child 显示。
+  - 关闭后 active 回到 primary `P=0x34AB24/H=0x2E2325`，primary
+    `extChunk[0x34]=0`，但后续 timer 仍只让 wrapper code=2 反复运行，pay
+    modal 没有创建。
+  - `arm_ext_primary_helper()` 因 `wrapper_timer_dispatch_addr=0` 返回 0，
+    gghjt 19KB wrapper 继续走普通 code=2 路径；这解释了为什么不会进入
+    `arm_ext_call_dispatch()` 的 chain-walker fallback。
+- 子 Agent 指出另一处高风险：`MODAL_FG_SNAPSHOT_LEN=0xD0` 只覆盖
+  `wrapper_rw+0xE0..0x1AF`，而历史反汇编文档确认 gghjt child-flow list
+  区域是 `wrapper_rw+0x190..0x1B7`。这会漏还原 `0x1B0..0x1B7`，与
+  `verdload` bridge 区 `rw+0x170..0x1B0` 的别名风险相邻。
+- 下一步实验 A：把 wrapper 前台/child-flow 快照覆盖扩到
+  `0xE0..0x1B7`，这是反汇编已有证据支持的 wrapper 状态区扩展，不是
+  app-specific 分支；若 focused gghjt 恢复，再跑 gwkdl 和完整 e2e。
+
+## 2026-06-25 22:46 CST — gghjt regressions fixed, full e2e green
+
+- gghjt 下载/付费路径的 keepable 修复分两部分：
+  - 去掉 `ce382f4` 中来自早期 gwkdl 试验、未被最终反汇编证据采用的
+    `compact-sdk` private-child RW bridge 镜像，仅保留 `verdload` 已证明
+    的 `rw+0x16C..0x1B0` bridge 布局。该变更恢复下载子模块自身状态，
+    `pnpm vitest run test/e2e/gghjt/download-plugin.test.ts` 5 个用例全过。
+  - gghjt close callback 会在模态关闭时安装新的 game timer head
+    `0x32CF44`；旧清理逻辑随后把它覆盖成 suspend 前保存的 `0x2F5874`，
+    导致异步请求处理丢失、下载完成后 pay modal 不出现。现在仅当当前
+    game timer head 仍为 0 时才恢复保存值。
+- `game-start` 的“游戏直接开始”表面是 30s socket timeout，实际是
+  `startVmrp()` 内部已经崩溃，E2E socket 尚未创建。窄 gdb 断点显示：
+  `table[14] memset(r0=0x4, r1=0, r2=0xFFFFFFFC)`，ARM caller 为
+  `game.ext` parser `0x2DFCE2 -> 0x2DB7E0`，其长度来自
+  `0x2DD96C` 读取 signed 16-bit count 后返回 `-1`。
+- 反汇编结论：这不是宿主 `memset` 问题，而是资源包 parser 在缺失/无效
+  `gghjt.pak` 上读到 EOF，随后把 `count=-1` 传给 allocator，形成 `-4`
+  字节清零长度。
+- 文件桥窄诊断显示冷启动先读 `gghjt\res.list`，再打开
+  `gghjt\gghjt.pak`。`gghjt.mrp` 的目录顺序中 `res.list` 位于 entry 17；
+  `ce382f4` 把 MRP cache 从固定 16 条扩展成动态全量后，basename fallback
+  让 `mr_open("gghjt\\res.list")` 在磁盘目录为空时也从包内成功。game 因此
+  认为提取状态存在，但 `gghjt.pak` 尚未落盘，后续直接进入 parser 并崩溃。
+- 实现修复：保留动态 MRP cache（gwkdl 需要 entry 16 之后的资源），但只对
+  “直接资源名”使用 basename fallback。带目录组件的请求必须按真实文件系统
+  语义失败，除非包内 entry 路径与请求路径完全一致；这些 `dir/file` 请求在
+  真实设备上通常是持久化提取状态探测，不能被包内 basename 资源掩盖。
+  该规则是通用路径语义修正，不是 gghjt 分支。
+- 验证：
+  - `cmake --build build --target vmrp -j2` 通过。
+  - `pnpm vitest run test/e2e/gghjt/download-plugin.test.ts` 通过：
+    5 passed，约 206s。
+  - `pnpm vitest run test/e2e/gghjt/game-start.test.ts` 通过：
+    2 passed，约 53s。
+  - `pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts` 通过：
+    1 passed，约 13s，证明动态 cache 对 gwkdl 后段资源仍有效。
+  - `pnpm vitest run test/e2e` 通过：
+    7 files / 12 tests 全部通过，约 325s。
+  - `git diff --check` 无 whitespace error。

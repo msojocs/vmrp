@@ -260,8 +260,9 @@ static void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
  *  (a) 扫描 record，凡 master EXT_TABLE[idx] 为自指针 bridge（== EXT_TABLE_ADDR+idx*4）
  *      且当前 record 槽为空白(0) 的，填回该 bridge 值；
  *  (b) 子模块 RW 段里 bridge 槽的目标偏移属于该子模块自身的数据段布局，无法从 EXT_TABLE
- *      推导，故以声明式描述符（纯数据，按结构化 in-bounds 拟合应用，绝不按文件名）镜像。
- * 两步都只写"空白槽"，因此对普通 app / 已正常重定位的子模块是安全 no-op。
+ *      推导，故只对已有反汇编和运行时锚点证明的布局做声明式镜像。
+ * record 源槽填值可通用应用；RW 镜像不能把其它子模块的实验性偏移当作全局规则，否则会
+ * 覆盖 private child 自己的状态字段（gghjt 的 verdload 下载路径即暴露了这一点）。
  */
 #define PRIVATE_CHILD_RECORD_SPAN 0x248u
 
@@ -305,16 +306,7 @@ static const PrivateChildRwRun verdload_rw_runs[] = {
     { 0x68u, 0x16Cu, 1u  },
     { 0x0Cu, 0x170u, 17u },
 };
-/* 标准 MRC SDK 紧凑 RW 布局：反汇编可见 child init 直接从 module
- * record[26] 和 record[3..19] 拷贝到 rw+0x20..0x64；图形库随后通过
- * rw+0x28 的 memcpy bridge 做逐行像素 blit。私有 loader 在 child entry
- * 前可能留下这些槽为 0，必须在第一次 bridge 调用前补齐。 */
-static const PrivateChildRwRun compact_rw_runs[] = {
-    { 0x68u, 0x20u, 1u },
-    { 0x0Cu, 0x24u, 17u },
-};
 static const PrivateChildRwLayout private_child_rw_layouts[] = {
-    { "compact-sdk", compact_rw_runs, sizeof(compact_rw_runs) / sizeof(compact_rw_runs[0]) },
     { "verdload", verdload_rw_runs, sizeof(verdload_rw_runs) / sizeof(verdload_rw_runs[0]) },
 };
 
@@ -331,10 +323,10 @@ static void arm_ext_repair_private_child_bridges(ArmExtModule *m,
 
     /* (b) 声明式 RW 镜像：先整体 in-bounds 拟合，再逐槽镜像空白目标。
      *
-     * bridge 桥块在子模块 RW 段内的起始偏移随该模块链接结果而变，描述符里写死的
-     * rw_dst_off 只对个别模块(gghjt verdload)正确，对别的模块(如 dota 社区下载库)
-     * 会把桥写到模块代码实际不读取的偏移：代码按 rw+0x188 取 memcpy 桥却拿到
-     * memcmp，正文逐字符拷贝失效、整片空白。
+     * bridge 桥块在子模块 RW 段内的起始偏移随该模块链接结果而变，描述符里的
+     * rw_dst_off 只对已有证据的布局正确；例如 graphics.ext 的临时 compact
+     * rw+0x20..0x64 试验不能套到 verdload，否则会改写 verdload 下载 UI 的
+     * 私有状态，导致点击“继续游戏”后仍停在主菜单。
      *
      * 这里用观测到的真实偏移平移描述符：若有与本模块代码区间重叠、且已被 ARM 重定位
      * 写入过 memcpy(table[3]) 桥的同族实例(got_memcpy_off!=0)，按它的真实偏移与描述符
@@ -948,6 +940,27 @@ static const char *path_basename(const char *path) {
     return p ? p + 1 : path;
 }
 
+static int path_has_directory_component(const char *path) {
+    if (!path) return 0;
+    for (const char *p = path; *p; ++p) {
+        if (*p == '/' || *p == '\\')
+            return 1;
+    }
+    return 0;
+}
+
+static int mrp_path_equal(const char *a, const char *b) {
+    if (!a || !b) return 0;
+    while (*a && *b) {
+        char ca = *a == '\\' ? '/' : *a;
+        char cb = *b == '\\' ? '/' : *b;
+        if (ca != cb) return 0;
+        ++a;
+        ++b;
+    }
+    return *a == '\0' && *b == '\0';
+}
+
 /* 解析 MRP 并缓存所有条目（解压 gzip） */
 static void parse_mrp_cache(ArmExtModule *m, const char *mrp_path) {
     mrp_cache_free(m);
@@ -1044,6 +1057,19 @@ static void parse_mrp_cache(ArmExtModule *m, const char *mrp_path) {
 
 /* 按 basename 在缓存中查找条目 */
 static MrpCacheEntry *mrp_cache_find(ArmExtModule *m, const char *filename) {
+    if (!filename || !*filename) return NULL;
+    for (int i = 0; i < m->mrp_cache_count; i++) {
+        if (mrp_path_equal(m->mrp_cache[i].name, filename))
+            return &m->mrp_cache[i];
+    }
+
+    /* Only basename-match direct resource names.  A request containing a
+     * directory component is a filesystem-state probe on real devices; answering
+     * it from the package cache can make first-run extractors believe their
+     * persistent files already exist while companion files are still missing. */
+    if (path_has_directory_component(filename))
+        return NULL;
+
     const char *base = path_basename(filename);
     for (int i = 0; i < m->mrp_cache_count; i++) {
         if (strcmp(path_basename(m->mrp_cache[i].name), base) == 0)
@@ -4182,7 +4208,10 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
             uint32_t grw = 0;
             if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
                 memcpy(&grw, arm_ptr(m, m->primary_p_addr), 4);
-            if (grw)
+            /* wrapper suspend 会临时清空 game timer head；仅当 resume/close
+             * 结束后仍为空时恢复旧 head。若 game 在关闭回调里已经安装了
+             * 新 timer，覆盖它会丢失后续异步请求处理。 */
+            if (grw && read_game_timer_head(m, grw) == 0)
                 write_game_timer_head(m, grw, m->saved_game_timer_head);
             m->saved_game_timer_head = 0;
         }
@@ -4561,7 +4590,9 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
             arm_ext_restore_modal_fg_snapshot(m);
             arm_ext_reset_child_modules(m);
             if (m->saved_game_timer_head) {
-                if (_grw2)
+                /* 与 arm_ext_call 的模态关闭路径保持一致：只填补仍为空的
+                 * game timer head，不覆盖关闭回调中新挂上的 timer。 */
+                if (_grw2 && read_game_timer_head(m, _grw2) == 0)
                     write_game_timer_head(m, _grw2, m->saved_game_timer_head);
                 m->saved_game_timer_head = 0;
             }
