@@ -19,11 +19,25 @@
 #define EXT_CODE_ADDR  0x00E80000u
 #define EXT_WRAPPER_STACK_SIZE 0x20000u
 #define EXT_CHUNK_MAGIC 0x7FD854EBu
-#define EXT_LOW_TABLE_SIZE 0x2000u
+/* Some compact EXT wrappers ask the handset-version probe for an MTK graphics
+ * storage band and then pass that address back as caller-owned module storage.
+ * Keep those device bands as real ARM-visible memory instead of folding them
+ * into the normal low heap; child loaders may keep the original address. */
+#define EXT_PLATFORM_MEM_ADDR 0x40000000u
+#define EXT_PLATFORM_MEM_SIZE (2u * 1024u * 1024u)
+#define EXT_PLATFORM_ALT_MEM_ADDR 0xA0000000u
+#define EXT_PLATFORM_ALT_MEM_SIZE (2u * 1024u * 1024u)
+/* 低地址表大小。部分游戏（如 gwkdl）通过读取 EXT table 区域以外的低地址
+ * 进行内存检测；0x2000 不够大会导致读取 unmapped 地址崩溃。扩展到
+ * 0x10000 (64KB) 以覆盖这些访问。 */
+#define EXT_LOW_TABLE_SIZE 0x10000u
 #define EXT_TRACE_PC_RING 64u
+/* game 的定时器链表头在 game_rw 中的偏移；不同版本的 game.ext SDK 使用
+ * 不同偏移（0x8C 和 0x88 均有实例）。编译期常量用于初始尝试，运行时通过
+ * auto-detect 修正。 */
 #define GAME_TIMER_HEAD_OFFSET 0x008Cu
+#define GAME_TIMER_HEAD_OFFSET_ALT 0x0088u
 
-#define MRP_CACHE_MAX 16
 #define MRP_VFD_MAX 4
 #define MRP_VFD_BASE 0x7FFF0000u
 #define ARM_EXT_NESTED_MODULE_MAX 64
@@ -71,6 +85,8 @@ struct ArmExtModule {
     uc_engine *uc;
     uint8_t *mem;
     uint8_t *low_table;
+    uint8_t *platform_mem;
+    uint8_t *platform_alt_mem;
     uint32_t heap_top;
     uint32_t code_len;
     const uint8_t *host_code;
@@ -86,6 +102,11 @@ struct ArmExtModule {
     uint32_t origin_mem_left;
     uint32_t origin_mem_min;
     uint32_t origin_mem_top;
+    /* ARM 侧 origin_mem 统计 slot 地址，用于在宿主 table[0]/table[1]
+     * 处理后同步 ARM 可见的剩余内存值，避免 ext 读到过期统计。 */
+    uint32_t origin_mem_left_slot;
+    uint32_t origin_mem_min_slot;
+    uint32_t origin_mem_top_slot;
     /* MR_MALLOC_SCRRAM/MR_FREE_SCRRAM return ARM-addressable scratch RAM.
      * Native code uses that RAM as ordinary pixel/data storage, so the host
      * must keep the allocation inside Unicorn's mapped address space. */
@@ -124,6 +145,11 @@ struct ArmExtModule {
     uint32_t primary_file_len;
     int primary_host_init_pending;
     uint32_t wrapper_timer_dispatch_addr;
+    /* 19KB cfunction.ext 的 chain walker thunk 地址（0xE83B50 格式：
+     * push{r3,lr}; bl chain_walker; movs r0,#0; pop{r3,pc}）。
+     * find_wrapper_timer_dispatch 匹配到该 thunk 时不将其作为宿主 timer
+     * dispatcher 使用，但记录其地址供 code=2 后的补发调用。 */
+    uint32_t chain_walker_thunk_addr;
     ArmExtNestedModule nested_modules[ARM_EXT_NESTED_MODULE_MAX];
     int nested_module_count;
     uint32_t outer_r9;
@@ -153,6 +179,8 @@ struct ArmExtModule {
     int primary_child_reopen_timer_needed;
     int host_timer_pending;
     int in_dispatch;
+    int supplementary_code5_pending;
+    int supplementary_init_done;
     uint32_t saved_game_timer_head;
     uint8_t *modal_screen_snapshot;
     uint32_t modal_screen_snapshot_len;
@@ -169,8 +197,9 @@ struct ArmExtModule {
     uint32_t modal_fg_snapshot_rw;
     int modal_fg_snapshot_valid;
     uc_hook hook;
-    MrpCacheEntry mrp_cache[MRP_CACHE_MAX];
+    MrpCacheEntry *mrp_cache;
     int mrp_cache_count;
+    int mrp_cache_capacity;
     MrpVirtualFd mrp_vfds[MRP_VFD_MAX];
 
     const AppCompatProfile *profile;
@@ -178,8 +207,18 @@ struct ArmExtModule {
 };
 
 static inline void *arm_ptr(ArmExtModule *m, uint32_t addr) {
-    if (addr < EXT_BASE_ADDR || addr >= EXT_BASE_ADDR + EXT_MEM_SIZE) return NULL;
-    return m->mem + (addr - EXT_BASE_ADDR);
+    if (!m) return NULL;
+    if (addr >= EXT_BASE_ADDR && addr - EXT_BASE_ADDR < EXT_MEM_SIZE)
+        return m->mem + (addr - EXT_BASE_ADDR);
+    if (m->platform_mem &&
+        addr >= EXT_PLATFORM_MEM_ADDR &&
+        addr - EXT_PLATFORM_MEM_ADDR < EXT_PLATFORM_MEM_SIZE)
+        return m->platform_mem + (addr - EXT_PLATFORM_MEM_ADDR);
+    if (m->platform_alt_mem &&
+        addr >= EXT_PLATFORM_ALT_MEM_ADDR &&
+        addr - EXT_PLATFORM_ALT_MEM_ADDR < EXT_PLATFORM_ALT_MEM_SIZE)
+        return m->platform_alt_mem + (addr - EXT_PLATFORM_ALT_MEM_ADDR);
+    return NULL;
 }
 
 static inline uint32_t arm_ext_read_u32_or_zero_(ArmExtModule *m, uint32_t addr) {

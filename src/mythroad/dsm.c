@@ -9,7 +9,10 @@
 
 #define DSM_MAX_FILE_LEN 256
 
-#define MT6235
+/* vmrp advertises a real MTK platform version that common ARM EXT libraries
+ * accept for graphics setup; actual SCRRAM availability is implemented by
+ * mr_platEx(MR_MALLOC_SCRRAM), not inferred from this handset bucket. */
+#define MT6227
 
 /*请不要修改这些值*/
 #if (defined(MT6223P) || defined(MT6223) || defined(MT6223P_S00))

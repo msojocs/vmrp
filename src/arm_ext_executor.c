@@ -114,7 +114,16 @@ extern int32 mr_sendto(int32 s, const char *buf, int len, int32 ip, uint16 port)
 
 static uint32_t arm_addr(ArmExtModule *m, const void *ptr) {
     if (ptr == NULL) return 0;
-    return (uint32_t)((const uint8_t *)ptr - m->mem) + EXT_BASE_ADDR;
+    const uint8_t *p = (const uint8_t *)ptr;
+    if (m && m->mem && p >= m->mem && p < m->mem + EXT_MEM_SIZE)
+        return (uint32_t)(p - m->mem) + EXT_BASE_ADDR;
+    if (m && m->platform_mem && p >= m->platform_mem &&
+        p < m->platform_mem + EXT_PLATFORM_MEM_SIZE)
+        return (uint32_t)(p - m->platform_mem) + EXT_PLATFORM_MEM_ADDR;
+    if (m && m->platform_alt_mem && p >= m->platform_alt_mem &&
+        p < m->platform_alt_mem + EXT_PLATFORM_ALT_MEM_SIZE)
+        return (uint32_t)(p - m->platform_alt_mem) + EXT_PLATFORM_ALT_MEM_ADDR;
+    return 0;
 }
 
 static uint32_t align4(uint32_t v) { return (v + 3u) & ~3u; }
@@ -256,6 +265,28 @@ static void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
  */
 #define PRIVATE_CHILD_RECORD_SPAN 0x248u
 
+static void arm_ext_repair_private_child_record_bridges(ArmExtModule *m,
+                                                        uint32_t record) {
+    if (!m || !record) return;
+
+    /*
+     * A private loader builds a per-child module record that mirrors the low
+     * EXT table.  Some loaders leave bridge slots blank and expect the child
+     * startup code to copy them into its RW area.  Fill only blank slots whose
+     * master table entry is the standard self-pointer bridge, before the child
+     * has a chance to snapshot the record into RW.
+     */
+    for (uint32_t off = 0; off + 4u <= PRIVATE_CHILD_RECORD_SPAN; off += 4u) {
+        uint32_t idx = off / 4u;
+        if (idx >= EXT_TABLE_COUNT) break;
+        if (!arm_ptr(m, record + off)) break;
+        uint32_t ext = arm_ext_read_u32_or_zero_(m, EXT_TABLE_ADDR + idx * 4u);
+        if (ext != EXT_TABLE_ADDR + idx * 4u) continue;
+        if (arm_ext_read_u32_or_zero_(m, record + off) != 0) continue;
+        memcpy(arm_ptr(m, record + off), &ext, 4);
+    }
+}
+
 typedef struct {
     uint32_t record_src_off; /* run 起始 record 偏移 */
     uint32_t rw_dst_off;     /* run 起始 RW 镜像偏移 */
@@ -274,7 +305,16 @@ static const PrivateChildRwRun verdload_rw_runs[] = {
     { 0x68u, 0x16Cu, 1u  },
     { 0x0Cu, 0x170u, 17u },
 };
+/* 标准 MRC SDK 紧凑 RW 布局：反汇编可见 child init 直接从 module
+ * record[26] 和 record[3..19] 拷贝到 rw+0x20..0x64；图形库随后通过
+ * rw+0x28 的 memcpy bridge 做逐行像素 blit。私有 loader 在 child entry
+ * 前可能留下这些槽为 0，必须在第一次 bridge 调用前补齐。 */
+static const PrivateChildRwRun compact_rw_runs[] = {
+    { 0x68u, 0x20u, 1u },
+    { 0x0Cu, 0x24u, 17u },
+};
 static const PrivateChildRwLayout private_child_rw_layouts[] = {
+    { "compact-sdk", compact_rw_runs, sizeof(compact_rw_runs) / sizeof(compact_rw_runs[0]) },
     { "verdload", verdload_rw_runs, sizeof(verdload_rw_runs) / sizeof(verdload_rw_runs[0]) },
 };
 
@@ -287,15 +327,7 @@ static void arm_ext_repair_private_child_bridges(ArmExtModule *m,
     if (!record) return;
 
     /* (a) 数据驱动 record 源槽填值：仅空白的自指针 bridge 槽。 */
-    for (uint32_t off = 0; off + 4u <= PRIVATE_CHILD_RECORD_SPAN; off += 4u) {
-        uint32_t idx = off / 4u;
-        if (idx >= EXT_TABLE_COUNT) break;
-        if (!arm_ptr(m, record + off)) break;
-        uint32_t ext = arm_ext_read_u32_or_zero_(m, EXT_TABLE_ADDR + idx * 4u);
-        if (ext != EXT_TABLE_ADDR + idx * 4u) continue;      /* 非 bridge 自指针 */
-        if (arm_ext_read_u32_or_zero_(m, record + off) != 0) continue; /* 已填 */
-        memcpy(arm_ptr(m, record + off), &ext, 4);
-    }
+    arm_ext_repair_private_child_record_bridges(m, record);
 
     /* (b) 声明式 RW 镜像：先整体 in-bounds 拟合，再逐槽镜像空白目标。
      *
@@ -402,7 +434,6 @@ static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
         if (!rw_base || p_ext_chunk != ext_chunk) {
             return 0;
         }
-
         arm_ext_repair_private_child_bridges(m, file_addr, file_len, rw_base);
 
         /*
@@ -865,6 +896,7 @@ static char *arm_str(ArmExtModule *m, uint32_t addr) {
     return p ? p : (char *)"";
 }
 
+
 static int format_arm(ArmExtModule *m, char *dst, size_t dst_size, const char *fmt, unsigned first_arg) {
     size_t out = 0;
     unsigned ai = first_arg;
@@ -907,6 +939,8 @@ static uint32_t mrp_rd32le(const uint8_t *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
+static void mrp_cache_free(ArmExtModule *m);
+
 static const char *path_basename(const char *path) {
     const char *p = strrchr(path, '/');
     const char *q = strrchr(path, '\\');
@@ -916,6 +950,7 @@ static const char *path_basename(const char *path) {
 
 /* 解析 MRP 并缓存所有条目（解压 gzip） */
 static void parse_mrp_cache(ArmExtModule *m, const char *mrp_path) {
+    mrp_cache_free(m);
     m->mrp_cache_count = 0;
     if (!mrp_path || !*mrp_path) return;
 
@@ -934,7 +969,7 @@ static void parse_mrp_cache(ArmExtModule *m, const char *mrp_path) {
     if (memcmp(raw, "MRPG", 4) != 0) { free(raw); return; }
 
     uint32_t pos = 240;
-    while (pos + 16 <= (uint32_t)sz && m->mrp_cache_count < MRP_CACHE_MAX) {
+    while (pos + 16 <= (uint32_t)sz) {
         uint32_t name_len = mrp_rd32le(raw + pos);
         pos += 4;
         if (name_len == 0 || name_len > 255 || pos + name_len + 12 > (uint32_t)sz) break;
@@ -950,7 +985,22 @@ static void parse_mrp_cache(ArmExtModule *m, const char *mrp_path) {
         pos += 12;
         if (off >= (uint32_t)sz || packed_len > (uint32_t)sz - off) continue;
 
+        if (m->mrp_cache_count == m->mrp_cache_capacity) {
+            int new_capacity = m->mrp_cache_capacity ? m->mrp_cache_capacity * 2 : 32;
+            MrpCacheEntry *new_cache = (MrpCacheEntry *)realloc(
+                m->mrp_cache, (size_t)new_capacity * sizeof(*new_cache));
+            if (!new_cache) break;
+            /* New slots must start empty because cleanup walks only committed
+             * entries; zeroing also keeps partially decoded entries harmless
+             * until mrp_cache_count is advanced. */
+            memset(new_cache + m->mrp_cache_capacity, 0,
+                   (size_t)(new_capacity - m->mrp_cache_capacity) * sizeof(*new_cache));
+            m->mrp_cache = new_cache;
+            m->mrp_cache_capacity = new_capacity;
+        }
+
         MrpCacheEntry *e = &m->mrp_cache[m->mrp_cache_count];
+        memset(e, 0, sizeof(*e));
         strncpy(e->name, entry_name, sizeof(e->name) - 1);
         e->name[sizeof(e->name) - 1] = '\0';
 
@@ -1027,7 +1077,10 @@ static void mrp_cache_free(ArmExtModule *m) {
         free(m->mrp_cache[i].data);
         m->mrp_cache[i].data = NULL;
     }
+    free(m->mrp_cache);
+    m->mrp_cache = NULL;
     m->mrp_cache_count = 0;
+    m->mrp_cache_capacity = 0;
 }
 
 /* ---- 结束 MRP 文件缓存 ---- */
@@ -1118,11 +1171,20 @@ static void arm_ext_record_timer_owner(ArmExtModule *m) {
     }
 }
 
-/* origin_mem 池由 ext 自身的 ARM 内存管理器维护，ext 直接更新
- * table[111/135/136] 对应的 slot 值。宿主侧不应覆写这些 slot，
- * 否则 ext 读到的 origin_mem_left 等统计会与实际不符。
- * 这里仅维护 m->origin_mem_left 用于其他宿主逻辑（如 arm_alloc
- * 的上限检查），不再调用 sync_origin_mem_stats。 */
+/* origin_mem 统计同步。
+ * 宿主 table[0]/table[1]/table[2] 使用 arm_alloc 而非 origin_mem
+ * 池本身来分配内存，ARM 侧自带的 free-list 分配器因此不会运行，
+ * 对应的 slot 值也不会被 ARM 代码更新。这里在宿主侧 accounting
+ * 后立即将最新值写回 ARM slot，让 ext 读到一致的统计。 */
+static void sync_origin_mem_slots(ArmExtModule *m) {
+    if (m->origin_mem_left_slot)
+        memcpy(arm_ptr(m, m->origin_mem_left_slot), &m->origin_mem_left, 4);
+    if (m->origin_mem_min_slot)
+        memcpy(arm_ptr(m, m->origin_mem_min_slot), &m->origin_mem_min, 4);
+    if (m->origin_mem_top_slot)
+        memcpy(arm_ptr(m, m->origin_mem_top_slot), &m->origin_mem_top, 4);
+}
+
 static void note_origin_mem_alloc(ArmExtModule *m, uint32_t len) {
     if (!m->origin_mem_addr) return;
     len = align4(len ? len : 1);
@@ -1131,12 +1193,42 @@ static void note_origin_mem_alloc(ArmExtModule *m, uint32_t len) {
         m->origin_mem_min = m->origin_mem_left;
         m->origin_mem_top = m->origin_mem_len - m->origin_mem_min;
     }
+    sync_origin_mem_slots(m);
 }
 
 static void note_origin_mem_free(ArmExtModule *m, uint32_t len) {
     if (!m->origin_mem_addr) return;
     m->origin_mem_left += align4(len);
     if (m->origin_mem_left > m->origin_mem_len) m->origin_mem_left = m->origin_mem_len;
+    sync_origin_mem_slots(m);
+}
+
+/* 读取 game 的定时器链表头。不同版本的 game.ext SDK 把 timer head 写在
+ * game_rw 的不同偏移（0x8C 或 0x88），这里依次尝试两个已知偏移。 */
+static uint32_t read_game_timer_head(ArmExtModule *m, uint32_t grw) {
+    if (!grw) return 0;
+    uint32_t val = 0;
+    if (arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET))
+        memcpy(&val, arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET), 4);
+    if (val) return val;
+    if (arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET_ALT))
+        memcpy(&val, arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET_ALT), 4);
+    return val;
+}
+
+/* 写回 game 的定时器链表头。使用与 read 相同的偏移搜索逻辑：
+ * 首先尝试主偏移 0x8C，若该处本身就有值则写到 0x8C；
+ * 否则写到备选偏移 0x88。 */
+static void write_game_timer_head(ArmExtModule *m, uint32_t grw, uint32_t val) {
+    if (!grw) return;
+    uint32_t cur = 0;
+    if (arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET))
+        memcpy(&cur, arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET), 4);
+    if (cur || !arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET_ALT)) {
+        memcpy(arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET), &val, 4);
+    } else {
+        memcpy(arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET_ALT), &val, 4);
+    }
 }
 
 static void arm_ext_free_row_spans(ArmExtRowSpans *spans) {
@@ -2384,7 +2476,8 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         } break;
         case 26: {
             char buf[1024];
-            format_arm(m, buf, sizeof(buf), arm_str(m, r0), 1);
+            const char *fmt = arm_str(m, r0);
+            format_arm(m, buf, sizeof(buf), fmt, 1);
             mr_printf("%s", buf);
             ret = 0;
         } break;
@@ -2682,9 +2775,10 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             }
         } break;
         case 46: {
-            ret = mr_getLen(arm_str(m, r0));
+            const char *len_name = arm_str(m, r0);
+            ret = mr_getLen(len_name);
             if (ret < 0 && m->mrp_cache_count > 0) {
-                MrpCacheEntry *ce = mrp_cache_find(m, arm_str(m, r0));
+                MrpCacheEntry *ce = mrp_cache_find(m, len_name);
                 if (ce) ret = (int32_t)ce->data_len;
             }
         } break;
@@ -3000,6 +3094,9 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 m->last_file_copy && r2 && r3 <= m->last_file_len &&
                 r3 > 8 && arm_ptr(m, r2 + 8)) {
                 memcpy(arm_ptr(m, r2 + 8), m->last_file_copy + 8, r3 - 8);
+                uint32_t record_addr = 0;
+                memcpy(&record_addr, arm_ptr(m, r2), 4);
+                arm_ext_repair_private_child_record_bridges(m, record_addr);
                 /*
                  * file_base[0] 是私有 loader 写入的 module record 指针——它是
                  * EXT_TABLE 的逐槽镜像，被子模块当作自己的 C 函数表基址使用。
@@ -3012,8 +3109,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                  * 仅还原 readFile 槽：malloc/free/loader(table[25]) 仍走 wrapper，
                  * 以保留 wrapper 对子模块内存与子加载的管理。
                  */
-                uint32_t record_addr = 0;
-                memcpy(&record_addr, arm_ptr(m, r2), 4);
                 if (record_addr && arm_ptr(m, record_addr + 125 * 4)) {
                     memcpy(arm_ptr(m, record_addr + 125 * 4),
                            arm_ptr(m, EXT_TABLE_ADDR + 125 * 4), 4);
@@ -3306,7 +3401,9 @@ static void hook_restore_r9(uc_engine *uc, uint64_t address, uint32_t size, void
     arm_ext_sync_r9_for_code_addr(m, (uint32_t)address);
 }
 
-static uint32_t find_wrapper_timer_dispatch(const uint8_t *code, uint32_t len) {
+static uint32_t find_wrapper_timer_dispatch(const uint8_t *code, uint32_t len,
+                                             uint32_t *chain_thunk_out) {
+    if (chain_thunk_out) *chain_thunk_out = 0;
     static const uint8_t pat[] = {
         0x00, 0x48, 0xF8, 0xB5, 0x78, 0x44, 0x80, 0x6B,
         0x80, 0x30, 0x40, 0x68, 0x80, 0x47, 0x00, 0x25,
@@ -3330,6 +3427,63 @@ static uint32_t find_wrapper_timer_dispatch(const uint8_t *code, uint32_t len) {
             }
         }
         if (match) return EXT_CODE_ADDR + off + 1u;
+    }
+
+    /* gghjt/gwkdl 版 cfunction.ext（解压后 19428 字节）的同形 thunk 不是
+     * 宿主 timer dispatcher。反汇编确认：
+     *   0xE83B50: push {r3,lr}; bl 0xE8261C; movs r0,#0; pop {r3,pc}
+     *   0xE8261C: 按 wrapper_rw+0x190 的 suspend/resume bucket 遍历节点
+     *   0xE83590: 单个 resume 回调，递减 extChunk[0x34]
+     *
+     * 把这个 walker 当成宿主 timer 调用会在非 suspend 状态下反复递减
+     * primary extChunk[0x34]，破坏 wrapper 状态机。该版本的真实 timer
+     * consumer 位于 helper code=2 分支（0xE83E6C），因此这里明确不启用
+     * arm_ext_call_dispatch()，让 mr_timer() 走普通 native_ext_void_event(2)
+     * 路由。 */
+    static const uint8_t chain_thunk_pat[] = {
+        0x08, 0xB5, 0xFE, 0xF7, 0x63, 0xFD, 0x00, 0x20, 0x08, 0xBD,
+    };
+    for (uint32_t off = 0; off + sizeof(chain_thunk_pat) <= len; off += 2) {
+        if (memcmp(code + off, chain_thunk_pat, sizeof(chain_thunk_pat)) == 0) {
+            /* 记录 chain walker thunk 地址供 code=2 补发用，但不作为
+             * 宿主 timer dispatcher（避免递减 suspend depth 的副作用）。 */
+            *chain_thunk_out = EXT_CODE_ADDR + off + 1u;
+            return 0;
+        }
+    }
+
+    /* 保留 resume 回调签名校验用于诊断 pattern 漏匹配：如果只存在
+     * 0xE83590 这类单节点回调而没有上面的 walker thunk，不能启用
+     * arm_ext_call_dispatch()，否则会重现直接调 game helper 的崩溃。 */
+    static const uint8_t pat2[] = {
+        0x30, 0xB5, 0x04, 0x1C, 0x00, 0x68, 0x00, 0x49,
+        0x83, 0xB0, 0x88, 0x42, 0x03, 0xD0, 0x00, 0x20,
+        0xC0, 0x43, 0x03, 0xB0,
+    };
+    for (uint32_t off = 0; off + sizeof(pat2) <= len; off += 2) {
+        int match = 1;
+        for (uint32_t i = 0; i < sizeof(pat2); ++i) {
+            /* byte 6 是 LDR literal 的立即数，随 literal pool 位置变化 */
+            if (i == 6) continue;
+            if (code[off + i] != pat2[i]) {
+                match = 0;
+                break;
+            }
+        }
+        if (match) {
+            /* 验证：literal pool 中应包含 EXT_CHUNK_MAGIC (0x7FD854EB)。
+             * LDR 指令在 pattern 偏移 6，Thumb PC = (instr_addr + 4) & ~3 */
+            uint32_t ldr_imm = (code[off + 6] & 0xFF) * 4;
+            uint32_t lit_pc = (off + 6 + 4) & ~3u;
+            uint32_t lit_addr = lit_pc + ldr_imm;
+            if (lit_addr + 4 <= len) {
+                uint32_t lit_val = 0;
+                memcpy(&lit_val, code + lit_addr, 4);
+                if (lit_val == EXT_CHUNK_MAGIC) {
+                    return 0;
+                }
+            }
+        }
     }
     return 0;
 }
@@ -3458,7 +3612,11 @@ static void init_table(ArmExtModule *m) {
     write_table_entry(m, 103, alloc_string(m, mr_get_old_start_filename()));
     write_table_entry(m, 138, alloc_string(m, mr_get_start_fileparameter()));
 
-    m->origin_mem_len = 4u * 1024u * 1024u;
+    /* 真机 MR 平台的应用堆一般为 512KB–1MB；origin_mem_len 过大会使
+     * 部分游戏的 exRam 预算计算（= 固定值 − origin_mem_len）溢出为负，
+     * 导致 SCRRAM 分配被跳过、图像资源无法渲染。将 origin_mem_len 设为
+     * 与真机一致的 512KB，同时 arm_alloc 仍可提供远超此值的实际内存。 */
+    m->origin_mem_len = 512u * 1024u;
     m->origin_mem_left = m->origin_mem_len;
     m->origin_mem_min = m->origin_mem_len;
     m->origin_mem_top = 0;
@@ -3484,6 +3642,10 @@ static void init_table(ArmExtModule *m) {
         if (slot111) { uint32_t v = m->origin_mem_left; memcpy(arm_ptr(m, slot111), &v, 4); }
         if (slot135) { uint32_t v = m->origin_mem_min; memcpy(arm_ptr(m, slot135), &v, 4); }
         if (slot136) { uint32_t v = m->origin_mem_top; memcpy(arm_ptr(m, slot136), &v, 4); }
+        /* 保存 slot 地址，以便 note_origin_mem_alloc/free 后同步 ARM 侧 */
+        m->origin_mem_left_slot = slot111;
+        m->origin_mem_min_slot = slot135;
+        m->origin_mem_top_slot = slot136;
         write_table_entry(m, 108, slot108);
         write_table_entry(m, 109, slot109);
         write_table_entry(m, 110, slot110);
@@ -3522,6 +3684,10 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     }
 #endif
     if (!m->mem) goto fail;
+    m->platform_mem = calloc(1, EXT_PLATFORM_MEM_SIZE);
+    if (!m->platform_mem) goto fail;
+    m->platform_alt_mem = calloc(1, EXT_PLATFORM_ALT_MEM_SIZE);
+    if (!m->platform_alt_mem) goto fail;
     m->low_table = calloc(1, EXT_LOW_TABLE_SIZE);
     if (!m->low_table) goto fail;
     m->heap_top = EXT_HEAP_ADDR;
@@ -3536,6 +3702,14 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     if (err != UC_ERR_OK) goto fail;
     err = uc_mem_map_ptr(m->uc, EXT_BASE_ADDR, EXT_MEM_SIZE, UC_PROT_ALL, m->mem);
     if (err != UC_ERR_OK) goto fail;
+    err = uc_mem_map_ptr(m->uc, EXT_PLATFORM_MEM_ADDR,
+                         EXT_PLATFORM_MEM_SIZE, UC_PROT_ALL,
+                         m->platform_mem);
+    if (err != UC_ERR_OK) goto fail;
+    err = uc_mem_map_ptr(m->uc, EXT_PLATFORM_ALT_MEM_ADDR,
+                         EXT_PLATFORM_ALT_MEM_SIZE, UC_PROT_ALL,
+                         m->platform_alt_mem);
+    if (err != UC_ERR_OK) goto fail;
     init_table(m);
     /* 预解析 MRP，缓存所有条目，避免 ARM ext 做极慢的 MRP 索引扫描 */
     parse_mrp_cache(m, mr_get_pack_filename());
@@ -3545,7 +3719,12 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     void *code_dst = arm_ptr(m, EXT_CODE_ADDR);
     if (!code_dst) goto fail;
     memcpy(code_dst, code, len);
-    m->wrapper_timer_dispatch_addr = find_wrapper_timer_dispatch(code, len);
+    m->wrapper_timer_dispatch_addr = find_wrapper_timer_dispatch(code, len,
+                                                                 &m->chain_walker_thunk_addr);
+    if (getenv("VMRP_ARM_EXT_TRACE")) {
+        printf("arm_ext_executor: wrapper_timer_dispatch=0x%X chain_walker_thunk=0x%X\n",
+               m->wrapper_timer_dispatch_addr, m->chain_walker_thunk_addr);
+    }
     patch_wrapper_stack_size(m);
     uint32_t table = EXT_TABLE_ADDR;
     memcpy(arm_ptr(m, EXT_CODE_ADDR), &table, 4);
@@ -3563,6 +3742,18 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     uc_hook restore_hook;
     err = uc_hook_add(m->uc, &restore_hook, UC_HOOK_BLOCK, hook_restore_r9, m,
                       EXT_BASE_ADDR, EXT_BASE_ADDR + EXT_MEM_SIZE - 1);
+    if (err != UC_ERR_OK) goto fail;
+    uc_hook restore_platform_hook;
+    err = uc_hook_add(m->uc, &restore_platform_hook, UC_HOOK_BLOCK,
+                      hook_restore_r9, m,
+                      EXT_PLATFORM_MEM_ADDR,
+                      EXT_PLATFORM_MEM_ADDR + EXT_PLATFORM_MEM_SIZE - 1);
+    if (err != UC_ERR_OK) goto fail;
+    uc_hook restore_platform_alt_hook;
+    err = uc_hook_add(m->uc, &restore_platform_alt_hook, UC_HOOK_BLOCK,
+                      hook_restore_r9, m,
+                      EXT_PLATFORM_ALT_MEM_ADDR,
+                      EXT_PLATFORM_ALT_MEM_ADDR + EXT_PLATFORM_ALT_MEM_SIZE - 1);
     if (err != UC_ERR_OK) goto fail;
     uc_hook screen_hook;
     if (m->screen_addr && m->screen_len) {
@@ -3799,6 +3990,9 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         }
     }
 
+    /* chain walker dispatch 的 supplementary_init_done 计数在
+     * arm_ext_call_dispatch 内部管理，这里不需要额外门控。 */
+
     uint32_t rw_base = 0;
     memcpy(&rw_base, arm_ptr(m, call_p_addr), 4);
     if (getenv("VMRP_ARM_EXT_DIAG")) {
@@ -3823,8 +4017,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     uint32_t _ac_grw = 0, _ac_s8_pre = 0;
     if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
         memcpy(&_ac_grw, arm_ptr(m, m->primary_p_addr), 4);
-    if (_ac_grw && arm_ptr(m, _ac_grw + GAME_TIMER_HEAD_OFFSET))
-        memcpy(&_ac_s8_pre, arm_ptr(m, _ac_grw + GAME_TIMER_HEAD_OFFSET), 4);
+    _ac_s8_pre = read_game_timer_head(m, _ac_grw);
     int call_modal_snapshot_candidate = 0;
     /* 非模态状态下的 code=1 事件可能触发子模块加载，需要事先保存 game
      * 的快照以便子模块关闭后恢复。事件经 wrapper 路由时 call_p_addr
@@ -3839,6 +4032,19 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         arm_ext_save_modal_fg_snapshot(m);
     }
 
+    /* extChunk[8]（game helper 指针）在 wrapper ARM 代码执行期间会被清零，
+     * code=2 定时器回调中 wrapper 通过 blx extChunk[8] 转发给 game helper，
+     * 若该槽已被先前回调清零，后续定时器将无法到达 game，导致 game 的图像
+     * 加载初始化仅执行一次。对所有经 wrapper 转发的事件统一修复。 */
+    if (has_separate_wrapper && modal_ext_chunk &&
+        m->primary_helper_addr && arm_ptr(m, modal_ext_chunk + 8)) {
+        uint32_t cur_helper = 0;
+        memcpy(&cur_helper, arm_ptr(m, modal_ext_chunk + 8), 4);
+        if (!cur_helper) {
+            memcpy(arm_ptr(m, modal_ext_chunk + 8), &m->primary_helper_addr, 4);
+        }
+    }
+
     uint16 *saved_screenBuf = NULL;
     uint32_t present_depth_before = 0;
     enter_screen_context(m, &saved_screenBuf, &present_depth_before);
@@ -3849,7 +4055,16 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     }
     m->current_p_addr = call_p_addr;
     m->current_helper_addr = call_helper_addr;
+    int prev_in_dispatch = m->in_dispatch;
+    /*
+     * Runtime event/timer callbacks may query the ARM EXT device band while
+     * building child graphics dispatch tables.  Lifecycle calls such as code=0
+     * still run during startVmrp(), before the E2E control socket exists, and
+     * must keep native startup behavior.
+     */
+    if (code == 1 || code == 2) m->in_dispatch = 1;
     int call_ret = run_arm_with_sp(m, call_helper_addr, sp);
+    m->in_dispatch = prev_in_dispatch;
     m->current_p_addr = 0;
     m->current_helper_addr = 0;
     sync_timer_state_from_arm(m);
@@ -3872,13 +4087,56 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         internal_slot_write(m, m->mr_timer_state_slot, 1);
     }
 
+    /* wrapper helper code=2 自己消费 timer delta chain。宿主侧只负责在
+     * timer tick 到达时调用 helper，不伪造 wrapper busy 状态或 code=5。 */
+
     /* arm_ext_call 后检查 game timer head (state[8]) 变化：wrapper 的
      * suspend 会清零 game_rw[0x8C]，保存旧值以便 resume 时恢复。 */
     if (_ac_grw && _ac_s8_pre) {
-        uint32_t _ac_s8_post = 0;
-        memcpy(&_ac_s8_post, arm_ptr(m, _ac_grw + GAME_TIMER_HEAD_OFFSET), 4);
+        uint32_t _ac_s8_post = read_game_timer_head(m, _ac_grw);
+        if (getenv("VMRP_ARM_EXT_DIAG")) {
+            printf("DIAG game_timer_head grw=0x%X pre=0x%X post=0x%X code=%d\n",
+                   _ac_grw, _ac_s8_pre, _ac_s8_post, code);
+        }
         if (_ac_s8_post == 0) {
             m->saved_game_timer_head = _ac_s8_pre;
+        }
+    } else if (_ac_grw && !_ac_s8_pre && getenv("VMRP_ARM_EXT_DIAG")) {
+        static int scan_done = 0;
+        printf("DIAG game_timer_head_zero grw=0x%X code=%d\n", _ac_grw, code);
+        /* 首次 code=2 时扫描 wrapper RW 的定时器链表区 */
+        if (code == 2 && !scan_done) {
+            scan_done = 1;
+            /* 扫描 wrapper RW (at m->p_addr → rw) */
+            uint32_t wrw = arm_ext_wrapper_rw_base_(m);
+            if (wrw) {
+                printf("DIAG wrapper_rw_scan wrapperRW=0x%X\n", wrw);
+                /* 检查事件队列忙标志和定时器链表 */
+                uint32_t busy_flag = arm_ext_read_u32_or_zero_(m, wrw + 4u);
+                uint32_t timer_chain = arm_ext_read_u32_or_zero_(m, wrw + 0x274u);
+                uint32_t ready_queue = arm_ext_read_u32_or_zero_(m, wrw + 8u);
+                uint32_t pending_queue = arm_ext_read_u32_or_zero_(m, wrw + 0x2Cu);
+                printf("DIAG   wrw+0x04 (busy) = 0x%X\n", busy_flag);
+                printf("DIAG   wrw+0x08 (ready_q) = 0x%X\n", ready_queue);
+                printf("DIAG   wrw+0x2C (pending_q) = 0x%X\n", pending_queue);
+                printf("DIAG   wrw+0x274 (timer_chain) = 0x%X\n", timer_chain);
+                if (timer_chain) {
+                    uint32_t node_magic = arm_ext_read_u32_or_zero_(m, timer_chain);
+                    uint32_t node_interval = arm_ext_read_u32_or_zero_(m, timer_chain + 4);
+                    uint32_t node_counter = arm_ext_read_u32_or_zero_(m, timer_chain + 8);
+                    uint32_t node_extchunk = arm_ext_read_u32_or_zero_(m, timer_chain + 12);
+                    uint32_t node_next = arm_ext_read_u32_or_zero_(m, timer_chain + 24);
+                    printf("DIAG   timer_node[0] magic=0x%X interval=%d counter=%d extchunk=0x%X next=0x%X\n",
+                           node_magic, node_interval, node_counter, node_extchunk, node_next);
+                }
+            }
+            /* 扫描 game_rw 更大范围找定时器 */
+            printf("DIAG game_rw_scan grw=0x%X\n", _ac_grw);
+            for (uint32_t off = 0x80; off < 0xC0; off += 4) {
+                uint32_t v = arm_ext_read_u32_or_zero_(m, _ac_grw + off);
+                if (v)
+                    printf("DIAG   grw+0x%02X = 0x%X\n", off, v);
+            }
         }
     }
     uint32_t modal_suspend_depth_post = modal_suspend_depth_pre;
@@ -3924,9 +4182,8 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
             uint32_t grw = 0;
             if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
                 memcpy(&grw, arm_ptr(m, m->primary_p_addr), 4);
-            if (grw && arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET))
-                memcpy(arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET),
-                       &m->saved_game_timer_head, 4);
+            if (grw)
+                write_game_timer_head(m, grw, m->saved_game_timer_head);
             m->saved_game_timer_head = 0;
         }
         if (m->modal_screen_snapshot_valid &&
@@ -3989,7 +4246,8 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
      * 事件导致 0->1 进入模态时也必须消费；12-byte 内部转发仍返回
      * helper 的真实 R0，供非模态前台模块在清掉可见层后继续把事件交给 game/Lua。 */
     if (wrapper_raw_event_routed || wrapper_entered_modal) return MR_SUCCESS;
-    return (int32_t)reg_read32(m->uc, UC_ARM_REG_R0);
+    int32_t call_result = (int32_t)reg_read32(m->uc, UC_ARM_REG_R0);
+    return call_result;
 }
 
 uint32 arm_ext_helper_addr(ArmExtModule *m) {
@@ -4026,6 +4284,9 @@ uint32 arm_ext_primary_helper(ArmExtModule *m) {
      * code=2 路由，由当前 timer owner 选择 wrapper helper。mpc/game.ext 的
      * extChunk[0x28] 还可指向后续嵌套 EXT 的 code dispatcher，它的 timer
      * 已通过 table[31]/[32] veneer 接入，不能按 wrapper tick 调用。 */
+    /* chain_walker_thunk 通过运行时 ARM 代码 patch 集成到 wrapper 的
+     * code=2 分支中，不依赖外部时序门控。这是通用的 wrapper timer dispatch
+     * 机制修复。仅对有 wrapper_timer_dispatch_addr 的 wrapper 启用 dispatch。 */
     ret = (dispatch && (dispatch & 1u) &&
            dispatch_addr >= EXT_CODE_ADDR &&
            dispatch_addr < EXT_CODE_ADDR + m->code_len &&
@@ -4075,11 +4336,7 @@ uint32 arm_ext_read_timer_queue(ArmExtModule *m) {
     if (!m || !m->primary_p_addr) return 0;
     uint32_t rw = 0;
     memcpy(&rw, arm_ptr(m, m->primary_p_addr), 4);
-    if (!rw) return 0;
-    uint32_t val = 0;
-    if (arm_ptr(m, rw + GAME_TIMER_HEAD_OFFSET))
-        memcpy(&val, arm_ptr(m, rw + GAME_TIMER_HEAD_OFFSET), 4);
-    return val;
+    return read_game_timer_head(m, rw);
 }
 
 
@@ -4103,6 +4360,11 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
         m->timer_p_addr == m->p_addr &&
         m->timer_helper_addr == m->helper_addr &&
         m->wrapper_timer_dispatch_addr != 0;
+    /* 19KB cfunction.ext 的 chain walker thunk：wrapper 不使用宿主直接
+     * 驱动（wrapper_timer_dispatch_addr==0），但有 chain_walker_thunk_addr。
+     * 宿主 timer 每次触发时让 chain walker 遍历 timer chain，通过
+     * 0xE83590 在 wrapper 栈上下文中安全调用 game helper(code=5)。 */
+    int chain_walker_owner = !wrapper_timer_owner && m->chain_walker_thunk_addr != 0;
     if (wrapper_timer_owner) {
         /*
          * wrapper 自己的 table[31] timerStart 来自 timer queue 管理函数
@@ -4112,6 +4374,8 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
          * 0x66FFBD 回调被消费并显示 netpay 付费界面。
          */
         func = m->wrapper_timer_dispatch_addr;
+    } else if (chain_walker_owner) {
+        func = m->chain_walker_thunk_addr;
     }
     if (getenv("VMRP_ARM_EXT_DIAG")) {
         printf("DIAG call_dispatch nestedP=0x%X chunk=0x%X func=0x%X param=0x%X wrapperOwner=%d timerP=0x%X timerH=0x%X\n",
@@ -4144,8 +4408,8 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     uint32_t _game_rw = 0, _s8_pre = 0;
     if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
         memcpy(&_game_rw, arm_ptr(m, m->primary_p_addr), 4);
-    if (_game_rw && arm_ptr(m, _game_rw + GAME_TIMER_HEAD_OFFSET))
-        memcpy(&_s8_pre, arm_ptr(m, _game_rw + GAME_TIMER_HEAD_OFFSET), 4);
+    if (_game_rw)
+        _s8_pre = read_game_timer_head(m, _game_rw);
     uint32_t suspend_depth_pre = 0;
     if (arm_ptr(m, ext_chunk + 0x34))
         memcpy(&suspend_depth_pre, arm_ptr(m, ext_chunk + 0x34), 4);
@@ -4164,11 +4428,50 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     uint32_t present_depth_before = 0;
     enter_screen_context(m, &saved_screenBuf, &present_depth_before);
     sync_internal_state_to_arm(m);
+    /* 19KB cfunction.ext 的 timer dispatcher 是 chain walker；它从
+     * wrapper_rw+0x190 取节点并调用节点回调 0xE83590。该回调会读取
+     * extChunk[8] 调 game helper(code=5)，所以这里只修复可能被 wrapper
+     * 清零的 helper 槽，不篡改 suspend depth。 */
+    uint32_t depth_patched = 0;
+    if ((wrapper_timer_owner || chain_walker_owner) && suspend_depth_pre == 0 &&
+        arm_ptr(m, ext_chunk + 0x34)) {
+        /* 确保 extChunk[8] = game helper (wrapper 代码可能已清零) */
+        if (m->primary_helper_addr && arm_ptr(m, ext_chunk + 8)) {
+            memcpy(arm_ptr(m, ext_chunk + 8), &m->primary_helper_addr, 4);
+        }
+        /* chain walker 遍历 timer chain 节点，节点的 extChunk 可能指向
+         * 任一嵌套模块（如 graphics.ext）。确保所有嵌套模块的 extChunk[8]
+         * helper 指针有效，否则 0xE83590 的 blx extChunk[8] 会跳到 0。 */
+        if (chain_walker_owner) {
+            for (int ci = 0; ci < m->nested_module_count; ++ci) {
+                ArmExtNestedModule *mod = &m->nested_modules[ci];
+                if (!mod->p_addr || !mod->helper_addr) continue;
+                uint32_t child_chunk = 0;
+                if (arm_ptr(m, mod->p_addr + 12))
+                    memcpy(&child_chunk, arm_ptr(m, mod->p_addr + 12), 4);
+                if (child_chunk && arm_ptr(m, child_chunk + 8)) {
+                    uint32_t cur = 0;
+                    memcpy(&cur, arm_ptr(m, child_chunk + 8), 4);
+                    if (!cur) {
+                        memcpy(arm_ptr(m, child_chunk + 8), &mod->helper_addr, 4);
+                    }
+                }
+            }
+        }
+    }
     m->current_p_addr = m->p_addr;
     m->current_helper_addr = m->helper_addr;
+    int prev_in_dispatch = m->in_dispatch;
+    m->in_dispatch = 1;
     int ret = run_arm_with_sp(m, func, sp);
+    m->in_dispatch = prev_in_dispatch;
     m->current_p_addr = 0;
     m->current_helper_addr = 0;
+    /* 旧版 queue consumer 兼容路径可能会临时修改 suspend depth；
+     * 当前 19KB chain walker 不需要该 patch，正常保持 no-op。 */
+    if (depth_patched && arm_ptr(m, ext_chunk + 0x34)) {
+        memcpy(arm_ptr(m, ext_chunk + 0x34), &suspend_depth_pre, 4);
+    }
     sync_timer_state_from_arm(m);
     leave_screen_context(m, saved_screenBuf, present_depth_before);
     capture_timer_dispatches(m);
@@ -4180,10 +4483,17 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
             memcpy(&queue_head, arm_ptr(m, q + 12), 4);
             memcpy(&queue_base_ms, arm_ptr(m, q + 20), 4);
         }
-        if (queue_head) {
+        /* 19KB wrapper timer walker 使用 wrapper_rw+0x190 的桶数组；旧
+         * 0x274 位置只是早期误判的诊断偏移，不能用来决定宿主 timer 生死。 */
+        uint32_t active_index = arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x18u);
+        uint32_t tc_after = arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x190u + active_index * 8u);
+        if (queue_head || tc_after) {
             mr_timer_state = 1;
             m->host_timer_pending = 1;
             internal_slot_write(m, m->mr_timer_state_slot, 1);
+            /* ARM 侧可能未调用 table[31] timerStart 重新注册 SDL 定时器，
+             * 需要宿主主动启动一次以保证下一个 tick 到达 */
+            mr_timerStart((uint16)timer_interval);
             /*
              * 0xE83A80 可能只消费到期节点并留下后续节点；若 ARM 侧没有
              * 再次调用 table[31]，宿主仍要保持 timer running，下一 tick
@@ -4196,6 +4506,32 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
             }
         }
     }
+    /* chain walker owner: 保持宿主 timer 运行并恢复 suspend depth */
+    if (chain_walker_owner) {
+        uint32_t active_index = arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x18u);
+        uint32_t tc_after = arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x190u + active_index * 8u);
+        if (tc_after) {
+            mr_timer_state = 1;
+            m->host_timer_pending = 1;
+            internal_slot_write(m, m->mr_timer_state_slot, 1);
+            mr_timerStart((uint16)timer_interval);
+        }
+        /* 0xE83590 递减了 extChunk[0x34]，恢复所有嵌套模块的 suspend depth */
+        if (arm_ptr(m, ext_chunk + 0x34))
+            memcpy(arm_ptr(m, ext_chunk + 0x34), &suspend_depth_pre, 4);
+        for (int ci = 0; ci < m->nested_module_count; ++ci) {
+            ArmExtNestedModule *mod = &m->nested_modules[ci];
+            if (!mod->p_addr) continue;
+            uint32_t child_chunk = 0;
+            if (arm_ptr(m, mod->p_addr + 12))
+                memcpy(&child_chunk, arm_ptr(m, mod->p_addr + 12), 4);
+            if (child_chunk && child_chunk != ext_chunk &&
+                arm_ptr(m, child_chunk + 0x34)) {
+                uint32_t zero = 0;
+                memcpy(arm_ptr(m, child_chunk + 0x34), &zero, 4);
+            }
+        }
+    }
 
     /* wrapper dispatch 可能清零 game timer head（模态框进入时），保存旧值 */
     /* dispatch 后重新读 game_rw（ARM 代码可能修改了 primary_p_addr[0]） */
@@ -4203,9 +4539,7 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
         uint32_t _grw2 = 0;
         if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr))
             memcpy(&_grw2, arm_ptr(m, m->primary_p_addr), 4);
-        uint32_t _s8_post = 0;
-        if (_grw2 && arm_ptr(m, _grw2 + GAME_TIMER_HEAD_OFFSET))
-            memcpy(&_s8_post, arm_ptr(m, _grw2 + GAME_TIMER_HEAD_OFFSET), 4);
+        uint32_t _s8_post = read_game_timer_head(m, _grw2);
         if (_s8_post == 0 && _s8_pre != 0) {
             m->saved_game_timer_head = _s8_pre;
         }
@@ -4227,9 +4561,8 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
             arm_ext_restore_modal_fg_snapshot(m);
             arm_ext_reset_child_modules(m);
             if (m->saved_game_timer_head) {
-                if (_grw2 && arm_ptr(m, _grw2 + GAME_TIMER_HEAD_OFFSET))
-                    memcpy(arm_ptr(m, _grw2 + GAME_TIMER_HEAD_OFFSET),
-                           &m->saved_game_timer_head, 4);
+                if (_grw2)
+                    write_game_timer_head(m, _grw2, m->saved_game_timer_head);
                 m->saved_game_timer_head = 0;
             }
             if (m->modal_screen_snapshot_valid &&
@@ -4280,7 +4613,10 @@ int arm_ext_invoke0(ArmExtModule *m, uint32 func, int32 *ret_out) {
     sync_internal_state_to_arm(m);
     m->current_p_addr = m->active_p_addr ? m->active_p_addr : m->p_addr;
     m->current_helper_addr = func;
+    int prev_in_dispatch = m->in_dispatch;
+    m->in_dispatch = 1;
     int call_ret = run_arm(m, func);
+    m->in_dispatch = prev_in_dispatch;
     m->current_p_addr = 0;
     m->current_helper_addr = 0;
     sync_timer_state_from_arm(m);
@@ -4309,7 +4645,10 @@ int arm_ext_invoke3(ArmExtModule *m, uint32 func, uint32 arg0, uint32 arg1,
     sync_internal_state_to_arm(m);
     m->current_p_addr = m->active_p_addr ? m->active_p_addr : m->p_addr;
     m->current_helper_addr = func;
+    int prev_in_dispatch = m->in_dispatch;
+    m->in_dispatch = 1;
     int call_ret = run_arm(m, func);
+    m->in_dispatch = prev_in_dispatch;
     m->current_p_addr = 0;
     m->current_helper_addr = 0;
     sync_timer_state_from_arm(m);
@@ -4347,6 +4686,8 @@ void arm_ext_unload(ArmExtModule *m) {
     arm_ext_free_row_spans(&m->screen_present);
     arm_ext_free_row_spans(&m->foreground_cover);
     free(m->low_table);
+    free(m->platform_mem);
+    free(m->platform_alt_mem);
     if (m->mem_is_mmap) {
 #ifdef _MSC_VER
         VirtualFree(m->mem, 0, MEM_RELEASE);

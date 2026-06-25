@@ -10,7 +10,7 @@ describe("gghjt pixel flow", () => {
     vmrp = undefined;
   });
 
-  it("下载付费插件 - 返回", async () => {
+  it("下载付费插件 - 直接返回", async () => {
     // 删除后，继续游戏会进入下载netpay插件界面。
     fs.rmSync('mythroad/plugins/netpay.mrp', { force: true });
     fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
