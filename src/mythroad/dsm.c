@@ -1,6 +1,7 @@
 #include "./include/dsm.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include "./include/encode.h"
 #include "./include/fixR9.h"
 #include "./include/mem.h"
@@ -55,8 +56,18 @@ static uint32 dsmStartTime;  //虚拟机初始化时间，用来计算系统运�
 //////////////////////////////////////////////////////////////////
 
 void mr_printf(const char *format, ...) {
+    static int log_checked = 0;
+    static int log_enabled = 0;
     char printfBuf[512];
     va_list params;
+
+    if (!log_checked) {
+        log_enabled = getenv("VMRP_LOG") != NULL;
+        log_checked = 1;
+    }
+    if (!log_enabled) {
+        return;
+    }
 
     va_start(params, format);
     vsnprintf_(printfBuf, sizeof(printfBuf), format, params);
@@ -1283,21 +1294,36 @@ uint16 *mr_getScreenBuffer(void) {
 #endif
 
 void dsm_prepare(void) {
-    fprintf(stderr, "[dsm_prepare] mkDir...\n"); fflush(stderr);
+    if (getenv("VMRP_LOG")) {
+        fprintf(stderr, "[dsm_prepare] mkDir...\n");
+        fflush(stderr);
+    }
     dsmInFuncs->mkDir(MYTHROAD_PATH);
     dsmInFuncs->mkDir(DSM_HIDE_DRIVE);
     dsmInFuncs->mkDir(DSM_DRIVE_A);
     dsmInFuncs->mkDir(DSM_DRIVE_B);
     dsmInFuncs->mkDir(DSM_DRIVE_X);
-    fprintf(stderr, "[dsm_prepare] xl_font_sky16_init...\n"); fflush(stderr);
+    if (getenv("VMRP_LOG")) {
+        fprintf(stderr, "[dsm_prepare] xl_font_sky16_init...\n");
+        fflush(stderr);
+    }
     xl_font_sky16_init();
-    fprintf(stderr, "[dsm_prepare] xl_font_sky12_init...\n"); fflush(stderr);
+    if (getenv("VMRP_LOG")) {
+        fprintf(stderr, "[dsm_prepare] xl_font_sky12_init...\n");
+        fflush(stderr);
+    }
     xl_font_sky12_init();
-    fprintf(stderr, "[dsm_prepare] encode_init...\n"); fflush(stderr);
+    if (getenv("VMRP_LOG")) {
+        fprintf(stderr, "[dsm_prepare] encode_init...\n");
+        fflush(stderr);
+    }
     if (encode_init() == MR_FAILED) {
         LOGW("%s", "encode load fail");
     }
-    fprintf(stderr, "[dsm_prepare] done\n"); fflush(stderr);
+    if (getenv("VMRP_LOG")) {
+        fprintf(stderr, "[dsm_prepare] done\n");
+        fflush(stderr);
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////

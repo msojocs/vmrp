@@ -43,6 +43,10 @@ extern "C" {
 #define VMRP_KEY_SEND       19
 #define VMRP_KEY_SELECT     20
 
+/* Host-facing image processing modes. */
+#define VMRP_IMAGE_PROCESSING_NATIVE 0
+#define VMRP_IMAGE_PROCESSING_OPENCV 1
+
 /* Lifecycle */
 VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h);
 VMRP_EXPORT int vmrp_api_set_work_dir(const char *work_dir);
@@ -62,21 +66,32 @@ VMRP_EXPORT int vmrp_api_set_dns_map(const char *map);
 VMRP_EXPORT int vmrp_api_event(int code, int p0, int p1);
 
 /*
- * Timer: the host is responsible for scheduling.
- * After calling vmrp_api_start() or vmrp_api_event() or vmrp_api_timer(),
- * check vmrp_api_get_timer_interval(). If > 0, schedule a call to
- * vmrp_api_timer() after that many milliseconds.
+ * Timer: shared-library builds run the VM timer on a native worker thread so
+ * Flutter hosts do not need to schedule it on the UI isolate. These functions
+ * are kept for ABI compatibility with hosts that still use manual scheduling.
  */
 VMRP_EXPORT int vmrp_api_timer(void);
 VMRP_EXPORT int vmrp_api_get_timer_interval(void);
+
+/*
+ * Selects the host-facing screen conversion path. The OpenCV mode is accepted
+ * as a runtime option; builds without an OpenCV converter fall back to native.
+ */
+VMRP_EXPORT int vmrp_api_set_image_processing_mode(int mode);
+VMRP_EXPORT int vmrp_api_get_image_processing_mode(void);
 
 /*
  * Screen buffer: RGB565 format, row-major, size = width * height * 2 bytes.
  * The pointer remains valid until vmrp_api_destroy().
  * Call vmrp_api_get_screen_dirty() to check if the buffer has been updated
  * since the last call (it auto-clears the flag).
+ *
+ * The RGBA buffer is host-owned and refreshed when
+ * vmrp_api_get_screen_rgba_buffer() is called. It stays valid until the next
+ * vmrp_api_get_screen_rgba_buffer(), vmrp_api_init(), or vmrp_api_destroy().
  */
 VMRP_EXPORT const uint16_t *vmrp_api_get_screen_buffer(void);
+VMRP_EXPORT const uint8_t *vmrp_api_get_screen_rgba_buffer(void);
 VMRP_EXPORT int vmrp_api_get_screen_dirty(void);
 VMRP_EXPORT int vmrp_api_get_screen_width(void);
 VMRP_EXPORT int vmrp_api_get_screen_height(void);

@@ -4,7 +4,12 @@
 #include <errno.h>
 #include <math.h>
 #include <stdint.h>
-#ifndef _MSC_VER
+#ifdef _MSC_VER
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <pthread.h>
 #include <unistd.h>
 #endif
@@ -97,6 +102,22 @@ typedef struct {
 } NativeAudioState;
 
 static NativeAudioState native_audio;
+#if !defined(VMRP_SDL_AUDIO) && defined(_MSC_VER)
+static CRITICAL_SECTION native_audio_mutex;
+static INIT_ONCE native_audio_init_once = INIT_ONCE_STATIC_INIT;
+#elif !defined(VMRP_SDL_AUDIO)
+static pthread_mutex_t native_audio_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
+#if !defined(VMRP_SDL_AUDIO) && defined(_MSC_VER)
+static BOOL CALLBACK native_audio_init_lock(PINIT_ONCE init_once, PVOID parameter, PVOID *context) {
+    (void)init_once;
+    (void)parameter;
+    (void)context;
+    InitializeCriticalSection(&native_audio_mutex);
+    return TRUE;
+}
+#endif
 
 /* dsm.h 在 VMRP 构建下只暴露平台函数表，不带 mrporting.h 里的声音枚举。
  * 这里固定使用 mrc_base.h/mrporting.h 的 ABI 数值，保证 native 层解读一致。 */
@@ -409,6 +430,11 @@ static void native_audio_lock(void) {
     if (native_audio.device) {
         SDL_LockAudioDevice(native_audio.device);
     }
+#elif defined(_MSC_VER)
+    InitOnceExecuteOnce(&native_audio_init_once, native_audio_init_lock, NULL, NULL);
+    EnterCriticalSection(&native_audio_mutex);
+#elif !defined(_MSC_VER)
+    pthread_mutex_lock(&native_audio_mutex);
 #endif
 }
 
@@ -417,6 +443,10 @@ static void native_audio_unlock(void) {
     if (native_audio.device) {
         SDL_UnlockAudioDevice(native_audio.device);
     }
+#elif defined(_MSC_VER)
+    LeaveCriticalSection(&native_audio_mutex);
+#elif !defined(_MSC_VER)
+    pthread_mutex_unlock(&native_audio_mutex);
 #endif
 }
 
@@ -972,7 +1002,10 @@ int native_audio_channels(void) {
 }
 
 int native_audio_is_active(void) {
-    return native_audio.source != AUDIO_SOURCE_NONE;
+    native_audio_lock();
+    int active = native_audio.source != AUDIO_SOURCE_NONE;
+    native_audio_unlock();
+    return active;
 }
 
 int native_audio_render_s16le(void *buffer, int frames) {
@@ -998,7 +1031,9 @@ void native_dsm_funcs_destroy(void) {
         native_audio.device = 0;
     }
 #endif
+    native_audio_lock();
     native_audio_clear_locked(&native_audio);
+    native_audio_unlock();
 #ifdef __linux__
 #ifdef __x86_64__
     if (native_mem_base != NULL) {
