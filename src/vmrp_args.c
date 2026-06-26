@@ -26,7 +26,7 @@
 #include "./include/fileLib.h"
 #include "./include/utils.h"
 
-#define VMRP_DEFAULT_DNS_MAP "wap.skmeg.com->159.75.119.124;rop.skymobiapp.com->127.0.0.1;spd.skymobiapp.com->159.75.119.124"
+#define VMRP_DEFAULT_DNS_MAP "wap.skmeg.com->159.75.119.124;rop.skymobiapp.com->159.75.119.124;spd.skymobiapp.com->159.75.119.124"
 
 #ifdef _WIN32
 static int wide_to_utf8(const wchar_t *wide, char *output, size_t output_size) {

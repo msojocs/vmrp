@@ -123,6 +123,9 @@ static uint32_t arm_addr(ArmExtModule *m, const void *ptr) {
     if (m && m->platform_mem && p >= m->platform_mem &&
         p < m->platform_mem + EXT_PLATFORM_MEM_SIZE)
         return (uint32_t)(p - m->platform_mem) + EXT_PLATFORM_MEM_ADDR;
+    if (m && m->platform_io_mem && p >= m->platform_io_mem &&
+        p < m->platform_io_mem + EXT_PLATFORM_IO_MEM_SIZE)
+        return (uint32_t)(p - m->platform_io_mem) + EXT_PLATFORM_IO_MEM_ADDR;
     if (m && m->platform_alt_mem && p >= m->platform_alt_mem &&
         p < m->platform_alt_mem + EXT_PLATFORM_ALT_MEM_SIZE)
         return (uint32_t)(p - m->platform_alt_mem) + EXT_PLATFORM_ALT_MEM_ADDR;
@@ -3723,6 +3726,8 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     if (!m->mem) goto fail;
     m->platform_mem = calloc(1, EXT_PLATFORM_MEM_SIZE);
     if (!m->platform_mem) goto fail;
+    m->platform_io_mem = calloc(1, EXT_PLATFORM_IO_MEM_SIZE);
+    if (!m->platform_io_mem) goto fail;
     m->platform_alt_mem = calloc(1, EXT_PLATFORM_ALT_MEM_SIZE);
     if (!m->platform_alt_mem) goto fail;
     m->low_table = calloc(1, EXT_LOW_TABLE_SIZE);
@@ -3742,6 +3747,17 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     err = uc_mem_map_ptr(m->uc, EXT_PLATFORM_MEM_ADDR,
                          EXT_PLATFORM_MEM_SIZE, UC_PROT_ALL,
                          m->platform_mem);
+    if (err != UC_ERR_OK) goto fail;
+    /*
+     * MTK firmware uses 0x80000000-class addresses for ROM/MMIO/platform
+     * state. Some EXT libraries probe these addresses and then keep small
+     * halfword tables under that band (for example base+4, +8, ...). Keep the
+     * band ARM-visible so those data probes behave like handset memory
+     * instead of crashing on an unmapped read.
+     */
+    err = uc_mem_map_ptr(m->uc, EXT_PLATFORM_IO_MEM_ADDR,
+                         EXT_PLATFORM_IO_MEM_SIZE, UC_PROT_ALL,
+                         m->platform_io_mem);
     if (err != UC_ERR_OK) goto fail;
     err = uc_mem_map_ptr(m->uc, EXT_PLATFORM_ALT_MEM_ADDR,
                          EXT_PLATFORM_ALT_MEM_SIZE, UC_PROT_ALL,
@@ -3785,6 +3801,12 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
                       hook_restore_r9, m,
                       EXT_PLATFORM_MEM_ADDR,
                       EXT_PLATFORM_MEM_ADDR + EXT_PLATFORM_MEM_SIZE - 1);
+    if (err != UC_ERR_OK) goto fail;
+    uc_hook restore_platform_io_hook;
+    err = uc_hook_add(m->uc, &restore_platform_io_hook, UC_HOOK_BLOCK,
+                      hook_restore_r9, m,
+                      EXT_PLATFORM_IO_MEM_ADDR,
+                      EXT_PLATFORM_IO_MEM_ADDR + EXT_PLATFORM_IO_MEM_SIZE - 1);
     if (err != UC_ERR_OK) goto fail;
     uc_hook restore_platform_alt_hook;
     err = uc_hook_add(m->uc, &restore_platform_alt_hook, UC_HOOK_BLOCK,
@@ -4742,6 +4764,7 @@ void arm_ext_unload(ArmExtModule *m) {
     arm_ext_free_row_spans(&m->foreground_cover);
     free(m->low_table);
     free(m->platform_mem);
+    free(m->platform_io_mem);
     free(m->platform_alt_mem);
     if (m->mem_is_mmap) {
 #ifdef _MSC_VER
