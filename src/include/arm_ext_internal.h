@@ -25,6 +25,8 @@
  * into the normal low heap; child loaders may keep the original address. */
 #define EXT_PLATFORM_MEM_ADDR 0x40000000u
 #define EXT_PLATFORM_MEM_SIZE (2u * 1024u * 1024u)
+#define EXT_PLATFORM_IO_MEM_ADDR 0x80000000u
+#define EXT_PLATFORM_IO_MEM_SIZE (18u * 1024u * 1024u)
 #define EXT_PLATFORM_ALT_MEM_ADDR 0xA0000000u
 #define EXT_PLATFORM_ALT_MEM_SIZE (2u * 1024u * 1024u)
 /* 低地址表大小。部分游戏（如 gwkdl）通过读取 EXT table 区域以外的低地址
@@ -86,6 +88,7 @@ struct ArmExtModule {
     uint8_t *mem;
     uint8_t *low_table;
     uint8_t *platform_mem;
+    uint8_t *platform_io_mem;
     uint8_t *platform_alt_mem;
     uint32_t heap_top;
     uint32_t code_len;
@@ -217,6 +220,10 @@ static inline void *arm_ptr(ArmExtModule *m, uint32_t addr) {
         addr >= EXT_PLATFORM_MEM_ADDR &&
         addr - EXT_PLATFORM_MEM_ADDR < EXT_PLATFORM_MEM_SIZE)
         return m->platform_mem + (addr - EXT_PLATFORM_MEM_ADDR);
+    if (m->platform_io_mem &&
+        addr >= EXT_PLATFORM_IO_MEM_ADDR &&
+        addr - EXT_PLATFORM_IO_MEM_ADDR < EXT_PLATFORM_IO_MEM_SIZE)
+        return m->platform_io_mem + (addr - EXT_PLATFORM_IO_MEM_ADDR);
     if (m->platform_alt_mem &&
         addr >= EXT_PLATFORM_ALT_MEM_ADDR &&
         addr - EXT_PLATFORM_ALT_MEM_ADDR < EXT_PLATFORM_ALT_MEM_SIZE)

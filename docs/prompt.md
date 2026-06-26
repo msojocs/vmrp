@@ -290,8 +290,7 @@ my_recv(s:2): recv=0, errno=11
 充分利用子Agent。
 记得存储记忆数据。
 
-分析这个测试用例`pnpm vitest run test/e2e/gms/game-prepare.test.ts`，确定付费后，到付费成功会等待比较长的时间，看看什么原因。
-不是什么BUG，就是分析一下原因，看能不能优化速度
+分析这个应用启动失败`build/vmrp temp/RX4.5.mrp`
 
 注意trace日志量会特别大。
 不要使用xvfb。
