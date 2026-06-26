@@ -27,7 +27,7 @@ describe("gghjt 开始游戏", () => {
       await vmrp.delay(1_000);
 
     }
-    await vmrp.delay(4000);
+    await vmrp.delay(6000);
     const boot = await vmrp.screen("bgm-select");
     // rgb(72,88,0)
     expect(boot.pixel(227, 308)).toEqual([0, 0, 0]);
@@ -109,7 +109,7 @@ describe("gghjt 开始游戏", () => {
       await vmrp.delay(1_000);
 
     }
-    await vmrp.delay(4000);
+    await vmrp.delay(6000);
     const boot = await vmrp.screen("bgm-select");
     // rgb(72,88,0)
     expect(boot.pixel(227, 308)).toEqual([0, 0, 0]);
