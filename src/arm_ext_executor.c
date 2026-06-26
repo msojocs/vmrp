@@ -90,6 +90,8 @@ extern int wstrlen(char *txt);
 
 /* mrporting.h 中定义的 mr_info 返回值，此处直接使用数值避免引入额外头文件 */
 #define MRP_IS_FILE 1
+/* mr_sendSms flag requesting an asynchronous MR_SMS_RESULT event. */
+#define ARM_EXT_MR_SMS_RESULT_FLAG 16
 
 extern void _DrawPoint(int16 x, int16 y, uint16 nativecolor);
 extern void _DrawBitmap(uint16 *p, int16 x, int16 y, uint16 w, uint16 h, uint16 rop, uint16 transcoler, int16 sx, int16 sy, int16 mw);
@@ -143,6 +145,7 @@ static uint32_t reg_read32(uc_engine *uc, int reg) {
 }
 
 static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk);
+static void arm_ext_dispatch_pending_sms_result(ArmExtModule *m);
 static void arm_ext_clear_foreground_screen_owner(ArmExtModule *m);
 static void arm_ext_finish_accepted_screen_write(ArmExtModule *m,
                                                  uint32_t claim_p_addr,
@@ -2821,7 +2824,14 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 57: ret = mr_playSound((int)r0, arm_ptr(m, r1), r2, (int32)r3); break;
         case 58: ret = mr_stopSound((int)r0); break;
         /* table[59] mr_sendSms(pNumber, pContent, encode) */
-        case 59: ret = mr_sendSms(arm_str(m, r0), arm_str(m, r1), (int32)r2); break;
+        case 59: {
+            int32 flags = (int32)r2;
+            ret = mr_sendSms(arm_str(m, r0), arm_str(m, r1), flags);
+            if (ret == MR_SUCCESS && (flags & ARM_EXT_MR_SMS_RESULT_FLAG)) {
+                m->pending_sms_result = 1;
+                m->pending_sms_result_value = ret;
+            }
+        } break;
         case 60: mr_call(arm_str(m, r0)); ret = MR_SUCCESS; break;
         /* table[61] mr_getNetworkID()：返回 0 表示移动网络（MR_NET_ID_MOBILE） */
         case 61: ret = 0; break;
@@ -3923,8 +3933,17 @@ static void arm_ext_restore_modal_fg_snapshot(ArmExtModule *m) {
     m->modal_fg_snapshot_valid = 0;
 }
 
-
-
+static void arm_ext_dispatch_pending_sms_result(ArmExtModule *m) {
+    if (!m || !m->pending_sms_result || m->dispatching_sms_result) return;
+    int32_t result = m->pending_sms_result_value;
+    m->pending_sms_result = 0;
+    m->dispatching_sms_result = 1;
+    int32_t event[5] = {MR_SMS_RESULT, result, 0, 0, 0};
+    uint8 *output = NULL;
+    int32 output_len = 0;
+    (void)arm_ext_call(m, 1, event, sizeof(event), &output, &output_len);
+    m->dispatching_sms_result = 0;
+}
 
 int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_len,
                  uint8 **output, int32 *output_len) {
@@ -4269,13 +4288,14 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     uc_mem_read(m->uc, outl_addr, &arm_output_len, 4);
     if (output_len) *output_len = (int32)arm_output_len;
     if (output) *output = arm_output ? (uint8 *)arm_ptr(m, arm_output) : NULL;
+    int32_t call_result = (int32_t)reg_read32(m->uc, UC_ARM_REG_R0);
+    arm_ext_dispatch_pending_sms_result(m);
 
     /* 20-byte 原始事件已经先经过 wrapper；这里向宿主返回 MR_SUCCESS，
      * 避免同一个输入随后又经 Lua 的 12-byte _strCom(801) 转发重复处理。
      * 事件导致 0->1 进入模态时也必须消费；12-byte 内部转发仍返回
      * helper 的真实 R0，供非模态前台模块在清掉可见层后继续把事件交给 game/Lua。 */
     if (wrapper_raw_event_routed || wrapper_entered_modal) return MR_SUCCESS;
-    int32_t call_result = (int32_t)reg_read32(m->uc, UC_ARM_REG_R0);
     return call_result;
 }
 
@@ -4623,6 +4643,7 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
         return MR_SUCCESS;
     }
 
+    arm_ext_dispatch_pending_sms_result(m);
     return ret;
 }
 
@@ -4655,6 +4676,7 @@ int arm_ext_invoke0(ArmExtModule *m, uint32 func, int32 *ret_out) {
     if (call_ret != MR_SUCCESS) return MR_FAILED;
 
     if (ret_out) *ret_out = (int32)reg_read32(m->uc, UC_ARM_REG_R0);
+    arm_ext_dispatch_pending_sms_result(m);
     return MR_SUCCESS;
 }
 
@@ -4687,6 +4709,7 @@ int arm_ext_invoke3(ArmExtModule *m, uint32 func, uint32 arg0, uint32 arg1,
     if (call_ret != MR_SUCCESS) return MR_FAILED;
 
     if (ret_out) *ret_out = (int32)reg_read32(m->uc, UC_ARM_REG_R0);
+    arm_ext_dispatch_pending_sms_result(m);
     return MR_SUCCESS;
 }
 

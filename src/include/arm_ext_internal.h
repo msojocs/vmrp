@@ -179,6 +179,9 @@ struct ArmExtModule {
     int primary_child_reopen_timer_needed;
     int host_timer_pending;
     int in_dispatch;
+    int pending_sms_result;
+    int dispatching_sms_result;
+    int32_t pending_sms_result_value;
     int supplementary_code5_pending;
     int supplementary_init_done;
     uint32_t saved_game_timer_head;
