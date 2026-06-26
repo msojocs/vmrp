@@ -3,6 +3,7 @@
 #include "./include/arm_ext_internal.h"
 #include "./include/app_compat.h"
 #include "./include/network.h"
+#include "./include/fileLib.h"
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -970,7 +971,7 @@ static void parse_mrp_cache(ArmExtModule *m, const char *mrp_path) {
     m->mrp_cache_count = 0;
     if (!mrp_path || !*mrp_path) return;
 
-    FILE *fp = fopen(mrp_path, "rb");
+    FILE *fp = vmrp_host_fopen(mrp_path, "rb");
     if (!fp) return;
     fseek(fp, 0, SEEK_END);
     long sz = ftell(fp);

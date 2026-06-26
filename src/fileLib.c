@@ -14,8 +14,18 @@
 #include <zlib.h>
 
 #ifdef _WIN32
+#include <direct.h>
+#include <io.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
 #define VMRP_OPEN_PERMS (_S_IREAD | _S_IWRITE)
+#ifndef O_RAW
+#define O_RAW _O_BINARY
+#endif
 #else
+#include <unistd.h>
 #define VMRP_OPEN_PERMS (S_IRWXU | S_IRWXG | S_IRWXO)
 #endif
 
@@ -26,6 +36,65 @@ static uint32_t filef_count = 0;
 // mrc_findStart需要返回-1表示失败
 static struct rb_root dirf_map = RB_ROOT;
 static uint32_t dirf_count = 0;
+
+#ifdef _WIN32
+static wchar_t *utf8_to_wide(const char *text) {
+    int len;
+    wchar_t *wide;
+    if (!text) return NULL;
+    len = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, NULL, 0);
+    if (len <= 0) return NULL;
+    wide = (wchar_t *)malloc((size_t)len * sizeof(wchar_t));
+    if (!wide) return NULL;
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, wide, len) <= 0) {
+        free(wide);
+        return NULL;
+    }
+    return wide;
+}
+
+static int utf8_to_wide_mode(const char *mode, wchar_t *out, size_t out_len) {
+    size_t len;
+    if (!mode || !out || out_len == 0) return MR_FAILED;
+    len = strlen(mode);
+    if (len >= out_len) return MR_FAILED;
+    for (size_t i = 0; i <= len; ++i) {
+        out[i] = (wchar_t)(unsigned char)mode[i];
+    }
+    return MR_SUCCESS;
+}
+#endif
+
+FILE *vmrp_host_fopen(const char *filename, const char *mode) {
+#ifdef _WIN32
+    wchar_t *wfilename = utf8_to_wide(filename);
+    wchar_t wmode[16];
+    FILE *fp;
+    if (!wfilename) return NULL;
+    if (utf8_to_wide_mode(mode, wmode, sizeof(wmode) / sizeof(wmode[0])) != MR_SUCCESS) {
+        free(wfilename);
+        return NULL;
+    }
+    fp = _wfopen(wfilename, wmode);
+    free(wfilename);
+    return fp;
+#else
+    return fopen(filename, mode);
+#endif
+}
+
+int32_t vmrp_host_chdir(const char *name) {
+#ifdef _WIN32
+    wchar_t *wname = utf8_to_wide(name);
+    int ret;
+    if (!wname) return MR_FAILED;
+    ret = _wchdir(wname);
+    free(wname);
+    return ret == 0 ? MR_SUCCESS : MR_FAILED;
+#else
+    return chdir(name) == 0 ? MR_SUCCESS : MR_FAILED;
+#endif
+}
 
 int32_t my_open(const char *filename, uint32_t mode) {
     int f;
@@ -38,9 +107,16 @@ int32_t my_open(const char *filename, uint32_t mode) {
 
 #ifdef _WIN32
     new_mode |= O_RAW;
+    wchar_t *wfilename = utf8_to_wide(filename);
+    if (!wfilename) {
+        return 0;
+    }
+    f = _wopen(wfilename, new_mode, VMRP_OPEN_PERMS);
+    free(wfilename);
+#else
+    f = open((char *)filename, new_mode, VMRP_OPEN_PERMS);
 #endif
 
-    f = open((char *)filename, new_mode, VMRP_OPEN_PERMS);
     if (f == -1) {
         return 0;
     }
@@ -106,7 +182,21 @@ int32_t my_write(int32_t f, void *p, uint32_t l) {
 }
 
 int32_t my_rename(const char *oldname, const char *newname) {
+#ifdef _WIN32
+    wchar_t *woldname = utf8_to_wide(oldname);
+    wchar_t *wnewname = utf8_to_wide(newname);
+    int ret;
+    if (!woldname || !wnewname) {
+        free(woldname);
+        free(wnewname);
+        return MR_FAILED;
+    }
+    ret = _wrename(woldname, wnewname);
+    free(woldname);
+    free(wnewname);
+#else
     int ret = rename(oldname, newname);
+#endif
     if (ret != 0) {
         return MR_FAILED;
     }
@@ -114,16 +204,22 @@ int32_t my_rename(const char *oldname, const char *newname) {
 }
 
 int32_t my_remove(const char *filename) {
-    int ret = remove(filename);
 #ifdef _WIN32
+    wchar_t *wfilename = utf8_to_wide(filename);
+    int ret;
+    if (!wfilename) return MR_FAILED;
+    ret = _wremove(wfilename);
     if (ret != 0) {
-        DWORD attrs = GetFileAttributesA(filename);
+        DWORD attrs = GetFileAttributesW(wfilename);
         if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_READONLY) &&
             !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
-            SetFileAttributesA(filename, attrs & ~FILE_ATTRIBUTE_READONLY);
-            ret = remove(filename);
+            SetFileAttributesW(wfilename, attrs & ~FILE_ATTRIBUTE_READONLY);
+            ret = _wremove(wfilename);
         }
     }
+    free(wfilename);
+#else
+    int ret = remove(filename);
 #endif
     if (ret != 0) {
         return MR_FAILED;
@@ -132,8 +228,17 @@ int32_t my_remove(const char *filename) {
 }
 
 int32_t my_getLen(const char *filename) {
+#ifdef _WIN32
+    struct _stat s1;
+    wchar_t *wfilename = utf8_to_wide(filename);
+    int ret;
+    if (!wfilename) return -1;
+    ret = _wstat(wfilename, &s1);
+    free(wfilename);
+#else
     struct stat s1;
     int ret = stat(filename, &s1);
+#endif
     if (ret != 0)
         return -1;
     return s1.st_size;
@@ -141,23 +246,42 @@ int32_t my_getLen(const char *filename) {
 
 int32_t my_mkDir(const char *name) {
     int ret;
+#ifdef _WIN32
+    wchar_t *wname = utf8_to_wide(name);
+    if (!wname) return MR_FAILED;
+    if (_waccess(wname, F_OK) == 0) {  //检测是否已存在
+        goto ok;
+    }
+    ret = _wmkdir(wname);
+#else
     if (access(name, F_OK) == 0) {  //检测是否已存在
         goto ok;
     }
-#ifndef _WIN32
     ret = mkdir(name, S_IRWXU | S_IRWXG | S_IRWXO);
-#else
-    ret = mkdir(name);
 #endif
     if (ret != 0) {
+#ifdef _WIN32
+        free(wname);
+#endif
         return MR_FAILED;
     }
 ok:
+#ifdef _WIN32
+    free(wname);
+#endif
     return MR_SUCCESS;
 }
 
 int32_t my_rmDir(const char *name) {
+#ifdef _WIN32
+    wchar_t *wname = utf8_to_wide(name);
+    int ret;
+    if (!wname) return MR_FAILED;
+    ret = _wrmdir(wname);
+    free(wname);
+#else
     int ret = rmdir(name);
+#endif
     if (ret != 0) {
         return MR_FAILED;
     }
@@ -165,8 +289,17 @@ int32_t my_rmDir(const char *name) {
 }
 
 int32_t my_info(const char *filename) {
+#ifdef _WIN32
+    struct _stat s1;
+    wchar_t *wfilename = utf8_to_wide(filename);
+    int ret;
+    if (!wfilename) return MR_IS_INVALID;
+    ret = _wstat(wfilename, &s1);
+    free(wfilename);
+#else
     struct stat s1;
     int ret = stat(filename, &s1);
+#endif
 
     if (ret != 0) {
         return MR_IS_INVALID;
