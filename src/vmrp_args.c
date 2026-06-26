@@ -28,6 +28,30 @@
 
 #define VMRP_DEFAULT_DNS_MAP "wap.skmeg.com->159.75.119.124;rop.skymobiapp.com->127.0.0.1;spd.skymobiapp.com->159.75.119.124"
 
+#ifdef _WIN32
+static int wide_to_utf8(const wchar_t *wide, char *output, size_t output_size) {
+    int n;
+    if (!wide || !output || output_size == 0) return MR_FAILED;
+    n = WideCharToMultiByte(CP_UTF8, 0, wide, -1, output, (int)output_size, NULL, NULL);
+    return n > 0 ? MR_SUCCESS : MR_FAILED;
+}
+
+static wchar_t *utf8_to_wide(const char *text) {
+    int len;
+    wchar_t *wide;
+    if (!text) return NULL;
+    len = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, NULL, 0);
+    if (len <= 0) return NULL;
+    wide = (wchar_t *)malloc((size_t)len * sizeof(wchar_t));
+    if (!wide) return NULL;
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, wide, len) <= 0) {
+        free(wide);
+        return NULL;
+    }
+    return wide;
+}
+#endif
+
 static int is_host_absolute_path(const char *path) {
     if (!path || !*path) {
         return 0;
@@ -119,8 +143,10 @@ static int resolve_executable_dir(const char *argv0, char *output, size_t output
     path[0] = '\0';
 
 #ifdef _WIN32
-    DWORD n = GetModuleFileNameA(NULL, path, (DWORD)sizeof(path));
-    if (n > 0 && n < sizeof(path)) {
+    wchar_t wpath[PATH_MAX];
+    DWORD n = GetModuleFileNameW(NULL, wpath, (DWORD)(sizeof(wpath) / sizeof(wpath[0])));
+    if (n > 0 && n < sizeof(wpath) / sizeof(wpath[0]) &&
+        wide_to_utf8(wpath, path, sizeof(path)) == MR_SUCCESS) {
         dirname_inplace(path);
         snprintf(output, output_size, "%s", path);
         normalize_dir_path(output);
@@ -152,11 +178,16 @@ static int resolve_executable_dir(const char *argv0, char *output, size_t output
     if (argv0 && *argv0 && (strchr(argv0, '/') || strchr(argv0, '\\'))) {
         char resolved[PATH_MAX];
 #ifdef _WIN32
-        if (_fullpath(resolved, argv0, sizeof(resolved))) {
+        wchar_t *wargv0 = utf8_to_wide(argv0);
+        wchar_t wresolved[PATH_MAX];
+        if (wargv0 && _wfullpath(wresolved, wargv0,
+                                 sizeof(wresolved) / sizeof(wresolved[0])) &&
+            wide_to_utf8(wresolved, resolved, sizeof(resolved)) == MR_SUCCESS) {
             snprintf(path, sizeof(path), "%s", resolved);
         } else {
             snprintf(path, sizeof(path), "%s", argv0);
         }
+        free(wargv0);
 #else
         if (realpath(argv0, resolved)) {
             snprintf(path, sizeof(path), "%s", resolved);
@@ -228,10 +259,15 @@ static int resolve_cli_mrp_path(const char *input, char *output, size_t output_s
     }
 
 #ifdef _WIN32
-    if (_fullpath(output, input, output_size) == NULL) {
+    wchar_t *winput = utf8_to_wide(input);
+    wchar_t woutput[PATH_MAX];
+    if (!winput || _wfullpath(woutput, winput, sizeof(woutput) / sizeof(woutput[0])) == NULL ||
+        wide_to_utf8(woutput, output, output_size) != MR_SUCCESS) {
+        free(winput);
         fprintf(stderr, "vmrp: unable to resolve '%s'\n", input);
         return MR_FAILED;
     }
+    free(winput);
 #else
     (void)output_size;
     if (realpath(input, output) == NULL) {

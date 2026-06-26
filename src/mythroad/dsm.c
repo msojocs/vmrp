@@ -478,7 +478,12 @@ char *get_filename(char *outputbuf, const char *filename) {
         sprintf_(outputbuf, "%s%s", dsmWorkPath, filename);
     }
     formatPathString(outputbuf, '/');
-    if (dsmInFuncs->flags & FLAG_USE_UTF8_FS) {
+    if ((dsmInFuncs->flags & FLAG_USE_UTF8_FS) &&
+        dsmInFuncs->info(outputbuf) == MR_IS_INVALID) {
+        /* Startup paths imported by Flutter/Android are already host UTF-8
+         * (for example mythroad/中文.mrp).  Existing host files must not be
+         * converted as GB again; MRP-internal GB paths still miss this raw
+         * lookup and are converted for the UTF-8 filesystem below. */
         char *us = (char *)GBStrToUCS2BEStr((uint8 *)outputbuf, NULL);
         char *utf8s = UCS2BEStrToUTF8Str((uint8 *)us, NULL);
         strcpy2(outputbuf, utf8s);

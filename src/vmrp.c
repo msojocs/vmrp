@@ -9,14 +9,11 @@
 #include <string.h>
 #include <zlib.h>
 #ifdef _WIN32
-#include <direct.h>
 #ifndef PATH_MAX
 #define PATH_MAX 260
 #endif
-#define VMRP_CHDIR _chdir
 #else
 #include <unistd.h>
-#define VMRP_CHDIR chdir
 #endif
 
 #ifndef PATH_MAX
@@ -124,7 +121,7 @@ static int extract_ext_from_mrp(uint8 *raw, uint32 raw_len, const char *name,
 }
 
 static int smoke_arm_ext(const char *path) {
-    FILE *fp = fopen(path, "rb");
+    FILE *fp = vmrp_host_fopen(path, "rb");
     if (!fp) {
         perror(path);
         return MR_FAILED;
@@ -212,7 +209,7 @@ static int apply_config_paths(const VmrpArgs *args) {
         snprintf(vmrp_config.work_dir, sizeof(vmrp_config.work_dir), ".");
     }
 
-    if (VMRP_CHDIR(vmrp_config.work_dir) != 0) {
+    if (vmrp_host_chdir(vmrp_config.work_dir) != MR_SUCCESS) {
         fprintf(stderr, "vmrp: unable to switch working directory to '%s': %s\n",
                 vmrp_config.work_dir, strerror(errno));
         return MR_FAILED;
