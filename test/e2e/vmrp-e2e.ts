@@ -142,7 +142,7 @@ export class VmrpE2e {
     this.process = spawn(this.bin, ["--work-dir", this.workDir, mrpPath], {
       env: {
         ...process.env,
-        // SDL_VIDEODRIVER: process.env.SDL_VIDEODRIVER ?? "dummy",
+        SDL_VIDEODRIVER: process.env.SDL_VIDEODRIVER ?? "dummy",
         SDL_AUDIODRIVER: process.env.SDL_AUDIODRIVER ?? "dummy",
         VMRP_E2E_SOCKET: this.socketPath,
         VMRP_PPM_PATH: this.defaultScreenPath
