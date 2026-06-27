@@ -134,3 +134,65 @@
   - 第一次 `/simpleDownload`：`my_initNetwork(..., 'cmwap')`，`my_connect('159.75.119.124', 6009)`，`POST /simpleDownload`，返回 `HTTP/1.1 200 OK`。
   - 最后 `60s` 窗口内第二次 `/simpleDownload`：`my_initNetwork(..., 'CMNET')`，`my_getHostByName('spd.skymobiapp.com')`，`my_connect('159.75.119.124', 80)`，`my_getSocketState(3): 0`，`[my_send] cmwap off.`，`POST /simpleDownload`，`Host: spd.skymobiapp.com:6009`，返回 `HTTP/1.1 404 Not Found`。
 - PPM 检查：`/tmp/vmrp-e2e-i2ymhU/start-browser.ppm` 与 `screen.ppm` 均为 `240x320` raw pixmap；去除 PPM 头后分别有 `34708` 与 `39880` 个非零字节，证明不是黑屏路径。
+
+### 2026-06-27 19:52 当前状态重新复现
+
+- 复现命令：`VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功" --reporter=verbose`。
+- 当前失败点不是测试内 TODO throw，而是第 180 行再次按 `LEFT_SOFT` 后 `VmrpE2e.key()` 等待新绘制超时：`ERR wait_draw_timeout current=160 target>160`。
+- 保留目录：`/tmp/vmrp-e2e-w6QYxK`。
+- stdout 证据：
+  - 第一次 `/simpleDownload` 仍是下载外层 `embrw.mrp`，返回 `HTTP/1.1 200 OK`。
+  - 浏览器启动后第二次 `/simpleDownload` 改为返回 `HTTP/1.1 200 OK`，不再是旧记录里的 404。
+  - 第二次返回后立即出现 ARM EXT 异常：`UC_MEM_READ_UNMAPPED addr=0x75747879 size=4`，`crash PC=0x2CF5CA (thumb)`，`last_file=0x4134E0..0x4136C0`。
+  - 寄存器：`R4=0x75747869`，`R9=0x002C7784`，`LR=0x002CF5CB`，`PC=0x002CF5CA`。
+- 反汇编证据：
+  - 命令：`arm-none-eabi-objdump -D -b binary -m arm -M force-thumb --adjust-vma=0x2CF4CA /tmp/vmrp_crash.bin`。
+  - `0x2CF5A4` 函数是 12 字节节点的链表插入/注册逻辑；`0x2CF5CA: ldr r0, [r4, #16]` 读取链表头字段。
+  - `R4=0x75747869` 不是有效 ARM 内存指针，`R4+0x10=0x75747879` 导致崩溃；该值像文本/数据字节被当成结构指针传入。
+- 新运行时文件状态：
+  - `wasm/dist/fs/mythroad/brw/vercfg.bin` 已在本轮运行中写入，首个资源 ID 为 `0x000AAE6F`，与文档中的 `700015` 对应。
+  - 当前 `wasm/dist/fs/mythroad/plugins` 已包含 `brwshell.mrp`、`brwgui.mrp`、`brwmain.mrp`、`brwcore.mrp`、`embrw.mrp`、`netpay.mrp` 和新写入的 `dump0`；这和旧记录“只有 embrw/netpay”的条件不同。
+- 当前根因方向：
+  - 旧的外层 `frame.ext` 资源 owner/低色数启动问题已不是本轮首要失败。
+  - 需要定位第二阶段 `700015` 配置/组件处理后，哪个浏览器组件或回调把结构指针污染成 `0x75747869`。下一步用低噪声 ARM EXT DIAG 记录 table[125]/table[127]/table[25] 的文件名、长度、LR 和 nested owner，再按栈返回地址反汇编调用方。
+
+### 2026-06-27 19:55 DIAG 复现
+
+- 复现命令：`VMRP_E2E_KEEP_TMP=1 VMRP_ARM_EXT_DIAG=1 pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功" --reporter=verbose`。
+- 结果同样失败于 `ERR wait_draw_timeout current=160 target>160`；保留目录：`/tmp/vmrp-e2e-8mM4I4`。
+- 关键差异：
+  - 第二次 `/simpleDownload` 的 700015 配置返回 `HTTP/1.1 200 OK` 后，连续同步四个浏览器组件：
+    - `file=0x2CF110 len=22884 ... rw=0x2C7784`
+    - `file=0x2D4A78 len=19708 ... rw=0x2C85CC`
+    - `file=0x2D9778 len=56528 ... rw=0x2C8B3C`
+    - `file=0x2E7448 len=148224 ... rw=0x30B74C`
+  - `wasm/dist/fs/mythroad/brw/vercfg.bin` 的组件顺序是 `brwshell.mrp`、`brwgui.mrp`、`embrw.mrp`、`brwmain.mrp`、`brwcore.mrp`；最后一个 `len=148224` 与 `brwcore.ext` 解压长度一致。
+  - 崩溃时 `activeP=0x412C00 activeH=0x309181 activeRW=0x30B74C`，说明前台 active 子模块是 `brwcore.ext`。
+  - 但 CPU 寄存器为 `PC=0x2CF5CA`、`R9=0x2C7784`；该 PC/RW 属于第一个浏览器组件 `file=0x2CF110 len=22884`，不是 active 的 `brwcore.ext`。
+  - `call-post-active rw=0x30B74C` 中可以看到 brwcore RW 的多个槽指向字符串数据，如 `0x309DE8` 处为 ASCII `.librunapp`，而崩溃指令期望的是链表头/结构指针。
+- 反汇编解释：
+  - `0x2CF5A4` 函数按 `r0` 操作链表头：分配 12 字节节点，调用 memset 后读写 `[r4+16]`、`[r4+20]`。
+  - 崩溃时传入 `r0/r4=0x75747869`，`ldr r0,[r4,#16]` 访问 `0x75747879` unmapped。
+- 当前更强根因方向：
+  - 不是 700015 配置缺失，也不是 CMWAP/CMNET 端口重写。
+  - 这是多浏览器组件同步后，ARM EXT 在跨子模块/回调执行时选择了错误的 R9/P 上下文：active 已经是 `brwcore.ext`，但执行回到第一个组件的代码/RW，并把 brwcore 字符串/全局表中的内容当作第一个组件的链表结构参数使用。
+
+### 2026-06-27 23:02 最终修复复验
+
+- 本轮最终失败不是 R9 选择错误，而是 ARM-visible `table[100]`/`record[100]` 暴露宿主绝对路径后触发 fixed-buffer 溢出：
+  - `brwmain.ext` 启动代码在 `0x2D1E0C` 清空 `R9+0xBD8` 的 32 字节缓冲，随后按 `strlen(pack)`/`memcpy` 复制包名。`R9+0xBF8` 正好是后续 `0x2D1D64` 读取的链表头，长宿主路径第 32..35 字节为 `ixtu`，最终在 `0x2CF5CA: ldr r0,[r4,#16]` 访问 `0x75747879`。
+  - `frame.ext` 在 `0x2C9810` 使用 `sp+4` 的 32 字节包名缓冲，随后调用 table[125] 包装并在 `0x2C9844` 写回输出指针；长包名会先破坏该输出指针，表现为 host table[125] 收到损坏的 `r1=0x656c2c88` 或 ARM 写 `0x656c2c84`。
+- 关键修正点：
+  - `arm_ext_init_pack_names()` 已经能为根包 `/home/.../test/fixtures/dota.mrp` 生成 cwd-relative alias `test/fixtures/dota.mrp`，但 `init_table()` 仍把宿主绝对路径写入共享 `table[100]`。最终改为从启动时就暴露 `m->pack_alias`，同时让 table[40]/[42]/[46] 和 table[125] 一样通过 `arm_ext_pack_to_host_path()` 解析 alias 到宿主路径。
+  - `frame.ext` 的包名 getter 是 `0x2C916C`，它读取私有 loader 写入的 child module record 的 `record[100]`，不是共享 `EXT_TABLE[100]`。因此还必须在私有 child 同步/确认时更新 child `record[100]`。
+  - `record[100]` 的短字符串放在 executor metadata 映射区，不再放在低 heap/P 邻近区域，避免后续把包名指针误当 wrapper callback 或 P 邻接数据。
+- 修复边界：
+  - 用子模块自身代码形态检测风险：32 字节栈包名复制 + 输出指针写回、32 字节 R9-relative 全局包名复制、或 record[100] 读入紧凑 R9 状态区。没有应用名、文件名、长度特判。
+  - 对需要短包名 ABI 的 child，根据已记录的 package provenance 生成 ARM 可见短 alias，例如 `mythroad/plugins/embrw.mrp`；如果 root-relative 或 basename 仍超过 32 字节 fixed-buffer 上限，则分配 `~pN` 合成 alias，并在 executor 内维护 alias->host package 映射供 I/O 解析。
+  - host 侧 table[125] 仍通过已证明的 package owner 做 I/O 解析；没有在 table[125] 做坏指针兜底或吞异常。
+- 复验：
+  - `cmake --build build --target vmrp -j2` 通过。
+  - `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功" --reporter=verbose` 通过：`1 passed | 1 skipped`，目标用例耗时 `83429ms`。
+  - 成功保留目录 `/tmp/vmrp-e2e-GSqFvj`：stdout/stderr 无 `invalid memory`、`UC_MEM`、`UC_ERR`、`2CF5CA`、`757478`、`2C9844` 或 `pc bytes`。
+  - PPM：`start-browser.ppm` 为 `240x320`、`27` 色、`nonzero=222900`；`browser-running.ppm` 为 `240x320`、`24` 色、`nonzero=223287`、`pixel(152,146)=(240,240,240)`；最终 `screen.ppm` 为 `2954` 色。
+  - 目标用例最终断言记录第 180 行再次 `LEFT_SOFT` 前的 `drawCount`，60 秒后要求 `drawCount` 增长，并保存/检查 `browser-running.ppm`，避免只用旧帧证明存活。

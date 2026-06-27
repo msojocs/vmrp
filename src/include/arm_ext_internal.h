@@ -34,6 +34,8 @@
 #define EXT_PLATFORM_IO_MEM_SIZE (18u * 1024u * 1024u)
 #define EXT_PLATFORM_ALT_MEM_ADDR 0xA0000000u
 #define EXT_PLATFORM_ALT_MEM_SIZE (2u * 1024u * 1024u)
+#define EXT_EXECUTOR_META_ADDR 0x70000000u
+#define EXT_EXECUTOR_META_SIZE (64u * 1024u)
 /* 低地址表大小。部分游戏（如 gwkdl）通过读取 EXT table 区域以外的低地址
  * 进行内存检测；0x2000 不够大会导致读取 unmapped 地址崩溃。扩展到
  * 0x10000 (64KB) 以覆盖这些访问。 */
@@ -49,6 +51,7 @@
 #define MRP_VFD_BASE 0x7FFF0000u
 #define ARM_EXT_NESTED_MODULE_MAX 64
 #define ARM_EXT_PACK_TABLE_SIZE 128u
+#define ARM_EXT_SHORT_PACK_ALIAS_MAX 32u
 
 typedef struct mr_c_function_P_t {
     uint32 start_of_ER_RW;
@@ -71,6 +74,11 @@ typedef struct MrpVirtualFd {
     uint32_t pos;
 } MrpVirtualFd;
 
+typedef struct ArmExtShortPackAlias {
+    char alias[ARM_EXT_SHORT_PACK_ALIAS_MAX];
+    char host_path[PATH_MAX];
+} ArmExtShortPackAlias;
+
 typedef struct ArmExtNestedModule {
     uint32_t file_addr;
     uint32_t file_len;
@@ -84,6 +92,7 @@ typedef struct ArmExtNestedModule {
      * path, then clear table[100] before child resource reads. */
     uint32_t package_ram_addr;
     uint32_t package_ram_len;
+    uint32_t pack_name_addr;
     /* 观测到的该模块 GOT 桥块中 memcpy(table[3]=EXT_TABLE_ADDR+0xC) 桥所在的
      * R9 相对偏移（ARM 重定位写入该桥时记录，0=未观测）。该值仅描述本模块
      * 自己的重定位结果；private-loader RW 镜像还必须由当前 child 的 bridge-copy
@@ -104,11 +113,16 @@ struct ArmExtModule {
     uint8_t *platform_mem;
     uint8_t *platform_io_mem;
     uint8_t *platform_alt_mem;
+    uint8_t *executor_meta_mem;
+    uint32_t executor_meta_top;
     uint32_t heap_top;
     uint32_t code_len;
     const uint8_t *host_code;
     char pack_alias[128];
     char pack_host_path[PATH_MAX];
+    ArmExtShortPackAlias *short_pack_aliases;
+    uint32_t short_pack_alias_count;
+    uint32_t short_pack_alias_capacity;
     uint32_t pack_table_addr;
     uint32_t helper_addr;
     uint32_t p_addr;
@@ -250,6 +264,10 @@ static inline void *arm_ptr(ArmExtModule *m, uint32_t addr) {
         addr >= EXT_PLATFORM_ALT_MEM_ADDR &&
         addr - EXT_PLATFORM_ALT_MEM_ADDR < EXT_PLATFORM_ALT_MEM_SIZE)
         return m->platform_alt_mem + (addr - EXT_PLATFORM_ALT_MEM_ADDR);
+    if (m->executor_meta_mem &&
+        addr >= EXT_EXECUTOR_META_ADDR &&
+        addr - EXT_EXECUTOR_META_ADDR < EXT_EXECUTOR_META_SIZE)
+        return m->executor_meta_mem + (addr - EXT_EXECUTOR_META_ADDR);
     return NULL;
 }
 
