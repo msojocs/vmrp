@@ -35,3 +35,15 @@
 - **Pages:** opglqa-font-download-repeat-investigation.md
 - **Summary:** Updated "opglqa font download repeat investigation" with new content
 
+## [2026-06-27T06:49:59.956Z] ingest
+- **Pages:** dota-browser-plugin-dsm-package-provenance.md
+- **Summary:** Created new page "DOTA browser plugin DSM package provenance"
+
+## [2026-06-27T06:49:59.969Z] add
+- **Pages:** dota-browser-plugin-dsm-package-provenance.md
+- **Summary:** Created wiki page dota-browser-plugin-dsm-package-provenance.md
+
+## [2026-06-27T07:05:51.287Z] ingest
+- **Pages:** dota-browser-plugin-dsm-package-provenance.md
+- **Summary:** Updated "DOTA browser plugin DSM package provenance" with new content
+

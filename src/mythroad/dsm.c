@@ -1,14 +1,18 @@
 #include "./include/dsm.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include "./include/encode.h"
 #include "./include/fixR9.h"
 #include "./include/mem.h"
 #include "./include/printf.h"
 #include "./include/string.h"
+#include <stdlib.h>
 
 #define DSM_MAX_FILE_LEN 256
+#define DSM_MRP_TRACKER_MAX 32
+#define DSM_SEEK_SET 0
+#define DSM_SEEK_CUR 1
+#define DSM_SEEK_END 2
 
 /* vmrp advertises a real MTK platform version that common ARM EXT libraries
  * accept for graphics setup; actual SCRRAM availability is implemented by
@@ -52,6 +56,288 @@
 
 static DSM_REQUIRE_FUNCS *dsmInFuncs;
 static uint32 dsmStartTime;  //虚拟机初始化时间，用来计算系统运行时间
+
+typedef struct DsmMrpWriteTracker {
+    int32 handle;
+    char path[DSM_MAX_FILE_LEN];
+    uint8 prefix[4];
+    uint32 prefix_len;
+    int tracking;
+    uint8 *copy;
+    uint32 len;
+    uint32 cap;
+    uint32 pos;
+} DsmMrpWriteTracker;
+
+static DsmMrpWriteTracker dsm_mrp_write_trackers[DSM_MRP_TRACKER_MAX];
+static char dsm_last_written_mrp_path[DSM_MAX_FILE_LEN];
+static uint8 *dsm_last_written_mrp_copy;
+static uint32 dsm_last_written_mrp_len;
+
+static uint32 dsm_read_le32(const uint8 *p) {
+    return (uint32)p[0] |
+           ((uint32)p[1] << 8) |
+           ((uint32)p[2] << 16) |
+           ((uint32)p[3] << 24);
+}
+
+static int dsm_file_mode_writes(uint32 mode) {
+    return (mode & (MR_FILE_WRONLY | MR_FILE_RDWR | MR_FILE_CREATE |
+                    MR_FILE_RECREATE | MR_FILE_COMMITTED)) != 0;
+}
+
+static void dsm_mrp_tracker_reset(DsmMrpWriteTracker *tracker) {
+    if (!tracker) return;
+    free(tracker->copy);
+    memset2(tracker, 0, sizeof(*tracker));
+}
+
+static DsmMrpWriteTracker *dsm_mrp_tracker_for_handle(int32 handle) {
+    int i;
+    if (handle <= 0) return NULL;
+    for (i = 0; i < DSM_MRP_TRACKER_MAX; ++i) {
+        if (dsm_mrp_write_trackers[i].handle == handle)
+            return &dsm_mrp_write_trackers[i];
+    }
+    return NULL;
+}
+
+static void dsm_mrp_tracker_reset_stream(DsmMrpWriteTracker *tracker,
+                                         uint32 pos) {
+    if (!tracker) return;
+    free(tracker->copy);
+    tracker->copy = NULL;
+    tracker->prefix_len = 0;
+    tracker->tracking = 0;
+    tracker->len = 0;
+    tracker->cap = 0;
+    tracker->pos = pos;
+}
+
+static void dsm_mrp_track_open(int32 handle, const char *path, uint32 mode) {
+    int i;
+    DsmMrpWriteTracker *slot = NULL;
+    if (handle <= 0 || !path || !path[0] || !dsm_file_mode_writes(mode))
+        return;
+    for (i = 0; i < DSM_MRP_TRACKER_MAX; ++i) {
+        if (dsm_mrp_write_trackers[i].handle == handle) {
+            slot = &dsm_mrp_write_trackers[i];
+            break;
+        }
+    }
+    if (!slot) {
+        for (i = 0; i < DSM_MRP_TRACKER_MAX; ++i) {
+            if (!dsm_mrp_write_trackers[i].handle) {
+                slot = &dsm_mrp_write_trackers[i];
+                break;
+            }
+        }
+    }
+    if (!slot) return;
+    dsm_mrp_tracker_reset(slot);
+    slot->handle = handle;
+    snprintf_(slot->path, sizeof(slot->path), "%s", path);
+}
+
+static void dsm_mrp_publish(DsmMrpWriteTracker *tracker) {
+    uint32 total_len;
+    uint8 *copy;
+    if (!tracker || !tracker->tracking || tracker->len < 12 ||
+        !tracker->path[0] || memcmp2(tracker->copy, "MRPG", 4) != 0)
+        return;
+    total_len = dsm_read_le32(tracker->copy + 8);
+    if (total_len <= 240 || total_len > tracker->len)
+        return;
+
+    copy = (uint8 *)malloc(total_len);
+    if (!copy) return;
+    memcpy2(copy, tracker->copy, total_len);
+    free(dsm_last_written_mrp_copy);
+    dsm_last_written_mrp_copy = copy;
+    dsm_last_written_mrp_len = total_len;
+    snprintf_(dsm_last_written_mrp_path, sizeof(dsm_last_written_mrp_path),
+              "%s", tracker->path);
+}
+
+static void dsm_mrp_track_write(int32 handle, const void *src, uint32 len) {
+    DsmMrpWriteTracker *tracker = dsm_mrp_tracker_for_handle(handle);
+    uint32 consumed = 0;
+    uint32 expected_pos;
+    uint32 next_pos;
+    if (!tracker || !src || !len) return;
+    expected_pos = tracker->tracking ? tracker->len : tracker->prefix_len;
+    if (tracker->pos > 0xFFFFFFFFu - len) {
+        dsm_mrp_tracker_reset_stream(tracker, 0);
+        return;
+    }
+    next_pos = tracker->pos + len;
+    if (tracker->pos != expected_pos) {
+        dsm_mrp_tracker_reset_stream(tracker, next_pos);
+        return;
+    }
+
+    if (!tracker->tracking && tracker->prefix_len < 4) {
+        uint32 need = 4 - tracker->prefix_len;
+        uint32 take = len < need ? len : need;
+        memcpy2(tracker->prefix + tracker->prefix_len, src, take);
+        tracker->prefix_len += take;
+        consumed = take;
+        if (tracker->prefix_len == 4) {
+            if (memcmp2(tracker->prefix, "MRPG", 4) != 0) {
+                dsm_mrp_tracker_reset_stream(tracker, next_pos);
+                return;
+            }
+            tracker->tracking = 1;
+            tracker->cap = 4096;
+            tracker->copy = (uint8 *)malloc(tracker->cap);
+            if (!tracker->copy) {
+                dsm_mrp_tracker_reset_stream(tracker, next_pos);
+                return;
+            }
+            memcpy2(tracker->copy, tracker->prefix, 4);
+            tracker->len = 4;
+        } else {
+            tracker->pos = next_pos;
+            return;
+        }
+    }
+    if (!tracker->tracking) {
+        dsm_mrp_tracker_reset_stream(tracker, next_pos);
+        return;
+    }
+    if (consumed < len) {
+        const uint8 *bytes = (const uint8 *)src + consumed;
+        uint32 append_len = len - consumed;
+        if (tracker->len + append_len > tracker->cap) {
+            uint32 new_cap = tracker->cap ? tracker->cap : 4096;
+            while (new_cap < tracker->len + append_len) {
+                if (new_cap > 0x7FFFFFFFu) {
+                    dsm_mrp_tracker_reset_stream(tracker, next_pos);
+                    return;
+                }
+                new_cap *= 2;
+            }
+            uint8 *new_copy = (uint8 *)realloc(tracker->copy, new_cap);
+            if (!new_copy) {
+                dsm_mrp_tracker_reset_stream(tracker, next_pos);
+                return;
+            }
+            tracker->copy = new_copy;
+            tracker->cap = new_cap;
+        }
+        memcpy2(tracker->copy + tracker->len, bytes, append_len);
+        tracker->len += append_len;
+    }
+    tracker->pos = next_pos;
+    /*
+     * Downloads can stream the final package through repeated mr_write calls.
+     * Publish only after the MRPG header's total file length has arrived, so
+     * ARM child ownership never binds to a partial network artifact.
+     */
+    dsm_mrp_publish(tracker);
+}
+
+static void dsm_mrp_track_close(int32 handle) {
+    DsmMrpWriteTracker *tracker = dsm_mrp_tracker_for_handle(handle);
+    if (!tracker) return;
+    dsm_mrp_publish(tracker);
+    dsm_mrp_tracker_reset(tracker);
+}
+
+static void dsm_mrp_track_seek(int32 handle, int32 pos, int method) {
+    DsmMrpWriteTracker *tracker = dsm_mrp_tracker_for_handle(handle);
+    uint32 expected_pos;
+    uint32 new_pos;
+    long long computed_pos;
+    if (!tracker) return;
+    /*
+     * Only a sequential write stream starting at offset zero can publish MRP
+     * provenance.  Keep harmless seeks to the current offset; reset the stream
+     * on jumps so later writes must restart proof from offset zero.
+     */
+    if (method == DSM_SEEK_SET) {
+        if (pos < 0) {
+            dsm_mrp_tracker_reset_stream(tracker, 0);
+            return;
+        }
+        new_pos = (uint32)pos;
+    } else if (method == DSM_SEEK_CUR) {
+        computed_pos = (long long)tracker->pos + (long long)pos;
+        if (computed_pos < 0 || computed_pos > 0xFFFFFFFFll) {
+            dsm_mrp_tracker_reset_stream(tracker, 0);
+            return;
+        }
+        new_pos = (uint32)computed_pos;
+    } else if (method == DSM_SEEK_END && pos == 0) {
+        int32 file_len = dsmInFuncs->getLen(tracker->path);
+        if (file_len < 0) {
+            dsm_mrp_tracker_reset_stream(tracker, 0);
+            return;
+        }
+        new_pos = (uint32)file_len;
+    } else {
+        dsm_mrp_tracker_reset_stream(tracker, 0);
+        return;
+    }
+
+    expected_pos = tracker->tracking ? tracker->len : tracker->prefix_len;
+    if (new_pos == expected_pos) {
+        tracker->pos = new_pos;
+    } else {
+        dsm_mrp_tracker_reset_stream(tracker, new_pos);
+    }
+}
+
+static void dsm_mrp_forget_path(const char *path) {
+    int i;
+    if (!path || !path[0]) return;
+    for (i = 0; i < DSM_MRP_TRACKER_MAX; ++i) {
+        DsmMrpWriteTracker *tracker = &dsm_mrp_write_trackers[i];
+        if (tracker->handle && strcmp2(tracker->path, path) == 0)
+            dsm_mrp_tracker_reset(tracker);
+    }
+    if (dsm_last_written_mrp_path[0] &&
+        strcmp2(dsm_last_written_mrp_path, path) == 0) {
+        free(dsm_last_written_mrp_copy);
+        dsm_last_written_mrp_copy = NULL;
+        dsm_last_written_mrp_len = 0;
+        dsm_last_written_mrp_path[0] = '\0';
+    }
+}
+
+static void dsm_mrp_track_rename(const char *old_path, const char *new_path) {
+    int i;
+    if (!old_path || !old_path[0] || !new_path || !new_path[0]) return;
+    for (i = 0; i < DSM_MRP_TRACKER_MAX; ++i) {
+        DsmMrpWriteTracker *tracker = &dsm_mrp_write_trackers[i];
+        if (tracker->handle && strcmp2(tracker->path, old_path) == 0)
+            snprintf_(tracker->path, sizeof(tracker->path), "%s", new_path);
+    }
+    if (dsm_last_written_mrp_path[0] &&
+        strcmp2(dsm_last_written_mrp_path, old_path) == 0) {
+        snprintf_(dsm_last_written_mrp_path,
+                  sizeof(dsm_last_written_mrp_path), "%s", new_path);
+    }
+}
+
+static void dsm_mrp_reset_all(void) {
+    int i;
+    for (i = 0; i < DSM_MRP_TRACKER_MAX; ++i)
+        dsm_mrp_tracker_reset(&dsm_mrp_write_trackers[i]);
+    free(dsm_last_written_mrp_copy);
+    dsm_last_written_mrp_copy = NULL;
+    dsm_last_written_mrp_len = 0;
+    dsm_last_written_mrp_path[0] = '\0';
+}
+
+const char *mr_get_last_written_mrp_path(void) {
+    return dsm_last_written_mrp_path;
+}
+
+const uint8 *mr_get_last_written_mrp_data(uint32 *len) {
+    if (len) *len = dsm_last_written_mrp_len;
+    return dsm_last_written_mrp_copy;
+}
 
 //////////////////////////////////////////////////////////////////
 
@@ -689,6 +975,9 @@ int32 mr_open(const char *filename, uint32 mode) {
     char fullpathname[DSM_MAX_FILE_LEN];
     int32 ret = dsmInFuncs->open(get_filename(fullpathname, filename), mode);
     LOGI("mr_open(%s,%d) fd is: %d\n", fullpathname, mode, ret);
+    if (ret > 0) {
+        dsm_mrp_track_open(ret, fullpathname, mode);
+    }
     // 应用打开gb12_uc2.adl表示激活gb12字体用于MR_FONT_MEDIUM
     if (ret > 0 && strstr2(filename, "gb12_uc2.adl")) {
         font_medium_use_12 = 1;
@@ -701,6 +990,9 @@ int32 mr_close(int32 f) {
     int32 ret;
     ret = dsmInFuncs->close(f);
     LOGI("mr_close(%d): ret:%d", f, ret);
+    if (ret == MR_SUCCESS) {
+        dsm_mrp_track_close(f);
+    }
     return ret;
 }
 
@@ -710,11 +1002,19 @@ int32 mr_read(int32 f, void *p, uint32 l) {
 
 int32 mr_write(int32 f, void *p, uint32 l) {
     // LOGI("mr_write %d,%p,%d", f, p, l);
-    return dsmInFuncs->write(f, p, l);
+    int32 ret = dsmInFuncs->write(f, p, l);
+    if (ret > 0) {
+        dsm_mrp_track_write(f, p, (uint32)ret);
+    }
+    return ret;
 }
 
 int32 mr_seek(int32 f, int32 pos, int method) {
-    return dsmInFuncs->seek(f, pos, method);
+    int32 ret = dsmInFuncs->seek(f, pos, method);
+    if (ret == MR_SUCCESS) {
+        dsm_mrp_track_seek(f, pos, method);
+    }
+    return ret;
 }
 
 int32 mr_info(const char *filename) {
@@ -727,16 +1027,24 @@ int32 mr_remove(const char *filename) {
     int32 ret;
     ret = dsmInFuncs->remove(get_filename(fullpathname, filename));
     LOGI("mr_remove(%s) ret:%d", fullpathname, ret);
+    if (ret == MR_SUCCESS) {
+        dsm_mrp_forget_path(fullpathname);
+    }
     return ret;
 }
 
 int32 mr_rename(const char *oldname, const char *newname) {
     char fullpathname_1[DSM_MAX_FILE_LEN];
     char fullpathname_2[DSM_MAX_FILE_LEN];
+    int32 ret;
     get_filename(fullpathname_1, oldname);
     get_filename(fullpathname_2, newname);
     LOGI("mr_rename(%s to %s)", fullpathname_1, fullpathname_2);
-    return dsmInFuncs->rename(fullpathname_1, fullpathname_2);
+    ret = dsmInFuncs->rename(fullpathname_1, fullpathname_2);
+    if (ret == MR_SUCCESS) {
+        dsm_mrp_track_rename(fullpathname_1, fullpathname_2);
+    }
+    return ret;
 }
 
 int32 mr_mkDir(const char *name) {
@@ -1333,6 +1641,7 @@ int32 dsm_init(DSM_REQUIRE_FUNCS *inFuncs) {
     dsmInFuncs = inFuncs;
     dsmStartTime = dsmInFuncs->get_uptime_ms();
     holdTextMem = NULL;
+    dsm_mrp_reset_all();
     dsm_media_reset_all();
 
 #ifdef DSM_FULL

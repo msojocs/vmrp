@@ -7,6 +7,11 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <limits.h>
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 #define EXT_BASE_ADDR 0x00010000u
 #define EXT_MEM_SIZE  (16u * 1024u * 1024u)
@@ -43,6 +48,7 @@
 #define MRP_VFD_MAX 4
 #define MRP_VFD_BASE 0x7FFF0000u
 #define ARM_EXT_NESTED_MODULE_MAX 64
+#define ARM_EXT_PACK_TABLE_SIZE 128u
 
 typedef struct mr_c_function_P_t {
     uint32 start_of_ER_RW;
@@ -70,10 +76,18 @@ typedef struct ArmExtNestedModule {
     uint32_t file_len;
     uint32_t p_addr;
     uint32_t helper_addr;
+    /* Host-openable MRP that supplied this child image, used when wrappers
+     * clear table[100] before the child asks for sibling resources. */
+    char package_host_path[PATH_MAX];
+    /* RAM-backed MRP package that supplied this child image.  Some loaders
+     * install downloaded packages through table[104]/[105] instead of a host
+     * path, then clear table[100] before child resource reads. */
+    uint32_t package_ram_addr;
+    uint32_t package_ram_len;
     /* 观测到的该模块 GOT 桥块中 memcpy(table[3]=EXT_TABLE_ADDR+0xC) 桥所在的
-     * R9 相对偏移（ARM 重定位写入该桥时记录，0=未观测）。私有 loader 子模块的
-     * GOT 桥块基址随模块链接结果而变，写死会错位；用同族已自重定位实例观测到的
-     * 真实偏移来平移 bridge 修复描述符，避免把桥写到模块代码实际不读取的位置。 */
+     * R9 相对偏移（ARM 重定位写入该桥时记录，0=未观测）。该值仅描述本模块
+     * 自己的重定位结果；private-loader RW 镜像还必须由当前 child 的 bridge-copy
+     * 指令结构证明，不能再借同地址区间的其它模块偏移。 */
     uint32_t got_memcpy_off;
 } ArmExtNestedModule;
 
@@ -93,6 +107,9 @@ struct ArmExtModule {
     uint32_t heap_top;
     uint32_t code_len;
     const uint8_t *host_code;
+    char pack_alias[128];
+    char pack_host_path[PATH_MAX];
+    uint32_t pack_table_addr;
     uint32_t helper_addr;
     uint32_t p_addr;
     uint32_t screen_addr;
@@ -132,6 +149,11 @@ struct ArmExtModule {
     uint32_t last_file_addr;
     uint32_t last_file_len;
     uint8_t *last_file_copy;
+    /* Package context that produced last_file_copy; copied into a nested
+     * module record once the wrapper stages that file as executable code. */
+    char last_file_pack_host_path[PATH_MAX];
+    uint32_t last_file_pack_ram_addr;
+    uint32_t last_file_pack_ram_len;
     uint32_t last_alloc_addr;
     uint32_t last_alloc_len;
     uint32_t nested_p_addr;
