@@ -47,3 +47,15 @@
 - **Pages:** dota-browser-plugin-dsm-package-provenance.md
 - **Summary:** Updated "DOTA browser plugin DSM package provenance" with new content
 
+## [2026-06-27T08:29:28.334Z] ingest
+- **Pages:** dota-browser-plugin-network-state-investigation.md
+- **Summary:** Created new page "DOTA browser plugin network state investigation"
+
+## [2026-06-27T08:29:28.338Z] add
+- **Pages:** dota-browser-plugin-network-state-investigation.md
+- **Summary:** Created wiki page dota-browser-plugin-network-state-investigation.md
+
+## [2026-06-27T08:45:44.402Z] add
+- **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, opglqa-font-download-repeat-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md
+- **Summary:** Refreshed wiki index and derived metadata surfaces
+

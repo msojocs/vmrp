@@ -1,10 +1,11 @@
 # Wiki Index
 
-> 5 pages | Last updated: 2026-06-27T07:05:51.291Z
+> 6 pages | Last updated: 2026-06-27T08:45:44.401Z
 
 ## debugging
 
 - [DOTA browser plugin DSM package provenance](dota-browser-plugin-dsm-package-provenance.md) — # DOTA browser plugin DSM package provenance
+- [DOTA browser plugin network state investigation](dota-browser-plugin-network-state-investigation.md) — # DOTA browser plugin network state investigation
 - [gghjt modal timer and cold extraction regressions](gghjt-modal-timer-and-cold-extraction-regressions.md) — # gghjt modal timer and cold extraction regressions
 - [gms payment latency analysis](gms-payment-latency-analysis.md) — # gms payment latency analysis
 - [opglqa font download repeat investigation](opglqa-font-download-repeat-investigation.md) — # opglqa font download repeat investigation
