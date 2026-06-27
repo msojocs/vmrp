@@ -146,6 +146,7 @@ typedef struct LoadF {
 #define MR_FLAGS_EI 8
 
 void* _mr_readFile(const char* filename, int* filelen, int lookfor);
+void* mr_readFile_from_pack(const char* packname, const char* filename, int* filelen, int lookfor);
 
 extern int32 _mr_smsGetBytes(int32 pos, char* p, int32 len);
 extern void _mr_showErrorInfo(const char* errstr);

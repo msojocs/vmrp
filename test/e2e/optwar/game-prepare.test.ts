@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { VmrpE2e } from "../vmrp-e2e.js";
 import fs from "fs";
 
-describe("opbzqe 进入主菜单", () => {
+describe("optwar 进入主菜单", () => {
   let vmrp: VmrpE2e | undefined;
 
   afterEach(async () => {
