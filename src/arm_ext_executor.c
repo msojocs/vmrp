@@ -115,6 +115,8 @@ extern int32 mr_recv(int32 s, char *buf, int len);
 extern int32 mr_recvfrom(int32 s, char *buf, int len, int32 *ip, uint16 *port);
 extern int32 mr_send(int32 s, const char *buf, int len);
 extern int32 mr_sendto(int32 s, const char *buf, int len, int32 ip, uint16 port);
+extern const char *mr_get_last_written_mrp_path(void);
+extern const uint8 *mr_get_last_written_mrp_data(uint32 *len);
 
 static uint32_t arm_addr(ArmExtModule *m, const void *ptr) {
     if (ptr == NULL) return 0;
@@ -135,6 +137,415 @@ static uint32_t arm_addr(ArmExtModule *m, const void *ptr) {
 
 static uint32_t align4(uint32_t v) { return (v + 3u) & ~3u; }
 
+static uint32_t arm_ext_read_le32(const uint8_t *p) {
+    return (uint32_t)p[0] |
+           ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) |
+           ((uint32_t)p[3] << 24);
+}
+
+typedef int (*ArmExtMrpEntryVisitor)(const uint8_t *name, uint32_t name_len,
+                                     const uint8_t *data, uint32_t data_len,
+                                     void *ctx);
+
+static int arm_ext_visit_mrp_payloads(const uint8_t *mrp, uint32_t mrp_len,
+                                      ArmExtMrpEntryVisitor visitor,
+                                      void *ctx) {
+    uint32_t header_len;
+    uint32_t pos;
+    uint32_t count = 0;
+    if (!mrp || mrp_len < 12u || !visitor) return 0;
+
+    header_len = arm_ext_read_le32(mrp + 4u);
+    if (header_len > 232u) {
+        uint32_t index_start = arm_ext_read_le32(mrp + 12u);
+        uint32_t index_end = header_len + 8u;
+        if (index_start < 16u || index_start > index_end ||
+            index_end > mrp_len)
+            return 0;
+        pos = index_start;
+        while (pos + 16u <= index_end) {
+            uint32_t name_len = arm_ext_read_le32(mrp + pos);
+            pos += 4u;
+            if (name_len == 0 || name_len >= 256u ||
+                name_len > index_end - pos)
+                return count > 0;
+
+            const uint8_t *name = mrp + pos;
+            pos += name_len;
+            if (pos + 12u > index_end) return 0;
+
+            uint32_t data_off = arm_ext_read_le32(mrp + pos);
+            uint32_t data_len = arm_ext_read_le32(mrp + pos + 4u);
+            pos += 12u;
+            if (data_len == 0 || data_off > mrp_len ||
+                data_len > mrp_len - data_off)
+                return 0;
+
+            /*
+             * Newer disk MRP files store an index of file offsets, while RAM
+             * packages often use the older sequential payload table below.
+             * Visit payload bytes through both layouts so provenance remains
+             * format-based instead of entry-name based.
+             */
+            if (!visitor(name, name_len, mrp + data_off, data_len, ctx))
+                return 0;
+            count++;
+        }
+        return count > 0;
+    }
+
+    if (header_len > mrp_len - 8u) return 0;
+    pos = 8u + header_len;
+
+    while (pos + 4u <= mrp_len) {
+        uint32_t name_len = arm_ext_read_le32(mrp + pos);
+        pos += 4u;
+        if (name_len == 0 || name_len >= 256u || name_len > mrp_len - pos)
+            return count > 0;
+
+        const uint8_t *name = mrp + pos;
+        pos += name_len;
+        if (pos + 4u > mrp_len) return 0;
+
+        uint32_t data_len = arm_ext_read_le32(mrp + pos);
+        pos += 4u;
+        if (data_len == 0 || data_len > mrp_len - pos) return 0;
+
+        /*
+         * MRP files carry a sequential payload table after the index.  Private
+         * installers may wrap one of those payloads into a RAM package with a
+         * new synthetic name, so ownership is proved by payload bytes rather
+         * than by entry names.
+         */
+        if (!visitor(name, name_len, mrp + pos, data_len, ctx))
+            return 0;
+        pos += data_len;
+        count++;
+    }
+
+    return count > 0;
+}
+
+static int arm_ext_gunzip_payload(const uint8_t *input, uint32_t input_len,
+                                  uint8_t **output, uint32_t *output_len) {
+    z_stream zs;
+    uint32_t cap;
+    int zret;
+    if (output) *output = NULL;
+    if (output_len) *output_len = 0;
+    if (!input || !input_len || !output || !output_len) return 0;
+
+    memset(&zs, 0, sizeof(zs));
+    if (inflateInit2(&zs, 16 + MAX_WBITS) != Z_OK) return 0;
+
+    cap = input_len * 4u + 1024u;
+    if (cap < 4096u) cap = 4096u;
+    *output = (uint8_t *)malloc(cap);
+    if (!*output) {
+        inflateEnd(&zs);
+        return 0;
+    }
+
+    zs.next_in = (Bytef *)input;
+    zs.avail_in = input_len;
+    do {
+        if (zs.total_out == cap) {
+            uint32_t new_cap = cap * 2u;
+            uint8_t *new_output;
+            if (new_cap <= cap) {
+                free(*output);
+                *output = NULL;
+                inflateEnd(&zs);
+                return 0;
+            }
+            new_output = (uint8_t *)realloc(*output, new_cap);
+            if (!new_output) {
+                free(*output);
+                *output = NULL;
+                inflateEnd(&zs);
+                return 0;
+            }
+            *output = new_output;
+            cap = new_cap;
+        }
+        zs.next_out = *output + zs.total_out;
+        zs.avail_out = cap - (uint32_t)zs.total_out;
+        zret = inflate(&zs, Z_NO_FLUSH);
+    } while (zret == Z_OK);
+
+    if (zret != Z_STREAM_END) {
+        free(*output);
+        *output = NULL;
+        inflateEnd(&zs);
+        return 0;
+    }
+
+    *output_len = (uint32_t)zs.total_out;
+    inflateEnd(&zs);
+    return 1;
+}
+
+typedef struct ArmExtDecodedPayloadMatch {
+    const uint8_t *needle;
+    uint32_t needle_len;
+    int found;
+} ArmExtDecodedPayloadMatch;
+
+static int arm_ext_payload_matches_staged_file(const uint8_t *payload,
+                                               uint32_t payload_len,
+                                               const uint8_t *needle,
+                                               uint32_t needle_len) {
+    if (!payload || !needle || !payload_len || !needle_len)
+        return 0;
+    if (payload_len == needle_len &&
+        memcmp(payload, needle, needle_len) == 0)
+        return 1;
+    /*
+     * Private loaders overwrite the first two words of an executable staging
+     * buffer with module-record/P metadata.  The payload tail is the immutable
+     * executable proof used elsewhere for nested module registration.
+     */
+    if (payload_len == needle_len && needle_len > 8u &&
+        memcmp(payload + 8u, needle + 8u, needle_len - 8u) == 0)
+        return 1;
+    return 0;
+}
+
+static int arm_ext_payload_or_decoded_matches_staged(const uint8_t *payload,
+                                                     uint32_t payload_len,
+                                                     const uint8_t *staged,
+                                                     uint32_t staged_len) {
+    if (arm_ext_payload_matches_staged_file(payload, payload_len,
+                                           staged, staged_len))
+        return 1;
+
+    if (payload_len >= 2u && payload[0] == 0x1f && payload[1] == 0x8b) {
+        uint8_t *decoded = NULL;
+        uint32_t decoded_len = 0;
+        int found = 0;
+        if (arm_ext_gunzip_payload(payload, payload_len,
+                                   &decoded, &decoded_len)) {
+            found = arm_ext_payload_matches_staged_file(decoded, decoded_len,
+                                                        staged, staged_len);
+        }
+        free(decoded);
+        return found;
+    }
+    return 0;
+}
+
+static int arm_ext_decoded_payload_match_cb(const uint8_t *name,
+                                            uint32_t name_len,
+                                            const uint8_t *data,
+                                            uint32_t data_len,
+                                            void *ctx) {
+    (void)name;
+    (void)name_len;
+    ArmExtDecodedPayloadMatch *match = (ArmExtDecodedPayloadMatch *)ctx;
+    if (!match || match->found) return 0;
+
+    if (arm_ext_payload_or_decoded_matches_staged(data, data_len,
+                                                  match->needle,
+                                                  match->needle_len)) {
+        match->found = 1;
+        return 0;
+    }
+
+    return match->found ? 0 : 1;
+}
+
+static int arm_ext_host_package_matches_staged_file(ArmExtModule *m,
+                                                    uint32_t file_addr,
+                                                    uint32_t file_len) {
+    uint32 dsm_mrp_len = 0;
+    const uint8 *dsm_mrp = mr_get_last_written_mrp_data(&dsm_mrp_len);
+    const uint8_t *staged;
+    ArmExtDecodedPayloadMatch match;
+    if (!m || !file_addr || !file_len || !dsm_mrp || !dsm_mrp_len)
+        return 0;
+    staged = (const uint8_t *)arm_ptr(m, file_addr);
+    if (!staged) return 0;
+
+    match.needle = staged;
+    match.needle_len = file_len;
+    match.found = 0;
+    arm_ext_visit_mrp_payloads(dsm_mrp, dsm_mrp_len,
+                               arm_ext_decoded_payload_match_cb, &match);
+    return match.found;
+}
+
+typedef struct ArmExtRawPayloadMatch {
+    const uint8_t *needle;
+    uint32_t needle_len;
+    int found;
+} ArmExtRawPayloadMatch;
+
+static int arm_ext_raw_payload_match_cb(const uint8_t *name,
+                                        uint32_t name_len,
+                                        const uint8_t *data,
+                                        uint32_t data_len,
+                                        void *ctx) {
+    (void)name;
+    (void)name_len;
+    ArmExtRawPayloadMatch *match = (ArmExtRawPayloadMatch *)ctx;
+    if (!match || match->found) return 0;
+    if (data_len == match->needle_len &&
+        memcmp(data, match->needle, data_len) == 0) {
+        match->found = 1;
+        return 0;
+    }
+    return 1;
+}
+
+static int arm_ext_bytes_contain(const uint8_t *haystack, uint32_t haystack_len,
+                                 const uint8_t *needle, uint32_t needle_len) {
+    if (!haystack || !needle || !needle_len || needle_len > haystack_len)
+        return 0;
+    for (uint32_t off = 0; off + needle_len <= haystack_len; ++off) {
+        if (memcmp(haystack + off, needle, needle_len) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+static int arm_ext_host_package_contains_raw_payload(const uint8_t *payload,
+                                                     uint32_t payload_len) {
+    uint32 dsm_mrp_len = 0;
+    const uint8 *dsm_mrp = mr_get_last_written_mrp_data(&dsm_mrp_len);
+    ArmExtRawPayloadMatch match;
+    if (!payload || !payload_len || !dsm_mrp || !dsm_mrp_len)
+        return 0;
+    match.needle = payload;
+    match.needle_len = payload_len;
+    match.found = 0;
+    arm_ext_visit_mrp_payloads(dsm_mrp, dsm_mrp_len,
+                               arm_ext_raw_payload_match_cb, &match);
+    if (match.found)
+        return 1;
+    return payload_len >= 1024u &&
+           arm_ext_bytes_contain(dsm_mrp, dsm_mrp_len,
+                                 payload, payload_len);
+}
+
+typedef struct ArmExtRamPayloadHostMatch {
+    const uint8_t *staged;
+    uint32_t staged_len;
+    int found;
+} ArmExtRamPayloadHostMatch;
+
+static int arm_ext_ram_payload_host_match_cb(const uint8_t *name,
+                                             uint32_t name_len,
+                                             const uint8_t *data,
+                                             uint32_t data_len,
+                                             void *ctx) {
+    (void)name;
+    (void)name_len;
+    ArmExtRamPayloadHostMatch *match = (ArmExtRamPayloadHostMatch *)ctx;
+    if (!match || match->found) return 0;
+
+    /*
+     * A RAM-package payload proves a host owner only when that same encoded
+     * payload is present in the installed MRP and it decodes to the staged
+     * child executable.  Shared non-executable assets cannot satisfy both
+     * conditions.
+     */
+    if (arm_ext_host_package_contains_raw_payload(data, data_len) &&
+        arm_ext_payload_or_decoded_matches_staged(data, data_len,
+                                                  match->staged,
+                                                  match->staged_len)) {
+        match->found = 1;
+        return 0;
+    }
+    return 1;
+}
+
+static int arm_ext_host_package_matches_ram_staged_file(ArmExtModule *m,
+                                                       uint32_t ram_addr,
+                                                       uint32_t ram_len,
+                                                       uint32_t file_addr,
+                                                       uint32_t file_len) {
+    const uint8_t *ram;
+    const uint8_t *staged;
+    ArmExtRamPayloadHostMatch match;
+    if (!m || !ram_addr || !ram_len || !file_addr || !file_len)
+        return 0;
+    ram = (const uint8_t *)arm_ptr(m, ram_addr);
+    staged = (const uint8_t *)arm_ptr(m, file_addr);
+    if (!ram || !staged) return 0;
+
+    match.staged = staged;
+    match.staged_len = file_len;
+    match.found = 0;
+    arm_ext_visit_mrp_payloads(ram, ram_len,
+                               arm_ext_ram_payload_host_match_cb, &match);
+    return match.found;
+}
+
+static int arm_ext_is_host_absolute_path(const char *path) {
+    if (!path || !*path) return 0;
+    if (path[0] == '/') return 1;
+#ifdef _WIN32
+    if (path[0] == '\\') return 1;
+    if (((path[0] >= 'A' && path[0] <= 'Z') ||
+         (path[0] >= 'a' && path[0] <= 'z')) &&
+        path[1] == ':' && (path[2] == '/' || path[2] == '\\'))
+        return 1;
+#endif
+    return 0;
+}
+
+static const char *arm_ext_basename(const char *path) {
+    const char *base = path;
+    const char *slash;
+    if (!path) return "";
+    slash = strrchr(path, '/');
+    if (slash) base = slash + 1;
+    slash = strrchr(base, '\\');
+    if (slash) base = slash + 1;
+    return base;
+}
+
+static void arm_ext_init_pack_names(ArmExtModule *m) {
+    const char *host_path;
+    const char *alias;
+    char cwd[PATH_MAX];
+    if (!m) return;
+    host_path = mr_get_pack_filename();
+    alias = host_path;
+#ifndef _WIN32
+    if (arm_ext_is_host_absolute_path(host_path) && getcwd(cwd, sizeof(cwd))) {
+        size_t cwd_len = strlen(cwd);
+        if (cwd_len && strncmp(host_path, cwd, cwd_len) == 0 &&
+            host_path[cwd_len] == '/') {
+            /*
+             * EXT code treats table[100] as both a display/copyable package
+             * name and an openable package path.  Prefer the shortest
+             * host-openable spelling under cwd: it keeps old ARM helpers'
+             * fixed stack buffers intact without reducing the root package to
+             * an unopenable basename.
+             */
+            alias = host_path + cwd_len + 1u;
+        }
+    } else
+#endif
+    if (arm_ext_is_host_absolute_path(host_path)) {
+        alias = arm_ext_basename(host_path);
+    }
+    snprintf(m->pack_host_path, sizeof(m->pack_host_path), "%s",
+             host_path ? host_path : "");
+    snprintf(m->pack_alias, sizeof(m->pack_alias), "%s",
+             (alias && *alias) ? alias : m->pack_host_path);
+}
+
+static const char *arm_ext_pack_to_host_path(ArmExtModule *m, const char *pack) {
+    if (!m || !pack || !*pack) return pack;
+    if (m->pack_alias[0] && m->pack_host_path[0] &&
+        strcmp(pack, m->pack_alias) == 0)
+        return m->pack_host_path;
+    return pack;
+}
+
 static uint32_t arm_alloc(ArmExtModule *m, uint32_t len) {
     len = align4(len ? len : 1);
     if (m->heap_top + len >= EXT_BASE_ADDR + EXT_MEM_SIZE) return 0;
@@ -149,6 +560,7 @@ static uint32_t reg_read32(uc_engine *uc, int reg) {
     return v;
 }
 
+static void arm_ext_set_pack_table_name(ArmExtModule *m, const char *name);
 static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk);
 static void arm_ext_dispatch_pending_sms_result(ArmExtModule *m);
 static void arm_ext_clear_foreground_screen_owner(ArmExtModule *m);
@@ -166,6 +578,9 @@ static void arm_ext_claim_foreground_screen_rect(ArmExtModule *m,
                                                  int32_t y,
                                                  int32_t w,
                                                  int32_t h);
+static void arm_ext_diag_dump_rw_timer_state(ArmExtModule *m,
+                                             const char *tag,
+                                             uint32_t rw_base);
 static void capture_timer_dispatches(ArmExtModule *m);
 
 static inline void app_on_child_confirmed(ArmExtModule *m, uint32_t p, uint32_t h) {
@@ -210,31 +625,158 @@ static ArmExtNestedModule *arm_ext_find_nested_module(ArmExtModule *m, uint32_t 
     return NULL;
 }
 
-/* 在所有覆盖 addr 且记录了 GOT memcpy 偏移(got_memcpy_off)的嵌套模块里，返回最近
- * 登记(最高索引)的那一个。用于在 bridge 修复时，从与被修复模块代码区间重叠的"已自
- * 重定位同族实例"借用真实的 GOT 桥块偏移。 */
-static ArmExtNestedModule *arm_ext_find_got_donor(ArmExtModule *m, uint32_t lo, uint32_t hi) {
-    if (!m) return NULL;
+static ArmExtNestedModule *arm_ext_find_nested_module_by_p(ArmExtModule *m,
+                                                           uint32_t p_addr) {
+    if (!m || !p_addr) return NULL;
     for (int i = m->nested_module_count - 1; i >= 0; --i) {
         ArmExtNestedModule *mod = &m->nested_modules[i];
-        if (!mod->got_memcpy_off) continue;
-        if (!mod->file_addr || !mod->file_len) continue;
-        uint32_t mlo = mod->file_addr, mhi = mod->file_addr + mod->file_len;
-        if (mlo < hi && lo < mhi) return mod;   /* 区间重叠 */
+        if (mod->p_addr == p_addr) return mod;
     }
     return NULL;
+}
+
+static const char *arm_ext_staged_file_package(ArmExtModule *m,
+                                               uint32_t file_addr,
+                                               uint32_t file_len) {
+    const uint8_t *staged;
+    if (!m || !file_addr || !file_len) return "";
+    if (m->last_file_addr == file_addr && m->last_file_len == file_len)
+        return m->last_file_pack_host_path;
+    if (!m->last_file_copy || m->last_file_len != file_len || file_len <= 8u)
+        return "";
+    staged = (const uint8_t *)arm_ptr(m, file_addr);
+    if (!staged) return "";
+    /*
+     * table[131] cacheSync can stage a decoded child image at a wrapper-owned
+     * runtime address before the internal loader registers it.  That loader
+     * overwrites file_base[0]/[4] with module record/P metadata, so validate
+     * the immutable payload tail instead of handing the last-read package to an
+     * unrelated module.
+     */
+    if (memcmp(staged + 8u, m->last_file_copy + 8u, file_len - 8u) == 0)
+        return m->last_file_pack_host_path;
+    return "";
+}
+
+static int arm_ext_staged_file_ram_package(ArmExtModule *m,
+                                           uint32_t file_addr,
+                                           uint32_t file_len,
+                                           uint32_t *ram_addr,
+                                           uint32_t *ram_len) {
+    const uint8_t *staged;
+    const uint8_t *ram;
+    if (ram_addr) *ram_addr = 0;
+    if (ram_len) *ram_len = 0;
+    if (!m || !file_addr || !file_len ||
+        !m->last_file_pack_ram_addr || !m->last_file_pack_ram_len)
+        return 0;
+    if (m->last_file_addr == file_addr && m->last_file_len == file_len) {
+        if (ram_addr) *ram_addr = m->last_file_pack_ram_addr;
+        if (ram_len) *ram_len = m->last_file_pack_ram_len;
+        return 1;
+    }
+    if (!m->last_file_copy || file_len <= 8u)
+        return 0;
+    staged = (const uint8_t *)arm_ptr(m, file_addr);
+    if (!staged) return 0;
+    /*
+     * Use the same immutable-tail proof as host package propagation.  The
+     * package context is a runtime RAM package pointer, so copying it without
+     * byte validation would make later blank table[100] reads depend on stale
+     * last-file state.
+     */
+    if (m->last_file_len == file_len &&
+        memcmp(staged + 8u, m->last_file_copy + 8u, file_len - 8u) != 0)
+        return 0;
+    if (m->last_file_len != file_len) {
+        if (m->last_file_len < file_len ||
+            !m->last_file_pack_ram_addr ||
+            !m->last_file_pack_ram_len ||
+            m->last_file_pack_ram_len < file_len)
+            return 0;
+        ram = (const uint8_t *)arm_ptr(m, m->last_file_pack_ram_addr);
+        if (!ram) return 0;
+        /*
+         * Some private loaders decode an executable child out of a RAM-backed
+         * MRP and stage only that executable payload.  The last read is then the
+         * container entry, not the exact staged bytes; still require the staged
+         * child tail to occur verbatim in the actual RAM package before carrying
+         * the RAM package owner forward.
+         */
+        const uint8_t *needle = staged + 8u;
+        uint32_t needle_len = file_len - 8u;
+        int found = 0;
+        for (uint32_t off = 0; off + needle_len <= m->last_file_pack_ram_len;
+             ++off) {
+            if (memcmp(ram + off, needle, needle_len) == 0) {
+                found = 1;
+                break;
+            }
+        }
+        if (!found)
+            return 0;
+    }
+    if (ram_addr) *ram_addr = m->last_file_pack_ram_addr;
+    if (ram_len) *ram_len = m->last_file_pack_ram_len;
+    return 1;
 }
 
 static void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
                                          uint32_t file_len, uint32_t p_addr,
                                          uint32_t helper_addr) {
     if (!m || !file_addr || !file_len || !p_addr || !helper_addr) return;
+    const char *package_host_path =
+        arm_ext_staged_file_package(m, file_addr, file_len);
+    uint32_t package_ram_addr = 0;
+    uint32_t package_ram_len = 0;
+    arm_ext_staged_file_ram_package(m, file_addr, file_len,
+                                    &package_ram_addr, &package_ram_len);
+    const char *last_mrp_host_path = mr_get_last_written_mrp_path();
+    int host_match = 0;
+    if (!package_host_path[0] && package_ram_addr && package_ram_len &&
+        last_mrp_host_path && last_mrp_host_path[0]) {
+        /*
+         * The child image is already tied to the RAM package above.  Installed
+         * disk MRPs can gzip payload entries directly, or can share the RAM
+         * package's encoded executable payload.  In both cases the proof must
+         * resolve to the staged child bytes, not just a shared asset.
+         */
+        host_match =
+            arm_ext_host_package_matches_staged_file(m, file_addr, file_len) ||
+            arm_ext_host_package_matches_ram_staged_file(
+                m, package_ram_addr, package_ram_len, file_addr, file_len);
+    }
+    if (!package_host_path[0] && package_ram_addr && package_ram_len &&
+        last_mrp_host_path && last_mrp_host_path[0] && host_match) {
+        /*
+         * Download wrappers often install a full MRP on disk, then expose only
+         * a RAM-backed child package containing executable entries.  When the
+         * staged executable is byte-proven to be a decoded payload in the
+         * installed MRP, the child owner is the host package; sibling assets
+         * later arrive with table[100] cleared and must resolve through this
+         * committed owner.
+         */
+        package_host_path = last_mrp_host_path;
+        package_ram_addr = 0;
+        package_ram_len = 0;
+    }
 
     for (int i = 0; i < m->nested_module_count; ++i) {
         ArmExtNestedModule *mod = &m->nested_modules[i];
         if (mod->file_addr == file_addr && mod->file_len == file_len) {
             mod->p_addr = p_addr;
             mod->helper_addr = helper_addr;
+            if (package_host_path[0]) {
+                snprintf(mod->package_host_path, sizeof(mod->package_host_path),
+                         "%s", package_host_path);
+                mod->package_ram_addr = 0;
+                mod->package_ram_len = 0;
+            }
+            if (!package_host_path[0] && package_ram_addr && package_ram_len) {
+                mod->package_host_path[0] = '\0';
+                mod->package_ram_addr = package_ram_addr;
+                mod->package_ram_len = package_ram_len;
+            }
             return;
         }
     }
@@ -252,6 +794,10 @@ static void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
     slot->file_len = file_len;
     slot->p_addr = p_addr;
     slot->helper_addr = helper_addr;
+    snprintf(slot->package_host_path, sizeof(slot->package_host_path), "%s",
+             package_host_path);
+    slot->package_ram_addr = package_host_path[0] ? 0 : package_ram_addr;
+    slot->package_ram_len = package_host_path[0] ? 0 : package_ram_len;
     slot->got_memcpy_off = 0;
 }
 
@@ -308,15 +854,213 @@ typedef struct {
     uint32_t run_count;
 } PrivateChildRwLayout;
 
-/* verdload.ext 的 RW 数据段布局：idx26→rw+0x16C（mr_printf）、idx3..19→rw+0x170..0x1B0
- * （memcpy..strtoul）。源 record 偏移 = idx*4（record 是 EXT_TABLE 镜像）。 */
-static const PrivateChildRwRun verdload_rw_runs[] = {
+/* 私有 loader bridge-copy 基准布局：idx26→rw+0x16C（mr_printf）、
+ * idx3..19→rw+0x170..0x1B0（memcpy..strtoul）。源 record 偏移 =
+ * idx*4（record 是 EXT_TABLE 镜像）。真实 RW 偏移仍由子模块自身的
+ * Thumb bridge-copy 反汇编结构确认并平移，不能只凭内存区间重叠套用。 */
+static const PrivateChildRwRun std_bridge_copy_rw_runs[] = {
     { 0x68u, 0x16Cu, 1u  },
     { 0x0Cu, 0x170u, 17u },
 };
 static const PrivateChildRwLayout private_child_rw_layouts[] = {
-    { "verdload", verdload_rw_runs, sizeof(verdload_rw_runs) / sizeof(verdload_rw_runs[0]) },
+    { "std-bridge-copy", std_bridge_copy_rw_runs,
+      sizeof(std_bridge_copy_rw_runs) / sizeof(std_bridge_copy_rw_runs[0]) },
 };
+
+static uint16_t arm_ext_code_u16(const uint8_t *code, uint32_t off) {
+    return (uint16_t)code[off] | (uint16_t)((uint16_t)code[off + 1u] << 8);
+}
+
+static uint32_t arm_ext_code_u32(const uint8_t *code, uint32_t off) {
+    return (uint32_t)code[off] |
+           ((uint32_t)code[off + 1u] << 8) |
+           ((uint32_t)code[off + 2u] << 16) |
+           ((uint32_t)code[off + 3u] << 24);
+}
+
+static int arm_ext_thumb_ldr_word_imm(uint16_t insn, uint32_t record_src_off,
+                                      uint32_t *rt_out) {
+    if ((insn & 0xF800u) != 0x6800u) return 0;
+    uint32_t imm = ((insn >> 6) & 0x1Fu) * 4u;
+    uint32_t rn = (insn >> 3) & 0x7u;
+    if (rn != 0 || imm != record_src_off) return 0;
+    if (rt_out) *rt_out = insn & 0x7u;
+    return 1;
+}
+
+static int arm_ext_thumb_str_word_imm(uint16_t insn, uint32_t rt,
+                                      uint32_t *base_reg_out,
+                                      uint32_t *dst_imm_out) {
+    if ((insn & 0xF800u) != 0x6000u) return 0;
+    if ((insn & 0x7u) != rt) return 0;
+    if (base_reg_out) *base_reg_out = (insn >> 3) & 0x7u;
+    if (dst_imm_out) *dst_imm_out = ((insn >> 6) & 0x1Fu) * 4u;
+    return 1;
+}
+
+static int arm_ext_thumb_bridge_base_offset(const uint8_t *code,
+                                            uint32_t file_len,
+                                            uint32_t before_off,
+                                            uint32_t base_reg,
+                                            uint32_t *base_off_out) {
+    uint32_t scan_start = before_off > 96u ? before_off - 96u : 0u;
+    for (uint32_t ldr_off = before_off; ldr_off-- > scan_start;) {
+        if (ldr_off & 1u) continue;
+        uint16_t insn = arm_ext_code_u16(code, ldr_off);
+        if ((insn & 0xF800u) != 0x4800u ||
+            ((insn >> 8) & 0x7u) != base_reg)
+            continue;
+
+        uint32_t lit_off = ((ldr_off + 4u) & ~3u) + ((insn & 0xFFu) * 4u);
+        if (lit_off + 4u > file_len) continue;
+        int64_t base = (int64_t)arm_ext_code_u32(code, lit_off);
+        int saw_r9_add = 0;
+        for (uint32_t off = ldr_off + 2u; off + 2u <= before_off; off += 2u) {
+            uint16_t op = arm_ext_code_u16(code, off);
+            if (op == (uint16_t)(0x4448u | base_reg)) {
+                saw_r9_add = 1;
+            } else if ((op & 0xFF00u) == (uint16_t)(0x3800u | (base_reg << 8))) {
+                base -= (int64_t)(op & 0xFFu);
+            } else if ((op & 0xFF00u) == (uint16_t)(0x3000u | (base_reg << 8))) {
+                base += (int64_t)(op & 0xFFu);
+            }
+        }
+        if (!saw_r9_add || base < 0 || base > 0x4000) continue;
+        *base_off_out = (uint32_t)base;
+        return 1;
+    }
+    return 0;
+}
+
+static int arm_ext_thumb_bridge_run_matches(const uint8_t *code,
+                                            uint32_t file_len,
+                                            uint32_t start_off,
+                                            uint32_t base_reg,
+                                            uint32_t base_off,
+                                            const PrivateChildRwRun *run,
+                                            int32_t shift) {
+    if (!run || !run->count) return 0;
+    if (start_off + run->count * 4u > file_len) return 0;
+    for (uint32_t i = 0; i < run->count; ++i) {
+        uint32_t rt = 0, store_base = 0, store_imm = 0;
+        if (!arm_ext_thumb_ldr_word_imm(
+                arm_ext_code_u16(code, start_off + i * 4u),
+                run->record_src_off + i * 4u, &rt))
+            return 0;
+        if (!arm_ext_thumb_str_word_imm(
+                arm_ext_code_u16(code, start_off + i * 4u + 2u),
+                rt, &store_base, &store_imm))
+            return 0;
+        if (store_base != base_reg) return 0;
+        uint32_t expected = (uint32_t)((int32_t)run->rw_dst_off + shift) + i * 4u;
+        if (base_off + store_imm != expected) return 0;
+    }
+    return 1;
+}
+
+static int arm_ext_discover_private_child_rw_shift(ArmExtModule *m,
+                                                   uint32_t file_addr,
+                                                   uint32_t file_len,
+                                                   const PrivateChildRwLayout *lay,
+                                                   int32_t *shift_out) {
+    if (!m || !file_addr || !file_len || !lay || !shift_out) return 0;
+    const uint8_t *code = (const uint8_t *)arm_ptr(m, file_addr);
+    if (!code || file_len < 16u) return 0;
+
+    const PrivateChildRwRun *anchor = NULL;
+    for (uint32_t r = 0; r < lay->run_count; ++r) {
+        if (lay->runs[r].record_src_off == 0x0Cu && lay->runs[r].count >= 2u) {
+            anchor = &lay->runs[r];
+            break;
+        }
+    }
+    if (!anchor) return 0;
+
+    for (uint32_t off = 0; off + anchor->count * 4u <= file_len; off += 2u) {
+        uint32_t rt = 0, base_reg = 0, store_imm = 0, base_off = 0;
+        if (!arm_ext_thumb_ldr_word_imm(arm_ext_code_u16(code, off),
+                                        anchor->record_src_off, &rt))
+            continue;
+        if (!arm_ext_thumb_str_word_imm(arm_ext_code_u16(code, off + 2u),
+                                        rt, &base_reg, &store_imm))
+            continue;
+        if (!arm_ext_thumb_bridge_base_offset(code, file_len, off,
+                                              base_reg, &base_off))
+            continue;
+
+        int32_t shift = (int32_t)(base_off + store_imm) -
+                        (int32_t)anchor->rw_dst_off;
+        int ok = 1;
+        for (uint32_t r = 0; r < lay->run_count && ok; ++r) {
+            const PrivateChildRwRun *run = &lay->runs[r];
+            int found = 0;
+            uint32_t span_start = off > 24u ? off - 24u : 0u;
+            uint32_t span_end = off + anchor->count * 4u + 24u;
+            if (span_end > file_len) span_end = file_len;
+            for (uint32_t roff = span_start;
+                 roff + run->count * 4u <= span_end;
+                 roff += 2u) {
+                if (arm_ext_thumb_bridge_run_matches(code, file_len, roff,
+                                                      base_reg, base_off,
+                                                      run, shift)) {
+                    found = 1;
+                    break;
+                }
+            }
+            if (!found) ok = 0;
+        }
+        if (ok) {
+            *shift_out = shift;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int arm_ext_child_needs_short_pack_alias(ArmExtModule *m,
+                                                uint32_t file_addr,
+                                                uint32_t file_len) {
+    if (!m || !file_addr || file_len < 96u) return 0;
+    const uint8_t *code = (const uint8_t *)arm_ptr(m, file_addr);
+    if (!code) return 0;
+
+    for (uint32_t off = 0; off + 96u <= file_len; off += 2u) {
+        if (arm_ext_code_u16(code, off) != 0xB5FFu ||
+            arm_ext_code_u16(code, off + 2u) != 0xB089u) {
+            continue;
+        }
+
+        int has_small_stack_pack_copy = 0;
+        int has_output_store = 0;
+        for (uint32_t p = off + 4u; p + 8u < off + 96u; p += 2u) {
+            /*
+             * frame.ext 0x2C97C8 proves the hazardous shape: a 32-byte local
+             * buffer at sp+4 is used as the package-name destination before
+             * the wrapper calls readFile, and the function later writes
+             * through its caller-provided output pointer.  Use this code shape
+             * instead of a filename branch so other helpers keep the full
+             * package path unless they have the same fixed-buffer ABI.
+             */
+            if (arm_ext_code_u16(code, p) == 0x2120u &&
+                arm_ext_code_u16(code, p + 2u) == 0xA801u) {
+                has_small_stack_pack_copy = 1;
+            }
+            if (arm_ext_code_u16(code, p) == 0x444Au &&
+                arm_ext_code_u16(code, p + 2u) == 0x6812u &&
+                arm_ext_code_u16(code, p + 4u) == 0xA801u &&
+                arm_ext_code_u16(code, p + 6u) == 0x4790u) {
+                has_small_stack_pack_copy = 1;
+            }
+            if (arm_ext_code_u16(code, p) == 0x6020u) {
+                has_output_store = 1;
+            }
+        }
+
+        if (has_small_stack_pack_copy && has_output_store) return 1;
+    }
+
+    return 0;
+}
 
 static void arm_ext_repair_private_child_bridges(ArmExtModule *m,
                                                  uint32 file_addr,
@@ -329,46 +1073,43 @@ static void arm_ext_repair_private_child_bridges(ArmExtModule *m,
     /* (a) 数据驱动 record 源槽填值：仅空白的自指针 bridge 槽。 */
     arm_ext_repair_private_child_record_bridges(m, record);
 
-    /* (b) 声明式 RW 镜像：先整体 in-bounds 拟合，再逐槽镜像空白目标。
+    /* (b) 声明式 RW 镜像：先用子模块自身的 Thumb bridge-copy 结构证明布局，
+     * 再整体 in-bounds 拟合并逐槽镜像空白目标。
      *
-     * bridge 桥块在子模块 RW 段内的起始偏移随该模块链接结果而变，描述符里的
-     * rw_dst_off 只对已有证据的布局正确；例如 graphics.ext 的临时 compact
-     * rw+0x20..0x64 试验不能套到 verdload，否则会改写 verdload 下载 UI 的
-     * 私有状态，导致点击“继续游戏”后仍停在主菜单。
-     *
-     * 这里用观测到的真实偏移平移描述符：若有与本模块代码区间重叠、且已被 ARM 重定位
-     * 写入过 memcpy(table[3]) 桥的同族实例(got_memcpy_off!=0)，按它的真实偏移与描述符
-     * 中 idx3(memcpy) 槽偏移之差平移整张描述符；无可借用观测时按描述符原偏移(保持
-     * gghjt 老行为)。验证：dota/gghjt/gxdzc Vitest e2e 流程保持通过。 */
-    ArmExtNestedModule *donor =
-        arm_ext_find_got_donor(m, file_addr, file_addr + file_len);
+     * DOTA 浏览器插件的 frame.ext 反汇编在 0x2C97C8 把第三参数当输出指针，
+     * 0x2C97FC 执行 str r0,[r4]；旧逻辑仅因它与 game.ext 代码区间重叠，就借用
+     * game.ext 的 got_memcpy_off，把本描述符平移到 rw+0x34..0x74，随后 frame
+     * 把 0x202C7831 这样的代码/标志值当输出指针写崩。区间重叠只能说明地址复用，
+     * 不能证明 child RW bridge 布局相同；必须看到当前 child 代码中存在
+     * record[0x68]/record[0x0C..0x4C] 复制到同一 R9-relative RW 区的指令序列。 */
     for (size_t L = 0; L < sizeof(private_child_rw_layouts) /
                            sizeof(private_child_rw_layouts[0]); ++L) {
         const PrivateChildRwLayout *lay = &private_child_rw_layouts[L];
-        /* 描述符里 idx3(memcpy，record_src_off==0x0C) 槽的偏移，作为平移基准。 */
         int32_t shift = 0;
-        if (donor && donor->got_memcpy_off) {
-            for (uint32_t r = 0; r < lay->run_count; ++r) {
-                if (lay->runs[r].record_src_off == 0x0Cu) {
-                    shift = (int32_t)donor->got_memcpy_off -
-                            (int32_t)lay->runs[r].rw_dst_off;
-                    break;
-                }
-            }
-        }
+        if (!arm_ext_discover_private_child_rw_shift(m, file_addr, file_len,
+                                                     lay, &shift))
+            continue;
         int fits = 1;
         for (uint32_t r = 0; r < lay->run_count && fits; ++r) {
             const PrivateChildRwRun *run = &lay->runs[r];
-            uint32_t dst = run->rw_dst_off + shift;
+            int32_t dst_signed = (int32_t)run->rw_dst_off + shift;
+            if (dst_signed < 0) { fits = 0; break; }
+            uint32_t dst = (uint32_t)dst_signed;
             if (!run->count ||
                 !arm_ptr(m, record + run->record_src_off + (run->count - 1u) * 4u) ||
                 !arm_ptr(m, rw_base + dst + (run->count - 1u) * 4u))
                 fits = 0;
+            for (uint32_t i = 0; i < run->count && fits; ++i) {
+                uint32_t src_off = run->record_src_off + i * 4u;
+                uint32_t v = arm_ext_read_u32_or_zero_(m, record + src_off);
+                uint32_t expected = EXT_TABLE_ADDR + src_off;
+                if (v != expected) fits = 0;
+            }
         }
         if (!fits) continue;
         for (uint32_t r = 0; r < lay->run_count; ++r) {
             const PrivateChildRwRun *run = &lay->runs[r];
-            uint32_t dst = run->rw_dst_off + shift;
+            uint32_t dst = (uint32_t)((int32_t)run->rw_dst_off + shift);
             for (uint32_t i = 0; i < run->count; ++i) {
                 uint32_t v = arm_ext_read_u32_or_zero_(
                     m, record + run->record_src_off + i * 4u);
@@ -435,6 +1176,18 @@ static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
             return 0;
         }
         arm_ext_repair_private_child_bridges(m, file_addr, file_len, rw_base);
+        if (arm_ext_child_needs_short_pack_alias(m, file_addr, file_len) &&
+            m->pack_alias[0] && m->pack_host_path[0] &&
+            strcmp(m->pack_alias, m->pack_host_path) != 0) {
+            /*
+             * Private child helpers copy table[100] after their own loader is
+             * synchronized.  DOTA frame.ext 0x2C97C8 has only a 32-byte local
+             * package buffer before its readFile call; expose the short alias
+             * at that boundary while arm_ext_pack_to_host_path keeps host I/O
+             * bound to the original absolute package path.
+             */
+            arm_ext_set_pack_table_name(m, m->pack_alias);
+        }
 
         /*
          * cfunction.ext's internal loader does not call table[25].  The
@@ -487,6 +1240,7 @@ static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
                    file_addr, file_len, ext_chunk, p_addr, helper_addr, ext_type, is_pause,
                    m->active_p_addr, m->active_helper_addr, m->primary_p_addr,
                    m->primary_helper_addr, m->timer_p_addr, m->timer_helper_addr);
+            arm_ext_diag_dump_rw_timer_state(m, "sync-child", rw_base);
         }
         if (getenv("VMRP_ARM_EXT_TRACE")) {
             printf("arm_ext_executor: synced internal nested helper=0x%X P=0x%X file=0x%X len=%u primary=0x%X/0x%X\n",
@@ -611,6 +1365,70 @@ static int arm_ext_has_foreground_child(ArmExtModule *m) {
            m->active_helper_addr != m->primary_helper_addr &&
            m->active_p_addr != m->p_addr &&
            m->active_helper_addr != m->helper_addr;
+}
+
+static int arm_ext_has_suspended_foreground_child(ArmExtModule *m,
+                                                  uint32_t primary_ext_chunk) {
+    if (!arm_ext_has_foreground_child(m) ||
+        !primary_ext_chunk ||
+        !arm_ptr(m, primary_ext_chunk + 0x34u)) {
+        return 0;
+    }
+    uint32_t suspend_depth = 0;
+    memcpy(&suspend_depth, arm_ptr(m, primary_ext_chunk + 0x34u), 4);
+    return suspend_depth > 0;
+}
+
+static uint32_t arm_ext_active_rw_base(ArmExtModule *m) {
+    uint32_t rw_base = 0;
+    if (m && m->active_p_addr && arm_ptr(m, m->active_p_addr)) {
+        memcpy(&rw_base, arm_ptr(m, m->active_p_addr), 4);
+    }
+    return rw_base;
+}
+
+static int arm_ext_frame_timer_node_is_valid(ArmExtModule *m,
+                                             uint32_t node) {
+    if (!m || !node || !arm_ptr(m, node) || !arm_ptr(m, node + 0x1Cu))
+        return 0;
+    /*
+     * frame.ext allocates timer nodes at 0x2C9486 and stamps the first word
+     * with 0x79ABBCCF before 0x2C9538 links them into the R9+0x94 queue.
+     * Require that structural marker so unrelated child RW data is not
+     * mistaken for a private timer queue.
+     */
+    return arm_ext_read_u32_or_zero_(m, node) == 0x79ABBCCFu;
+}
+
+static int arm_ext_foreground_child_has_frame_timer_queue(ArmExtModule *m) {
+    if (!arm_ext_has_foreground_child(m)) return 0;
+    uint32_t rw_base = arm_ext_active_rw_base(m);
+    if (!rw_base || !arm_ptr(m, rw_base + 0x94u) ||
+        !arm_ptr(m, rw_base + 0xA0u)) {
+        return 0;
+    }
+    /*
+     * DOTA frame.ext code=2 (0x2C96A0) consumes the queue at R9+0x94:
+     * [base+8] is the queued head and [base+12] is the active/current list.
+     * If both are empty, direct child code=2 immediately returns and can
+     * starve the wrapper-owned loading queue that installed the child.
+     */
+    uint32_t queued = arm_ext_read_u32_or_zero_(m, rw_base + 0x9Cu);
+    uint32_t active = arm_ext_read_u32_or_zero_(m, rw_base + 0xA0u);
+    return arm_ext_frame_timer_node_is_valid(m, queued) ||
+           arm_ext_frame_timer_node_is_valid(m, active);
+}
+
+static int arm_ext_wrapper_dispatch_is_busy(ArmExtModule *m) {
+    uint32_t wrapper_rw = arm_ext_wrapper_rw_base_(m);
+    if (!wrapper_rw || !arm_ptr(m, wrapper_rw + 0x04u)) return 0;
+    /*
+     * cfunction.ext wrapper dispatch uses wrapper_rw+4 as its queue/busy flag
+     * (see the 0x1F50 dispatch notes).  Read it only as liveness evidence:
+     * mutating this flag changes wrapper queue semantics and previously left
+     * pending events undrained.
+     */
+    return arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x04u) != 0;
 }
 
 static int arm_ext_screen_owner_is_visible(ArmExtModule *m,
@@ -1137,6 +1955,31 @@ static uint32_t alloc_string(ArmExtModule *m, const char *value) {
     return slot;
 }
 
+static uint32_t arm_ext_pack_table_slot(ArmExtModule *m) {
+    if (!m) return 0;
+    if (!m->pack_table_addr) {
+        m->pack_table_addr = arm_alloc(m, ARM_EXT_PACK_TABLE_SIZE);
+    }
+    return m->pack_table_addr;
+}
+
+static void arm_ext_set_pack_table_name(ArmExtModule *m, const char *name) {
+    uint32_t slot = arm_ext_pack_table_slot(m);
+    char *dst;
+    if (!m || !slot) return;
+    dst = (char *)arm_ptr(m, slot);
+    if (!dst) return;
+    /*
+     * Native table[100] points at writable pack_filename[128], not an
+     * immutable exact-length string.  EXT helpers copy shorter package names
+     * such as c:/mythroad/ into that storage; zero-fill first so stale bytes
+     * from a previous longer host path cannot survive past the new NUL.
+     */
+    memset(dst, 0, ARM_EXT_PACK_TABLE_SIZE);
+    snprintf(dst, ARM_EXT_PACK_TABLE_SIZE, "%s", name ? name : "");
+    write_table_entry(m, 100, slot);
+}
+
 static void internal_slot_write(ArmExtModule *m, uint32_t slot, uint32_t value) {
     if (slot) memcpy(arm_ptr(m, slot), &value, 4);
 }
@@ -1384,6 +2227,94 @@ static void arm_ext_diag_dump_layer_state(ArmExtModule *m, const char *tag) {
            m->host_timer_pending, mr_timer_state);
 }
 
+static void arm_ext_diag_dump_timer_node(ArmExtModule *m,
+                                         const char *tag,
+                                         const char *name,
+                                         uint32_t node) {
+    if (!m || !getenv("VMRP_ARM_EXT_DIAG") || !node) return;
+    if (!arm_ptr(m, node) || !arm_ptr(m, node + 0x1Cu)) {
+        printf("DIAG timer_node %s %s=0x%X unmapped\n",
+               tag ? tag : "?", name ? name : "?", node);
+        return;
+    }
+    uint32_t w[8];
+    for (uint32_t i = 0; i < 8; ++i)
+        w[i] = arm_ext_read_u32_or_zero_(m, node + i * 4u);
+    printf("DIAG timer_node %s %s=0x%X [00]=0x%X [04]=0x%X [08]=0x%X [0C]=0x%X [10]=0x%X [14]=0x%X [18]=0x%X [1C]=0x%X\n",
+           tag ? tag : "?", name ? name : "?", node,
+           w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
+}
+
+static void arm_ext_diag_dump_rw_timer_state(ArmExtModule *m,
+                                             const char *tag,
+                                             uint32_t rw_base) {
+    if (!m || !getenv("VMRP_ARM_EXT_DIAG") || !rw_base) return;
+    if (!arm_ptr(m, rw_base) || !arm_ptr(m, rw_base + 0x1Cu)) {
+        printf("DIAG rw_low %s rw=0x%X unmapped\n",
+               tag ? tag : "?", rw_base);
+        return;
+    }
+    uint32_t w[8];
+    for (uint32_t i = 0; i < 8; ++i)
+        w[i] = arm_ext_read_u32_or_zero_(m, rw_base + i * 4u);
+    /*
+     * Keep the low words because older helper variants put timer queues near
+     * R9+8, but do not treat them as authoritative for every private child.
+     */
+    printf("DIAG rw_low %s rw=0x%X +00=0x%X +04=0x%X +08=0x%X +0C=0x%X +10=0x%X +14=0x%X +18=0x%X +1C=0x%X\n",
+           tag ? tag : "?", rw_base,
+           w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
+    arm_ext_diag_dump_timer_node(m, tag, "rw+08", w[2]);
+    arm_ext_diag_dump_timer_node(m, tag, "rw+0C", w[3]);
+    /*
+     * DOTA's browser frame helper disassembly proves a different timer base:
+     * 0x2C96A0 loads literal 0x94, adds R9, then uses [base+8] for the queued
+     * head, [base+12] for the active list and [base+16] for the last tick.
+     * Dump that structural window for all private children so the evidence is
+     * about the module ABI, not a filename or app-specific branch.
+     */
+    if (arm_ptr(m, rw_base + 0x94u) && arm_ptr(m, rw_base + 0xC0u)) {
+        uint32_t fw[12];
+        for (uint32_t i = 0; i < 12; ++i)
+            fw[i] = arm_ext_read_u32_or_zero_(m, rw_base + 0x94u + i * 4u);
+        printf("DIAG rw_frame %s rw=0x%X +94=0x%X +98=0x%X +9C=0x%X +A0=0x%X +A4=0x%X +A8=0x%X +AC=0x%X +B0=0x%X +B4=0x%X +B8=0x%X +BC=0x%X +C0=0x%X\n",
+               tag ? tag : "?", rw_base,
+               fw[0], fw[1], fw[2], fw[3], fw[4], fw[5],
+               fw[6], fw[7], fw[8], fw[9], fw[10], fw[11]);
+        arm_ext_diag_dump_timer_node(m, tag, "rw+9C", fw[2]);
+        arm_ext_diag_dump_timer_node(m, tag, "rw+A0", fw[3]);
+    }
+    if (arm_ptr(m, rw_base + 0x1B0u) && arm_ptr(m, rw_base + 0x200u)) {
+        uint32_t cb[8];
+        for (uint32_t i = 0; i < 8; ++i)
+            cb[i] = arm_ext_read_u32_or_zero_(m, rw_base + 0x1C0u + i * 4u);
+        printf("DIAG rw_cb %s rw=0x%X +1C0=0x%X +1C4=0x%X +1C8=0x%X +1CC=0x%X +1D0=0x%X +1D4=0x%X +1D8=0x%X +1DC=0x%X\n",
+               tag ? tag : "?", rw_base,
+               cb[0], cb[1], cb[2], cb[3], cb[4], cb[5], cb[6], cb[7]);
+    }
+    for (int i = 0; i < m->nested_module_count; ++i) {
+        uint32_t nrw = arm_ext_read_u32_or_zero_(m, m->nested_modules[i].p_addr);
+        if (nrw != rw_base) continue;
+        uint32_t record = arm_ext_read_u32_or_zero_(m, m->nested_modules[i].file_addr);
+        uint32_t slot0 = arm_ext_read_u32_or_zero_(m, record + 0u * 4u);
+        uint32_t slot3 = arm_ext_read_u32_or_zero_(m, record + 3u * 4u);
+        uint32_t slot25 = arm_ext_read_u32_or_zero_(m, record + 25u * 4u);
+        uint32_t slot100 = arm_ext_read_u32_or_zero_(m, record + 100u * 4u);
+        uint32_t slot125 = arm_ext_read_u32_or_zero_(m, record + 125u * 4u);
+        uint32_t slot131 = arm_ext_read_u32_or_zero_(m, record + 131u * 4u);
+        /*
+         * frame.ext 0x2C93E0 dispatches through record[125] and 0x2C97C8
+         * stores the result through its caller-provided R2.  These few slots
+         * prove whether the private module record still points at wrapper
+         * callbacks or has been restored to host table bridges.
+         */
+        printf("DIAG record %s file=0x%X record=0x%X slot0=0x%X slot3=0x%X slot25=0x%X slot100=0x%X slot125=0x%X slot131=0x%X\n",
+               tag ? tag : "?", m->nested_modules[i].file_addr, record,
+               slot0, slot3, slot25, slot100, slot125, slot131);
+        break;
+    }
+}
+
 static void arm_ext_mark_row_spans(ArmExtRowSpans *spans,
                                    int32_t screen_w,
                                    int32_t screen_h,
@@ -1624,6 +2555,51 @@ static void arm_ext_note_visible_present_rect(ArmExtModule *m,
     arm_ext_note_screen_present_rect(m, x, y, w, h);
 }
 
+static uint16_t arm_ext_sample_present_pixel(ArmExtModule *m,
+                                             const uint16_t *bmp,
+                                             int32_t x,
+                                             int32_t y) {
+    if (!m || !bmp || x < 0 || y < 0 ||
+        x >= m->screen_w || y >= m->screen_h) {
+        return 0;
+    }
+    return bmp[(uint32_t)y * (uint32_t)m->screen_w + (uint32_t)x];
+}
+
+static void arm_ext_diag_visible_present(ArmExtModule *m,
+                                         const char *tag,
+                                         const uint16_t *bmp,
+                                         int32_t x,
+                                         int32_t y,
+                                         int32_t w,
+                                         int32_t h,
+                                         int covered_by_foreground) {
+    if (!m || !getenv("VMRP_ARM_EXT_SCREEN_DIAG")) return;
+    if (!arm_ext_has_foreground_child(m) &&
+        !(w >= m->screen_w && h >= m->screen_h)) {
+        return;
+    }
+
+    uint32_t owner_helper = 0;
+    uint32_t owner_p = arm_ext_screen_caller_owner(m, &owner_helper);
+    uint16_t c_tl = arm_ext_sample_present_pixel(m, bmp, x, y);
+    uint16_t c_mid = arm_ext_sample_present_pixel(
+        m, bmp, m->screen_w / 2, m->screen_h / 2);
+    uint16_t c_probe = arm_ext_sample_present_pixel(
+        m, bmp, (m->screen_w * 2) / 3, (m->screen_h * 9) / 20);
+    /*
+     * Narrow visible-present signature for foreground handoff bugs.  It logs
+     * only explicit host-visible submits, not every ARM framebuffer write.
+     */
+    printf("DIAG visible_present %s x=%d y=%d w=%d h=%d ownerP=0x%X ownerH=0x%X activeP=0x%X activeH=0x%X primaryP=0x%X primaryH=0x%X fgOwnerP=0x%X fgOwnerH=0x%X covered=%d samples=%04X/%04X/%04X\n",
+           tag ? tag : "?", x, y, w, h, owner_p, owner_helper,
+           m->active_p_addr, m->active_helper_addr,
+           m->primary_p_addr, m->primary_helper_addr,
+           m->foreground_screen_owner_p_addr,
+           m->foreground_screen_owner_helper_addr,
+           covered_by_foreground, c_tl, c_mid, c_probe);
+}
+
 typedef int (*ArmExtPresentSegmentFn)(ArmExtModule *m,
                                       void *ctx,
                                       int32_t x,
@@ -1715,6 +2691,8 @@ static int arm_ext_present_bitmap_rect(ArmExtModule *m,
         covered_by_foreground = arm_ext_has_foreground_cover(m);
     }
     if (!covered_by_foreground || !arm_ext_has_foreground_cover(m)) {
+        arm_ext_diag_visible_present(m, "bitmap", bmp, x, y, w, h,
+                                     covered_by_foreground);
         mr_drawBitmap(bmp, (int16)x, (int16)y, (uint16)w, (uint16)h);
         arm_ext_note_visible_present_rect(m, x, y, w, h);
         return 1;
@@ -1736,6 +2714,9 @@ static int arm_ext_dispup_rect(ArmExtModule *m,
         covered_by_foreground = arm_ext_has_foreground_cover(m);
     }
     if (!covered_by_foreground || !arm_ext_has_foreground_cover(m)) {
+        arm_ext_diag_visible_present(m, "dispup",
+                                     (const uint16_t *)arm_ptr(m, m->screen_addr),
+                                     x, y, w, h, covered_by_foreground);
         int32 ret = _DispUpEx((int16)x, (int16)y, (uint16)w, (uint16)h);
         arm_ext_note_visible_present_rect(m, x, y, w, h);
         return ret;
@@ -2724,7 +3705,9 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 41: {
             MrpVirtualFd *vf = mrp_vfd_get(m, r0);
             if (vf) { vf->in_use = 0; ret = MR_SUCCESS; }
-            else ret = mr_close((int32)r0);
+            else {
+                ret = mr_close((int32)r0);
+            }
         } break;
         case 42: {
             const char *info_name = arm_str(m, r0);
@@ -2817,7 +3800,11 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             }
         } break;
         case 47: ret = mr_remove(arm_str(m, r0)); break;
-        case 48: ret = mr_rename(arm_str(m, r0), arm_str(m, r1)); break;
+        case 48: {
+            const char *old_name = arm_str(m, r0);
+            const char *new_name = arm_str(m, r1);
+            ret = mr_rename(old_name, new_name);
+        } break;
         case 49: ret = mr_mkDir(arm_str(m, r0)); break;
         case 50: ret = mr_rmDir(arm_str(m, r0)); break;
         case 51: ret = mr_findStart(arm_str(m, r0), arm_ptr(m, r1), r2); break;
@@ -3088,6 +4075,9 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 125: {
             int fl = 0;
             uint32_t packp = 0, ramp_slot = 0, raml_slot = 0, ramp = 0, raml = 0;
+            uint32_t read_pack_ram_addr = 0, read_pack_ram_len = 0;
+            char read_pack_host_path[PATH_MAX];
+            read_pack_host_path[0] = '\0';
             const char *read_name = arm_str(m, r0);
             uc_mem_read(m->uc, EXT_TABLE_ADDR + 100 * 4, &packp, 4);
             uc_mem_read(m->uc, EXT_TABLE_ADDR + 104 * 4, &ramp_slot, 4);
@@ -3097,8 +4087,60 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
 
             void *hp = NULL;
             const char *pack = arm_str(m, packp);
+            const char *host_pack = arm_ext_pack_to_host_path(m, pack);
             if (pack[0] == '$' && ramp && raml) {
                 hp = mr_readFile_from_ram(read_name, &fl, (int)r2, arm_ptr(m, ramp), (int)raml);
+                if (hp) {
+                    read_pack_ram_addr = ramp;
+                    read_pack_ram_len = raml;
+                    const char *last_mrp_path = mr_get_last_written_mrp_path();
+                    uint32 last_mrp_len = 0;
+                    const uint8 *last_mrp =
+                        mr_get_last_written_mrp_data(&last_mrp_len);
+                    if (last_mrp && last_mrp_len == raml &&
+                        last_mrp_path && last_mrp_path[0] &&
+                        memcmp(arm_ptr(m, ramp), last_mrp, raml) == 0) {
+                        snprintf(read_pack_host_path,
+                                 sizeof(read_pack_host_path), "%s",
+                                 last_mrp_path);
+                    }
+                }
+            } else if (!pack[0]) {
+                uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
+                uint32_t owner_helper = 0;
+                uint32_t owner_p = arm_ext_p_for_code_addr(m, lr,
+                                                           &owner_helper);
+                ArmExtNestedModule *owner =
+                    arm_ext_find_nested_module_by_p(m, owner_p);
+                /*
+                 * Native pack_filename[128] is writable, and private child
+                 * helpers may clear it after their loader has installed the
+                 * child.  Once the LR maps to a registered child module, that
+                 * module's package is the ABI context for table[125]; otherwise
+                 * a blank table[100] means the VM-global package.
+                 */
+                if (owner && owner->package_ram_addr &&
+                           owner->package_ram_len &&
+                           arm_ptr(m, owner->package_ram_addr)) {
+                    hp = mr_readFile_from_ram(
+                        read_name, &fl, (int)r2,
+                        arm_ptr(m, owner->package_ram_addr),
+                        (int)owner->package_ram_len);
+                    if (hp) {
+                        read_pack_ram_addr = owner->package_ram_addr;
+                        read_pack_ram_len = owner->package_ram_len;
+                    }
+                } else if (owner && owner->package_host_path[0]) {
+                    hp = mr_readFile_from_pack(owner->package_host_path,
+                                               read_name, &fl, (int)r2);
+                    if (hp) {
+                        snprintf(read_pack_host_path,
+                                 sizeof(read_pack_host_path), "%s",
+                                 owner->package_host_path);
+                    }
+                } else {
+                    hp = _mr_readFile(read_name, &fl, (int)r2);
+                }
             } else {
                 /*
                  * EXT modules expose their current MRP through table[100].
@@ -3107,7 +4149,11 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                  * names the outer app. Bind the host read to the ARM-visible
                  * package for this bridge call, matching the native C table ABI.
                  */
-                hp = mr_readFile_from_pack(pack, read_name, &fl, (int)r2);
+                hp = mr_readFile_from_pack(host_pack, read_name, &fl, (int)r2);
+                if (hp && host_pack && host_pack[0]) {
+                    snprintf(read_pack_host_path, sizeof(read_pack_host_path),
+                             "%s", host_pack);
+                }
             }
             if (!hp) { ret = 0; break; }
             uint32_t ap = arm_alloc(m, (uint32_t)fl);
@@ -3118,6 +4164,11 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 memcpy(m->last_file_copy, hp, (size_t)fl);
                 m->last_file_addr = ap;
                 m->last_file_len = (uint32_t)fl;
+                snprintf(m->last_file_pack_host_path,
+                         sizeof(m->last_file_pack_host_path), "%s",
+                         read_pack_host_path);
+                m->last_file_pack_ram_addr = read_pack_ram_addr;
+                m->last_file_pack_ram_len = read_pack_ram_len;
             }
             if (r1) memcpy(arm_ptr(m, r1), &fl, 4);
             ret = ap;
@@ -3298,6 +4349,11 @@ static bool hook_invalid(uc_engine *uc, uc_mem_type type, uint64_t address, int 
         printf("  crash PC=0x%X (%s) last_file=0x%X..0x%X\n",
                pc, thumb ? "thumb" : "arm",
                m->last_file_addr, m->last_file_addr + m->last_file_len);
+        if (getenv("VMRP_ARM_EXT_DIAG")) {
+            uint32_t r9 = reg_read32(uc, UC_ARM_REG_R9);
+            arm_ext_diag_dump_layer_state(m, "invalid");
+            arm_ext_diag_dump_rw_timer_state(m, "invalid-r9", r9);
+        }
         /* 打印 crash PC 前32字节和后16字节，便于反汇编定位上下文 */
         {
             uint32_t pre_start = (pc > 32) ? (pc - 32) : 0;
@@ -3564,6 +4620,7 @@ static void patch_wrapper_stack_size(ArmExtModule *m) {
 }
 
 static void init_table(ArmExtModule *m) {
+    arm_ext_init_pack_names(m);
     for (uint32_t i = 0; i < EXT_TABLE_COUNT; ++i) {
         write_table_entry(m, i, EXT_TABLE_ADDR + i * 4);
     }
@@ -3654,7 +4711,14 @@ static void init_table(ArmExtModule *m) {
         write_table_entry(m, 95, bitmap_array);
     }
 
-    write_table_entry(m, 100, alloc_string(m, mr_get_pack_filename()));
+    /*
+     * Root wrapper startup may use table[100] as an actual package path.  Keep
+     * the host-resolved spelling here; private child loader synchronization
+     * narrows it later, after the outer package has initialized.
+     */
+    arm_ext_set_pack_table_name(m, m->pack_host_path[0] ?
+                                   m->pack_host_path :
+                                   mr_get_pack_filename());
     write_table_entry(m, 101, alloc_string(m, mr_get_start_filename()));
     write_table_entry(m, 102, alloc_string(m, mr_get_old_pack_filename()));
     write_table_entry(m, 103, alloc_string(m, mr_get_old_start_filename()));
@@ -3744,7 +4808,10 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     m->code_len = len;
     m->host_code = code;
 
-    m->profile = app_compat_select(mr_get_pack_filename());
+    arm_ext_init_pack_names(m);
+    m->profile = app_compat_select(m->pack_host_path[0] ?
+                                   m->pack_host_path :
+                                   mr_get_pack_filename());
     if (m->profile && m->profile->init)
         m->app_state = m->profile->init(m);
 
@@ -3773,7 +4840,9 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     if (err != UC_ERR_OK) goto fail;
     init_table(m);
     /* 预解析 MRP，缓存所有条目，避免 ARM ext 做极慢的 MRP 索引扫描 */
-    parse_mrp_cache(m, mr_get_pack_filename());
+    parse_mrp_cache(m, m->pack_host_path[0] ?
+                    m->pack_host_path :
+                    mr_get_pack_filename());
     memcpy(m->low_table, m->mem, EXT_TABLE_COUNT * 4);
     err = uc_mem_map_ptr(m->uc, 0, EXT_LOW_TABLE_SIZE, UC_PROT_ALL, m->low_table);
     if (err != UC_ERR_OK) goto fail;
@@ -4032,6 +5101,24 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         memcpy(&modal_ext_chunk, arm_ptr(m, m->primary_p_addr + 12), 4);
     if (modal_ext_chunk && arm_ptr(m, modal_ext_chunk + 0x34))
         memcpy(&modal_suspend_depth_pre, arm_ptr(m, modal_ext_chunk + 0x34), 4);
+    int suspended_foreground_child =
+        arm_ext_has_suspended_foreground_child(m, modal_ext_chunk);
+    int foreground_child_has_private_timer =
+        suspended_foreground_child &&
+        arm_ext_foreground_child_has_frame_timer_queue(m);
+    if (code == 2 && foreground_child_has_private_timer) {
+        /*
+         * A suspended primary extChunk with a different active child means the
+         * wrapper has handed the visible layer to that child, but DOTA proves
+         * that is not enough to route timer ticks directly.  frame.ext code=2
+         * reaches 0x2C96A0 and only advances nodes in child R9+0x94; when that
+         * queue is empty, direct child ticks return immediately and starve the
+         * wrapper-owned load queue.  Switch only after the child has installed
+         * a real frame timer node.
+         */
+        call_p_addr = m->active_p_addr;
+        call_helper_addr = m->active_helper_addr;
+    }
     int foreground_child_active =
         m->active_p_addr &&
         m->active_helper_addr &&
@@ -4077,6 +5164,15 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
                m->active_p_addr, m->active_helper_addr, m->primary_p_addr,
                m->primary_helper_addr, m->timer_p_addr, m->timer_helper_addr,
                modal_suspend_depth_pre);
+        if (code == 2 && suspended_foreground_child) {
+            /*
+             * Browser private children keep their timer queue under child
+             * R9+0x94 (frame.ext 0x2C96A0), not the primary game timer head.
+             * Dump that window around each routed tick so stalled foreground
+             * progress can be tied to the child ABI instead of broad tracing.
+             */
+            arm_ext_diag_dump_rw_timer_state(m, "call-pre-active", rw_base);
+        }
     }
     arm_ext_diag_dump_layer_state(m, "call-pre");
     if (rw_base) reg_write32(m->uc, UC_ARM_REG_R9, rw_base);
@@ -4150,6 +5246,15 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     leave_screen_context(m, saved_screenBuf, present_depth_before);
     capture_timer_dispatches(m);
     arm_ext_diag_dump_layer_state(m, "call-post");
+    if (getenv("VMRP_ARM_EXT_DIAG") && code == 2 &&
+        suspended_foreground_child) {
+        uint32_t active_rw_post = 0;
+        if (m->active_p_addr && arm_ptr(m, m->active_p_addr)) {
+            memcpy(&active_rw_post, arm_ptr(m, m->active_p_addr), 4);
+        }
+        arm_ext_diag_dump_rw_timer_state(m, "call-post-active",
+                                         active_rw_post);
+    }
 
     /* wrapper 无 primary module 时（如"请稍后"加载阶段），wrapper 的
      * code=2 处理完后不会通过 table[31] 重启宿主 timer。宿主需要持续
@@ -4157,6 +5262,23 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
      * 注册 primary module。 */
     if (code == 2 && !m->host_timer_pending &&
         !m->primary_p_addr && m->wrapper_timer_dispatch_addr) {
+        mr_timerStart(50);
+        mr_timer_state = 1;
+        m->host_timer_pending = 1;
+        internal_slot_write(m, m->mr_timer_state_slot, 1);
+    }
+    if (code == 2 && !m->host_timer_pending &&
+        suspended_foreground_child &&
+        (foreground_child_has_private_timer ||
+         arm_ext_wrapper_dispatch_is_busy(m))) {
+        /*
+         * Wrapper suspend/resume keeps the primary extChunk depth at +0x34
+         * while a child module owns the foreground.  frame.ext direct code=2
+         * ticks are useful only after R9+0x94 contains a 0x79ABBCCF timer
+         * node; before then the wrapper-owned load/resume state can still be
+         * busy at wrapper_rw+4.  Keep the normal host timer path alive in both
+         * cases without faking wrapper flags or calling code=5 directly.
+         */
         mr_timerStart(50);
         mr_timer_state = 1;
         m->host_timer_pending = 1;
@@ -4347,6 +5469,31 @@ uint32 arm_ext_primary_helper(ArmExtModule *m) {
         goto out;
     }
     if (!(m->primary_helper_addr && m->primary_helper_addr != m->helper_addr)) {
+        goto out;
+    }
+    if (m->primary_child_reopen_timer_needed) {
+        /*
+         * After a modal child closes, the wrapper still owns one or more
+         * resume/reopen timer ticks.  The normal helper code=2 path preserves
+         * the wrapper's ARM-side argument setup for that transition; direct
+         * 0xE83A81 dispatch fabricates only the primary extChunk ABI.  DOTA's
+         * browser launch hits this boundary immediately after the download
+         * result modal closes, before brw.ext/frame.ext are registered.
+         */
+        goto out;
+    }
+    if (arm_ext_has_foreground_child(m)) {
+        /*
+         * Direct wrapper timer dispatch uses a host-synthesized ABI
+         * (R0=primary extChunk, R2=extChunk[0x24]).  That is only valid while
+         * the wrapper is advancing its primary module queue.  DOTA's browser
+         * path proves the opposite boundary: after brw.ext/frame.ext become
+         * the foreground child, entering 0xE83A81 directly reaches frame.ext
+         * 0x2C97C8 with a tagged callback/code value as the output struct
+         * pointer, and 0x2C97FC stores through it.  Let the normal helper
+         * code=2 path run in child foreground state so wrapper-owned ABI setup
+         * stays inside ARM code.
+         */
         goto out;
     }
     if (!m->primary_p_addr || !arm_ptr(m, m->primary_p_addr + 12)) {
