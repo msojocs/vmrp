@@ -59,3 +59,27 @@
 - **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, opglqa-font-download-repeat-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md
 - **Summary:** Refreshed wiki index and derived metadata surfaces
 
+## [2026-06-27T09:09:19.252Z] query
+- **Pages:** dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-dsm-package-provenance.md, opglqa-font-download-repeat-investigation.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md
+- **Summary:** Query "dota simpleDownload browser plugin network state investigation" → 6 results (of 6 total)
+
+## [2026-06-27T09:11:15.121Z] ingest
+- **Pages:** dota-browser-plugin-second-simpledownload-trigger.md
+- **Summary:** Created new page "DOTA browser plugin second simpleDownload trigger"
+
+## [2026-06-27T09:11:15.124Z] add
+- **Pages:** dota-browser-plugin-second-simpledownload-trigger.md
+- **Summary:** Created wiki page dota-browser-plugin-second-simpledownload-trigger.md
+
+## [2026-06-27T09:19:00.469Z] ingest
+- **Pages:** dota-browser-plugin-second-simpledownload-trigger.md
+- **Summary:** Updated "DOTA browser plugin second simpleDownload trigger" with new content
+
+## [2026-06-27T09:22:28.614Z] ingest
+- **Pages:** dota-browser-plugin-second-simpledownload-trigger.md
+- **Summary:** Updated "DOTA browser plugin second simpleDownload trigger" with new content
+
+## [2026-06-27T09:24:55.248Z] ingest
+- **Pages:** dota-browser-plugin-second-simpledownload-trigger.md
+- **Summary:** Updated "DOTA browser plugin second simpleDownload trigger" with new content
+

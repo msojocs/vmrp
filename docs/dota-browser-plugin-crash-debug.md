@@ -68,3 +68,69 @@
   - `cmake --build build --target vmrp -j2`
   - `VMRP_E2E_KEEP_TMP=1 VMRP_ARM_EXT_DIAG=1 pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功" --reporter=verbose`
   - `pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功"`
+
+## 2026-06-27 simpleDownload 最后 60 秒复查
+
+- 新任务：分析 `pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功"` 最后 `60s` 内发起 `simpleDownload` 的触发条件；不跑 `xvfb`，避免全量 trace，继续用 stdout/PPM/反汇编证据。
+- 当前工作树已有前序修复形态，不能直接采信旧 wiki 结论；本轮以新保留目录 `/tmp/vmrp-e2e-GLjzVe` 为准。
+- 目标用例通过：`VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功" --reporter=verbose`，耗时约 `83s`。
+- 低噪声 stdout 证据：
+  - 启动早期先有一次 `cmwap` 请求 `POST /payOneAsTlv` 到 `rop.skymobiapp.com:80`。
+  - 下载界面确认下载后有第一次 `POST /simpleDownload`：`my_initNetwork(..., 'cmwap')`，`Host: spd.skymobiapp.com:6009`，真实连接 `159.75.119.124:6009`，收到 `HTTP/1.1 200 OK`，随后安装 `mythroad/plugins/embrw.mrp`。
+  - 浏览器插件启动后，测试第 180 行再次按 `LEFT_SOFT`，最后 `60s` 内出现第二次 `POST /simpleDownload`：`my_initNetwork(..., 'CMNET')`，同步 DNS 解析 `spd.skymobiapp.com`，`my_connect()` 异步连接 `159.75.119.124:80` 成功，`my_getSocketState(3): 0`，`[my_send] cmwap off.`，请求头仍写 `Host: spd.skymobiapp.com:6009`，收到 `HTTP/1.1 404 Not Found`。
+- 当前关键疑点：
+  - 第二次 `simpleDownload` 确实发生在最后 `60s` 观察窗口内，不是只在插件下载阶段发生。
+  - 第二次请求的 HTTP Host 指向 `:6009`，但 socket 实际连到 `:80`；这可能是浏览器插件业务使用 `CMNET` 后显式传入 `80`，也可能是平台网络桥/反汇编路径把请求端口处理错。
+  - 需要继续用 MRP 内容和 ARM EXT/DSM 网络槽反汇编区分“插件业务状态机触发”与“平台 BUG 导致错误目标端口”。
+- 运行时文件状态：
+  - `mythroad` 是 `wasm/dist/fs/mythroad` 的符号链接。
+  - 本轮测试后运行时 `mythroad/plugins` 只有 `embrw.mrp` 与 `netpay.mrp`；`brwmain.mrp`、`brwcore.mrp`、`brwshell.mrp` 等浏览器下级插件只存在于 `build/mythroad/plugins`，没有被测试工作目录预置。
+  - `embrw.mrp` 内部只含 `brw.ext`、`frame.ext`、`logo.bmp`、`progress.bmp`、`font.uni`、焦点位图；`frame.ext` 字符串包含 `brw/vercfg.bin`、`brw/upd/vercfg.bin`、`brw/brw2.cfg`、`CMWAP`、`CMNET`、`plugins/embrw.mrp`。这支持一个候选解释：最后 `60s` 的左软键是在已启动的 `frame.ext` 浏览器壳中确认继续/更新，因下级浏览器包或版本配置缺失而再次进入下载服务。
+- 当前 x86_64 反汇编核验：
+  - `build/vmrp` 中 `my_initNetwork` 位于 `0x22010`，对 `mode` 做 `strncasecmp("cmwap", mode, 5)`，每次覆盖全局 `isCMWAP`。
+  - `my_socket` 位于 `0x21df0`，创建 socket 时把当前 `isCMWAP` 复制到 `mSocket+0x10`。
+  - `my_connectAsync` 位于 `0x21c50`，真实连接结果写到 `realState`，再按 `mSocket+0x10` 决定是否同步 guest 可见 `state`。
+  - `my_getSocketState` 位于 `0x21da0`，返回 `mSocket+0x0c`；本轮日志的 `my_getSocketState(3): 0` 证明 CMNET 阶段没有复现旧的 `MR_WAITING` 状态污染。
+
+## 2026-06-27 simpleDownload 触发条件结论
+
+- 复现稳定：
+  - `/tmp/vmrp-e2e-GLjzVe/stdout.log` 和 `/tmp/vmrp-e2e-aj82ck/stdout.log` 均显示最后 `60s` 窗口内有第二次 `POST /simpleDownload`。
+  - `strace -f -s 4096 -e trace=connect,sendto,recvfrom -o /tmp/vmrp-dota-simpledownload-sendto.strace ...` 再次复现通过，系统调用级证据显示第二次请求在测试第 180 行 `LEFT_SOFT` 后出现。
+- 触发条件：
+  - 前提一：测试开头删除运行时 `mythroad/plugins/embrw.mrp`，DOTA 进入“下载浏览器插件”界面。
+  - 前提二：第 158 行 `LEFT_SOFT` 下载并安装 `embrw.mrp`，第一次 `/simpleDownload` 的 TLV `0x29CE=480004 (0x75304)`，与 `build/mythroad/plugins/embrw.mrp` 的 appid 一致，返回 `200 OK`。
+  - 前提三：第 166 行确认下载结果后启动 `embrw.mrp`，`frame.ext` 作为浏览器壳进入可交互界面。
+  - 直接触发：第 180 行再次按 `LEFT_SOFT`。此时已经在浏览器插件 `frame.ext` 路径内；`frame.ext` 选择 `CMNET`，解析 `spd.skymobiapp.com`，调用 `mr_connect(..., port=80, type=async)`，socket 状态成功后发送第二次 `/simpleDownload`。
+  - 运行时文件条件：当前测试工作目录只有 `embrw.mrp` 和 `netpay.mrp`，没有 `brwmain.mrp`、`brwcore.mrp`、`brwshell.mrp` 等下级浏览器插件；第二次 `/simpleDownload` 的 TLV `0x29CE=700015 (0xAAE6F)`，不是 `embrw.mrp` 的 appid。现有仓库内未找到 appid `700015` 对应 MRP，说明它更像浏览器壳请求的下一级组件/配置/更新对象，而不是重复下载 `embrw.mrp`。
+- 端口判断：
+  - `src/arm_ext_executor.c` table[85] 直接把 ARM `r2` 作为 `mr_connect` 端口传入；`src/network.c` 的 `my_connect()` 对 CMNET 不解析 HTTP Host。
+  - 第二次日志有 `[my_send] cmwap off.`，因此 `Host: spd.skymobiapp.com:6009` 不会被平台用于重连。
+  - `connect('159.75.119.124', 80)` 是 guest/plugin 传入的平台参数；`Host: ...:6009` 是 guest/plugin 随后构造的 HTTP 头。当前证据不支持“VMRP 把 6009 改成 80”的平台 BUG。
+- 反汇编证据：
+  - `/tmp/vmrp-embrw-extract/frame.ext` 中 `CMWAP` 位于文件偏移 `0x24f0`，`CMNET` 位于 `0x24f8`。
+  - `arm-none-eabi-objdump -D -b binary -m arm -M force-thumb --adjust-vma=0x2c8000 /tmp/vmrp-embrw-extract/frame.ext` 显示 `0x2c9200` 函数根据 `r0 == 1` 选择 `CMWAP`，否则选择 `CMNET`，再进入网络初始化/连接路径。
+  - `frame.ext` 字符串还包含 `brw/vercfg.bin`、`brw/upd/vercfg.bin`、`brw/wvercfg.bin`、`brw/brw2.cfg`、`plugins/embrw.mrp`；这些配置/组件在运行时目录缺失，支持“浏览器壳启动后进入更新/下载检查”的解释。
+- 更具体的按键触发反汇编：
+  - `src/e2e_control.c` 把 `LEFT_SOFT` 映射为 `SDLK_EQUALS`；`src/main.c` 再把 `SDLK_EQUALS` 送成 `MR_KEY_SOFTLEFT`。`src/include/types.h` 中 `MR_KEY_SOFTLEFT` 的枚举值为 `17`，`MR_KEY_SELECT` 为 `20`。
+  - `frame.ext` 是带 `MRPGCMAP` 头的混合 ARM/Thumb 子模块，不能按全文件单一 Thumb 流解释；只对已知 Thumb 函数区切片。
+  - 在 `frame.ext` Thumb 切片里，`0x2c8658` 一段是输入命中/确认处理函数。它先要求全局 UI 状态字节 `[state+4] == 2`；`r0 == 0` 的按下事件会在 `0x2c8722..0x2c8732` 处理 `r1 == 12/13`（上/下键）并更新选择字节 `[r4+7]`，这只是改变当前选择。
+  - 真正触发网络路径的是确认/释放分支：`r0 == 1` 时，`0x2c8736..0x2c873c` 明确比较 `r1 == 20` 或 `r1 == 17`，两者任一命中都会落到 `0x2c873e`；其中 `17` 正是左软键。
+  - `0x2c873e..0x2c8752` 读取选择字节 `[r4+7]`，先调用 `0x2c93c0` 保存选择状态、`0x2c9044` 刷新界面，然后把该状态作为 `r0` 调用 `0x2c9200`。`0x2c9200` 对 `r0 == 1` 选择 `CMWAP`，否则选择 `CMNET`；当前日志中这一分支实际选择了 `CMNET`。
+  - `0x2c9200` 之后调用疑似 `initNetwork(APN)` 包装的 `0x2c9a48`。若返回 `2`，`0x2c9232..0x2c9242` 使用 `0x4e20`（`20000ms`）注册重试回调；该回调落在 `0x2c84d0` 附近，会再次调用 `0x2c9260` 和 `0x2c9200`。这解释了左软键后观察窗口内出现 CMNET 初始化和后续下载请求。
+  - 因此“第 180 行左软键触发”不只是测试时序判断：`frame.ext` 内部确有左软键/确认键分支直接调用网络模式选择函数。尚未静态定位到 `simpleDownload` 字符串或 appid `700015` 的构造函数，因为这些字符串不在 `frame.ext`/`brw.ext` 明文中；`700015` 的具体资源身份仍按运行时 TLV 证据归为中置信推断。
+- PPM/可见状态：
+  - `/tmp/vmrp-e2e-7SRio9/start-browser.ppm` 为 `240x320`，不是黑屏；前序断言 `uniqueColorCount() > 4` 已通过。
+  - 最终 `screen.ppm` 也有大量非黑像素；当前问题是网络业务触发条件，不是浏览器插件启动崩溃或空画面。
+- 结论：
+  - 最后 `60s` 发起 `simpleDownload` 的直接触发条件是“浏览器插件启动后在 `frame.ext` 界面再次按左软键”；更完整的条件是运行时只安装了外层 `embrw.mrp`，下级浏览器组件/配置缺失，`frame.ext` 在左软键确认后走 `CMNET` 更新/下载路径，请求 appid `700015`。
+  - 程序现有网络代码在此路径上已经把 CMNET socket 状态正确暴露为 `0`，没有复现旧的 CMWAP/CMNET 状态污染。当前若要让请求成功，修复方向应是提供/模拟浏览器壳请求的 `700015` 资源或补齐它期望的组件/配置；不应在平台层按 HTTP Host 对 CMNET 已连接 socket 做重连兜底。
+
+### 2026-06-27 17:16 当前状态复验
+
+- 复验命令：`VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功" --reporter=verbose`，结果 `1 passed | 1 skipped`，目标用例耗时 `83299ms`。
+- 新保留目录：`/tmp/vmrp-e2e-i2ymhU`。
+- 新 stdout 与前述结论一致：
+  - 第一次 `/simpleDownload`：`my_initNetwork(..., 'cmwap')`，`my_connect('159.75.119.124', 6009)`，`POST /simpleDownload`，返回 `HTTP/1.1 200 OK`。
+  - 最后 `60s` 窗口内第二次 `/simpleDownload`：`my_initNetwork(..., 'CMNET')`，`my_getHostByName('spd.skymobiapp.com')`，`my_connect('159.75.119.124', 80)`，`my_getSocketState(3): 0`，`[my_send] cmwap off.`，`POST /simpleDownload`，`Host: spd.skymobiapp.com:6009`，返回 `HTTP/1.1 404 Not Found`。
+- PPM 检查：`/tmp/vmrp-e2e-i2ymhU/start-browser.ppm` 与 `screen.ppm` 均为 `240x320` raw pixmap；去除 PPM 头后分别有 `34708` 与 `39880` 个非零字节，证明不是黑屏路径。
