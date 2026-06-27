@@ -114,6 +114,10 @@ describe("dota pixel flow", () => {
   it("下载浏览器插件 - 成功", async () => {
     // 删除后，继续游戏会进入下载浏览器插件界面。
     fs.rmSync('mythroad/plugins/embrw.mrp', { force: true });
+    fs.rmSync('mythroad/plugins/brwcore.mrp', { force: true });
+    fs.rmSync('mythroad/plugins/brwgui.mrp', { force: true });
+    fs.rmSync('mythroad/plugins/brwmain.mrp', { force: true });
+    fs.rmSync('mythroad/plugins/brwshell.mrp', { force: true });
     vmrp = await VmrpE2e.start("test/fixtures/dota.mrp");
 
     await vmrp.delay(6000);
@@ -164,22 +168,16 @@ describe("dota pixel flow", () => {
     {
       // 点击确定，确认下载结果，开始加载浏览器
       await vmrp.key('LEFT_SOFT', 3_000);
-      await vmrp.delay(4_000);
-      let screen = await vmrp.screen("start-browser");
-      for (let i = 0; i < 10 && screen.uniqueColorCount() <= 4; i++) {
-        // 浏览器插件先提交一帧低色数过渡画面，随后才绘制正文内容。
-        await vmrp.delay(500);
-        screen = await vmrp.screen("start-browser");
-      }
-      expect(await vmrp.drawCount()).toBeGreaterThan(0);
-      expect(screen.uniqueColorCount()).toBeGreaterThan(4);
-      expect(screen.pixel(152, 146)).not.toEqual([0, 0, 0]);
+      await vmrp.delay(1_000);
+      // 已确认进入目标界面，不可使用循环检测，循环等待会导致退出该界面
+      let screen = await vmrp.screen("download-browser-components");
+      expect(screen.uniqueColorCount()).toBeGreaterThan(100);
+      expect(screen.pixel(95, 88)).not.toEqual([0, 0, 0]);
+      expect(screen.pixel(120, 190)).not.toEqual([0, 0, 0]);
     }
     {
-      // 点击确定，确认下载结果，开始请求插件并启动浏览器
       const before = await vmrp.drawCount();
-      await vmrp.key('LEFT_SOFT', 1_000);
-      await vmrp.delay(10_000);
+      await vmrp.delay(20_000);
       const after = await vmrp.drawCount();
       const screen = await vmrp.screen("browser-running");
       expect(after).toBeGreaterThan(before);

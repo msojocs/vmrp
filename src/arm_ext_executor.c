@@ -2151,6 +2151,69 @@ static char *arm_str(ArmExtModule *m, uint32_t addr) {
     return p ? p : (char *)"";
 }
 
+static ArmExtNestedModule *arm_ext_resource_owner_for_lr(ArmExtModule *m,
+                                                         uint32_t *owner_p,
+                                                         uint32_t *owner_helper) {
+    uint32_t helper = 0;
+    uint32_t p = 0;
+    ArmExtNestedModule *owner = NULL;
+    if (owner_p) *owner_p = 0;
+    if (owner_helper) *owner_helper = 0;
+    if (!m) return NULL;
+
+    p = arm_ext_p_for_code_addr(m, reg_read32(m->uc, UC_ARM_REG_LR), &helper);
+    owner = arm_ext_find_nested_module_by_p(m, p);
+    if (owner_p) *owner_p = p;
+    if (owner_helper) *owner_helper = helper;
+    return owner;
+}
+
+static void *arm_ext_read_child_resource(ArmExtModule *m,
+                                         ArmExtNestedModule *owner,
+                                         const char *read_name,
+                                         int *file_len,
+                                         int lookfor,
+                                         char *read_pack_host_path,
+                                         uint32_t *read_pack_ram_addr,
+                                         uint32_t *read_pack_ram_len) {
+    void *hp = NULL;
+    if (!m || !owner || !read_name) return NULL;
+    /*
+     * Private loaders give each child a stable package owner when the staged
+     * executable is byte-proven.  A later shared table[100] value can still be
+     * the outer app because wrappers reuse one writable pack_filename buffer;
+     * child resource calls are scoped by LR to the child's recorded owner.
+     */
+    if (owner->package_ram_addr && owner->package_ram_len &&
+        arm_ptr(m, owner->package_ram_addr)) {
+        hp = mr_readFile_from_ram(read_name, file_len, lookfor,
+                                  arm_ptr(m, owner->package_ram_addr),
+                                  (int)owner->package_ram_len);
+        if (hp) {
+            if (read_pack_ram_addr) *read_pack_ram_addr = owner->package_ram_addr;
+            if (read_pack_ram_len) *read_pack_ram_len = owner->package_ram_len;
+        }
+        return hp;
+    }
+    if (owner->package_host_path[0]) {
+        hp = mr_readFile_from_pack(owner->package_host_path, read_name,
+                                   file_len, lookfor);
+        if (hp && read_pack_host_path) {
+            snprintf(read_pack_host_path, PATH_MAX, "%s",
+                     owner->package_host_path);
+        }
+    }
+    return hp;
+}
+
+static int arm_ext_child_has_package_owner(ArmExtModule *m,
+                                           ArmExtNestedModule *owner) {
+    if (!owner) return 0;
+    if (owner->package_host_path[0]) return 1;
+    return owner->package_ram_addr && owner->package_ram_len &&
+           arm_ptr(m, owner->package_ram_addr);
+}
+
 
 static int format_arm(ArmExtModule *m, char *dst, size_t dst_size, const char *fmt, unsigned first_arg) {
     size_t out = 0;
@@ -4569,7 +4632,21 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             void *hp = NULL;
             const char *pack = arm_str(m, packp);
             const char *host_pack = arm_ext_pack_to_host_path(m, pack);
-            if (pack[0] == '$' && ramp && raml) {
+            ArmExtNestedModule *owner =
+                arm_ext_resource_owner_for_lr(m, NULL, NULL);
+            int pack_is_root =
+                pack[0] && host_pack && m->pack_host_path[0] &&
+                strcmp(host_pack, m->pack_host_path) == 0;
+            int child_scoped_pack =
+                arm_ext_child_has_package_owner(m, owner) &&
+                (!pack[0] || pack_is_root);
+            if (child_scoped_pack) {
+                hp = arm_ext_read_child_resource(
+                    m, owner, read_name, &fl, (int)r2,
+                    read_pack_host_path, &read_pack_ram_addr,
+                    &read_pack_ram_len);
+            }
+            if (!hp && !child_scoped_pack && pack[0] == '$' && ramp && raml) {
                 hp = mr_readFile_from_ram(read_name, &fl, (int)r2, arm_ptr(m, ramp), (int)raml);
                 if (hp) {
                     read_pack_ram_addr = ramp;
@@ -4586,13 +4663,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                                  last_mrp_path);
                     }
                 }
-            } else if (!pack[0]) {
-                uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
-                uint32_t owner_helper = 0;
-                uint32_t owner_p = arm_ext_p_for_code_addr(m, lr,
-                                                           &owner_helper);
-                ArmExtNestedModule *owner =
-                    arm_ext_find_nested_module_by_p(m, owner_p);
+            } else if (!hp && !child_scoped_pack && !pack[0]) {
                 /*
                  * Native pack_filename[128] is writable, and private child
                  * helpers may clear it after their loader has installed the
@@ -4600,29 +4671,8 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                  * module's package is the ABI context for table[125]; otherwise
                  * a blank table[100] means the VM-global package.
                  */
-                if (owner && owner->package_ram_addr &&
-                           owner->package_ram_len &&
-                           arm_ptr(m, owner->package_ram_addr)) {
-                    hp = mr_readFile_from_ram(
-                        read_name, &fl, (int)r2,
-                        arm_ptr(m, owner->package_ram_addr),
-                        (int)owner->package_ram_len);
-                    if (hp) {
-                        read_pack_ram_addr = owner->package_ram_addr;
-                        read_pack_ram_len = owner->package_ram_len;
-                    }
-                } else if (owner && owner->package_host_path[0]) {
-                    hp = mr_readFile_from_pack(owner->package_host_path,
-                                               read_name, &fl, (int)r2);
-                    if (hp) {
-                        snprintf(read_pack_host_path,
-                                 sizeof(read_pack_host_path), "%s",
-                                 owner->package_host_path);
-                    }
-                } else {
-                    hp = _mr_readFile(read_name, &fl, (int)r2);
-                }
-            } else {
+                hp = _mr_readFile(read_name, &fl, (int)r2);
+            } else if (!hp && !child_scoped_pack) {
                 /*
                  * EXT modules expose their current MRP through table[100].
                  * Nested download/install helpers may switch that slot to a
