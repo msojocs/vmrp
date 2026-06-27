@@ -1,11 +1,12 @@
 # Wiki Index
 
-> 7 pages | Last updated: 2026-06-27T09:24:55.250Z
+> 8 pages | Last updated: 2026-06-27T15:07:39.467Z
 
 ## debugging
 
 - [DOTA browser plugin DSM package provenance](dota-browser-plugin-dsm-package-provenance.md) — # DOTA browser plugin DSM package provenance
 - [DOTA browser plugin network state investigation](dota-browser-plugin-network-state-investigation.md) — # DOTA browser plugin network state investigation
+- [DOTA Browser Plugin Record Pack Slot Fix](dota-browser-plugin-record-pack-slot-fix.md) — # DOTA Browser Plugin Record Pack Slot Fix
 - [DOTA browser plugin second simpleDownload trigger](dota-browser-plugin-second-simpledownload-trigger.md) — # DOTA browser plugin second simpleDownload trigger
 - [gghjt modal timer and cold extraction regressions](gghjt-modal-timer-and-cold-extraction-regressions.md) — # gghjt modal timer and cold extraction regressions
 - [gms payment latency analysis](gms-payment-latency-analysis.md) — # gms payment latency analysis

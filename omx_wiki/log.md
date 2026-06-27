@@ -83,3 +83,30 @@
 - **Pages:** dota-browser-plugin-second-simpledownload-trigger.md
 - **Summary:** Updated "DOTA browser plugin second simpleDownload trigger" with new content
 
+## [2026-06-27T12:58:15.667Z] ingest
+- **Pages:** dota-browser-plugin-record-pack-slot-fix.md
+- **Summary:** Created new page "DOTA Browser Plugin Record Pack Slot Fix"
+
+## [2026-06-27T12:58:15.680Z] add
+- **Pages:** dota-browser-plugin-record-pack-slot-fix.md
+- **Summary:** Created wiki page dota-browser-plugin-record-pack-slot-fix.md
+
+## [2026-06-27T13:11:05.398Z] ingest
+- **Pages:** dota-browser-plugin-record-pack-slot-fix.md
+- **Summary:** Updated "DOTA Browser Plugin Record Pack Slot Fix" with new content
+
+## [2026-06-27T13:12:04.987Z] ingest
+- **Pages:** dota-browser-plugin-record-pack-slot-fix.md
+- **Summary:** Updated "DOTA Browser Plugin Record Pack Slot Fix" with new content
+
+## [2026-06-27T13:14:57.236Z] ingest
+- **Pages:** dota-browser-plugin-record-pack-slot-fix.md
+- **Summary:** Updated "DOTA Browser Plugin Record Pack Slot Fix" with new content
+
+## [2026-06-27T15:02:02.464Z] ingest
+- **Pages:** dota-browser-plugin-record-pack-slot-fix.md
+- **Summary:** Updated final DOTA browser plugin record/table[100] alias fix and verification evidence
+
+## [2026-06-27T15:07:39.467Z] ingest
+- **Pages:** dota-browser-plugin-record-pack-slot-fix.md
+- **Summary:** Refreshed final DOTA browser plugin verification evidence from /tmp/vmrp-e2e-GSqFvj

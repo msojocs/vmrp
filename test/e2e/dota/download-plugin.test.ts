@@ -175,5 +175,17 @@ describe("dota pixel flow", () => {
       expect(screen.uniqueColorCount()).toBeGreaterThan(4);
       expect(screen.pixel(152, 146)).not.toEqual([0, 0, 0]);
     }
+    {
+      // 点击确定，确认下载结果，开始请求插件并启动浏览器
+      const before = await vmrp.drawCount();
+      await vmrp.key('LEFT_SOFT', 1_000);
+      await vmrp.delay(10_000);
+      const after = await vmrp.drawCount();
+      const screen = await vmrp.screen("browser-running");
+      expect(after).toBeGreaterThan(before);
+      expect(screen.uniqueColorCount()).toBeGreaterThan(4);
+      // rgb(27, 34, 27)
+      expect(screen.pixel(95, 88)).toEqual([240, 244, 240]);
+    }
   });
 });
