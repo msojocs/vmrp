@@ -101,6 +101,7 @@ extern int32 _DrawText(char *pcText, int16 x, int16 y, uint8 r, uint8 g, uint8 b
 extern int _BitmapCheck(uint16 *p, int16 x, int16 y, uint16 w, uint16 h, uint16 transcoler, uint16 color_check);
 extern void *_mr_readFile(const char *filename, int *filelen, int lookfor);
 extern void *mr_readFile_from_ram(const char *filename, int *filelen, int lookfor, char *ram_file, int ram_file_len);
+extern void *mr_readFile_from_pack(const char *pack_filename, const char *filename, int *filelen, int lookfor);
 extern int32 mr_registerAPP(uint8 *p, int32 len, int32 index);
 extern int _mr_TestCom(void *L, int input0, int input1);
 extern int _mr_TestCom1(void *L, int input0, char *input1, int32 len);
@@ -3099,7 +3100,14 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             if (pack[0] == '$' && ramp && raml) {
                 hp = mr_readFile_from_ram(read_name, &fl, (int)r2, arm_ptr(m, ramp), (int)raml);
             } else {
-                hp = _mr_readFile(read_name, &fl, (int)r2);
+                /*
+                 * EXT modules expose their current MRP through table[100].
+                 * Nested download/install helpers may switch that slot to a
+                 * transient package while the VM-level pack_filename still
+                 * names the outer app. Bind the host read to the ARM-visible
+                 * package for this bridge call, matching the native C table ABI.
+                 */
+                hp = mr_readFile_from_pack(pack, read_name, &fl, (int)r2);
             }
             if (!hp) { ret = 0; break; }
             uint32_t ap = arm_alloc(m, (uint32_t)fl);

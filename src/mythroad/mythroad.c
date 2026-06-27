@@ -243,10 +243,33 @@ int32 _DrawTextEx(char* pcText, int16 x, int16 y, mr_screenRectSt rect, mr_colou
 int _mr_TestCom(mrp_State* L, int input0, int input1);
 int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len);
 void* mr_readFile_from_ram(const char* filename, int* filelen, int lookfor, char* ram_file, int ram_file_len_value);
+void* mr_readFile_from_pack(const char* packname, const char* filename, int* filelen, int lookfor);
 int32 mr_stop_ex(int16 freemem);
 static int32 _mr_div(int32 a, int32 b);
 static int32 _mr_mod(int32 a, int32 b);
 
+
+void* mr_readFile_from_pack(const char* packname, const char* filename, int* filelen, int lookfor) {
+    char saved_pack_filename[MR_MAX_FILENAME_SIZE];
+    void* ret;
+
+    if (!packname || !packname[0]) return NULL;
+
+    /*
+     * Native EXT modules pass their package context through table[100].  Host
+     * _mr_readFile uses the VM-global pack_filename, so bridge callers that run
+     * inside nested installers must temporarily bind that global to the ARM
+     * supplied package and restore it before returning to the outer app.
+     */
+    MEMCPY(saved_pack_filename, pack_filename, sizeof(saved_pack_filename));
+    MEMSET(pack_filename, 0, sizeof(pack_filename));
+    STRNCPY(pack_filename, packname, sizeof(pack_filename) - 1);
+
+    ret = _mr_readFile(filename, filelen, lookfor);
+
+    MEMCPY(pack_filename, saved_pack_filename, sizeof(pack_filename));
+    return ret;
+}
 
 void* mr_readFile_from_ram(const char* filename, int* filelen, int lookfor, char* ram_file, int ram_file_len_value) {
     char saved_pack_filename[MR_MAX_FILENAME_SIZE];
