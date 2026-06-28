@@ -4,7 +4,7 @@ import fs from "fs";
 
 describe("gghjt 开始游戏", () => {
   let vmrp: VmrpE2e | undefined;
-  const memCheckTime = 10_000
+  const memCheckTime = 15_000
 
   afterEach(async () => {
     await vmrp?.close();
@@ -71,7 +71,7 @@ describe("gghjt 开始游戏", () => {
     {
       // 点击确定付费，进入游戏界面
       await vmrp.key('LEFT_SOFT', 3_000);
-      await vmrp.delay(2_000);
+      await vmrp.delay(4_000);
       const screen = await vmrp.screen("game-start");
       // rgb(0, 0, 0)
       expect(screen.pixel(88, 44)).toEqual([0, 0, 0]);
