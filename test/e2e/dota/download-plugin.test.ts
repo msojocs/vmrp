@@ -113,6 +113,7 @@ describe("dota pixel flow", () => {
 
   it("下载浏览器插件 - 成功", async () => {
     // 删除后，继续游戏会进入下载浏览器插件界面。
+    fs.rmSync('mythroad/brw', { force: true, recursive: true });
     fs.rmSync('mythroad/plugins/embrw.mrp', { force: true });
     fs.rmSync('mythroad/plugins/brwcore.mrp', { force: true });
     fs.rmSync('mythroad/plugins/brwgui.mrp', { force: true });
@@ -160,13 +161,16 @@ describe("dota pixel flow", () => {
     {
       // 点击确定，下载浏览器插件，进入下载结果界面
       await vmrp.key('LEFT_SOFT', 1_000);
-      await vmrp.delay(3_000);
+      await vmrp.delay(6_000);
       const screen = await vmrp.screen("download-result");
       // rgb(0, 252, 0)
       expect(screen.pixel(152, 146)).toEqual([0, 252, 0]);
     }
     {
       // 点击确定，确认下载结果，开始加载浏览器
+      await vmrp.key('LEFT_SOFT', 3_000);
+      await vmrp.delay(1_000);
+      // 确定使用cmnet
       await vmrp.key('LEFT_SOFT', 3_000);
       await vmrp.delay(1_000);
       // 已确认进入目标界面，不可使用循环检测，循环等待会导致退出该界面

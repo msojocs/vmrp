@@ -30,7 +30,7 @@ describe("gwkdl 进入准备界面", () => {
     }
     // 是否检测内存？-> 是
     await vmrp.key('LEFT_SOFT', 1_000);
-    await vmrp.delay(10_000);
+    await vmrp.delay(15_000);
     const boot = await vmrp.screen("bgm-select");
     expect(boot.pixel(150, 308)).toEqual([0, 0, 0]);
     // rgb(248, 240, 0)
