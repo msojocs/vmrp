@@ -63,6 +63,13 @@ export class VmrpE2e {
   }
 
   async close(): Promise<void> {
+    await this.stop();
+    if (process.env.VMRP_E2E_KEEP_TMP !== "1") {
+      await rm(this.tmpDir, { recursive: true, force: true });
+    }
+  }
+
+  async stop(): Promise<void> {
     const proc = this.process;
     if (proc && proc.exitCode === null) {
       try {
@@ -74,9 +81,6 @@ export class VmrpE2e {
         proc.kill("SIGKILL");
         await this.waitForExit(2_000);
       }
-    }
-    if (process.env.VMRP_E2E_KEEP_TMP !== "1") {
-      await rm(this.tmpDir, { recursive: true, force: true });
     }
   }
 

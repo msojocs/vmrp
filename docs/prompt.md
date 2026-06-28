@@ -302,10 +302,9 @@ my_recv(s:2): recv=0, errno=11
 充分利用子Agent。
 记得存储记忆数据。
 
-分析并修复执行测试用例`pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功"`自动下载浏览器插件并启动操作，但是启动后崩溃。
+分析并测试用例`pnpm vitest run test/e2e/optwar/exit-plugin.test.ts`退出时会自动下载插件并启动操作，但是没有网络请求直接失败的原因。
 
-预期结果：启动浏览器插件不崩溃。
-实际结果：启动浏览器插件发生崩溃。
+点击确认后，立即显示“拨号失败”，分析点击确认后发生了什么。
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。

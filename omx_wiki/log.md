@@ -110,3 +110,40 @@
 ## [2026-06-27T15:07:39.467Z] ingest
 - **Pages:** dota-browser-plugin-record-pack-slot-fix.md
 - **Summary:** Refreshed final DOTA browser plugin verification evidence from /tmp/vmrp-e2e-GSqFvj
+## [2026-06-27T15:46:20.555Z] ingest
+- **Pages:** dota-download-browser-components-transition-frame-fix.md
+- **Summary:** Created new page "DOTA download-browser-components transition frame fix"
+
+## [2026-06-27T15:46:20.558Z] add
+- **Pages:** dota-download-browser-components-transition-frame-fix.md
+- **Summary:** Created wiki page dota-download-browser-components-transition-frame-fix.md
+
+## [2026-06-27T15:51:29.852Z] ingest
+- **Pages:** dota-download-browser-components-waiting-hypothesis-invalidated.md
+- **Summary:** Created new page "DOTA download-browser-components waiting hypothesis invalidated"
+
+## [2026-06-27T15:51:29.856Z] add
+- **Pages:** dota-download-browser-components-waiting-hypothesis-invalidated.md
+- **Summary:** Created wiki page dota-download-browser-components-waiting-hypothesis-invalidated.md
+
+## [2026-06-27T23:30:09Z] ingest
+- **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-download-browser-components-transition-frame-fix.md
+- **Summary:** Recorded final child-scoped table[125] package-provenance fix for DOTA browser component logo/text rendering and marked the earlier transition-frame waiting fix as superseded
+## [2026-06-27T23:54:44.678Z] ingest
+- **Pages:** optwar-exit-plugin-no-network-investigation.md
+- **Summary:** Created new page "Optwar exit plugin no-network investigation"
+
+## [2026-06-27T23:54:44.681Z] add
+- **Pages:** optwar-exit-plugin-no-network-investigation.md
+- **Summary:** Created wiki page optwar-exit-plugin-no-network-investigation.md
+
+## [2026-06-28T00:09:48.398Z] ingest
+- **Pages:** optwar-exit-plugin-no-network-investigation.md
+- **Summary:** Updated "Optwar exit plugin no-network investigation" with new content
+## [2026-06-28T05:34:02.325Z] ingest
+- **Pages:** optwar-exit-plugin-no-network-investigation.md
+- **Summary:** Updated "Optwar exit plugin no-network investigation" with new content
+
+## [2026-06-28T05:39:47.805Z] ingest
+- **Pages:** optwar-exit-plugin-no-network-investigation.md
+- **Summary:** Updated "Optwar exit plugin no-network investigation" with new content
