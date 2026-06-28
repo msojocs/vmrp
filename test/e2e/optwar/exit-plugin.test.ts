@@ -15,6 +15,7 @@ describe("optwar 进入主菜单", () => {
     if (!fs.existsSync('mythroad/plugins/netpay.mrp')) {
       fs.cpSync('test/fixtures/plugins/netpay.mrp', 'mythroad/plugins/netpay.mrp');
     }
+    fs.rmSync('mythroad/plugins/promote.mrp', { force: true });
     // 本用例验证前台 advbar 插件与游戏主画面的屏幕合成，运行前显式准备插件资源。
     if (!fs.existsSync('mythroad/plugins/advbar.mrp')) {
       fs.cpSync('test/fixtures/plugins/advbar.mrp', 'mythroad/plugins/advbar.mrp');

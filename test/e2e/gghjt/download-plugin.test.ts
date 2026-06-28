@@ -4,6 +4,7 @@ import fs from "fs";
 
 describe("gghjt pixel flow", () => {
   let vmrp: VmrpE2e | undefined;
+  const memCheckTime = 10_000
 
   afterEach(async () => {
     await vmrp?.close();
@@ -25,7 +26,7 @@ describe("gghjt pixel flow", () => {
       await vmrp.delay(1_000);
 
     }
-    await vmrp.delay(6_000);
+    await vmrp.delay(memCheckTime);
     const boot = await vmrp.screen("bgm-select");
     // rgb(0, 0, 0)
     expect(boot.pixel(227, 308)).toEqual([0, 0, 0]);
@@ -77,7 +78,7 @@ describe("gghjt pixel flow", () => {
       await vmrp.delay(1_000);
 
     }
-    await vmrp.delay(6_000);
+    await vmrp.delay(memCheckTime);
     const boot = await vmrp.screen("bgm-select");
     // rgb(72,88,0)
     expect(boot.pixel(227, 308)).toEqual([0, 0, 0]);
@@ -147,7 +148,7 @@ describe("gghjt pixel flow", () => {
       await vmrp.delay(1_000);
 
     }
-    await vmrp.delay(6_000);
+    await vmrp.delay(memCheckTime);
     const boot = await vmrp.screen("bgm-select");
     // rgb(72,88,0)
     expect(boot.pixel(227, 308)).toEqual([0, 0, 0]);
@@ -219,7 +220,7 @@ describe("gghjt pixel flow", () => {
       await vmrp.delay(1_000);
 
     }
-    await vmrp.delay(6_000);
+    await vmrp.delay(memCheckTime);
     const boot = await vmrp.screen("bgm-select");
     // rgb(72,88,0)
     expect(boot.pixel(227, 308)).toEqual([0, 0, 0]);
@@ -317,7 +318,7 @@ describe("gghjt pixel flow", () => {
       await vmrp.delay(1_000);
 
     }
-    await vmrp.delay(6_000);
+    await vmrp.delay(memCheckTime);
     const boot = await vmrp.screen("bgm-select");
     // rgb(72,88,0)
     expect(boot.pixel(227, 308)).toEqual([0, 0, 0]);
