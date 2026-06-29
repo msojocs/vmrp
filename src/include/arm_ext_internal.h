@@ -193,6 +193,13 @@ struct ArmExtModule {
     int nested_module_count;
     uint32_t outer_r9;
     uint32_t nested_return_addr;
+    /* UC_HOOK_INTR covers every ARM SVC/HVC-style trap.  Handled ABI traps
+     * leave these zero; unhandled traps set them so run_arm_with_sp() can turn
+     * Unicorn's clean hook stop back into a real CPU exception. */
+    uint32_t pending_intr_no;
+    uint32_t pending_intr_pc;
+    uint32_t pending_intr_r0;
+    uint32_t pending_intr_r1;
     uint32_t screen_write_count;
     uint32_t thumb_fix_count;
     uint32_t pc_ring[EXT_TRACE_PC_RING];
