@@ -10,12 +10,40 @@ describe("optwar 进入主菜单", () => {
     vmrp = undefined;
   });
 
+  it("advbar", async () => {
+    // 删除后，启动游戏会自动下载。
+    fs.rmSync('mythroad/plugins/advbar.mrp', { force: true });
+    vmrp = await VmrpE2e.start("test/fixtures/optwar.mrp");
+
+    await vmrp.delay(10000);
+    const boot = await vmrp.screen("bgm-select");
+    expect(boot.pixel(150, 308)).toEqual([0, 0, 0]);
+    // rgb(248, 0, 0)
+    expect(boot.pixel(227, 301)).toEqual([248, 0, 0]);
+
+    // 是否开启音乐？-> 否
+    await vmrp.click(227, 301, 1_000);
+    await vmrp.delay(1_000);
+
+    // 进入主菜单
+    const wake = await vmrp.screen("menu");
+    // rgb(128, 48, 40)
+    expect(wake.pixel(110, 27)).toEqual([128, 48, 40]);
+    expect(wake.pixel(120, 20)).toEqual([176, 120, 120]);
+    // rgb(24, 24, 24)
+    expect(wake.pixel(83, 267)).toEqual([24, 24, 24]);
+    // rgb(0, 252, 0)
+    expect(wake.pixel(98, 264)).toEqual([0, 252, 0]);
+
+  });
   it("游戏退出时下载插件", async () => {
     // 删除后，继续游戏会进入下载netpay插件界面。
     if (!fs.existsSync('mythroad/plugins/netpay.mrp')) {
       fs.cpSync('test/fixtures/plugins/netpay.mrp', 'mythroad/plugins/netpay.mrp');
     }
     fs.rmSync('mythroad/plugins/promote.mrp', { force: true });
+    fs.rmSync('mythroad/plugins/brwcore.mrp', { force: true });
+    fs.rmSync('mythroad/promote', { force: true, recursive: true });
     // 本用例验证前台 advbar 插件与游戏主画面的屏幕合成，运行前显式准备插件资源。
     if (!fs.existsSync('mythroad/plugins/advbar.mrp')) {
       fs.cpSync('test/fixtures/plugins/advbar.mrp', 'mythroad/plugins/advbar.mrp');
@@ -76,12 +104,28 @@ describe("optwar 进入主菜单", () => {
       expect(screen.pixel(104, 296)).toEqual([40, 176, 216]);
     }
     {
-      // 点击确认后，立即显示“拨号失败”，分析点击确认后发生了什么。
+      // 点击确认后，开始下载
       await vmrp.key('LEFT_SOFT', 1_000)
-      await vmrp.delay(3_000);
+      console.info("等待下载完成，下载完成后会自动启动营销商店");
+      await vmrp.delay(5_000);
+      console.info("下载完成");
       const screen = await vmrp.screen("download-result");
       // rgb(248, 0, 0)
       expect(screen.pixel(134, 146)).not.toEqual([248, 0, 0]);
+      // rgb(0, 0, 0)
+      expect(screen.pixel(107, 151)).toEqual([0, 0, 0]);
+      // rgb(248, 252, 248)
+      expect(screen.pixel(32, 301)).toEqual([248, 252, 248]);
+    }
+    {
+      // 启动营销商店。这个按键会先进入插件文件/网络启动路径，不保证在
+      // 按键命令的 3s 窗口内重绘；回归点是后续 ARM 侧启动不应再异常退出。
+      console.info("启动营销商店");
+      await vmrp.key('LEFT_SOFT', 3_000)
+      await vmrp.delay(20_000);
+      // 会请求dl_confirm
+      const screen = await vmrp.screen("promote-start");
+      expect(screen.pixel(104, 296)).not.toEqual([0, 0, 0]);
     }
   });
 });
