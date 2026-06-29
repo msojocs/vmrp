@@ -6561,6 +6561,11 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if (code == 2) {
         m->host_timer_pending = 0;
     }
+    /* wrapper 的 code=2 回调中可能通过 table[25]（mr_load_c_function）加载
+     * 新的前台子模块（如下载完成后启动 promote.mrp），此时 active_p_addr
+     * 会在 run_arm_with_sp 内部被更新。记录回调前的值，回调后比对以检测
+     * 前台子模块替换。 */
+    uint32_t active_p_addr_pre = m->active_p_addr;
     m->current_p_addr = call_p_addr;
     m->current_helper_addr = call_helper_addr;
     int prev_in_dispatch = m->in_dispatch;
@@ -6665,6 +6670,48 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         mr_timer_state = 1;
         m->host_timer_pending = 1;
         internal_slot_write(m, m->mr_timer_state_slot, 1);
+    }
+
+    /* wrapper 的定时器回调中，前台子模块可能已经完成（如下载器
+     * verdload.ext 下载完毕后清空了自己的定时器队列）。此时子模块虽然
+     * 仍占据 active_p_addr，但已不再需要前台绘制权——它的所有定时器节点
+     * 已耗尽，不再有后续回调会推进其 UI 状态。
+     *
+     * 真机上 wrapper 的 resume() 会递减 extChunk[0x34] 并归还前台，但
+     * 某些 wrapper 路径（如下载完成后直接启动新应用 promote.mrp）不走
+     * resume，导致 extChunk[0x34] 一直 > 0。模拟器需要在此检测前台子模块
+     * 已失活（无私有定时器），并将前台控制权交还给 wrapper/primary，
+     * 使后续 wrapper 的画面输出（或新加载的子模块的画面输出）能被宿主
+     * 接受并呈现。
+     *
+     * 条件：
+     *   - code=2 定时器回调
+     *   - 存在已暂停的前台子模块
+     *   - 子模块无私有定时器队列（compact/frame timer 均空）
+     *   - wrapper 已接管定时器（或回调刚路由给 wrapper） */
+    if (code == 2 &&
+        suspended_foreground_child &&
+        !foreground_child_has_private_timer &&
+        m->active_p_addr != active_p_addr_pre) {
+        /* active_p_addr 在回调中被 table[25] 更新：wrapper 加载了新的
+         * 前台子模块（如从 verdload 过渡到 promote），旧子模块的前台
+         * 覆盖区域需要清除，让新模块能正常绘制。 */
+        arm_ext_clear_foreground_screen_owner(m);
+        m->modal_screen_snapshot_valid = 0;
+        m->modal_fg_snapshot_valid = 0;
+    } else if (code == 2 &&
+               suspended_foreground_child &&
+               !foreground_child_has_private_timer &&
+               (call_p_addr == m->p_addr ||
+                m->timer_p_addr == m->p_addr ||
+                wrapper_timer_live_post)) {
+        /* wrapper 已接管定时器但 active_p_addr 未在本次回调中变化：
+         * 旧的前台子模块已失活（定时器队列空），但 wrapper 尚未通过
+         * table[25] 加载新模块。清除前台状态让 wrapper 后续的画面
+         * 输出能通过宿主的 screen_write/present 接受路径。 */
+        arm_ext_clear_foreground_screen_owner(m);
+        m->modal_screen_snapshot_valid = 0;
+        m->modal_fg_snapshot_valid = 0;
     }
 
     /* wrapper helper code=2 自己消费 timer delta chain。宿主侧只负责在
