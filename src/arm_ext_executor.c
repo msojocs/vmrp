@@ -6651,6 +6651,27 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
                    m->active_p_addr, m->active_helper_addr);
         }
     }
+    /* timer_p_addr 指向一个已失活的子模块（无私有定时器队列），wrapper
+     * 仍有待处理的定时器节点。子模块在下载期间通过 wrapper veneer 调用
+     * table[31] 获得 timer 所有权，下载完成后清空了自己的队列但
+     * timer_p_addr 未被重置。宿主 tick 被路由到空的子模块 helper，
+     * wrapper 的定时器队列永远得不到消费。将 timer 所有权还给 wrapper，
+     * 让后续 tick 到达 wrapper 的 code=2 处理，推进定时器队列。 */
+    if (code == 2 &&
+        m->timer_p_addr &&
+        m->timer_p_addr != m->p_addr &&
+        m->timer_p_addr != m->primary_p_addr &&
+        suspended_foreground_child &&
+        !foreground_child_has_private_timer &&
+        wrapper_timer_live_post) {
+        m->timer_p_addr = m->p_addr;
+        m->timer_helper_addr = m->helper_addr;
+        if (getenv("VMRP_ARM_EXT_DIAG")) {
+            printf("DIAG timer_owner_transfer staleChild->wrapper wrapperTimer=%d activeP=0x%X activeH=0x%X\n",
+                   wrapper_timer_live_post,
+                   m->active_p_addr, m->active_helper_addr);
+        }
+    }
     if (code == 2 && !m->host_timer_pending &&
         suspended_foreground_child &&
         (foreground_child_has_private_timer ||
