@@ -735,10 +735,76 @@ static uint32_t arm_exec_addr(uint32_t addr) {
     return addr;
 }
 
+static int arm_ext_pending_internal_contains(ArmExtModule *m, uint32_t addr) {
+    if (!m || !m->pending_internal_file_addr || !m->pending_internal_file_len)
+        return 0;
+    uint32_t start = m->pending_internal_file_addr;
+    uint32_t len = m->pending_internal_file_len;
+    if (len > UINT32_MAX - start) return 0;
+    return addr >= start && addr < start + len;
+}
+
+static int arm_ext_nested_module_overlaps_pending(ArmExtModule *m,
+                                                  const ArmExtNestedModule *mod) {
+    if (!m || !mod || !mod->file_addr || !mod->file_len ||
+        !m->pending_internal_file_addr || !m->pending_internal_file_len) {
+        return 0;
+    }
+    uint32_t a0 = mod->file_addr;
+    uint32_t b0 = m->pending_internal_file_addr;
+    uint32_t a1 = a0 + mod->file_len;
+    uint32_t b1 = b0 + m->pending_internal_file_len;
+    if (a1 < a0 || b1 < b0) return 0;
+    return a0 < b1 && b0 < a1;
+}
+
+static int arm_ext_nested_exec_range_for_lr(ArmExtModule *m, uint32_t lr,
+                                            uint32_t *file_addr,
+                                            uint32_t *file_len) {
+    uint32_t pc = lr & ~1u;
+    if (file_addr) *file_addr = 0;
+    if (file_len) *file_len = 0;
+    if (!m) return 0;
+
+    /*
+     * last_file_addr is the latest read/staged file buffer.  Private loaders
+     * briefly have two copies of the same bytes: the raw _mr_readFile buffer
+     * and the runtime image passed to mr_cacheSync.  LR ownership must follow
+     * the runtime image, otherwise later P writes and nested registration can
+     * bind callbacks to the raw buffer that the loader never executed.
+     */
+    if (arm_ext_pending_internal_contains(m, pc)) {
+        if (file_addr) *file_addr = m->pending_internal_file_addr;
+        if (file_len) *file_len = m->pending_internal_file_len;
+        return 1;
+    }
+
+    if (m->last_file_addr && m->last_file_len &&
+        pc >= m->last_file_addr &&
+        pc < m->last_file_addr + m->last_file_len) {
+        if (file_addr) *file_addr = m->last_file_addr;
+        if (file_len) *file_len = m->last_file_len;
+        return 1;
+    }
+
+    return 0;
+}
+
 static ArmExtNestedModule *arm_ext_find_nested_module(ArmExtModule *m, uint32_t addr) {
     if (!m) return NULL;
     for (int i = m->nested_module_count - 1; i >= 0; --i) {
         ArmExtNestedModule *mod = &m->nested_modules[i];
+        /*
+         * Private loaders reuse low-heap executable storage before the new
+         * child has filled extChunk[8] and can be registered.  During that
+         * window the old module record may still overlap the fresh staging
+         * range.  Do not use that stale record for PC->P/R9 ownership: the
+         * new child startup code must run with the R9 value it installs.
+         */
+        if (arm_ext_pending_internal_contains(m, addr) &&
+            arm_ext_nested_module_overlaps_pending(m, mod)) {
+            continue;
+        }
         if (mod->file_addr && mod->file_len &&
             addr >= mod->file_addr && addr < mod->file_addr + mod->file_len) {
             return mod;
@@ -1939,6 +2005,49 @@ static int arm_ext_range_contains(uint32_t outer, uint32_t outer_len,
     return outer_start <= inner_start && inner_end <= outer_end;
 }
 
+static void arm_ext_drop_overlapping_stale_nested_modules(ArmExtModule *m,
+                                                          uint32_t file_addr,
+                                                          uint32_t file_len) {
+    if (!m || !file_addr || !file_len) return;
+    int out = 0;
+    for (int i = 0; i < m->nested_module_count; ++i) {
+        ArmExtNestedModule mod = m->nested_modules[i];
+        int is_primary = m->primary_file_addr &&
+                         mod.file_addr == m->primary_file_addr &&
+                         mod.file_len == m->primary_file_len;
+        int overlaps = mod.file_addr && mod.file_len &&
+                       arm_ext_ranges_overlap(mod.file_addr, mod.file_len,
+                                              file_addr, file_len);
+        if (!is_primary && overlaps) {
+            /*
+             * Private loaders may stage a replacement child into the same
+             * low-heap code range before the new extChunk has a helper.  Once
+             * mr_cacheSync proves the bytes were rewritten, the old module
+             * record no longer describes that address range and must not drive
+             * R9, timer-owner or screen-owner recovery.
+             */
+            if (m->active_p_addr == mod.p_addr &&
+                m->active_helper_addr == mod.helper_addr) {
+                m->active_p_addr = 0;
+                m->active_helper_addr = 0;
+            }
+            if (m->timer_p_addr == mod.p_addr &&
+                m->timer_helper_addr == mod.helper_addr) {
+                m->timer_p_addr = 0;
+                m->timer_helper_addr = 0;
+            }
+            if (getenv("VMRP_ARM_EXT_DIAG")) {
+                printf("DIAG stale_child_drop oldFile=0x%X/%u oldP=0x%X oldH=0x%X newFile=0x%X/%u\n",
+                       mod.file_addr, mod.file_len, mod.p_addr,
+                       mod.helper_addr, file_addr, file_len);
+            }
+            continue;
+        }
+        m->nested_modules[out++] = mod;
+    }
+    m->nested_module_count = out;
+}
+
 static void arm_ext_restore_primary_mapping_after_dump0(ArmExtModule *m,
                                                        uint32_t read_addr,
                                                        uint32_t read_len) {
@@ -2272,6 +2381,47 @@ static void dump_pc_ring(ArmExtModule *m) {
     }
 }
 
+static void arm_ext_mark_unhandled_intr(ArmExtModule *m, uint32_t intno) {
+    if (!m) return;
+    m->pending_intr_no = intno;
+    m->pending_intr_pc = reg_read32(m->uc, UC_ARM_REG_PC) & ~1u;
+    m->pending_intr_r0 = reg_read32(m->uc, UC_ARM_REG_R0);
+    m->pending_intr_r1 = reg_read32(m->uc, UC_ARM_REG_R1);
+}
+
+static void hook_intr(uc_engine *uc, uint32_t intno, void *user_data) {
+    ArmExtModule *m = (ArmExtModule *)user_data;
+    uint32_t pc = reg_read32(uc, UC_ARM_REG_PC) & ~1u;
+    uint32_t r0 = reg_read32(uc, UC_ARM_REG_R0);
+    uint32_t r1 = reg_read32(uc, UC_ARM_REG_R1);
+    /*
+     * ARM semihosting uses SVC #0xAB in Thumb state.  Vendor browser
+     * components keep a tiny debug putchar stub in their runtime image:
+     *   movs r0,#3; mov r1,sp; svc #0xAB
+     * where operation 3 is SYS_WRITEC and r1 points at one byte.  Unicorn
+     * reports the trap through UC_HOOK_INTR and does not emulate the ABI, so
+     * consume only this documented print operation.  Other SVC/HVC traps are
+     * preserved as real execution errors by stopping with pending_intr_* set.
+     */
+    if (intno == 2u && r0 == 3u && arm_ptr(m, r1)) {
+        if (getenv("VMRP_ARM_EXT_DIAG")) {
+            static uint32_t semihost_diag_count = 0;
+            if (semihost_diag_count < 64u) {
+                unsigned ch = arm_ext_read_u8_or_zero_(m, r1);
+                printf("DIAG semihost_writec pc=0x%X ch=0x%02X r1=0x%X\n",
+                       pc, ch, r1);
+            } else if (semihost_diag_count == 64u) {
+                printf("DIAG semihost_writec truncated after 64 entries\n");
+            }
+            semihost_diag_count++;
+        }
+        return;
+    }
+
+    arm_ext_mark_unhandled_intr(m, intno);
+    uc_emu_stop(uc);
+}
+
 static uint32_t arg_read(ArmExtModule *m, unsigned n) {
     if (n < 4) return reg_read32(m->uc, UC_ARM_REG_R0 + n);
     uint32_t sp = reg_read32(m->uc, UC_ARM_REG_SP);
@@ -2282,21 +2432,31 @@ static uint32_t arg_read(ArmExtModule *m, unsigned n) {
 
 static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
     set_arm_mode_for_addr(m, start);
+    m->pending_intr_no = 0;
+    m->pending_intr_pc = 0;
+    m->pending_intr_r0 = 0;
+    m->pending_intr_r1 = 0;
     reg_write32(m->uc, UC_ARM_REG_SP, sp);
     reg_write32(m->uc, UC_ARM_REG_LR, EXT_STOP_ADDR);
     uc_err err = uc_emu_start(m->uc, arm_exec_addr(start), EXT_STOP_ADDR, 0, 0);
+    if (err == UC_ERR_OK && m->pending_intr_no) {
+        err = UC_ERR_EXCEPTION;
+        reg_write32(m->uc, UC_ARM_REG_PC, m->pending_intr_pc);
+    }
     /*
      * Some nested .mrp plug-ins (e.g. netpay.mrp loaded by gghjt.mrp) keep
      * function pointers without the Thumb bit, so a BLX into them lands in
-     * ARM mode while the bytes are Thumb-2.  Do the mode correction once per
-     * callback entry.  If the same PC still raises UC_ERR_INSN_INVALID after
-     * being retried in Thumb mode, it is real invalid code/data, not a missing
-     * Thumb bit.  gghjt's 60s timeout-return path exposes this after dump0
-     * restore: a copied timer node (e.g. table[3] to 0x738B34) is data, and an
-     * unbounded retry here pins the UI on “请稍等”.  Let the normal invalid-PC
-     * handling below stop the callback cleanly instead of spinning forever.
+     * ARM mode while the bytes are Thumb-2.  Unicorn reports that mismatch as
+     * UC_ERR_INSN_INVALID for some Thumb instruction pairs and UC_ERR_EXCEPTION
+     * for others, so do the same one-shot mode correction for both errors. If
+     * the same PC still fails after being retried in Thumb mode, it is real
+     * invalid code/data, not a missing Thumb bit.  gghjt's 60s timeout-return
+     * path exposes this after dump0 restore: a copied timer node (e.g.
+     * table[3] to 0x738B34) is data, and an unbounded retry here pins the UI on
+     * “请稍等”.  Let the normal invalid-PC handling below stop the callback
+     * cleanly instead of spinning forever.
      */
-    if (err == UC_ERR_INSN_INVALID) {
+    if (err == UC_ERR_INSN_INVALID || err == UC_ERR_EXCEPTION) {
         uint32_t pc = reg_read32(m->uc, UC_ARM_REG_PC);
         if (pc != EXT_STOP_ADDR && pc != 0) {
             uint32_t cpsr = reg_read32(m->uc, UC_ARM_REG_CPSR);
@@ -2306,7 +2466,17 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
                 if (getenv("VMRP_ARM_EXT_TRACE")) {
                     printf("arm_ext_executor: retrying in Thumb mode at pc=0x%X\n", pc);
                 }
-                err = uc_emu_start(m->uc, pc, EXT_STOP_ADDR, 0, 0);
+                /*
+                 * Unicorn selects Thumb entry semantics from the low address
+                 * bit on uc_emu_start().  Changing CPSR.T alone is not enough
+                 * when a BLX target lost bit 0 and stopped on valid Thumb
+                 * bytes, so restart the callback at the Thumb-tagged PC.
+                 */
+                err = uc_emu_start(m->uc, pc | 1u, EXT_STOP_ADDR, 0, 0);
+                if (err == UC_ERR_OK && m->pending_intr_no) {
+                    err = UC_ERR_EXCEPTION;
+                    reg_write32(m->uc, UC_ARM_REG_PC, m->pending_intr_pc);
+                }
             }
         }
     }
@@ -2314,6 +2484,11 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
         if (reg_read32(m->uc, UC_ARM_REG_PC) == EXT_STOP_ADDR) return MR_SUCCESS;
         uint32_t pc = reg_read32(m->uc, UC_ARM_REG_PC) & ~1u;
         uint32_t cur_sp = reg_read32(m->uc, UC_ARM_REG_SP);
+        if (m->pending_intr_no && getenv("VMRP_ARM_EXT_DIAG")) {
+            printf("DIAG unhandled_intr intno=%u pc=0x%X r0=0x%X r1=0x%X start=0x%X\n",
+                   m->pending_intr_no, m->pending_intr_pc,
+                   m->pending_intr_r0, m->pending_intr_r1, start);
+        }
         if (err == UC_ERR_INSN_INVALID && pc >= EXT_CODE_ADDR && pc < EXT_CODE_ADDR + m->code_len) {
             /*
              * ARM 侧栈漂进了代码段后无法继续安全解释。这里只结束当前
@@ -3189,37 +3364,6 @@ static void arm_ext_diag_dump_rw_timer_state(ArmExtModule *m,
                tag ? tag : "?", owner->file_addr, record,
                slot0, slot3, slot25, slot100, slot125, slot131);
     }
-}
-
-static void arm_ext_diag_dump_child_control_state(ArmExtModule *m,
-                                                  const char *tag,
-                                                  uint32_t rw_base) {
-    if (!m || !getenv("VMRP_ARM_EXT_DIAG") || !rw_base) return;
-    if (!arm_ptr(m, rw_base) || !arm_ptr(m, rw_base + 0x2A0u)) return;
-
-    printf("DIAG child_ctrl %s rw=0x%X b18=%u b1A=%u b1B=%u b1D=%u b28=%u bD0=%u w2C=0x%X w30=0x%X w38=0x%X w3C=0x%X w40=0x%X w44=0x%X w48=0x%X w4C=0x%X w194=0x%X w1C8=0x%X w1CC=0x%X w1D0=0x%X w1D4=0x%X w1D8=0x%X w1DC=0x%X\n",
-           tag ? tag : "?", rw_base,
-           arm_ext_read_u8_or_zero_(m, rw_base + 0x18u),
-           arm_ext_read_u8_or_zero_(m, rw_base + 0x1Au),
-           arm_ext_read_u8_or_zero_(m, rw_base + 0x1Bu),
-           arm_ext_read_u8_or_zero_(m, rw_base + 0x1Du),
-           arm_ext_read_u8_or_zero_(m, rw_base + 0x28u),
-           arm_ext_read_u8_or_zero_(m, rw_base + 0xD0u),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x2Cu),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x30u),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x38u),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x3Cu),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x40u),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x44u),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x48u),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x4Cu),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x194u),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x1C8u),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x1CCu),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x1D0u),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x1D4u),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x1D8u),
-           arm_ext_read_u32_or_zero_(m, rw_base + 0x1DCu));
 }
 
 static void arm_ext_diag_dump_wrapper_timer_state(ArmExtModule *m,
@@ -4291,7 +4435,12 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             if (ret) note_origin_mem_alloc(m, r0);
             {
                 uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR) & ~1u;
-                if (m->nested_loading && m->last_file_addr && lr >= m->last_file_addr && lr < m->last_file_addr + m->last_file_len && r0 > 0x1000) {
+                uint32_t nested_file_addr = 0;
+                uint32_t nested_file_len = 0;
+                if (m->nested_loading &&
+                    arm_ext_nested_exec_range_for_lr(m, lr, &nested_file_addr,
+                                                     &nested_file_len) &&
+                    r0 > 0x1000) {
                     if (!m->outer_r9) {
                         m->outer_r9 = reg_read32(m->uc, UC_ARM_REG_R9);
                     }
@@ -4300,7 +4449,20 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                         uint32_t saved_lr = 0;
                         if (arm_ptr(m, sp + 12)) {
                             uc_mem_read(m->uc, sp + 12, &saved_lr, 4);
-                            m->nested_return_addr = saved_lr;
+                            /*
+                             * The private loader temporarily switches R9 from
+                             * wrapper RW to the child RW while child startup
+                             * allocates its own data.  Restore the wrapper R9
+                             * only at the real wrapper return site.  A saved LR
+                             * inside the staged child is just an internal
+                             * Thumb return and restoring there makes the child
+                             * run with wrapper globals.
+                             */
+                            uint32_t ret_pc = saved_lr & ~1u;
+                            if (ret_pc >= EXT_CODE_ADDR &&
+                                ret_pc < EXT_CODE_ADDR + m->code_len) {
+                                m->nested_return_addr = saved_lr;
+                            }
                         }
                     }
                     reg_write32(m->uc, UC_ARM_REG_R9, ret + 4);
@@ -4390,7 +4552,10 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             break;
         case 25: {
             uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
-            int nested = m->last_file_addr && lr >= m->last_file_addr && lr < m->last_file_addr + m->last_file_len;
+            uint32_t nested_file_addr = 0;
+            uint32_t nested_file_len = 0;
+            int nested = arm_ext_nested_exec_range_for_lr(
+                m, lr, &nested_file_addr, &nested_file_len);
             uint32_t p_addr = nested ? m->nested_p_addr : 0;
             int reuse_nested_p = p_addr && r1 == sizeof(mr_c_function_P_t) && arm_ptr(m, p_addr);
             uint32_t p_len = r1;
@@ -4406,7 +4571,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             }
             if (p_addr && !reuse_nested_p) memset(arm_ptr(m, p_addr), 0, p_len);
             if (nested) {
-                memcpy(arm_ptr(m, m->last_file_addr + 4), &p_addr, 4);
+                memcpy(arm_ptr(m, nested_file_addr + 4), &p_addr, 4);
                 uint32_t wrapper_rw = 0;
                 memcpy(&wrapper_rw, arm_ptr(m, m->p_addr), 4);
                 if (wrapper_rw) {
@@ -4417,13 +4582,13 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 m->active_helper_addr = r0;
                 m->active_p_addr = p_addr;
                 arm_ext_clear_foreground_screen_owner(m);
-                arm_ext_record_nested_module(m, m->last_file_addr,
-                                             m->last_file_len, p_addr, r0);
+                arm_ext_record_nested_module(m, nested_file_addr,
+                                             nested_file_len, p_addr, r0);
                 if (!m->primary_helper_addr) {
                     m->primary_helper_addr = r0;
                     m->primary_p_addr = p_addr;
-                    m->primary_file_addr = m->last_file_addr;
-                    m->primary_file_len = m->last_file_len;
+                    m->primary_file_addr = nested_file_addr;
+                    m->primary_file_len = nested_file_len;
                     /* Host table[25] only registers the child helper. Unlike
                      * cfunction.ext's internal loader, it has not called the
                      * child lifecycle handler yet, so mythroad.c must issue
@@ -4785,10 +4950,20 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
              * 2) invalidate Unicorn TB cache（否则执行旧翻译） */
             if ((int32_t)ret > 0 && (uint32_t)ret > 0x1000) {
                 /* 仅在 dump0 恢复时（目标地址匹配）才恢复间隙数据 */
+                int read_covers_primary =
+                    m->primary_file_addr && m->primary_file_len &&
+                    arm_ext_range_contains(r1, (uint32_t)ret,
+                                           m->primary_file_addr,
+                                           m->primary_file_len);
                 uc_ctl_remove_cache(m->uc, r1, r1 + (uint32_t)ret);
                 arm_ext_restore_primary_mapping_after_dump0(m, r1, (uint32_t)ret);
-                /* 修复 GOT：只恢复已记录的 bridge 函数指针 */
-                if (m->got_snapshot_base) {
+                /*
+                 * table[44] also reads downloaded packages and RAM staging
+                 * buffers.  Only rewrite bridge GOT slots when this read is
+                 * proven to be an executable dump/restore of the primary
+                 * image; otherwise compressed payload bytes can be corrupted.
+                 */
+                if (read_covers_primary && m->got_snapshot_base) {
                     uint32_t got_base = m->got_snapshot_base;
                     uint32_t read_end = r1 + (uint32_t)ret;
                     for (uint32_t i = 0; i < EXT_TABLE_COUNT; i++) {
@@ -5238,6 +5413,13 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 uint32_t record_addr = 0;
                 uint32_t p_addr = arm_ext_read_u32_or_zero_(m, r2 + 4u);
                 memcpy(&record_addr, arm_ptr(m, r2), 4);
+                /*
+                 * The private loader writes the runtime header before
+                 * mr_cacheSync, but several wrappers leave the body in a
+                 * transient scratch form.  Copy only the immutable payload tail
+                 * from the host-decoded readFile result; keep file_base[0]/[4]
+                 * as the wrapper's record/P metadata.
+                 */
                 arm_ext_repair_private_child_record_bridges(m, record_addr,
                                                             r2, r3);
                 /*
@@ -5258,6 +5440,15 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 }
                 arm_ext_apply_short_pack_alias_for_private_child(m, r2, r3,
                                                                  p_addr);
+                /*
+                 * From this point on the executable owner is the runtime image
+                 * at r2, not the raw buffer returned by _mr_readFile.  Keep
+                 * last_file_copy as immutable package provenance, but make
+                 * later generic nested-load ownership and P-header writes use
+                 * the same file_base that the private loader will BLX into.
+                 */
+                m->last_file_addr = r2;
+                m->last_file_len = r3;
             }
             if (r1 == 9 && !internal_loader_staging &&
                 m->last_file_copy && r2 && r3 <= m->last_file_len &&
@@ -5298,6 +5489,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                  * file_base[4] becomes the child P pointer.  The authoritative
                  * check is therefore the extChunk magic/file/length tuple.
                  */
+                arm_ext_drop_overlapping_stale_nested_modules(m, r2, r3);
                 m->pending_internal_file_addr = r2;
                 m->pending_internal_file_len = r3;
                 arm_ext_sync_internal_nested_module(m, r2, r3);
@@ -5455,64 +5647,10 @@ static bool hook_invalid(uc_engine *uc, uc_mem_type type, uint64_t address, int 
     return false;
 }
 
-static void arm_ext_diag_watch_compact_sched_write(uc_engine *uc,
-                                                   ArmExtModule *m,
-                                                   uint64_t address,
-                                                   int size,
-                                                   int64_t value) {
-    if (!m || !getenv("VMRP_ARM_EXT_DIAG") || size <= 0) return;
-
-    uint32_t addr = (uint32_t)address;
-    uint32_t end = addr + (uint32_t)size - 1u;
-    static int sched_write_diag_count = 0;
-    if (sched_write_diag_count > 320) return;
-
-    for (int i = 0; i < m->nested_module_count; ++i) {
-        ArmExtNestedModule *mod = &m->nested_modules[i];
-        if (!mod->p_addr || !arm_ptr(m, mod->p_addr)) continue;
-        uint32_t rw = arm_ext_read_u32_or_zero_(m, mod->p_addr);
-        if (!rw) continue;
-
-        uint32_t low_watch_start = rw + 0x38u;
-        uint32_t low_watch_end = rw + 0x4Fu;
-        uint32_t sched_watch_start = rw + 0x248u;
-        uint32_t sched_watch_end = rw + 0x260u;
-        int is_low_watch = !(end < low_watch_start || addr > low_watch_end);
-        int is_sched_watch =
-            !(end < sched_watch_start || addr > sched_watch_end);
-        if (!is_low_watch && !is_sched_watch) continue;
-
-        if (sched_write_diag_count++ > 320) return;
-        uint32_t pc = reg_read32(uc, UC_ARM_REG_PC);
-        uint32_t lr = reg_read32(uc, UC_ARM_REG_LR);
-        uint32_t r9 = reg_read32(uc, UC_ARM_REG_R9);
-        uint32_t sp = reg_read32(uc, UC_ARM_REG_SP);
-        uint32_t before = arm_ext_read_u32_or_zero_(m, addr & ~3u);
-        uint32_t saved_lr = arm_ext_read_u32_or_zero_(m, sp + 4u);
-        printf("DIAG %s_write pc=0x%X lr=0x%X savedLR=0x%X sp=0x%X addr=0x%X size=%d value=0x%llX before=0x%X off=0x%X P=0x%X H=0x%X rw=0x%X r9=0x%X r0=0x%X r1=0x%X r2=0x%X r3=0x%X activeP=0x%X activeH=0x%X currentP=0x%X currentH=0x%X\n",
-               is_low_watch ? "low" : "sched",
-               pc, lr, saved_lr, sp, addr, size,
-               (unsigned long long)value, before,
-               addr - rw, mod->p_addr, mod->helper_addr, rw, r9,
-               reg_read32(uc, UC_ARM_REG_R0),
-               reg_read32(uc, UC_ARM_REG_R1),
-               reg_read32(uc, UC_ARM_REG_R2),
-               reg_read32(uc, UC_ARM_REG_R3),
-               m->active_p_addr, m->active_helper_addr,
-               m->current_p_addr, m->current_helper_addr);
-        arm_ext_diag_dump_rw_timer_state(
-            m, is_low_watch ? "low-write" : "sched-write", rw);
-        arm_ext_diag_dump_child_control_state(
-            m, is_low_watch ? "low-write" : "sched-write", rw);
-        return;
-    }
-}
-
 /* GOT 写监控 */
 static void hook_got_write(uc_engine *uc, uc_mem_type type, uint64_t address, int size, int64_t value, void *user_data) {
     (void)type;
     ArmExtModule *m = (ArmExtModule *)user_data;
-    arm_ext_diag_watch_compact_sched_write(uc, m, address, size, value);
     if (size != 4) return;
     uint32_t r9 = reg_read32(uc, UC_ARM_REG_R9);
     uint32_t got_size = EXT_TABLE_COUNT * 4;
@@ -5581,225 +5719,6 @@ static void hook_screen_write(uc_engine *uc, uc_mem_type type, uint64_t address,
     }
 }
 
-static void arm_ext_diag_watch_wrapper_scheduler(ArmExtModule *m,
-                                                 uint32_t address) {
-    if (!m || !getenv("VMRP_ARM_EXT_DIAG")) return;
-    uint32_t pc = address & ~1u;
-    if (pc != 0xE8168Cu && pc != 0xE81CC2u &&
-        pc != 0xE847C4u && pc != 0xE848C0u &&
-        pc != 0xE83C48u && pc != 0xE83D88u) {
-        return;
-    }
-    static int diag_count = 0;
-    if (diag_count++ > 200) return;
-
-    uint32_t wrapper_rw = arm_ext_wrapper_rw_base_(m);
-    uint32_t active_rw = arm_ext_active_rw_base(m);
-    uint32_t sp = reg_read32(m->uc, UC_ARM_REG_SP);
-    printf("DIAG sched_pc pc=0x%X r0=0x%X r1=0x%X r2=0x%X r3=0x%X r9=0x%X sp=0x%X wrw=0x%X activeRW=0x%X\n",
-           pc,
-           reg_read32(m->uc, UC_ARM_REG_R0),
-           reg_read32(m->uc, UC_ARM_REG_R1),
-           reg_read32(m->uc, UC_ARM_REG_R2),
-           reg_read32(m->uc, UC_ARM_REG_R3),
-           reg_read32(m->uc, UC_ARM_REG_R9),
-           sp, wrapper_rw, active_rw);
-    if (wrapper_rw) {
-        printf("DIAG sched_wrw +04=0x%X +20=0x%X +24=0x%X +28=0x%X +2C=0x%X +30=0x%X +C4=0x%X +C8=0x%X +2B4=0x%X +3C8=0x%X +3D0=0x%X +3D4=0x%X\n",
-               arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x04u),
-               arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x20u),
-               arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x24u),
-               arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x28u),
-               arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x2Cu),
-               arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x30u),
-               arm_ext_read_u32_or_zero_(m, wrapper_rw + 0xC4u),
-               arm_ext_read_u32_or_zero_(m, wrapper_rw + 0xC8u),
-               arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x2B4u),
-               arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x3C8u),
-               arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x3D0u),
-               arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x3D4u));
-    }
-    if (active_rw) {
-        printf("DIAG sched_child +250=0x%X +254=0x%X +258=0x%X\n",
-               arm_ext_read_u32_or_zero_(m, active_rw + 0x250u),
-               arm_ext_read_u32_or_zero_(m, active_rw + 0x254u),
-               arm_ext_read_u32_or_zero_(m, active_rw + 0x258u));
-    }
-}
-
-static int arm_ext_diag_pc_offset_is(uint32_t off,
-                                     const uint32_t *offsets,
-                                     uint32_t count) {
-    for (uint32_t i = 0; i < count; ++i) {
-        if (off == offsets[i]) return 1;
-    }
-    return 0;
-}
-
-static int arm_ext_diag_describe_watched_pc(ArmExtModule *m, uint32_t address,
-                                            const char **kind_out,
-                                            uint32_t *file_addr_out,
-                                            uint32_t *file_len_out,
-                                            uint32_t *off_out,
-                                            uint32_t *p_addr_out,
-                                            uint32_t *helper_addr_out) {
-    if (!m || !getenv("VMRP_ARM_EXT_DIAG")) return 0;
-
-    uint32_t pc = address & ~1u;
-    const char *kind = NULL;
-    uint32_t file_addr = EXT_CODE_ADDR;
-    uint32_t file_len = m->code_len;
-    uint32_t off = 0;
-    uint32_t p_addr = m->p_addr;
-    uint32_t helper_addr = m->helper_addr;
-
-    static const uint32_t wrapper_offsets[] = {
-        0x3E1Cu, 0x47C4u, 0x4920u, 0x49E8u, 0x48C0u,
-        0x3C48u, 0x3D88u, 0x3E6Cu,
-    };
-    static const uint32_t child_offsets[] = {
-        0x3F1Eu, 0x3F50u, 0x3F7Eu, 0x3FA8u, 0x3FB0u,
-        0x03C0u, 0x3E18u, 0x4364u,
-        0x41FCu, 0x42D8u, 0x42DCu, 0x42E2u, 0x430Cu,
-        0x4328u, 0x4352u, 0x44F0u, 0x4510u, 0x45A6u,
-        0x30D8u, 0x28B0u, 0x1758u, 0x1EB0u, 0x2684u,
-        0x26AAu, 0x26FEu, 0x2720u, 0x2742u, 0x2BC4u,
-        0x2D1Cu, 0x317Cu, 0x44BCu,
-    };
-
-    if (pc >= EXT_CODE_ADDR && pc < EXT_CODE_ADDR + m->code_len) {
-        off = pc - EXT_CODE_ADDR;
-        if (arm_ext_diag_pc_offset_is(off, wrapper_offsets,
-                                      sizeof(wrapper_offsets) /
-                                          sizeof(wrapper_offsets[0]))) {
-            kind = "wrapper";
-        }
-    } else {
-        ArmExtNestedModule *mod = arm_ext_find_nested_module(m, pc);
-        if (mod && mod->file_addr && pc >= mod->file_addr) {
-            file_addr = mod->file_addr;
-            file_len = mod->file_len;
-            off = pc - mod->file_addr;
-            p_addr = mod->p_addr;
-            helper_addr = mod->helper_addr;
-            if (arm_ext_diag_pc_offset_is(off, child_offsets,
-                                          sizeof(child_offsets) /
-                                              sizeof(child_offsets[0]))) {
-                kind = "child";
-            }
-        }
-    }
-    if (!kind) return 0;
-
-    if (kind_out) *kind_out = kind;
-    if (file_addr_out) *file_addr_out = file_addr;
-    if (file_len_out) *file_len_out = file_len;
-    if (off_out) *off_out = off;
-    if (p_addr_out) *p_addr_out = p_addr;
-    if (helper_addr_out) *helper_addr_out = helper_addr;
-    return 1;
-}
-
-static void arm_ext_diag_watch_pc(ArmExtModule *m, uint32_t address) {
-    const char *kind = NULL;
-    uint32_t file_addr = 0;
-    uint32_t file_len = 0;
-    uint32_t off = 0;
-    uint32_t p_addr = 0;
-    uint32_t helper_addr = 0;
-
-    if (!arm_ext_diag_describe_watched_pc(m, address, &kind, &file_addr,
-                                          &file_len, &off, &p_addr,
-                                          &helper_addr)) {
-        return;
-    }
-
-    static int wrapper_diag_count = 0;
-    static int child_diag_count = 0;
-    if (strcmp(kind, "wrapper") == 0) {
-        if (wrapper_diag_count++ > 180) return;
-    } else {
-        if (child_diag_count++ > 260) return;
-    }
-
-    uint32_t r9 = reg_read32(m->uc, UC_ARM_REG_R9);
-    uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
-    uint32_t sp = reg_read32(m->uc, UC_ARM_REG_SP);
-    uint32_t chunk = 0;
-    uint32_t chunk24 = 0;
-    uint32_t chunk28 = 0;
-    uint32_t chunk34 = 0;
-    uint32_t p_rw = 0;
-    uint32_t p_rw_len = 0;
-    if (p_addr && arm_ptr(m, p_addr + 12u))
-        chunk = arm_ext_read_u32_or_zero_(m, p_addr + 12u);
-    if (p_addr && arm_ptr(m, p_addr + 4u)) {
-        p_rw = arm_ext_read_u32_or_zero_(m, p_addr);
-        p_rw_len = arm_ext_read_u32_or_zero_(m, p_addr + 4u);
-    }
-    if (chunk && arm_ptr(m, chunk + 0x34u)) {
-        chunk24 = arm_ext_read_u32_or_zero_(m, chunk + 0x24u);
-        chunk28 = arm_ext_read_u32_or_zero_(m, chunk + 0x28u);
-        chunk34 = arm_ext_read_u32_or_zero_(m, chunk + 0x34u);
-    }
-
-    printf("DIAG pc_hit kind=%s file=0x%X len=%u off=0x%X pc=0x%X P=0x%X H=0x%X p_rw=0x%X p_rw_len=%u chunk=0x%X +24=0x%X +28=0x%X +34=0x%X r0=0x%X r1=0x%X r2=0x%X r3=0x%X r4=0x%X r5=0x%X r6=0x%X r7=0x%X r9=0x%X lr=0x%X sp=0x%X activeP=0x%X activeH=0x%X primaryP=0x%X primaryH=0x%X timerP=0x%X timerH=0x%X\n",
-           kind, file_addr, file_len, off, address & ~1u, p_addr, helper_addr, p_rw,
-           p_rw_len, chunk, chunk24, chunk28, chunk34,
-           reg_read32(m->uc, UC_ARM_REG_R0),
-           reg_read32(m->uc, UC_ARM_REG_R1),
-           reg_read32(m->uc, UC_ARM_REG_R2),
-           reg_read32(m->uc, UC_ARM_REG_R3),
-           reg_read32(m->uc, UC_ARM_REG_R4),
-           reg_read32(m->uc, UC_ARM_REG_R5),
-           reg_read32(m->uc, UC_ARM_REG_R6),
-           reg_read32(m->uc, UC_ARM_REG_R7),
-           r9, lr, sp, m->active_p_addr, m->active_helper_addr,
-           m->primary_p_addr, m->primary_helper_addr, m->timer_p_addr,
-           m->timer_helper_addr);
-
-    char tag[64];
-    snprintf(tag, sizeof(tag), "pc-%s-%04X", kind, off);
-    arm_ext_diag_dump_wrapper_timer_state(m, tag);
-    arm_ext_diag_dump_rw_timer_state(m, tag, r9);
-    if (strcmp(kind, "child") == 0)
-        arm_ext_diag_dump_child_control_state(m, tag, r9);
-    if (p_rw && p_rw != r9)
-        arm_ext_diag_dump_rw_timer_state(m, "pc-owner-rw", p_rw);
-}
-
-static void arm_ext_diag_watch_r9_sync(ArmExtModule *m, uint32_t address,
-                                       uint32_t r9_pre, uint32_t r9_post) {
-    const char *kind = NULL;
-    uint32_t file_addr = 0;
-    uint32_t file_len = 0;
-    uint32_t off = 0;
-    uint32_t p_addr = 0;
-    uint32_t helper_addr = 0;
-
-    if (!arm_ext_diag_describe_watched_pc(m, address, &kind, &file_addr,
-                                          &file_len, &off, &p_addr,
-                                          &helper_addr)) {
-        return;
-    }
-
-    static int r9_diag_count = 0;
-    if (r9_diag_count++ > 320) return;
-
-    uint32_t p_rw = 0;
-    if (p_addr && arm_ptr(m, p_addr))
-        p_rw = arm_ext_read_u32_or_zero_(m, p_addr);
-
-    printf("DIAG r9_sync kind=%s file=0x%X len=%u off=0x%X pc=0x%X P=0x%X H=0x%X p_rw=0x%X pre=0x%X post=0x%X r0=0x%X r1=0x%X lr=0x%X activeP=0x%X activeH=0x%X timerP=0x%X timerH=0x%X\n",
-           kind, file_addr, file_len, off, address & ~1u, p_addr,
-           helper_addr, p_rw, r9_pre, r9_post,
-           reg_read32(m->uc, UC_ARM_REG_R0),
-           reg_read32(m->uc, UC_ARM_REG_R1),
-           reg_read32(m->uc, UC_ARM_REG_LR),
-           m->active_p_addr, m->active_helper_addr,
-           m->timer_p_addr, m->timer_helper_addr);
-}
-
 static void hook_restore_r9(uc_engine *uc, uint64_t address, uint32_t size, void *user_data) {
     (void)size;
     ArmExtModule *m = (ArmExtModule *)user_data;
@@ -5821,12 +5740,7 @@ static void hook_restore_r9(uc_engine *uc, uint64_t address, uint32_t size, void
      * block and only writes R9 when PC enters a known EXT image. Verification:
      * gxdzc e2e reaches the payment UI.
      */
-    uint32_t r9_pre = reg_read32(m->uc, UC_ARM_REG_R9);
     arm_ext_sync_r9_for_code_addr(m, (uint32_t)address);
-    uint32_t r9_post = reg_read32(m->uc, UC_ARM_REG_R9);
-    arm_ext_diag_watch_r9_sync(m, (uint32_t)address, r9_pre, r9_post);
-    arm_ext_diag_watch_wrapper_scheduler(m, (uint32_t)address);
-    arm_ext_diag_watch_pc(m, (uint32_t)address);
 }
 
 static uint32_t find_wrapper_timer_dispatch(const uint8_t *code, uint32_t len,
@@ -6230,6 +6144,9 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     }
     uc_hook invalid_hook;
     err = uc_hook_add(m->uc, &invalid_hook, UC_HOOK_MEM_INVALID, hook_invalid, m, 1, 0);
+    if (err != UC_ERR_OK) goto fail;
+    uc_hook intr_hook;
+    err = uc_hook_add(m->uc, &intr_hook, UC_HOOK_INTR, hook_intr, m, 1, 0);
     if (err != UC_ERR_OK) goto fail;
     /* GOT bridge 指针追踪：ARM 代码向 R9 数据区写入 bridge 地址时记录，
      * 后续 dump/restore 覆盖时自动修复 */
