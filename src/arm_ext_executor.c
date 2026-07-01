@@ -3172,6 +3172,12 @@ static uint32_t alloc_string(ArmExtModule *m, const char *value) {
     return slot;
 }
 
+static uint32_t alloc_bytes(ArmExtModule *m, const void *value, uint32_t len) {
+    uint32_t slot = arm_alloc(m, len);
+    if (slot && value && len) memcpy(arm_ptr(m, slot), value, len);
+    return slot;
+}
+
 static uint32_t arm_ext_pack_table_slot(ArmExtModule *m) {
     if (!m) return 0;
     if (!m->pack_table_addr) {
@@ -5580,7 +5586,10 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 76: ret = mr_editRelease((int32)r0); break;
         case 77: {
             const char *text = mr_editGetText((int32)r0);
-            ret = alloc_string(m, text ? text : "");
+            /* mr_editGetText returns UCS2-BE text.  ASCII therefore contains a
+             * zero high byte before every character, so strlen() would copy only
+             * the first byte and make ARM browser editors see an empty string. */
+            ret = text ? alloc_bytes(m, text, (uint32_t)wstrlen((char *)text) + 2) : 0;
         } break;
         /* table[78] mr_winCreate / table[79] mr_winRelease: 窗口功能不支持 */
         case 78: ret = MR_IGNORE; break;

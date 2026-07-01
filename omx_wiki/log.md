@@ -147,3 +147,14 @@
 ## [2026-06-28T05:39:47.805Z] ingest
 - **Pages:** optwar-exit-plugin-no-network-investigation.md
 - **Summary:** Updated "Optwar exit plugin no-network investigation" with new content
+## [2026-07-01T10:59:31.770Z] query
+- **Pages:** dota-browser-plugin-second-simpledownload-trigger.md
+- **Summary:** Query "wbrw input paste editGetText editGetText table77" → 1 results (of 1 total)
+
+## [2026-07-01T11:08:41.053Z] ingest
+- **Pages:** wbrw-input-paste-ucs2-table77-fix.md
+- **Summary:** Created new page "wbrw input paste UCS2 table77 fix"
+
+## [2026-07-01T11:08:41.058Z] add
+- **Pages:** wbrw-input-paste-ucs2-table77-fix.md
+- **Summary:** Created wiki page wbrw-input-paste-ucs2-table77-fix.md

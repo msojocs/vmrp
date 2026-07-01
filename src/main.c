@@ -501,7 +501,11 @@ void loop() {
             if (isEditMode) {
                 switch (ev.type) {
                     case SDL_KEYDOWN: {
-                        if (SDL_GetModState() & KMOD_CTRL) {
+                        SDL_Keymod key_mod = (SDL_Keymod)(ev.key.keysym.mod | SDL_GetModState());
+                        /* SDL_KEYDOWN carries the modifier state observed with
+                         * the key event; use it so injected and physical Ctrl+V
+                         * follow the same edit commit path. */
+                        if (key_mod & KMOD_CTRL) {
                             if (ev.key.keysym.sym == SDLK_z) {  // 取消编辑框输入
                                 // MR_DIALOG_KEY_CANCEL=1
                                 event(MR_DIALOG_EVENT, 1, 0);

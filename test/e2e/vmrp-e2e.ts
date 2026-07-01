@@ -19,6 +19,7 @@ export interface PpmImage {
   height: number;
   pixel(x: number, y: number): Rgb;
   uniqueColorCount(): number;
+  diffPixelCount(other: PpmImage, rect?: { x: number; y: number; width: number; height: number }): number;
 }
 
 type KeyName =
@@ -109,6 +110,12 @@ export class VmrpE2e {
   async key(name: KeyName, timeoutMs = 2_000): Promise<void> {
     const previous = await this.drawCount();
     await this.command(`KEY ${name}`);
+    await this.waitDrawAfter(previous, timeoutMs);
+  }
+
+  async paste(text: string, timeoutMs = 5_000): Promise<void> {
+    const previous = await this.drawCount();
+    await this.command(`PASTE ${text}`);
     await this.waitDrawAfter(previous, timeoutMs);
   }
 
@@ -240,6 +247,26 @@ export async function readPpm(filePath: string): Promise<PpmImage> {
         colors.add((pixels[i] << 16) | (pixels[i + 1] << 8) | pixels[i + 2]);
       }
       return colors.size;
+    },
+    diffPixelCount(other: PpmImage, rect = { x: 0, y: 0, width, height }): number {
+      if (other.width !== width || other.height !== height) {
+        throw new Error(`PPM dimensions differ: ${width}x${height} vs ${other.width}x${other.height}`);
+      }
+      let count = 0;
+      const x0 = Math.max(0, rect.x);
+      const y0 = Math.max(0, rect.y);
+      const x1 = Math.min(width, rect.x + rect.width);
+      const y1 = Math.min(height, rect.y + rect.height);
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const index = (y * width + x) * 3;
+          const rhs = other.pixel(x, y);
+          if (pixels[index] !== rhs[0] || pixels[index + 1] !== rhs[1] || pixels[index + 2] !== rhs[2]) {
+            count++;
+          }
+        }
+      }
+      return count;
     }
   };
 }
