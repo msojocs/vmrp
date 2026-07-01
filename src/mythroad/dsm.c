@@ -1307,6 +1307,10 @@ int32 mr_plat(int32 code, int32 param) {
             return MR_IGNORE;
         case 1011:  // netpay SMS 查询/触发，返回 MR_IGNORE 让正常流程走完
             return MR_IGNORE;
+        case 1016:  // 获取SIM卡状态/网络类型
+            return MR_SUCCESS;
+        case 1100:  // 浏览器引擎初始化查询（wbrw在加载主页前调用）
+            return MR_SUCCESS;
         case MR_SET_KEY_END:  // 1214 启用/禁用按键结束事件
             return MR_SUCCESS;
         default:
@@ -1386,6 +1390,8 @@ int32 mr_platEx(int32 code, uint8 *input, int32 input_len, uint8 **output, int32
         case 1224:  //小区信息ID
         case 1307:  //获取SIM卡个数，非多卡多待直接返回 MR_INGORE
             return MR_IGNORE;
+        case 4033:  // 浏览器渲染引擎初始化（wbrw在加载主页前调用）
+            return MR_SUCCESS;
 
         case 0x90004:
             /*

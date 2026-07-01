@@ -52,6 +52,7 @@
 #define ARM_EXT_NESTED_MODULE_MAX 64
 #define ARM_EXT_PACK_TABLE_SIZE 128u
 #define ARM_EXT_SHORT_PACK_ALIAS_MAX 32u
+#define ARM_EXT_DIAG_FD_MAX 32u
 
 typedef struct mr_c_function_P_t {
     uint32 start_of_ER_RW;
@@ -105,6 +106,11 @@ typedef struct ArmExtRowSpans {
     uint16_t *max_x;
     uint32_t rows;
 } ArmExtRowSpans;
+
+typedef struct ArmExtDiagFd {
+    int32_t handle;
+    char name[128];
+} ArmExtDiagFd;
 
 struct ArmExtModule {
     uc_engine *uc;
@@ -184,6 +190,9 @@ struct ArmExtModule {
     uint32_t primary_file_len;
     int primary_host_init_pending;
     uint32_t wrapper_timer_dispatch_addr;
+    /* R9-relative scheduler header used by compact wrapper timer walkers.
+     * Zero means the wrapper uses another/unknown timer layout. */
+    uint32_t wrapper_compact_timer_scheduler_off;
     /* 19KB cfunction.ext 的 chain walker thunk 地址（0xE83B50 格式：
      * push{r3,lr}; bl chain_walker; movs r0,#0; pop{r3,pc}）。
      * find_wrapper_timer_dispatch 匹配到该 thunk 时不将其作为宿主 timer
@@ -250,6 +259,7 @@ struct ArmExtModule {
     int mrp_cache_count;
     int mrp_cache_capacity;
     MrpVirtualFd mrp_vfds[MRP_VFD_MAX];
+    ArmExtDiagFd diag_fds[ARM_EXT_DIAG_FD_MAX];
 
     const AppCompatProfile *profile;
     void *app_state;

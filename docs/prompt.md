@@ -319,3 +319,39 @@ my_recv(s:2): recv=0, errno=11
 先不管其它测试用例，先修好BUG，再去兼容其它测试用例。
 充分利用子Agent。
 记得存储记忆数据。
+
+分析命令`build/vmrp build/mythroad/wbrw.mrp`启动时会向服务器发送/simpleDownload请求下载资源/插件，分析缺失的文件路径。
+
+可能是类似于：
+```
+if (!exists('path/to/file'))
+  // request simpleDownload
+```
+
+程序的现有代码不一定正确。
+注意trace日志量会特别大。
+不要使用xvfb。
+深入反汇编检测目标所在位置。
+
+充分利用子Agent。
+记得存储记忆数据。
+
+命令`build/vmrp build/mythroad/wbrw.mrp`启动时进度条会卡住，界面整体卡在“正在启动”的界面，分析并修复它。
+
+预期结果：成功启动浏览器应用。
+实际结果：卡在“正在启动”界面。
+
+tool/server-http.js已经在80端口启动，可以修改tool/proxy.js热生效。
+
+程序的现有代码不一定正确。
+注意trace日志量会特别大。
+不要使用xvfb。
+修改代码要加注释，不要有兜底代码逻辑。
+深入反汇编检测BUG所在位置。
+你可以检测PPM，来验证修复是否成功。
+不能写特定场景代码，如if(is_xxx_app()) {...}
+
+在分析与解决过程中，把进度定期保存至文档中。
+先不管其它测试用例，先修好BUG，再去兼容其它测试用例。
+充分利用子Agent。
+记得存储记忆数据。
