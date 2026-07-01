@@ -111,10 +111,12 @@ VMRP_EXPORT void vmrp_api_audio_stop(void);
 
 /*
  * Text edit: when MRP requests text input, vmrp_api_is_edit_active()
- * returns 1. The host should display a text input UI, then call
+ * returns 1. The host can read vmrp_api_get_edit_text() for the
+ * app-provided initial content, display a text input UI, then call
  * vmrp_api_set_edit_text() to confirm or vmrp_api_cancel_edit() to cancel.
  */
 VMRP_EXPORT int vmrp_api_is_edit_active(void);
+VMRP_EXPORT const char *vmrp_api_get_edit_text(void);
 VMRP_EXPORT int vmrp_api_set_edit_text(const char *text);
 VMRP_EXPORT int vmrp_api_cancel_edit(void);
 

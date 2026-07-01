@@ -38,6 +38,7 @@ static int image_processing_mode = VMRP_IMAGE_PROCESSING_NATIVE;
 static int edit_active = 0;
 static int32_t edit_max_size = 0;
 static char *hold_edit_text = NULL;
+static char *edit_text_snapshot = NULL;
 
 typedef enum {
     API_CMD_EVENT,
@@ -181,6 +182,11 @@ static void free_hold_edit_text(void) {
         my_freeExt(hold_edit_text);
         hold_edit_text = NULL;
     }
+}
+
+static void free_edit_text_snapshot(void) {
+    free(edit_text_snapshot);
+    edit_text_snapshot = NULL;
 }
 
 /* --- bridge.h implementations (linked by native_dsm_funcs.c) --- */
@@ -538,6 +544,7 @@ VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h) {
     screen_dirty = 0;
     pending_timer_ms = 0;
     image_processing_mode = VMRP_IMAGE_PROCESSING_NATIVE;
+    free_edit_text_snapshot();
     edit_active = 0;
     api_running = 0;
 #if VMRP_API_ASYNC_RUNNER
@@ -605,6 +612,7 @@ VMRP_EXPORT void vmrp_api_destroy(void) {
     pending_timer_ms = 0;
     api_running = 0;
     free_hold_edit_text();
+    free_edit_text_snapshot();
     edit_active = 0;
 }
 
@@ -771,6 +779,32 @@ VMRP_EXPORT int vmrp_api_is_edit_active(void) {
 #else
     return edit_active;
 #endif
+}
+
+VMRP_EXPORT const char *vmrp_api_get_edit_text(void) {
+    static const char empty_text[] = "";
+    if (!api_running || vmrp_is_exited()) return "";
+#if VMRP_API_ASYNC_RUNNER
+    api_lock();
+    const char *source = edit_active && hold_edit_text ? hold_edit_text : "";
+    size_t len = strlen(source);
+    char *copy = (char *)malloc(len + 1);
+    if (copy) {
+        memcpy(copy, source, len + 1);
+    }
+    api_unlock();
+#else
+    const char *source = edit_active && hold_edit_text ? hold_edit_text : "";
+    size_t len = strlen(source);
+    char *copy = (char *)malloc(len + 1);
+    if (copy) {
+        memcpy(copy, source, len + 1);
+    }
+#endif
+    if (!copy) return empty_text;
+    free(edit_text_snapshot);
+    edit_text_snapshot = copy;
+    return edit_text_snapshot;
 }
 
 VMRP_EXPORT int vmrp_api_set_edit_text(const char *text) {
