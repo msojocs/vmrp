@@ -105,6 +105,17 @@ static void e2e_push_key(int type, SDL_Keycode key, Uint8 state) {
     SDL_PushEvent(&ev);
 }
 
+static void e2e_push_key_with_mod(int type, SDL_Keycode key, Uint8 state, SDL_Keymod mod) {
+    SDL_Event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type = type;
+    ev.key.type = type;
+    ev.key.state = state;
+    ev.key.keysym.sym = key;
+    ev.key.keysym.mod = mod;
+    SDL_PushEvent(&ev);
+}
+
 static int e2e_read_line(int fd, char *buf, size_t size) {
     size_t pos = 0;
     while (pos + 1 < size) {
@@ -172,6 +183,24 @@ static void e2e_inject_key(SDL_Keycode key, int fd) {
     char resp[64];
     snprintf(resp, sizeof(resp), "OK key %d", (int)key);
     e2e_write_line(fd, resp);
+}
+
+static void e2e_inject_paste(const char *text, int fd) {
+    if (SDL_SetClipboardText(text ? text : "") != 0) {
+        e2e_write_line(fd, "ERR clipboard");
+        return;
+    }
+    /* Ctrl+V is a platform-edit action, not a Mythroad key.  Carry the Ctrl
+     * modifier in the SDL event and mirror it into SDL's mod state so the main
+     * edit-mode branch observes the same condition as a real keyboard paste. */
+    SDL_Keymod old_mod = SDL_GetModState();
+    SDL_SetModState((SDL_Keymod)(old_mod | KMOD_CTRL));
+    e2e_push_key_with_mod(SDL_KEYDOWN, SDLK_v, SDL_PRESSED, KMOD_CTRL);
+    SDL_Delay((Uint32)e2e_input_hold_ms());
+    e2e_push_key_with_mod(SDL_KEYUP, SDLK_v, SDL_RELEASED, KMOD_CTRL);
+    SDL_Delay(1);
+    SDL_SetModState(old_mod);
+    e2e_write_line(fd, "OK paste");
 }
 
 static void e2e_handle_wait_draw(VmrpE2eControl *control, int draw_count, int timeout_ms, int fd) {
@@ -254,6 +283,10 @@ static void e2e_handle_client(VmrpE2eControl *control, int fd) {
             return;
         }
         e2e_inject_key(key, fd);
+    } else if (strcasecmp(op, "PASTE") == 0) {
+        const char *text = line + strlen(op);
+        while (*text == ' ' || *text == '\t') text++;
+        e2e_inject_paste(text, fd);
     } else if (strcasecmp(op, "WAIT_DRAW") == 0) {
         int draw_count, timeout_ms;
         if (b[0]) {
