@@ -20,6 +20,8 @@ const proxy2Page2Tag21 = process.env.PROXY2_PAGE2_TAG21 ?? '';
 const updateMode = process.env.WBRW_UPDATE_MODE || 'fixture';
 const updateFixturePath = process.env.WBRW_UPDATE_FIXTURE || '';
 const updateContentType = process.env.WBRW_UPDATE_CONTENT_TYPE || 'application/sky-mrp';
+const proxy2Magic = 0x8aed9cf3;
+const proxy2FixedHeaderLength = 17;
 
 function readU16BE(buffer, offset) {
     return offset + 2 <= buffer.length ? buffer.readUInt16BE(offset) : undefined;
@@ -41,6 +43,54 @@ function printable(buffer) {
     return [...buffer]
         .map(byte => (byte >= 0x20 && byte < 0x7f ? String.fromCharCode(byte) : '.'))
         .join('');
+}
+
+function asciiValue(buffer) {
+    return printable(buffer).replace(/\.+$/u, '');
+}
+
+function parseParams(text) {
+    const query = text.includes('?') ? text.slice(text.indexOf('?') + 1) : text;
+    if (!query.includes('=')) return undefined;
+
+    const params = {};
+    for (const [key, value] of new URLSearchParams(query)) {
+        if (!/^[A-Za-z0-9_.~-]+$/u.test(key)) {
+            return undefined;
+        }
+        if (!Object.prototype.hasOwnProperty.call(params, key)) {
+            params[key] = value;
+            continue;
+        }
+        params[key] = Array.isArray(params[key]) ? [...params[key], value] : [params[key], value];
+    }
+    return Object.keys(params).length ? params : undefined;
+}
+
+function fieldInfo(tag, length, value, offset) {
+    const text = asciiValue(value);
+    const field = {
+        tag,
+        length,
+        offset,
+        ascii: text,
+    };
+    if (value.length <= 16) {
+        field.hex = value.toString('hex');
+    }
+    if (value.length === 1) {
+        field.u8 = value[0];
+    } else if (value.length === 2) {
+        field.u16 = value.readUInt16BE(0);
+    } else if (value.length === 4) {
+        field.u32 = value.readUInt32BE(0);
+    }
+
+    const params = parseParams(text);
+    if (params) {
+        field.params = params;
+    }
+    return field;
 }
 
 function readMrpEntry(mrpPath, entryName, options = {}) {
@@ -123,59 +173,127 @@ function makeProxy2ResponsePacket(payload, fields = []) {
     return packet;
 }
 
-function parseFieldStream(body, offset, limit = body.length) {
+function parseFieldStream(body, offset, limit = body.length, expectedCount = undefined) {
     const fields = [];
-    while (offset + 4 <= limit) {
+    const end = Math.min(limit, body.length);
+    while (offset + 4 <= end && (expectedCount == null || fields.length < expectedCount)) {
         const tag = readU16BE(body, offset);
         const length = readU16BE(body, offset + 2);
         const valueOffset = offset + 4;
         const valueEnd = valueOffset + length;
-        if (length > limit || valueEnd > limit) break;
+        if (valueEnd > end) {
+            return {
+                fields,
+                parsedLength: offset,
+                error: `field ${fields.length} tag ${tag} length ${length} exceeds limit ${end - valueOffset}`,
+            };
+        }
         const value = body.subarray(valueOffset, valueEnd);
-        fields.push({
-            tag,
-            length,
-            ascii: printable(value).replace(/\.+$/u, ''),
-            hex: value.length <= 8 ? value.toString('hex') : undefined,
-        });
+        fields.push(fieldInfo(tag, length, value, offset));
         offset = valueEnd;
     }
-    return { fields, parsedLength: offset };
+    const error = expectedCount != null && fields.length < expectedCount
+        ? `expected ${expectedCount} fields, parsed ${fields.length}`
+        : undefined;
+    return { fields, parsedLength: offset, error };
+}
+
+function summarizeBytes(buffer) {
+    const summary = {
+        length: buffer.length,
+        ascii: asciiValue(buffer),
+    };
+    if (buffer.length <= 64) {
+        summary.hex = buffer.toString('hex');
+    }
+    const params = parseParams(summary.ascii);
+    if (params) {
+        summary.params = params;
+    }
+    return summary;
+}
+
+function parseProxy2Payload(body, offset, declaredLength) {
+    const length = declaredLength || 0;
+    const end = Math.min(offset + length, body.length);
+    const payloadBuffer = body.subarray(offset, end);
+    const payload = {
+        offset,
+        declaredLength: length,
+        ...summarizeBytes(payloadBuffer),
+    };
+    if (payloadBuffer.length < length) {
+        payload.truncatedLength = length - payloadBuffer.length;
+    }
+    if (payloadBuffer.length < 5) {
+        return payload;
+    }
+
+    // /sta captures use one byte of payload type followed by a TLV stream.
+    const parsed = parseFieldStream(payloadBuffer, 1, payloadBuffer.length);
+    if (parsed.fields.length > 0) {
+        payload.format = 'u8-tlv';
+        payload.type = payloadBuffer[0];
+        payload.fields = parsed.fields;
+        payload.parsedLength = parsed.parsedLength;
+        payload.trailingLength = payloadBuffer.length - parsed.parsedLength;
+        if (payload.trailingLength > 0 && payload.trailingLength <= 16) {
+            payload.trailingHex = payloadBuffer.subarray(parsed.parsedLength).toString('hex');
+        }
+        if (parsed.error) {
+            payload.error = parsed.error;
+        }
+    }
+    return payload;
 }
 
 function parseProxy2Packet(body) {
+    const headerLength = readU16BE(body, 6);
+    const code = readU16BE(body, 8);
+    const status = readU16BE(body, 10);
+    const payloadLength = readU32BE(body, 12);
     const packet = {
         magic: readU32BE(body, 0),
         version: readU16BE(body, 4),
-        declaredLength: readU16BE(body, 6),
-        service: readU16BE(body, 8),
-        serviceLength: readU16BE(body, 10),
+        headerLength,
+        declaredLength: headerLength,
+        code,
+        status,
+        payloadLength,
+        fieldCount: body.length > 16 ? body[16] : undefined,
         fields: [],
     };
+    packet.service = packet.code;
+    packet.serviceLength = packet.status;
 
-    if (packet.magic !== 0x8aed9cf3 || body.length < 8) {
+    if (packet.magic !== proxy2Magic || body.length < proxy2FixedHeaderLength) {
         return packet;
     }
 
-    let fieldOffset = 12 + (packet.serviceLength || 0);
-    // Captured WBRW packets put a compact segment header before the TLV field stream.
-    if (packet.service === 1 && packet.serviceLength === 1 && body[12] === 0) {
-        fieldOffset = 17;
-    } else if (packet.service === 5 && packet.serviceLength === 2) {
-        fieldOffset = 17;
-    }
-    const fieldLimit = packet.declaredLength && packet.declaredLength <= body.length
-        ? packet.declaredLength
+    const fieldOffset = proxy2FixedHeaderLength;
+    const fieldLimit = packet.headerLength && packet.headerLength <= body.length
+        ? packet.headerLength
         : body.length;
-    const parsed = parseFieldStream(body, fieldOffset, fieldLimit);
+    const parsed = parseFieldStream(body, fieldOffset, fieldLimit, packet.fieldCount);
     packet.fieldOffset = fieldOffset;
     packet.fields = parsed.fields;
     packet.parsedLength = parsed.parsedLength;
-    packet.trailingLength = body.length - parsed.parsedLength;
+    packet.headerTrailingLength = Math.max(0, fieldLimit - parsed.parsedLength);
+    if (parsed.error) {
+        packet.error = parsed.error;
+    }
+
+    const packetLength = (packet.headerLength || 0) + (packet.payloadLength || 0);
+    packet.packetLength = packetLength;
+    packet.payload = parseProxy2Payload(body, packet.headerLength || body.length, packet.payloadLength || 0);
+    packet.trailingLength = packetLength < body.length ? body.length - packetLength : 0;
+    packet.truncatedLength = packetLength > body.length ? packetLength - body.length : 0;
     return packet;
 }
-
 function logProxy2Packet(req, body) {
+    const tempDir = path.resolve(__dirname, './temp');
+    fs.mkdirSync(tempDir, { recursive: true });
+    fs.writeFileSync(path.resolve(tempDir, req.url.replace(/\//g, '_') + `_${Date.now()}.bin`), body);
     const packet = parseProxy2Packet(body);
     console.info('proxy2 packet:', JSON.stringify({
         path: req.url,
@@ -183,13 +301,22 @@ function logProxy2Packet(req, body) {
         magic: packet.magic == null ? null : `0x${packet.magic.toString(16)}`,
         version: packet.version,
         declaredLength: packet.declaredLength,
-        service: packet.service,
-        serviceLength: packet.serviceLength,
+        headerLength: packet.headerLength,
+        code: packet.code,
+        status: packet.status,
+        payloadLength: packet.payloadLength,
+        fieldCount: packet.fieldCount,
         fieldOffset: packet.fieldOffset,
         parsedLength: packet.parsedLength,
+        headerTrailingLength: packet.headerTrailingLength,
+        packetLength: packet.packetLength,
         trailingLength: packet.trailingLength,
+        truncatedLength: packet.truncatedLength,
+        error: packet.error,
         fields: packet.fields,
+        payload: packet.payload,
     }));
+    console.info('\n');
 }
 
 function sendBuffer(res, contentType, body) {
