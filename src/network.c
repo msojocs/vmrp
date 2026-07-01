@@ -347,6 +347,25 @@ int32 my_getSocketState(int32 s) {
 }
 
 static int32_t socketCounter = 0;
+int32 my_hasOpenSockets(void) {
+#ifdef NETWORK_SUPPORT
+    return rb_first(&sockets) != NULL;
+#else
+    return FALSE;
+#endif
+}
+
+int32 my_openSocketCount(void) {
+#ifdef NETWORK_SUPPORT
+    int32 count = 0;
+    for (struct rb_node* node = rb_first(&sockets); node; node = rb_next(node))
+        count++;
+    return count;
+#else
+    return 0;
+#endif
+}
+
 /*
  >=0 返回的Socket句柄 
    MR_FAILED 失败 
@@ -776,12 +795,16 @@ int32 my_recv(int32 s, char* buf, int len) {
     }
     ret = recv(data->s, buf, len, 0);
     printf("my_recv(s:%d): recv=%d, errno=%d\n", s, ret, errno);
-    /* recv 返回 0 表示对端关闭了连接（TCP FIN），向 ARM 代码
-     * 返回 MR_FAILED 让其走错误/关闭路径，而不是返回 0 让其
-     * 误以为"暂时没数据"而无限轮询。 */
-    // if (ret == 0) {
-    //     return MR_FAILED;
-    // }
+    if (ret == 0) {
+        /*
+         * select()+readable followed by recv()==0 is TCP FIN, not "no data".
+         * Mythroad sockets use 0 for temporary EAGAIN-style polling; keeping a
+         * closed socket in that state makes browser/update state machines spin
+         * forever instead of completing their response parse.
+         */
+        my_closeSocket(s);
+        return MR_FAILED;
+    }
     if (ret > 0) {
         char preview[65];
         int plen = ret < 64 ? ret : 64;

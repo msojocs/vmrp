@@ -16,5 +16,7 @@ int32 my_recvfrom(int32 s, char *buf, int len, int32 *ip, uint16 *port);
 int32 my_recv(int32 s, char *buf, int len);
 int32 my_connect(int32 s, int32 ip, uint16 port, int32 type);
 int32 my_getSocketState(int32 s);
+int32 my_hasOpenSockets(void);
+int32 my_openSocketCount(void);
 
 #endif
