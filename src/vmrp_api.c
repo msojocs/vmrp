@@ -191,8 +191,12 @@ static void free_edit_text_snapshot(void) {
 
 /* --- bridge.h implementations (linked by native_dsm_funcs.c) --- */
 
-void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
-    if (!screen_buf || !bmp || w <= 0 || h <= 0) return;
+void guiDrawBitmapWithStride(uint16_t *bmp, int32_t x, int32_t y,
+                             int32_t w, int32_t h,
+                             int32_t source_stride,
+                             int32_t source_x,
+                             int32_t source_y) {
+    if (!screen_buf || !bmp || source_stride <= 0 || w <= 0 || h <= 0) return;
     int sw = vmrp_config.screen_width;
     int sh = vmrp_config.screen_height;
     int32_t min_x = x < 0 ? 0 : x;
@@ -209,12 +213,29 @@ void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
 #endif
     for (int32_t yy = min_y; yy < max_y; yy++) {
         size_t off = (size_t)yy * (size_t)sw + (size_t)min_x;
-        memcpy(screen_buf + off, bmp + off, row_bytes);
+        int32_t sx = source_x + (min_x - x);
+        int32_t sy = source_y + (yy - y);
+        if (sx < 0 || sy < 0 || sx + (max_x - min_x) > source_stride) {
+            continue;
+        }
+        memcpy(screen_buf + off,
+               bmp + (size_t)sy * (size_t)source_stride + (size_t)sx,
+               row_bytes);
     }
     screen_dirty = 1;
 #if VMRP_API_ASYNC_RUNNER
     screen_unlock();
 #endif
+}
+
+void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
+    /*
+     * Default DSM callers submit mr_screenBuf rectangles, so their source
+     * coordinates remain absolute screen coordinates.  Local bitmap presents
+     * use guiDrawBitmapWithStride() directly.
+     */
+    guiDrawBitmapWithStride(bmp, x, y, w, h,
+                            vmrp_config.screen_width, x, y);
 }
 
 int32_t timerStart(uint16_t t) {

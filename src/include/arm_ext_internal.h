@@ -50,6 +50,7 @@
 #define MRP_VFD_MAX 4
 #define MRP_VFD_BASE 0x7FFF0000u
 #define ARM_EXT_NESTED_MODULE_MAX 64
+#define ARM_EXT_READ_ALIAS_MAX 64
 #define ARM_EXT_PACK_TABLE_SIZE 128u
 #define ARM_EXT_SHORT_PACK_ALIAS_MAX 32u
 #define ARM_EXT_DIAG_FD_MAX 32u
@@ -101,6 +102,12 @@ typedef struct ArmExtNestedModule {
     uint32_t got_memcpy_off;
 } ArmExtNestedModule;
 
+/* 应用可见 bump 后备块记录项(见 ArmExtModule.bump_live 注释) */
+typedef struct ArmExtBumpBlock {
+    uint32_t addr;
+    uint32_t len;
+} ArmExtBumpBlock;
+
 typedef struct ArmExtRowSpans {
     uint16_t *min_x;
     uint16_t *max_x;
@@ -111,6 +118,13 @@ typedef struct ArmExtDiagFd {
     int32_t handle;
     char name[128];
 } ArmExtDiagFd;
+
+typedef struct ArmExtReadAlias {
+    uint32_t source_addr;
+    uint32_t source_len;
+    uint32_t decoded_addr;
+    uint32_t decoded_len;
+} ArmExtReadAlias;
 
 struct ArmExtModule {
     uc_engine *uc;
@@ -142,6 +156,24 @@ struct ArmExtModule {
     uint32_t origin_mem_left;
     uint32_t origin_mem_min;
     uint32_t origin_mem_top;
+    /* ARM 可见的 LG_mem_free 头节点地址(table[146],8 字节 {next,len})。
+     * 原生 ABI 直接暴露该头节点,应用会读改空闲链表来预测 mr_malloc 的
+     * 返回地址,因此 table[0]/[1]/[2] 与 table[125] 输出必须在该链表上
+     * 按 src/mythroad/mem.c 的 first-fit 语义分配。 */
+    uint32_t origin_mem_head_addr;
+    /* 应用可见的 bump 后备块记录(宿主侧)。原生 LG_mem 只有 512KB,
+     * 应用堆必须依赖 free 后复用才能完成长流程;bump 后备若只增不减,
+     * 资源包下载安装等流程会耗尽 16MB 并撞入 EXT 栈/代码区(talkcat
+     * 喝水资源包安装时整屏位图被写到 0xE732A0 栈区,PC 变成像素值)。
+     * live 表登记 table[0]/[2]/[125] 发给应用的 bump 块;free 仅回收
+     * 登记过的块,防止 guest 用伪造地址回收执行器内部分配(屏幕缓冲、
+     * 模块暂存等同在 bump 区)。 */
+    struct ArmExtBumpBlock *bump_live;
+    uint32_t bump_live_count;
+    uint32_t bump_live_cap;
+    struct ArmExtBumpBlock *bump_free_blocks;
+    uint32_t bump_free_count;
+    uint32_t bump_free_cap;
     /* ARM 侧 origin_mem 统计 slot 地址，用于在宿主 table[0]/table[1]
      * 处理后同步 ARM 可见的剩余内存值，避免 ext 读到过期统计。 */
     uint32_t origin_mem_left_slot;
@@ -200,6 +232,8 @@ struct ArmExtModule {
     uint32_t chain_walker_thunk_addr;
     ArmExtNestedModule nested_modules[ARM_EXT_NESTED_MODULE_MAX];
     int nested_module_count;
+    ArmExtReadAlias read_aliases[ARM_EXT_READ_ALIAS_MAX];
+    uint32_t read_alias_count;
     uint32_t outer_r9;
     uint32_t nested_return_addr;
     /* UC_HOOK_INTR covers every ARM SVC/HVC-style trap.  Handled ABI traps

@@ -55,6 +55,7 @@ typedef struct {
     int32 (*read)(int32 f, void *p, uint32 l);
     int32 (*write)(int32 f, void *p, uint32 l);
     int32 (*seek)(int32 f, int32 pos, int method);
+    int32 (*tell)(int32 f);
     int32 (*info)(const char *filename);
     int32 (*remove)(const char *filename);
     int32 (*rename)(const char *oldname, const char *newname);

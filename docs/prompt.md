@@ -336,12 +336,10 @@ if (!exists('path/to/file'))
 充分利用子Agent。
 记得存储记忆数据。
 
-命令`build/vmrp build/mythroad/wbrw.mrp`启动时进度条会卡住，界面整体卡在“正在启动”的界面，分析并修复它。
+命令`build/vmrp build/mythroad/talkcat.mrp`启动后，界面图像存在部分损坏，分析并修复它。
 
-预期结果：成功启动浏览器应用。
-实际结果：卡在“正在启动”界面。
-
-tool/server-http.js已经在80端口启动，可以修改tool/proxy.js热生效。
+预期结果：游戏主界面显示正常。
+实际结果：进入后存在部分花屏形状的横线。
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。

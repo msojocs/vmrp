@@ -947,6 +947,7 @@ static DSM_REQUIRE_FUNCS native_funcs = {
     .read = my_read,
     .write = my_write,
     .seek = my_seek,
+    .tell = my_tell,
     .info = my_info,
     .remove = my_remove,
     .rename = my_rename,
