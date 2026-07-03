@@ -39,6 +39,7 @@
   cmake --build build --target vmrp-wasm
   ```
 - `test/e2e/` 是面向真实 MRP 样本的 Vitest 回归用例，通常假定可执行文件位于 `build/vmrp`，并依赖 `test/fixtures/*.mrp` 等运行资源。
+- e2e 测试文件级并发执行（上限见 `vitest.config.ts` 的 `maxForks`，为避免 CPU 超售引起时序抖动）。数据隔离模式：每个 `it()` 用例开头 `ws = await VmrpWorkspace.create()` 获得独立的 `mythroad/` 临时副本，用 `ws.path('mythroad/...')` 访问工作区内文件，`VmrpE2e.start(mrp, { workDir: ws.dir })` 启动，`afterEach` 中 `ws.dispose()` 清理。新增用例禁止直接读写仓库根目录的 `mythroad/`。
 
 ## 开发要求
 

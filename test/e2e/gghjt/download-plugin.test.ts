@@ -1,23 +1,28 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { VmrpE2e } from "../vmrp-e2e.js";
+import { VmrpE2e, VmrpWorkspace } from "../vmrp-e2e.js";
 import fs from "fs";
 
 describe("gghjt pixel flow", () => {
   let vmrp: VmrpE2e | undefined;
+  let ws: VmrpWorkspace | undefined;
   const memCheckTime = 10_000
 
   afterEach(async () => {
     await vmrp?.close();
     vmrp = undefined;
+    await ws?.dispose();
+    ws = undefined;
   });
 
   it("下载付费插件 - 直接返回", async () => {
+    // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
+    ws = await VmrpWorkspace.create();
     // 删除后，继续游戏会进入下载netpay插件界面。
-    fs.rmSync('mythroad/plugins/netpay.mrp', { force: true });
-    fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
-    fs.rmSync('mythroad/cache', { force: true, recursive: true });
-    fs.cpSync('test/fixtures/gghjt', 'mythroad/gghjt', { recursive: true });
-    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp");
+    fs.rmSync(ws.path('mythroad/plugins/netpay.mrp'), { force: true });
+    fs.rmSync(ws.path('mythroad/gghjt'), { force: true, recursive: true });
+    fs.rmSync(ws.path('mythroad/cache'), { force: true, recursive: true });
+    fs.cpSync('test/fixtures/gghjt', ws.path('mythroad/gghjt'), { recursive: true });
+    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp", { workDir: ws.dir });
 
     {
       // 检测内存
@@ -64,12 +69,14 @@ describe("gghjt pixel flow", () => {
     expect(menu.pixel(80, 80)).toEqual([0, 4, 0]);
   });
   it("下载付费插件 - 返回重进", async () => {
+    // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
+    ws = await VmrpWorkspace.create();
     // 删除后，继续游戏会进入下载netpay插件界面。
-    fs.rmSync('mythroad/plugins/netpay.mrp', { force: true });
-    fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
-    fs.rmSync('mythroad/cache', { force: true, recursive: true });
-    fs.cpSync('test/fixtures/gghjt', 'mythroad/gghjt', { recursive: true });
-    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp");
+    fs.rmSync(ws.path('mythroad/plugins/netpay.mrp'), { force: true });
+    fs.rmSync(ws.path('mythroad/gghjt'), { force: true, recursive: true });
+    fs.rmSync(ws.path('mythroad/cache'), { force: true, recursive: true });
+    fs.cpSync('test/fixtures/gghjt', ws.path('mythroad/gghjt'), { recursive: true });
+    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp", { workDir: ws.dir });
 
     {
       // 检测内存
@@ -134,12 +141,14 @@ describe("gghjt pixel flow", () => {
   
   });
   it("下载付费插件 - 下载完毕", async () => {
+    // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
+    ws = await VmrpWorkspace.create();
     // 删除后，继续游戏会进入下载netpay插件界面。
-    fs.rmSync('mythroad/plugins/netpay.mrp', { force: true });
-    fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
-    fs.rmSync('mythroad/cache', { force: true, recursive: true });
-    fs.cpSync('test/fixtures/gghjt', 'mythroad/gghjt', { recursive: true });
-    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp");
+    fs.rmSync(ws.path('mythroad/plugins/netpay.mrp'), { force: true });
+    fs.rmSync(ws.path('mythroad/gghjt'), { force: true, recursive: true });
+    fs.rmSync(ws.path('mythroad/cache'), { force: true, recursive: true });
+    fs.cpSync('test/fixtures/gghjt', ws.path('mythroad/gghjt'), { recursive: true });
+    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp", { workDir: ws.dir });
 
     {
       // 检测内存
@@ -206,12 +215,14 @@ describe("gghjt pixel flow", () => {
     expect(pay.pixel(104, 147)).toEqual([104, 104, 224]);
   });
   it("下载付费插件 - 下载完毕返回重进", async () => {
+    // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
+    ws = await VmrpWorkspace.create();
     // 删除后，继续游戏会进入下载netpay插件界面。
-    fs.rmSync('mythroad/plugins/netpay.mrp', { force: true });
-    fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
-    fs.rmSync('mythroad/cache', { force: true, recursive: true });
-    fs.cpSync('test/fixtures/gghjt', 'mythroad/gghjt', { recursive: true });
-    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp");
+    fs.rmSync(ws.path('mythroad/plugins/netpay.mrp'), { force: true });
+    fs.rmSync(ws.path('mythroad/gghjt'), { force: true, recursive: true });
+    fs.rmSync(ws.path('mythroad/cache'), { force: true, recursive: true });
+    fs.cpSync('test/fixtures/gghjt', ws.path('mythroad/gghjt'), { recursive: true });
+    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp", { workDir: ws.dir });
 
     {
       // 检测内存
@@ -304,12 +315,14 @@ describe("gghjt pixel flow", () => {
     }
   });
   it("下载付费插件 - 下载完毕付费超时返回重进", async () => {
+    // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
+    ws = await VmrpWorkspace.create();
     // 删除后，继续游戏会进入下载netpay插件界面。
-    fs.rmSync('mythroad/plugins/netpay.mrp', { force: true });
-    fs.rmSync('mythroad/gghjt', { force: true, recursive: true });
-    fs.rmSync('mythroad/cache', { force: true, recursive: true });
-    fs.cpSync('test/fixtures/gghjt', 'mythroad/gghjt', { recursive: true });
-    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp");
+    fs.rmSync(ws.path('mythroad/plugins/netpay.mrp'), { force: true });
+    fs.rmSync(ws.path('mythroad/gghjt'), { force: true, recursive: true });
+    fs.rmSync(ws.path('mythroad/cache'), { force: true, recursive: true });
+    fs.cpSync('test/fixtures/gghjt', ws.path('mythroad/gghjt'), { recursive: true });
+    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp", { workDir: ws.dir });
 
     {
       // 检测内存

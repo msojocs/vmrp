@@ -1,19 +1,24 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { VmrpE2e } from "../vmrp-e2e.js";
+import { VmrpE2e, VmrpWorkspace } from "../vmrp-e2e.js";
 import fs from "fs";
 
 describe("dota pixel flow", () => {
   let vmrp: VmrpE2e | undefined;
+  let ws: VmrpWorkspace | undefined;
 
   afterEach(async () => {
     await vmrp?.close();
     vmrp = undefined;
+    await ws?.dispose();
+    ws = undefined;
   });
 
   it("下载浏览器插件 - 返回重进", async () => {
+    // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
+    ws = await VmrpWorkspace.create();
     // 删除后，继续游戏会进入下载浏览器插件界面。
-    fs.rmSync('mythroad/plugins/embrw.mrp', { force: true });
-    vmrp = await VmrpE2e.start("test/fixtures/dota.mrp");
+    fs.rmSync(ws.path('mythroad/plugins/embrw.mrp'), { force: true });
+    vmrp = await VmrpE2e.start("test/fixtures/dota.mrp", { workDir: ws.dir });
 
     await vmrp.delay(6000);
     const boot = await vmrp.screen("bgm-select");
@@ -112,14 +117,16 @@ describe("dota pixel flow", () => {
   });
 
   it("下载浏览器插件 - 成功", async () => {
+    // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
+    ws = await VmrpWorkspace.create();
     // 删除后，继续游戏会进入下载浏览器插件界面。
-    fs.rmSync('mythroad/brw', { force: true, recursive: true });
-    fs.rmSync('mythroad/plugins/embrw.mrp', { force: true });
-    fs.rmSync('mythroad/plugins/brwcore.mrp', { force: true });
-    fs.rmSync('mythroad/plugins/brwgui.mrp', { force: true });
-    fs.rmSync('mythroad/plugins/brwmain.mrp', { force: true });
-    fs.rmSync('mythroad/plugins/brwshell.mrp', { force: true });
-    vmrp = await VmrpE2e.start("test/fixtures/dota.mrp");
+    fs.rmSync(ws.path('mythroad/brw'), { force: true, recursive: true });
+    fs.rmSync(ws.path('mythroad/plugins/embrw.mrp'), { force: true });
+    fs.rmSync(ws.path('mythroad/plugins/brwcore.mrp'), { force: true });
+    fs.rmSync(ws.path('mythroad/plugins/brwgui.mrp'), { force: true });
+    fs.rmSync(ws.path('mythroad/plugins/brwmain.mrp'), { force: true });
+    fs.rmSync(ws.path('mythroad/plugins/brwshell.mrp'), { force: true });
+    vmrp = await VmrpE2e.start("test/fixtures/dota.mrp", { workDir: ws.dir });
 
     await vmrp.delay(6000);
     const boot = await vmrp.screen("bgm-select");

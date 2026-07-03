@@ -1,19 +1,24 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { VmrpE2e } from "../vmrp-e2e.js";
+import { VmrpE2e, VmrpWorkspace } from "../vmrp-e2e.js";
 import fs from "fs";
 
 describe("wbrw 进入主界面", () => {
   let vmrp: VmrpE2e | undefined;
+  let ws: VmrpWorkspace | undefined;
 
   afterEach(async () => {
     await vmrp?.close();
     vmrp = undefined;
+    await ws?.dispose();
+    ws = undefined;
   });
 
   it("浏览器正常启动", async () => {
-    fs.rmSync('mythroad/brw', { recursive: true, force: true })
+    // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
+    ws = await VmrpWorkspace.create();
+    fs.rmSync(ws.path('mythroad/brw'), { recursive: true, force: true })
     
-    vmrp = await VmrpE2e.start("test/fixtures/wbrw.mrp");
+    vmrp = await VmrpE2e.start("test/fixtures/wbrw.mrp", { workDir: ws.dir });
 
     await vmrp.delay(5000);
     const boot = await vmrp.screen("home");

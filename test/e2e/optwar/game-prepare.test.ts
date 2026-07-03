@@ -1,25 +1,30 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { VmrpE2e } from "../vmrp-e2e.js";
+import { VmrpE2e, VmrpWorkspace } from "../vmrp-e2e.js";
 import fs from "fs";
 
 describe("optwar 进入主菜单", () => {
   let vmrp: VmrpE2e | undefined;
+  let ws: VmrpWorkspace | undefined;
 
   afterEach(async () => {
     await vmrp?.close();
     vmrp = undefined;
+    await ws?.dispose();
+    ws = undefined;
   });
 
   it("游戏准备 - 顶部正常", async () => {
+    // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
+    ws = await VmrpWorkspace.create();
     // 删除后，继续游戏会进入下载netpay插件界面。
-    if (!fs.existsSync('mythroad/plugins/netpay.mrp')) {
-      fs.cpSync('test/fixtures/plugins/netpay.mrp', 'mythroad/plugins/netpay.mrp');
+    if (!fs.existsSync(ws.path('mythroad/plugins/netpay.mrp'))) {
+      fs.cpSync('test/fixtures/plugins/netpay.mrp', ws.path('mythroad/plugins/netpay.mrp'));
     }
     // 本用例验证前台 advbar 插件与游戏主画面的屏幕合成，运行前显式准备插件资源。
-    if (!fs.existsSync('mythroad/plugins/advbar.mrp')) {
-      fs.cpSync('test/fixtures/plugins/advbar.mrp', 'mythroad/plugins/advbar.mrp');
+    if (!fs.existsSync(ws.path('mythroad/plugins/advbar.mrp'))) {
+      fs.cpSync('test/fixtures/plugins/advbar.mrp', ws.path('mythroad/plugins/advbar.mrp'));
     }
-    vmrp = await VmrpE2e.start("test/fixtures/optwar.mrp");
+    vmrp = await VmrpE2e.start("test/fixtures/optwar.mrp", { workDir: ws.dir });
 
     await vmrp.delay(2000);
     const boot = await vmrp.screen("bgm-select");

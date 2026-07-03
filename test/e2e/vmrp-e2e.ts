@@ -1,10 +1,11 @@
 import { spawn, type ChildProcessByStdio } from "node:child_process";
 import type { Readable } from "node:stream";
-import { createWriteStream } from "node:fs";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { createWriteStream, cpSync } from "node:fs";
+import { copyFile, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type Rgb = readonly [number, number, number];
 
@@ -59,8 +60,27 @@ export class VmrpE2e {
   static async start(mrpPath: string, options: VmrpE2eOptions = {}): Promise<VmrpE2e> {
     const tmpDir = await mkdtemp(path.join(tmpdir(), "vmrp-e2e-"));
     const vmrp = new VmrpE2e(tmpDir, options);
-    await vmrp.spawn(mrpPath);
+    await vmrp.spawn(await vmrp.prepareMrp(mrpPath));
     return vmrp;
+  }
+
+  /**
+   * 确保 MRP 文件位于 work-dir 之下,否则复制一份进去再启动。
+   *
+   * ARM EXT 执行器把包名 alias 解析为"相对 cwd 的最短可打开路径"
+   * (src/arm_ext_executor.c arm_ext_init_pack_names),且部分 EXT helper
+   * 只有固定 32 字节的包名缓冲区。当 MRP 位于 work-dir 之外时 alias 退化
+   * 为截断的绝对路径,包自身无法被重新打开,wbrw 等应用会误判包异常并
+   * 触发联网版本上报,改变启动流程导致像素断言失败。仓库根作为 work-dir
+   * 时 fixtures 本就在 cwd 下,此函数不做任何复制,保持原有行为。
+   */
+  private async prepareMrp(mrpPath: string): Promise<string> {
+    const workDir = path.resolve(this.workDir);
+    const absMrp = path.resolve(mrpPath);
+    if (absMrp.startsWith(workDir + path.sep)) return mrpPath;
+    const dest = path.join(workDir, path.basename(absMrp));
+    await copyFile(absMrp, dest);
+    return dest;
   }
 
   async close(): Promise<void> {
@@ -200,6 +220,52 @@ export class VmrpE2e {
         resolve(true);
       });
     });
+  }
+}
+
+/**
+ * 每个测试用例独立的 mythroad 数据副本。
+ *
+ * 测试并发执行时,所有用例共享仓库根目录 mythroad/(wasm/dist/fs/mythroad
+ * 的符号链接)会互相覆盖插件/缓存/存档,导致数据竞争。VmrpWorkspace 在临时
+ * 目录中复制一份模板,把该目录作为 vmrp 的 --work-dir,实现文件级隔离。
+ *
+ * 生命周期须覆盖整个 it()(而非单个 VmrpE2e 实例):opglqa/font.test.ts
+ * 会在同一用例内重启第二个 vmrp 实例并验证第一次启动落盘的文件被复用。
+ */
+export class VmrpWorkspace {
+  /** 传给 VmrpE2e.start 的 workDir。 */
+  readonly dir: string;
+
+  private constructor(dir: string) {
+    this.dir = dir;
+  }
+
+  static async create(): Promise<VmrpWorkspace> {
+    const tmpDir = await mkdtemp(path.join(tmpdir(), "vmrp-ws-"));
+    // 用 import.meta.url 定位模板源,不依赖 worker 的 cwd;直接指向符号链接
+    // 目标 wasm/dist/fs/mythroad。dereference: true 确保拷贝真实文件。
+    const src = fileURLToPath(new URL("../../wasm/dist/fs/mythroad", import.meta.url));
+    // preserveTimestamps: true —— 模拟器/MRP 应用会依据文件时间戳判断
+    // “是否需要重新联网校验”(如 wbrw 启动时的 simpleDownload 上报);
+    // 不保留 mtime 会触发额外的真实网络请求,拖慢启动导致像素断言失败。
+    cpSync(src, path.join(tmpDir, "mythroad"), {
+      recursive: true,
+      dereference: true,
+      preserveTimestamps: true
+    });
+    return new VmrpWorkspace(tmpDir);
+  }
+
+  /** 把工作区内的相对路径(如 "mythroad/plugins/netpay.mrp")转成绝对路径。 */
+  path(rel: string): string {
+    return path.join(this.dir, rel);
+  }
+
+  async dispose(): Promise<void> {
+    if (process.env.VMRP_E2E_KEEP_TMP !== "1") {
+      await rm(this.dir, { recursive: true, force: true });
+    }
   }
 }
 
