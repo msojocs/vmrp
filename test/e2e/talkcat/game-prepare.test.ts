@@ -75,4 +75,40 @@ describe("talkcat 进入游戏", () => {
       expect(stdout).not.contain('Invalid memory read')
     }
   });
+  it("循环取消", async () => {
+    fs.rmSync('mythroad/talkcat', { force: true, recursive: true })
+
+    vmrp = await VmrpE2e.start("test/fixtures/talkcat.mrp");
+
+    await vmrp.delay(40_000);
+    const boot = await vmrp.screen("main");
+    // rgb(232, 236, 232)
+    expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);
+    // rgb(0, 12, 16)
+    expect(boot.pixel(216, 27)).toEqual([0, 12, 16]);
+    // rgb(64, 64, 64)
+    expect(boot.pixel(221, 279)).toEqual([64, 64, 64]);
+
+    for (let i = 0; i < 20; i++) {
+      {
+        // 点击水杯图标，触发下载提示
+        await vmrp.click(139, 266, 1_000)
+        await vmrp.delay(1_000)
+        // 检查像素
+        const screen = await vmrp.screen("download-confirm");
+        // rgb(32, 64, 120)
+        expect(screen.pixel(78, 280)).toEqual([32, 64, 120]);
+      }
+      {
+        // 点击确定开始下载
+        await vmrp.click(139, 266, 1_000)
+        await vmrp.delay(1_000)
+        // rgb(32, 212, 0)
+        const screen = await vmrp.screen("download-cancel");
+        // rgb(32, 64, 120)
+        expect(screen.pixel(78, 280)).not.toEqual([32, 64, 120]);
+        await vmrp.delay(1_000)
+      }
+    }
+  });
 });
