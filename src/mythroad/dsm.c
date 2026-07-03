@@ -1295,6 +1295,20 @@ int32 mr_plat(int32 code, int32 param) {
         case MR_GET_RAND:  // 1211
             dsmInFuncs->srand(mr_getTime());
             return (MR_PLAT_VALUE_BASE + dsmInFuncs->rand() % param);
+        case MR_GET_FILE_POS:  // 1231
+            /*
+             * Platform values are biased by MR_PLAT_VALUE_BASE.  TalkCat's ARM
+             * loader subtracts that base before deriving the mr_read() length;
+             * returning the raw offset would truncate every file by 1000 bytes,
+             * while returning MR_IGNORE makes the subtraction negative.
+             */
+            {
+                int32 pos = dsmInFuncs->tell(param);
+                if (pos < 0 || pos > 0x7fffffff - MR_PLAT_VALUE_BASE) {
+                    return MR_FAILED;
+                }
+                return MR_PLAT_VALUE_BASE + pos;
+            }
         case MR_CHECK_TOUCH:  // 1205是否支持触屏
             return MR_TOUCH_SCREEN;
         case MR_GET_HANDSET_LG:  // 1206获取语言

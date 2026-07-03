@@ -164,7 +164,12 @@ char *editGetText(int32 edit) {
     return holdEditText;
 }
 
-void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
+void guiDrawBitmapWithStride(uint16_t *bmp, int32_t x, int32_t y,
+                             int32_t w, int32_t h,
+                             int32_t source_stride,
+                             int32_t source_x,
+                             int32_t source_y) {
+    if (!bmp || source_stride <= 0 || w <= 0 || h <= 0) return;
     int draw_count = SDL_AtomicAdd(&guiDrawBitmapCount, 1) + 1;
     /* Dump after the bitmap is copied to the SDL surface.  Dumping before the
      * draw captures the previous frame, which makes VMRP_PPM misleading for
@@ -173,6 +178,7 @@ void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
      * keep the configured PPM path equal to the most recent rendered frame. */
     int should_dump_ppm = getenv("VMRP_PPM") || draw_count == 5;
     SDL_Surface *surface = SDL_GetWindowSurface(window);
+    if (!surface) return;
     if (SDL_MUSTLOCK(surface)) {
         if (SDL_LockSurface(surface) != 0) printf("SDL_LockSurface err\n");
     }
@@ -183,7 +189,10 @@ void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
             if (xx < 0 || yy < 0 || xx >= vmrp_config.screen_width || yy >= vmrp_config.screen_height) {
                 continue;
             }
-            uint16_t color = *(bmp + (xx + yy * vmrp_config.screen_width));
+            int32_t sx = source_x + i;
+            int32_t sy = source_y + j;
+            if (sx < 0 || sy < 0 || sx >= source_stride) continue;
+            uint16_t color = *(bmp + ((size_t)sy * (size_t)source_stride + (size_t)sx));
             Uint32 *p = (Uint32 *)(((Uint8 *)surface->pixels) + surface->pitch * yy) + xx;
             *p = SDL_MapRGB(surface->format, PIXEL565R(color), PIXEL565G(color), PIXEL565B(color));
         }
@@ -194,6 +203,17 @@ void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
     if (should_dump_ppm) {
         dump_screen_ppm(screen_dump_path());
     }
+}
+
+void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
+    /*
+     * Mythroad _DispUpEx submits rectangles from mr_screenBuf, whose source
+     * coordinates are absolute screen coordinates.  Keep this legacy full-screen
+     * stride path and let ARM EXT local bitmap presents opt into
+     * guiDrawBitmapWithStride().
+     */
+    guiDrawBitmapWithStride(bmp, x, y, w, h,
+                            vmrp_config.screen_width, x, y);
 }
 
 #ifdef __EMSCRIPTEN__

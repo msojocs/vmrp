@@ -157,6 +157,19 @@ int32_t my_seek(int32_t f, int32_t pos, int method) {
     return MR_SUCCESS;
 }
 
+/* Current-offset query used by MR_GET_FILE_POS through the DSM bridge. */
+int32_t my_tell(int32_t f) {
+    uIntMap *obj = uIntMap_search(&filef_map, f);
+    if (obj == NULL) {
+        return MR_FAILED;
+    }
+    off_t ret = lseek((int)(intptr_t)obj->data, 0, MR_SEEK_CUR);
+    if (ret == -1 || ret > INT32_MAX) {
+        return MR_FAILED;
+    }
+    return (int32_t)ret;
+}
+
 int32_t my_read(int32_t f, void *p, uint32_t l) {
     uIntMap *obj = uIntMap_search(&filef_map, f);
     if (obj == NULL) {

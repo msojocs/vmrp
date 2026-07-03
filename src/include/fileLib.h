@@ -22,6 +22,7 @@ enum {
 int32_t my_open(const char *filename, uint32_t mode);
 int32_t my_close(int32_t f);
 int32_t my_seek(int32_t f, int32_t pos, int method);
+int32_t my_tell(int32_t f);
 int32_t my_read(int32_t f, void *p, uint32_t l);
 int32_t my_write(int32_t f, void *p, uint32_t l);
 int32_t my_rename(const char *oldname, const char *newname);
