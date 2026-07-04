@@ -697,10 +697,127 @@ static uint32_t arm_alloc(ArmExtModule *m, uint32_t len) {
     if (m->heap_top < reserved_hi && m->heap_top + len > reserved_lo) {
         m->heap_top = reserved_hi;
     }
-    if (m->heap_top + len >= EXT_BASE_ADDR + EXT_MEM_SIZE) return 0;
+    /* 屏幕缓冲迁移到顶部保留区后(hook_screen_dim_write),该区对 bump 堆
+     * 关闭,否则宿主绘制会覆写堆上分配。未迁移时保持完整 16MB 可用,
+     * 与旧版本布局/容量完全一致(gghjt 等长流程依赖)。 */
+    uint32_t mem_end = EXT_BASE_ADDR + EXT_MEM_SIZE;
+    if (m->screen_addr == mem_end - EXT_SCREEN_RESERVE) {
+        mem_end -= EXT_SCREEN_RESERVE;
+    }
+    if (m->heap_top + len >= mem_end) return 0;
     uint32_t ret = m->heap_top;
     m->heap_top += len;
     return ret;
+}
+
+/* guest 改写 ARM 可见 mr_screen_w/h 变量(table[92/93] 指向的 u32)时触发。
+ * 部分 C SDK 游戏(gtcm 的 SphinxJoy 引擎)在 init 用这两个变量配置比物理
+ * 屏更大的逻辑画布(横屏 480x320):真机上 DSM framebuffer 与配置一致,而
+ * 模拟器的 EXT 屏幕缓冲按物理分辨率分配在 bump 堆首,若不处理,宿主
+ * DrawRect/DrawBitmap 按新尺寸写入旧缓冲会越界抹掉紧随其后的模块镜像
+ * (gtcm 黑屏根因)。超出容量时把缓冲迁移到 16MB 空间顶部的专属保留区:
+ * 迁移发生在写变量的瞬间,早于 graphics.ext 缓存 framebuffer 指针,guest
+ * 后续读 table[91] 拿到的即是新地址;bump 堆布局保持与旧版本一致,不影响
+ * 依赖既有堆地址的应用(gghjt netpay dump0 恢复等)。 */
+static void hook_screen_dim_write(uc_engine *uc, uc_mem_type type,
+                                  uint64_t address, int size, int64_t value,
+                                  void *user_data) {
+    (void)uc;
+    (void)type;
+    ArmExtModule *m = (ArmExtModule *)user_data;
+    if (!m || size <= 0) return;
+
+    /* 仅当 ARM 可见 mr_screenBuf(table[91])仍指向宿主屏幕缓冲时才迁移:
+     * gtcm 在 init 配置 480x320 逻辑画布时 buf 未动,需要迁移扩容;gghjt
+     * 滚屏离屏合成先把 table[91] 指到自有缓冲再写更宽的 w(272),此时
+     * 迁移宿主缓冲反而使恢复后的 buf 与 screen_addr 失配导致花屏。 */
+    {
+        uint32_t slot91_ptr = arm_ext_read_u32_or_zero_(
+            m, EXT_TABLE_ADDR + 91u * 4u);
+        uint32_t cur_buf = arm_ext_read_u32_or_zero_(m, slot91_ptr);
+        if (cur_buf != m->screen_addr) return;
+    }
+
+    uint32_t addr = (uint32_t)address;
+    /* 写入尚未落盘:被写维度取 value,另一维读当前内存 */
+    uint32_t w = (addr == m->screen_w_slot)
+                     ? (uint32_t)value
+                     : arm_ext_read_u32_or_zero_(m, m->screen_w_slot);
+    uint32_t h = (addr == m->screen_h_slot)
+                     ? (uint32_t)value
+                     : arm_ext_read_u32_or_zero_(m, m->screen_h_slot);
+    if (w == 0 || h == 0 || w > 2048 || h > 2048) return;
+
+    uint32_t need = w * h * 2u;
+    uint32_t top_addr = EXT_BASE_ADDR + EXT_MEM_SIZE - EXT_SCREEN_RESERVE;
+    if (need <= m->screen_cap || m->screen_addr == top_addr ||
+        need > EXT_SCREEN_RESERVE) {
+        return;
+    }
+
+    uint8_t *dst = (uint8_t *)arm_ptr(m, top_addr);
+    const uint8_t *src = (const uint8_t *)arm_ptr(m, m->screen_addr);
+    if (!dst || !src) return;
+    memset(dst, 0, need);
+    /* 旧内容按行搬运(stride 变化),保留已绘制画面 */
+    uint32_t copy_w = ((uint32_t)m->screen_w < w ? (uint32_t)m->screen_w : w) * 2u;
+    uint32_t copy_h = (uint32_t)m->screen_h < h ? (uint32_t)m->screen_h : h;
+    for (uint32_t yy = 0; yy < copy_h; ++yy) {
+        memcpy(dst + yy * w * 2u, src + yy * (uint32_t)m->screen_w * 2u, copy_w);
+    }
+    /* 同步 ARM 可见 mr_screenBuf 变量(slot91 指向的 u32) */
+    uint32_t slot91 = arm_ext_read_u32_or_zero_(m, EXT_TABLE_ADDR + 91u * 4u);
+    if (slot91 && arm_ptr(m, slot91)) {
+        memcpy(arm_ptr(m, slot91), &top_addr, 4);
+    }
+    /* 同步 table[95] 屏幕位图描述项(第 30 项: w,h,len,type,addr) */
+    uint32_t bmp_array = arm_ext_read_u32_or_zero_(m, EXT_TABLE_ADDR + 95u * 4u);
+    if (bmp_array && arm_ptr(m, bmp_array + 30u * 16u + 15u)) {
+        uint8_t *bm = (uint8_t *)arm_ptr(m, bmp_array + 30u * 16u);
+        uint16_t w16 = (uint16_t)w;
+        uint16_t h16 = (uint16_t)h;
+        memcpy(bm + 0, &w16, 2);
+        memcpy(bm + 2, &h16, 2);
+        memcpy(bm + 4, &need, 4);
+        memcpy(bm + 12, &top_addr, 4);
+    }
+    m->screen_addr = top_addr;
+    m->screen_cap = EXT_SCREEN_RESERVE;
+    /* screen_w/h/len 不在此处更新:绘制入口(arm_ext_push_draw_screen_context)
+     * 读取 guest 变量后在容量内统一采纳,保证与后续尺寸调整走同一路径 */
+}
+
+/* guest 读回 ARM 可见 mr_screen_w/h 时触发。gtcm 进下载/付费提示前把逻辑
+ * 画布写成宿主画布的转置(按 LCD 原生竖屏 320x480,真机上伴随撤销
+ * plat(101) 旋转)。展示层没有旋转能力、窗口方向固定;若放任转置尺寸被
+ * 读回,提示 UI 会按竖屏 320 宽布局,横屏窗口右侧 160px 永远不被绘制。
+ * 写钩子在写指令落盘前触发无法当场改写,改为在 guest 读回前把两个变量
+ * 恢复成宿主尺寸,guest 按窗口方向(480x320)重新布局。仅当两值恰为宿主
+ * 尺寸的转置时生效,不影响 gghjt 滚屏离屏合成等改写更宽 stride 的场景。 */
+static void hook_screen_dim_read(uc_engine *uc, uc_mem_type type,
+                                 uint64_t address, int size, int64_t value,
+                                 void *user_data) {
+    (void)uc;
+    (void)type;
+    (void)address;
+    (void)size;
+    (void)value;
+    ArmExtModule *m = (ArmExtModule *)user_data;
+    if (!m || m->screen_w == m->screen_h) return;
+
+    uint32_t w = arm_ext_read_u32_or_zero_(m, m->screen_w_slot);
+    uint32_t h = arm_ext_read_u32_or_zero_(m, m->screen_h_slot);
+    if (w != (uint32_t)m->screen_h || h != (uint32_t)m->screen_w) return;
+
+    /* 仅主屏幕缓冲:table[91] 指向自有离屏缓冲时不干预 */
+    uint32_t slot91 = arm_ext_read_u32_or_zero_(m, EXT_TABLE_ADDR + 91u * 4u);
+    uint32_t cur_buf = arm_ext_read_u32_or_zero_(m, slot91);
+    if (cur_buf != m->screen_addr) return;
+
+    uint32_t hw = (uint32_t)m->screen_w;
+    uint32_t hh = (uint32_t)m->screen_h;
+    memcpy(arm_ptr(m, m->screen_w_slot), &hw, 4);
+    memcpy(arm_ptr(m, m->screen_h_slot), &hh, 4);
 }
 
 static uint32_t arm_ext_meta_alloc(ArmExtModule *m, uint32_t len) {
@@ -5170,6 +5287,40 @@ static int arm_ext_push_draw_screen_context(ArmExtModule *m,
     }
 
     /*
+     * guest 可改写 ARM 可见 mr_screen_w/h(table[92/93])配置逻辑画布(gtcm
+     * 横屏 480x320):hook_screen_dim_write 已在写入瞬间把缓冲迁移到顶部
+     * 保留区。仅当缓冲确实已迁移(screen_addr 落在保留区)时才把新尺寸
+     * 持久采纳进 m->screen_w/h/len——present 的 stride/行数与 damage 跟踪
+     * 必须与迁移后的绘制一致。未迁移时保持原有语义:guest 尺寸只作用于
+     * 本次绘制(函数末尾的 mr_screen_w/h 赋值),但超出宿主缓冲容量的
+     * 尺寸必须回退,避免宿主绘制越界抹掉缓冲之后的模块镜像(gtcm 黑屏
+     * 根因);写成宿主画布转置的尺寸同样回退——那是 gtcm 撤销 LCD 旋转
+     * 的竖屏请求,hook_screen_dim_read 会在 guest 读回前恢复宿主尺寸,
+     * 宿主绘制若在这个窗口内采纳转置 stride 会交错花屏。guest 把
+     * table[91] 指向自有缓冲时(滚动背景离屏合成)不受影响。
+     */
+    if (screen_addr == m->screen_addr) {
+        uint32_t cap = m->screen_cap ? m->screen_cap : m->screen_len;
+        int migrated = m->screen_addr ==
+                       EXT_BASE_ADDR + EXT_MEM_SIZE - EXT_SCREEN_RESERVE;
+        int transposed = screen_w == (uint32_t)m->screen_h &&
+                         screen_h == (uint32_t)m->screen_w &&
+                         screen_w != screen_h;
+        if (transposed || screen_w > 2048 || screen_h > 2048 ||
+            screen_w * screen_h * 2u > cap) {
+            /* 越界/转置保护:退回宿主已知尺寸 */
+            screen_w = (uint32_t)m->screen_w;
+            screen_h = (uint32_t)m->screen_h;
+        } else if (migrated &&
+                   ((int32_t)screen_w != m->screen_w ||
+                    (int32_t)screen_h != m->screen_h)) {
+            m->screen_w = (int32_t)screen_w;
+            m->screen_h = (int32_t)screen_h;
+            m->screen_len = screen_w * screen_h * 2u;
+        }
+    }
+
+    /*
      * table[91/92/93] are the ARM-visible mr_screenBuf/mr_screen_w/mr_screen_h
      * variables. Native code may repoint them to an off-screen cache with a
      * wider stride while composing a scrolling background, so host-rendered
@@ -7702,6 +7853,11 @@ static void init_table(ArmExtModule *m) {
     m->screen_w = sw;
     m->screen_h = sh;
     m->screen_len = (uint32_t)(sw * sh * 2);
+    /* 屏幕缓冲保持为 bump 堆的首个分配(地址/布局与既有应用完全一致——
+     * gghjt game.ext 会扫描 RAM 定位 framebuffer,netpay dump0 恢复也依赖
+     * 既有堆地址)。应用改写 ARM 可见 mr_screen_w/h 把逻辑画布改大时,由
+     * slot 写监视钩子把缓冲迁移到顶部保留区(见 hook_screen_dim_write)。 */
+    m->screen_cap = m->screen_len;
     m->screen_addr = arm_alloc(m, m->screen_len);
     if (m->screen_addr && mr_screenBuf) {
         memcpy(arm_ptr(m, m->screen_addr), mr_screenBuf, m->screen_len);
@@ -7709,9 +7865,27 @@ static void init_table(ArmExtModule *m) {
     m->screen_dirty = 0;
 
     write_table_entry(m, 91, alloc_u32_slot(m, m->screen_addr));
-    write_table_entry(m, 92, alloc_u32_slot(m, (uint32_t)sw));
-    write_table_entry(m, 93, alloc_u32_slot(m, (uint32_t)sh));
+    m->screen_w_slot = alloc_u32_slot(m, (uint32_t)sw);
+    m->screen_h_slot = alloc_u32_slot(m, (uint32_t)sh);
+    write_table_entry(m, 92, m->screen_w_slot);
+    write_table_entry(m, 93, m->screen_h_slot);
     write_table_entry(m, 94, alloc_u32_slot(m, (uint32_t)bit));
+    /* 监视 guest 对 mr_screen_w/h 变量的写入:应用(如 gtcm 的 SphinxJoy
+     * 引擎)在 init 时直接改写这两个变量配置逻辑画布,必须在其后续绘制
+     * (graphics.ext 会缓存 framebuffer 指针)之前完成缓冲迁移。两个 slot
+     * 由连续的 alloc_u32_slot 分配,地址相邻。 */
+    if (m->screen_w_slot && m->screen_h_slot) {
+        uc_hook dim_hook;
+        uc_hook dim_read_hook;
+        uint32_t lo = m->screen_w_slot < m->screen_h_slot ? m->screen_w_slot : m->screen_h_slot;
+        uint32_t hi = m->screen_w_slot < m->screen_h_slot ? m->screen_h_slot : m->screen_w_slot;
+        uc_hook_add(m->uc, &dim_hook, UC_HOOK_MEM_WRITE, hook_screen_dim_write,
+                    m, lo, hi + 3);
+        /* 读钩子:guest 写入转置尺寸(撤销旋转)后,在读回前恢复宿主尺寸,
+         * 见 hook_screen_dim_read 注释 */
+        uc_hook_add(m->uc, &dim_read_hook, UC_HOOK_MEM_READ,
+                    hook_screen_dim_read, m, lo, hi + 3);
+    }
 
     const uint32_t bitmap_count = 31;
     const uint32_t bitmap_stride = 16;

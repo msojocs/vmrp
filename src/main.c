@@ -649,6 +649,14 @@ int main(int argc, char *args[]) {
     signal(SIGUSR1, sigusr1_handler);
 #endif
 
+    /* SDL 窗口必须按 --screen/环境变量解析出的分辨率创建。此前窗口用
+     * vmrp_config 的编译期默认值(240x320),而 --screen 要到后面的
+     * startVmrp() 才写入 vmrp_config,导致任何非默认分辨率都只显示
+     * 240x320 窗口(gtcm --screen 480x320 只能看到左上裁切)。这里提前
+     * 同步一次;startVmrp() 内部的赋值保持不变(共享库入口依赖它)。 */
+    vmrp_config.screen_width = vmrp_args.screen_width;
+    vmrp_config.screen_height = vmrp_args.screen_height;
+
     /* guiDrawBitmap writes to SDL_GetWindowSurface(); avoiding an OpenGL window
      * lets the E2E pixel tests run under SDL's dummy video driver in CI. */
     window = SDL_CreateWindow("vmrp", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, vmrp_config.screen_width, vmrp_config.screen_height, 0);

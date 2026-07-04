@@ -40,6 +40,12 @@
  * 进行内存检测；0x2000 不够大会导致读取 unmapped 地址崩溃。扩展到
  * 0x10000 (64KB) 以覆盖这些访问。 */
 #define EXT_LOW_TABLE_SIZE 0x10000u
+/* EXT 屏幕缓冲的专属保留区(16MB 空间的最高 1MB)。应用可把 ARM 可见的
+ * mr_screen_w/h 改大来配置逻辑画布(gtcm plat(101,3) 横屏路径写 480x320),
+ * graphics.ext 等模块会在 init 缓存 framebuffer 指针,因此缓冲地址必须
+ * 终生稳定且容量足以覆盖更大的逻辑尺寸。放在地址空间顶部使 bump 堆布局
+ * 与既有应用完全一致(不平移任何其它分配)。1MB 覆盖 480x800x2 及以下。 */
+#define EXT_SCREEN_RESERVE (1024u * 1024u)
 #define EXT_TRACE_PC_RING 64u
 /* game 的定时器链表头在 game_rw 中的偏移；不同版本的 game.ext SDK 使用
  * 不同偏移（0x8C 和 0x88 均有实例）。编译期常量用于初始尝试，运行时通过
@@ -148,6 +154,15 @@ struct ArmExtModule {
     uint32_t p_addr;
     uint32_t screen_addr;
     uint32_t screen_len;
+    /* screen_addr 处预留的实际容量(字节)。应用可把 ARM 可见的
+     * mr_screen_w/h 改大(如 gtcm 配置 480x320 逻辑画布):写入被
+     * hook_screen_dim_write 捕获,超容量时缓冲迁移到顶部保留区,
+     * 之后绘制入口在容量内原地采纳新尺寸。 */
+    uint32_t screen_cap;
+    /* ARM 可见 mr_screen_w/h 变量(table[92/93] 指向的 u32)的 guest 地址,
+     * 供尺寸写监视钩子读取另一维的当前值。 */
+    uint32_t screen_w_slot;
+    uint32_t screen_h_slot;
     uint32_t char_bitmap_addr;
     int32_t screen_w;
     int32_t screen_h;
