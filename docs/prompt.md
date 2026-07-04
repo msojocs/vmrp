@@ -372,7 +372,7 @@ if (!exists('path/to/file'))
 在分析与解决过程中，把进度定期保存至文档中。
 先不管其它测试用例，先修好BUG，再去兼容其它测试用例。
 充分利用子Agent。
-记得存储记忆数据。
+记得存储记忆数据。9
 
 测试用例`pnpm vitest run test/e2e/talkcat/game-prepare.test.ts -t "循环"`执行后，会卡死，分析并修复它。
 

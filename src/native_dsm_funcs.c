@@ -36,6 +36,14 @@
 #include "./include/utils.h"
 #include "./include/vmrp.h"
 
+/* MP3 解码器(vendored 单头文件, 见 third_party/minimp3/README.md)。
+ * talkcat 等应用的音效/音乐是 MPEG1 Layer III 流, 之前 native_playSound
+ * 对 MR_SOUND_MP3 直接返回 MR_FAILED 导致启动音完全无声。
+ * MINIMP3_ONLY_MP3 去掉 Layer I/II 支持以减小体积——MRP 样本均为 Layer III。 */
+#define MINIMP3_IMPLEMENTATION
+#define MINIMP3_ONLY_MP3
+#include "../third_party/minimp3/minimp3.h"
+
 #define NATIVE_DSM_MEM_SIZE (4 * 1024 * 1024)
 
 static void *native_mem_base;
@@ -673,6 +681,85 @@ static int native_audio_play_wav(const void *data, uint32 dataLen, int32 loop) {
                                 bits_per_sample, format, block_align);
 }
 
+/* 用 minimp3 把 MR_SOUND_MP3 整段解码为宿主端 S16 PCM, 再走
+ * native_audio_set_pcm 统一重采样到 44.1KHz/stereo。MRP 音效通常只有
+ * 几秒(talkcat 音效 32KHz mono 约 1 秒), 全量解码的内存开销可以接受;
+ * 以首帧的采样率/声道数为准, 中途参数变化的畸形流按解码到该处截断处理,
+ * 避免把不同采样率的帧硬拼进同一个 PCM 缓冲造成变调。 */
+static int native_audio_play_mp3(const void *data, uint32 dataLen, int32 loop) {
+    if (!data || dataLen == 0) {
+        return MR_FAILED;
+    }
+
+    /* mp3dec_t 约 6.5KB, native_playSound 在主线程串行调用, 静态实例即可 */
+    static mp3dec_t mp3_decoder;
+    mp3dec_init(&mp3_decoder);
+
+    const uint8 *src = (const uint8 *)data;
+    uint32 pos = 0;
+    int hz = 0;
+    int channels = 0;
+    uint32 pcm_samples = 0;   /* 每声道样本数 */
+    uint32 pcm_capacity = 0;  /* 每声道样本容量 */
+    int16_t *pcm = NULL;
+    int16_t frame_pcm[MINIMP3_MAX_SAMPLES_PER_FRAME];
+
+    while (pos < dataLen) {
+        mp3dec_frame_info_t info;
+        int samples = mp3dec_decode_frame(&mp3_decoder, src + pos, (int)(dataLen - pos),
+                                          frame_pcm, &info);
+        if (info.frame_bytes <= 0) {
+            break; /* 剩余数据里已找不到合法帧(尾部 ID3/垃圾字节) */
+        }
+        pos += (uint32)info.frame_bytes;
+        if (samples <= 0) {
+            continue; /* 合法帧但无输出(解码器预热帧), 继续扫描 */
+        }
+        if (hz == 0) {
+            hz = info.hz;
+            channels = info.channels;
+        } else if (info.hz != hz || info.channels != channels) {
+            printf("native_playSound: MP3 stream params changed (%dHz/%dch -> %dHz/%dch), truncated\n",
+                   hz, channels, info.hz, info.channels);
+            break;
+        }
+
+        if (pcm_samples + (uint32)samples > pcm_capacity) {
+            uint32 new_capacity = pcm_capacity ? pcm_capacity * 2 : 64 * 1024;
+            while (new_capacity < pcm_samples + (uint32)samples) {
+                new_capacity *= 2;
+            }
+            int16_t *grown = (int16_t *)realloc(pcm, (size_t)new_capacity * (uint32)channels * sizeof(int16_t));
+            if (!grown) {
+                free(pcm);
+                return MR_FAILED;
+            }
+            pcm = grown;
+            pcm_capacity = new_capacity;
+        }
+        memcpy(pcm + (size_t)pcm_samples * (uint32)channels, frame_pcm,
+               (size_t)samples * (uint32)channels * sizeof(int16_t));
+        pcm_samples += (uint32)samples;
+    }
+
+    if (!pcm || pcm_samples == 0 || hz <= 0 || channels <= 0) {
+        free(pcm);
+        printf("native_playSound: MP3 stream has no decodable frame len=%u\n", dataLen);
+        return MR_FAILED;
+    }
+
+    /* 解码结果是交织 S16(format=1/bits=16), 交给统一的 PCM 重采样入口。
+     * 成功日志用于 e2e 从 stdout 判断 MP3 播放链路是否被触发(无声回归排查)。 */
+    int ret = native_audio_set_pcm(pcm, pcm_samples * (uint32)channels * (uint32)sizeof(int16_t),
+                                   loop, hz, channels, 16, 1, channels * (int)sizeof(int16_t));
+    free(pcm); /* native_audio_set_pcm 内部拷贝转换, 源缓冲这里释放 */
+    if (ret == MR_SUCCESS) {
+        printf("native_playSound: mp3 len=%u -> %uHz/%dch samples=%u loop=%d\n",
+               dataLen, (uint32)hz, channels, pcm_samples, (int)loop);
+    }
+    return ret;
+}
+
 static int midi_add_event(NativeAudioState *s, uint32 tick, uint8 status, uint8 a, uint8 b, uint32 value) {
     if (s->midi_event_count >= MIDI_MAX_EVENTS) {
         printf("native_playSound: MIDI event limit exceeded\n");
@@ -846,6 +933,9 @@ static int32 native_playSound(int type, const void *data, uint32 dataLen, int32 
         case NATIVE_SOUND_PCM:
             return native_audio_set_pcm(data, dataLen, loop, 8000, 1, 16, 1, 2);
         case NATIVE_SOUND_MP3:
+            /* talkcat 启动音/交互音效是 MP3(经 mr_platEx MR_MEDIA_* 或
+             * mr_playSound 直接传入), 用 minimp3 解码后统一走 PCM 渲染 */
+            return native_audio_play_mp3(data, dataLen, loop);
         case NATIVE_SOUND_M4A:
         case NATIVE_SOUND_AMR:
         case NATIVE_SOUND_AMR_WB:
