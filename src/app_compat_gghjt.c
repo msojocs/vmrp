@@ -45,7 +45,11 @@ static int gghjt_intercept_write(ArmExtModule *m, void *app_state,
     GghjtState *gs = app_state;
     if (!gs) return 0;
 
-    if (src_addr == 0x2001BCu && len == 0xBEu && gs->pending_chk_len > 14000u) {
+    /* 0xBE 字节的 chk 提取源是 EXT 屏幕缓冲基址。此前硬编码 0x2001BC
+     * (screen buffer 位于堆首时的地址);screen buffer 迁移到顶部保留区
+     * (arm_ext_internal.h EXT_SCREEN_RESERVE)后按 m->screen_addr 判定,
+     * 语义不变、与堆布局解耦。 */
+    if (m && src_addr == m->screen_addr && len == 0xBEu && gs->pending_chk_len > 14000u) {
         size_t out_cap = (size_t)gs->pending_chk_decomp_len;
         if (gs->pending_chk_decomp && out_cap > 0) {
             *new_src = gs->pending_chk_decomp;

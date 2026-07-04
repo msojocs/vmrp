@@ -768,6 +768,91 @@ static int isDsmRootPath(const char *filename) {
     return filename && strncmp2(filename, MYTHROAD_PATH, strlen2(MYTHROAD_PATH)) == 0;
 }
 
+#ifndef USE_FINDDIR
+/* ASCII 大小写不敏感比较:定长路径段 vs NUL 结尾目录项 */
+static int dsm_segment_ieq(const char *seg, uint32 seg_len, const char *name) {
+    uint32 i;
+    for (i = 0; i < seg_len; ++i) {
+        char a = seg[i];
+        char b = name[i];
+        if (!b) return 0;
+        if (a >= 'A' && a <= 'Z') a = (char)(a + ('a' - 'A'));
+        if (b >= 'A' && b <= 'Z') b = (char)(b + ('a' - 'A'));
+        if (a != b) return 0;
+    }
+    return name[seg_len] == '\0';
+}
+
+/* 大小写不敏感路径回退。MRP 应用产自 FAT(大小写不敏感)存储的真机环境,
+ * 可能用与落盘时不同的大小写重新访问同一文件:gtcm 安装场景数据时写
+ * gtcm\1004\uid.scene,"开始游戏"二次加载却用 UID.scene 打开——真机能
+ * 命中,Linux 区分大小写的文件系统打开失败,场景名读不出导致空文件名
+ * 拼接与未初始化指针崩溃。这里在原样查找失败(MR_IS_INVALID)时逐段
+ * 扫描父目录做不区分大小写匹配,命中则回填磁盘上的真实大小写,忠实
+ * 模拟 FAT 语义;找不到的段保留原样(可能是即将创建的新文件)。
+ * 兼容性:仅在原样查找失败时触发,对已能命中的路径零改动。 */
+static void dsm_fix_path_case(char *pathbuf) {
+    char fixed[DSM_MAX_FILE_LEN];
+    uint32 fi = 0;
+    const char *p = pathbuf;
+    int changed = 0;
+
+    if (*p == '/') {
+        fixed[fi++] = '/';
+        p++;
+    }
+    while (*p && fi < DSM_MAX_FILE_LEN - 1) {
+        const char *seg = p;
+        uint32 seg_len = 0;
+        uint32 base = fi;
+        int trailing;
+        while (p[seg_len] && p[seg_len] != '/') seg_len++;
+        p += seg_len;
+        trailing = (*p == '/');
+        if (trailing) p++;
+
+        if (base + seg_len + 2 >= DSM_MAX_FILE_LEN) return; /* 超长,放弃 */
+        memcpy2(fixed + base, (void *)seg, seg_len);
+        fixed[base + seg_len] = '\0';
+        if (dsmInFuncs->info(fixed) == MR_IS_INVALID) {
+            /* 原样不存在:扫描父目录寻找仅大小写不同的目录项 */
+            char parent[DSM_MAX_FILE_LEN];
+            int32 dh;
+            if (base == 0) {
+                strcpy2(parent, ".");
+            } else if (base == 1 && fixed[0] == '/') {
+                strcpy2(parent, "/");
+            } else {
+                memcpy2(parent, fixed, base - 1); /* 去掉结尾的 '/' */
+                parent[base - 1] = '\0';
+            }
+            dh = dsmInFuncs->opendir(parent);
+            if (dh > 0) {
+                char *dn;
+                while ((dn = dsmInFuncs->readdir(dh)) != NULL) {
+                    if (dsm_segment_ieq(seg, seg_len, dn)) {
+                        uint32 nl = strlen2(dn);
+                        if (base + nl + 2 >= DSM_MAX_FILE_LEN) break;
+                        memcpy2(fixed + base, dn, nl);
+                        fixed[base + nl] = '\0';
+                        seg_len = nl;
+                        changed = 1;
+                        break;
+                    }
+                }
+                dsmInFuncs->closedir(dh);
+            }
+        }
+        fi = base + seg_len;
+        if (trailing && fi < DSM_MAX_FILE_LEN - 1) fixed[fi++] = '/';
+        fixed[fi] = '\0';
+    }
+    if (changed) {
+        strcpy2(pathbuf, fixed);
+    }
+}
+#endif /* !USE_FINDDIR */
+
 char *get_filename(char *outputbuf, const char *filename) {
     if (isHostAbsolutePath(filename) || isDsmRootPath(filename)) {
         sprintf_(outputbuf, "%s", filename);
@@ -787,6 +872,11 @@ char *get_filename(char *outputbuf, const char *filename) {
         mr_freeExt(us);
         mr_freeExt(utf8s);
     }
+#ifndef USE_FINDDIR
+    if (dsmInFuncs->info(outputbuf) == MR_IS_INVALID) {
+        dsm_fix_path_case(outputbuf);
+    }
+#endif
     return outputbuf;
 }
 
@@ -1324,6 +1414,14 @@ int32 mr_plat(int32 code, int32 param) {
         case 1016:  // 获取SIM卡状态/网络类型
             return MR_SUCCESS;
         case 1100:  // 浏览器引擎初始化查询（wbrw在加载主页前调用）
+            return MR_SUCCESS;
+        case 101:
+            /* 设置/查询 LCD 旋转,param 取 MR_LCD_ROTATE_*(0=正常,3=270°)。
+             * gtcm(SphinxJoy 引擎)启动时调 plat(101,3) 请求横屏;反汇编
+             * (game.ext 0x2370AC: cmp r0,#0 / beq 正常路径)证明返回非 0
+             * 会进入"不支持横竖转换请退出"错误分支并黑屏。模拟器的帧缓冲
+             * 方向由应用自行绘制、展示层裁剪,接受请求返回 MR_SUCCESS。
+             * 兼容性:此前返回 MR_IGNORE(1),已有样本中仅 gtcm 调用该码。 */
             return MR_SUCCESS;
         case MR_SET_KEY_END:  // 1214 启用/禁用按键结束事件
             return MR_SUCCESS;

@@ -13,6 +13,8 @@ export interface VmrpE2eOptions {
   bin?: string;
   workDir?: string;
   timeoutMs?: number;
+  /** 屏幕分辨率(--screen WxH),如 "480x320"。默认由 vmrp 决定(240x320)。 */
+  screen?: `${number}x${number}`;
 }
 
 export interface PpmImage {
@@ -44,6 +46,8 @@ export class VmrpE2e {
   private readonly bin: string;
   private readonly workDir: string;
   private readonly timeoutMs: number;
+  /** 命名避免与 screen() 方法冲突:实例字段会遮蔽原型方法。 */
+  private readonly screenSize?: string;
   private process?: ChildProcessByStdio<null, Readable, Readable>;
 
   private constructor(tmpDir: string, options: VmrpE2eOptions = {}) {
@@ -55,6 +59,7 @@ export class VmrpE2e {
     this.bin = options.bin ?? process.env.VMRP_BIN ?? "build/vmrp";
     this.workDir = options.workDir ?? process.env.VMRP_WORK_DIR ?? ".";
     this.timeoutMs = options.timeoutMs ?? Number(process.env.VMRP_TIMEOUT_MS ?? 30_000);
+    this.screenSize = options.screen;
   }
 
   static async start(mrpPath: string, options: VmrpE2eOptions = {}): Promise<VmrpE2e> {
@@ -170,7 +175,10 @@ export class VmrpE2e {
   }
 
   private async spawn(mrpPath: string): Promise<void> {
-    this.process = spawn(this.bin, ["--work-dir", this.workDir, mrpPath], {
+    const args = ["--work-dir", this.workDir];
+    if (this.screenSize) args.push("--screen", this.screenSize);
+    args.push(mrpPath);
+    this.process = spawn(this.bin, args, {
       env: {
         ...process.env,
         SDL_VIDEODRIVER: process.env.SDL_VIDEODRIVER ?? "dummy",
