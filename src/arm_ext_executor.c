@@ -7920,9 +7920,21 @@ static void init_table(ArmExtModule *m) {
 
     /* 真机 MR 平台的应用堆一般为 512KB–1MB；origin_mem_len 过大会使
      * 部分游戏的 exRam 预算计算（= 固定值 − origin_mem_len）溢出为负，
-     * 导致 SCRRAM 分配被跳过、图像资源无法渲染。将 origin_mem_len 设为
-     * 与真机一致的 512KB，同时 arm_alloc 仍可提供远超此值的实际内存。 */
-    m->origin_mem_len = 512u * 1024u;
+     * 导致 SCRRAM 分配被跳过、图像资源无法渲染。默认取与真机一致的
+     * 1MB(sky_istore 启动时校验堆容量,512KB 会报"内存不足");需要
+     * 更大堆的应用用 --memory/VMRP_MEMORY 调整(1M-16M)。arm_alloc 仍
+     * 可提供远超此值的实际内存。
+     * 池在 ARM 16MB 空间的 bump 堆(0x200000 起)上分配,还需避开栈区/
+     * 代码区与顶部屏幕保留区,过大的档位(16M)放不下,钳制到 8MB。 */
+    m->origin_mem_len = vmrp_memory_bytes(vmrp_config.memory_mb);
+    {
+        uint32_t ext_pool_max = 8u * 1024u * 1024u;
+        if (m->origin_mem_len > ext_pool_max) {
+            printf("arm_ext_executor: clamp app heap %uMB -> 8MB (ARM address space limit)\n",
+                   m->origin_mem_len >> 20);
+            m->origin_mem_len = ext_pool_max;
+        }
+    }
     m->origin_mem_left = m->origin_mem_len;
     m->origin_mem_min = m->origin_mem_len;
     m->origin_mem_top = 0;

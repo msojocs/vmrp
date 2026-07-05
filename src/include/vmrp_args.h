@@ -9,12 +9,14 @@
 
 #define DEFAULT_SCREEN_WIDTH 240
 #define DEFAULT_SCREEN_HEIGHT 320
+#define DEFAULT_MEMORY_MB 1
 #define VMRP_MRP_NAME_LIMIT 128
 #define VMRP_DNS_MAP_LIMIT 2048
 
 typedef struct VmrpArgs {
     int screen_width;
     int screen_height;
+    int memory_mb; /* 应用可见内存(MB):1/2/4/6/8/16 */
     char work_dir[PATH_MAX];
     char mrp_path[PATH_MAX];
     char ext_name[256];
