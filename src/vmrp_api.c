@@ -581,6 +581,15 @@ VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h) {
     return 0;
 }
 
+VMRP_EXPORT int vmrp_api_set_memory(int memory_mb) {
+    if (memory_mb != 1 && memory_mb != 2 && memory_mb != 4 &&
+        memory_mb != 6 && memory_mb != 8 && memory_mb != 16) {
+        return -1;
+    }
+    vmrp_config.memory_mb = memory_mb;
+    return 0;
+}
+
 VMRP_EXPORT int vmrp_api_set_work_dir(const char *work_dir) {
     int n;
     if (!work_dir || !*work_dir) return -1;
@@ -601,6 +610,9 @@ VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char
     VmrpArgs args = vmrp_args_default();
     args.screen_width = vmrp_config.screen_width;
     args.screen_height = vmrp_config.screen_height;
+    if (vmrp_config.memory_mb > 0) {
+        args.memory_mb = vmrp_config.memory_mb;
+    }
     if (vmrp_config.work_dir[0]) {
         snprintf(args.work_dir, sizeof(args.work_dir), "%s", vmrp_config.work_dir);
     }

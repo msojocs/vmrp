@@ -49,6 +49,11 @@ extern "C" {
 
 /* Lifecycle */
 VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h);
+/*
+ * App-visible memory in MB. Allowed: 1/2/4/6/8/16. Must be called before
+ * vmrp_api_start(); takes effect on the next start.
+ */
+VMRP_EXPORT int vmrp_api_set_memory(int memory_mb);
 VMRP_EXPORT int vmrp_api_set_work_dir(const char *work_dir);
 VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char *entry);
 VMRP_EXPORT void vmrp_api_destroy(void);
