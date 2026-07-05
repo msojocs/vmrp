@@ -220,6 +220,7 @@ VmrpArgs vmrp_args_default(void) {
     memset(&args, 0, sizeof(args));
     args.screen_width = DEFAULT_SCREEN_WIDTH;
     args.screen_height = DEFAULT_SCREEN_HEIGHT;
+    args.memory_mb = DEFAULT_MEMORY_MB;
     vmrp_args_set_default_dirs(&args, NULL);
     snprintf(args.ext_name, sizeof(args.ext_name), "start.mr");
     snprintf(args.dns_map, sizeof(args.dns_map), "%s", VMRP_DEFAULT_DNS_MAP);
@@ -233,12 +234,14 @@ void vmrp_args_print_usage(const char *program) {
     printf("\n");
     printf("Options:\n");
     printf("  --screen WxH        Set screen resolution (default: 240x320)\n");
+    printf("  --memory SIZE       Set app-visible memory: 1M,2M,4M,6M,8M,16M (default: 1M)\n");
     printf("  --work-dir DIR      Set working directory (default: executable directory)\n");
     printf("  --dns-map MAP       Resolve original domains using fake domains\n");
     printf("\n");
     printf("Environment variables:\n");
     printf("  VMRP_SCREEN_WIDTH   Screen width  (overridden by --screen)\n");
     printf("  VMRP_SCREEN_HEIGHT  Screen height (overridden by --screen)\n");
+    printf("  VMRP_MEMORY         App-visible memory (overridden by --memory)\n");
     printf("  VMRP_WORK_DIR       Working directory (overridden by --work-dir)\n");
     printf("  VMRP_DNS_MAP        Domain map, e.g. old.example->new.example\n");
     printf("  VMRP_PPM_PATH       PPM screen dump path for SIGUSR1/verification\n");
@@ -248,6 +251,7 @@ void vmrp_args_print_usage(const char *program) {
     printf("Examples:\n");
     printf("  %s /path/to/app.mrp\n", name);
     printf("  %s --screen 176x220 /path/to/app.mrp\n", name);
+    printf("  %s --memory 4M /path/to/app.mrp\n", name);
     printf("  %s --dns-map old.example->new.example /path/to/app.mrp\n", name);
     printf("  %s /path/to/app.mrp start.mr _dsm\n", name);
 }
@@ -298,10 +302,31 @@ static int parse_screen_size(const char *str, int *w, int *h) {
     return MR_SUCCESS;
 }
 
+/* 解析应用可见内存档位:数字 + 可选 M/MB 后缀(大小写均可),
+ * 仅允许真机常见档位 1/2/4/6/8/16 MB。 */
+static int parse_memory_size(const char *str, int *mb) {
+    char suffix[3] = {0};
+    int value = 0;
+    int n = sscanf(str, "%d%2s", &value, suffix);
+    if (n < 1) return MR_FAILED;
+    if (n == 2 &&
+        strcmp(suffix, "M") != 0 && strcmp(suffix, "m") != 0 &&
+        strcmp(suffix, "MB") != 0 && strcmp(suffix, "mb") != 0 &&
+        strcmp(suffix, "Mb") != 0 && strcmp(suffix, "mB") != 0) {
+        return MR_FAILED;
+    }
+    if (value != 1 && value != 2 && value != 4 &&
+        value != 6 && value != 8 && value != 16) {
+        return MR_FAILED;
+    }
+    *mb = value;
+    return MR_SUCCESS;
+}
+
 static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
                                  const char **ext_arg, const char **entry_arg,
                                  const char **screen_arg, const char **work_dir_arg,
-                                 const char **dns_map_arg) {
+                                 const char **dns_map_arg, const char **memory_arg) {
     int positional = 0;
     int after_dashdash = 0;
     *mrp_arg = NULL;
@@ -310,6 +335,7 @@ static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
     *screen_arg = NULL;
     *work_dir_arg = NULL;
     *dns_map_arg = NULL;
+    *memory_arg = NULL;
 
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
@@ -323,6 +349,14 @@ static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
                 return MR_FAILED;
             }
             *screen_arg = argv[++i];
+            continue;
+        }
+        if (!after_dashdash && strcmp(arg, "--memory") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "vmrp: --memory requires an argument (e.g. 4M)\n");
+                return MR_FAILED;
+            }
+            *memory_arg = argv[++i];
             continue;
         }
         if (!after_dashdash && strcmp(arg, "--dns-map") == 0) {
@@ -370,12 +404,14 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
     const char *screen_arg = NULL;
     const char *work_dir_arg = NULL;
     const char *dns_map_arg = NULL;
+    const char *memory_arg = NULL;
 
     *out = vmrp_args_default();
     vmrp_args_set_default_dirs(out, (argc > 0) ? argv[0] : NULL);
 
     if (parse_positional_args(argc, argv, &mrp_arg, &ext_arg, &entry_arg,
-                              &screen_arg, &work_dir_arg, &dns_map_arg) != MR_SUCCESS) {
+                              &screen_arg, &work_dir_arg, &dns_map_arg,
+                              &memory_arg) != MR_SUCCESS) {
         return MR_FAILED;
     }
 
@@ -446,6 +482,20 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
         const char *env_h = getenv("VMRP_SCREEN_HEIGHT");
         if (env_w && *env_w) out->screen_width = atoi(env_w);
         if (env_h && *env_h) out->screen_height = atoi(env_h);
+    }
+
+    /* Memory size: CLI --memory > env var > default */
+    if (!memory_arg) {
+        const char *env_memory = getenv("VMRP_MEMORY");
+        if (env_memory && *env_memory) memory_arg = env_memory;
+    }
+    if (memory_arg) {
+        int mb;
+        if (parse_memory_size(memory_arg, &mb) != MR_SUCCESS) {
+            fprintf(stderr, "vmrp: invalid memory size '%s' (allowed: 1M,2M,4M,6M,8M,16M)\n", memory_arg);
+            return MR_FAILED;
+        }
+        out->memory_mb = mb;
     }
 
     /* DNS map: CLI --dns-map > env var > default */

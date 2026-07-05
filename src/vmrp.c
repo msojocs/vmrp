@@ -230,6 +230,7 @@ int startVmrp(const VmrpArgs *args) {
     vmrp_exit_requested = 0;
     vmrp_config.screen_width = args->screen_width;
     vmrp_config.screen_height = args->screen_height;
+    vmrp_config.memory_mb = args->memory_mb;
     if (apply_config_paths(args) != MR_SUCCESS) {
         return MR_FAILED;
     }

@@ -44,8 +44,6 @@
 #define MINIMP3_ONLY_MP3
 #include "../third_party/minimp3/minimp3.h"
 
-#define NATIVE_DSM_MEM_SIZE (4 * 1024 * 1024)
-
 static void *native_mem_base;
 static uint32 native_mem_len;
 static uint64_t native_uptime_base;
@@ -152,20 +150,24 @@ static void native_exit(void) {
 
 static int32 native_mem_get(char **mem_base, uint32 *mem_len) {
     if (native_mem_base == NULL) {
+        /* 应用可见内存由 --memory/VMRP_MEMORY 配置(1M-16M),历史默认
+         * 4MB 改为跟随配置;非 EXT 应用(lua/mini mythroad)拿到的即为
+         * 全部运行内存。 */
+        uint32 mem_size = vmrp_memory_bytes(vmrp_config.memory_mb);
 #ifdef __linux__
 #ifdef __x86_64__
-        native_mem_base = mmap(NULL, NATIVE_DSM_MEM_SIZE, PROT_READ | PROT_WRITE,
+        native_mem_base = mmap(NULL, mem_size, PROT_READ | PROT_WRITE,
                                MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
         if (native_mem_base == MAP_FAILED) native_mem_base = NULL;
 #endif
 #endif
         if (native_mem_base == NULL) {
-            native_mem_base = malloc(NATIVE_DSM_MEM_SIZE);
+            native_mem_base = malloc(mem_size);
         }
         if (native_mem_base == NULL) {
             return MR_FAILED;
         }
-        native_mem_len = NATIVE_DSM_MEM_SIZE;
+        native_mem_len = mem_size;
     }
     *mem_base = (char *)native_mem_base;
     *mem_len = native_mem_len;

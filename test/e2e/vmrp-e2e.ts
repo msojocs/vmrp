@@ -15,6 +15,8 @@ export interface VmrpE2eOptions {
   timeoutMs?: number;
   /** 屏幕分辨率(--screen WxH),如 "480x320"。默认由 vmrp 决定(240x320)。 */
   screen?: `${number}x${number}`;
+  /** 应用可见内存(--memory),档位 1M/2M/4M/6M/8M/16M。默认由 vmrp 决定(1M)。 */
+  memory?: "1M" | "2M" | "4M" | "6M" | "8M" | "16M";
 }
 
 export interface PpmImage {
@@ -48,6 +50,7 @@ export class VmrpE2e {
   private readonly timeoutMs: number;
   /** 命名避免与 screen() 方法冲突:实例字段会遮蔽原型方法。 */
   private readonly screenSize?: string;
+  private readonly memorySize?: string;
   private process?: ChildProcessByStdio<null, Readable, Readable>;
 
   private constructor(tmpDir: string, options: VmrpE2eOptions = {}) {
@@ -60,6 +63,7 @@ export class VmrpE2e {
     this.workDir = options.workDir ?? process.env.VMRP_WORK_DIR ?? ".";
     this.timeoutMs = options.timeoutMs ?? Number(process.env.VMRP_TIMEOUT_MS ?? 30_000);
     this.screenSize = options.screen;
+    this.memorySize = options.memory;
   }
 
   static async start(mrpPath: string, options: VmrpE2eOptions = {}): Promise<VmrpE2e> {
@@ -177,6 +181,7 @@ export class VmrpE2e {
   private async spawn(mrpPath: string): Promise<void> {
     const args = ["--work-dir", this.workDir];
     if (this.screenSize) args.push("--screen", this.screenSize);
+    if (this.memorySize) args.push("--memory", this.memorySize);
     args.push(mrpPath);
     this.process = spawn(this.bin, args, {
       env: {
