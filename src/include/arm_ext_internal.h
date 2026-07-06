@@ -246,6 +246,12 @@ struct ArmExtModule {
     /* R9-relative scheduler header used by compact wrapper timer walkers.
      * Zero means the wrapper uses another/unknown timer layout. */
     uint32_t wrapper_compact_timer_scheduler_off;
+    /* R9-relative compact heap control pointer used by the same SDK allocator
+     * family as the compact timer walkers.  The value is discovered from the
+     * wrapper mr_free() instruction shape, then applied to whichever module RW
+     * is in R9 while that allocator runs. */
+    uint32_t wrapper_compact_heap_ctrl_off;
+    uint32_t wrapper_compact_free_return_addr;
     /* 19KB cfunction.ext 的 chain walker thunk 地址（0xE83B50 格式：
      * push{r3,lr}; bl chain_walker; movs r0,#0; pop{r3,pc}）。
      * find_wrapper_timer_dispatch 匹配到该 thunk 时不将其作为宿主 timer
