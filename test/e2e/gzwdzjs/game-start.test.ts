@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { VmrpE2e, VmrpWorkspace } from "../vmrp-e2e.js";
 import fs from "fs";
 
@@ -41,12 +41,20 @@ describe("gzwdzjs 进入主菜单", () => {
       expect(screen.pixel(38, 22)).toEqual([152, 228, 0]);
     }
     {
-      // 12下回车
+      // 7下回车
       for (let i = 0; i < 7; i++) {
         await vmrp.key('ENTER', 1_000);
         await vmrp.delay(1_000);
       }
-      await vmrp.delay(10_000);
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const screen = await vmrp.screen("need-power");
+        // rgb(208, 244, 200)
+        expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
+      }, { timeout: 90_000, interval: 1_000 });
+    }
+    {
+      // 5下回车
       for (let i = 0; i < 5; i++) {
         await vmrp.key('ENTER', 1_000);
         await vmrp.delay(1_000);
