@@ -154,6 +154,34 @@ export class VmrpE2e {
     return readPpm(ppmPath);
   }
 
+  /**
+   * 轮询截屏直到 (x,y) 处像素等于 expected,返回命中时的截图供后续断言。
+   * 适用于等待时长不确定的画面(如游戏结束结算),替代固定 delay + 单次断言。
+   * 超时抛错并附带最后一次实际像素值,便于修正断言点。
+   */
+  async waitForPixel(
+    x: number,
+    y: number,
+    expected: Rgb,
+    options: { name?: string; timeoutMs?: number; intervalMs?: number } = {}
+  ): Promise<PpmImage> {
+    const { name = "wait-pixel", timeoutMs = 60_000, intervalMs = 1_000 } = options;
+    const deadline = Date.now() + timeoutMs;
+    let last: Rgb | undefined;
+    for (;;) {
+      const screen = await this.screen(name);
+      last = screen.pixel(x, y);
+      if (last[0] === expected[0] && last[1] === expected[1] && last[2] === expected[2]) {
+        return screen;
+      }
+      if (Date.now() + intervalMs > deadline) break;
+      await sleep(intervalMs);
+    }
+    throw new Error(
+      `Pixel (${x},${y}) did not become rgb(${expected.join(",")}) within ${timeoutMs}ms; last was rgb(${last?.join(",")})`
+    );
+  }
+
   async command(command: string, timeoutMs = this.timeoutMs): Promise<string> {
     return new Promise((resolve, reject) => {
       const socket = createConnection(this.socketPath);
