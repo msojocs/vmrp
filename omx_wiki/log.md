@@ -1,5 +1,9 @@
 # Wiki Log
 
+## [2026-07-06T22:59:48+08:00] add
+- **Pages:** gzwdzjs-primary-black-clear-damage-synthesis.md
+- **Summary:** Recorded gzwdzjs tutorial top black root cause: primary full-screen black DrawRect cache reset was marked as visible damage and callback-exit synthesis exposed unpresented rows; verification covered focused/full gzwdzjs plus opbzqe/dota/gxdzc regressions.
+
 ## [2026-06-26T14:12:07+08:00] update
 - **Pages:** gms-payment-latency-analysis.md
 - **Summary:** Corrected the screen interpretation: hash dd716938a16f is payment success. Recorded generic MR_SMS_RESULT_FLAG fix and validation that success now appears at confirm+1s.
@@ -173,4 +177,15 @@
 ## [2026-07-06T13:15:59.662Z] add
 - **Pages:** gzwdzjs-table-bridge-stale-epilogue-guard.md
 - **Summary:** Created wiki page gzwdzjs-table-bridge-stale-epilogue-guard.md
+## [2026-07-06T15:00:43.952Z] lint
+- **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-record-pack-slot-fix.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-input-paste-ucs2-table77-fix.md
+- **Summary:** Lint: 18 issues (15 orphan, 0 stale, 2 broken, 0 contradictions)
+
+## [2026-07-06T15:00:56.228Z] lint
+- **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-record-pack-slot-fix.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-input-paste-ucs2-table77-fix.md
+- **Summary:** Lint: 18 issues (15 orphan, 0 stale, 2 broken, 0 contradictions)
+
+## [2026-07-06T15:01:06.245Z] lint
+- **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-record-pack-slot-fix.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-input-paste-ucs2-table77-fix.md
+- **Summary:** Lint: 16 issues (15 orphan, 0 stale, 0 broken, 0 contradictions)
 

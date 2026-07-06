@@ -69,9 +69,25 @@ describe("gzwdzjs 进入主菜单", () => {
       // 左软键确定开始教程
       await vmrp.key('LEFT_SOFT', 1_000);
       await vmrp.delay(5_000);
-      // 其实已经崩溃
-      const screen = await vmrp.screen("start");
+      const screen = await vmrp.screen("start-confirm");
       expect(screen.pixel(75, 75)).not.toEqual([0, 0, 0]);
+    }
+    {
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const screen = await vmrp.screen("introduce");
+        // rgb(208, 244, 200)
+        expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
+      }, { timeout: 90_000, interval: 1_000 });
+      for (let i = 0; i < 2; i++) {
+        await vmrp.key('ENTER', 1_000);
+        await vmrp.delay(1_000);
+      }
+      const screen = await vmrp.screen("game-start");
+      expect(screen.pixel(75, 75)).not.toEqual([0, 0, 0]);
+      expect(screen.pixel(43, 149)).not.toEqual([208, 244, 200]);
+      // rgb(24, 12, 0)
+      expect(screen.pixel(42, 245)).toEqual([24, 12, 0]);
     }
   });
   it("花屏检查", async () => {
