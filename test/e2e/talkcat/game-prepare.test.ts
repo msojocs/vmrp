@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { VmrpE2e, VmrpWorkspace } from "../vmrp-e2e.js";
 import fs from 'fs'
 
@@ -20,15 +20,16 @@ describe("talkcat 进入游戏", () => {
 
     vmrp = await VmrpE2e.start("test/fixtures/talkcat.mrp", { workDir: ws.dir });
 
-    await vmrp.delay(70_000);
-    const boot = await vmrp.screen("main");
-    // rgb(232, 236, 232)
-    expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);
-    // rgb(0, 12, 16)
-    expect(boot.pixel(216, 27)).toEqual([0, 12, 16]);
-    // rgb(64, 64, 64)
-    expect(boot.pixel(221, 279)).toEqual([64, 64, 64]);
-
+    await vi.waitFor(async () => {
+      if (!vmrp) throw new Error("vmrp is undefined");
+      const boot = await vmrp.screen("main");
+      // rgb(232, 236, 232)
+      expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);
+      // rgb(0, 12, 16)
+      expect(boot.pixel(216, 27)).toEqual([0, 12, 16]);
+      // rgb(64, 64, 64)
+      expect(boot.pixel(221, 279)).toEqual([64, 64, 64]);
+    }, { timeout: 90_000, interval: 1_000 });
   });
   it("下载喝水资源包并安装", async () => {
     // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
@@ -37,14 +38,16 @@ describe("talkcat 进入游戏", () => {
 
     vmrp = await VmrpE2e.start("test/fixtures/talkcat.mrp", { workDir: ws.dir });
 
-    await vmrp.delay(60_000);
-    const boot = await vmrp.screen("main");
-    // rgb(232, 236, 232)
-    expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);
-    // rgb(0, 12, 16)
-    expect(boot.pixel(216, 27)).toEqual([0, 12, 16]);
-    // rgb(64, 64, 64)
-    expect(boot.pixel(221, 279)).toEqual([64, 64, 64]);
+    await vi.waitFor(async () => {
+      if (!vmrp) throw new Error("vmrp is undefined");
+      const boot = await vmrp.screen("main");
+      // rgb(232, 236, 232)
+      expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);
+      // rgb(0, 12, 16)
+      expect(boot.pixel(216, 27)).toEqual([0, 12, 16]);
+      // rgb(64, 64, 64)
+      expect(boot.pixel(221, 279)).toEqual([64, 64, 64]);
+    }, { timeout: 90_000, interval: 1_000 });
 
     {
       // 点击水杯图标，触发下载提示
@@ -89,15 +92,16 @@ describe("talkcat 进入游戏", () => {
 
     vmrp = await VmrpE2e.start("test/fixtures/talkcat.mrp", { workDir: ws.dir });
 
-    await vmrp.delay(60_000);
-    const boot = await vmrp.screen("main");
-    // rgb(232, 236, 232)
-    expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);
-    // rgb(0, 12, 16)
-    expect(boot.pixel(216, 27)).toEqual([0, 12, 16]);
-    // rgb(64, 64, 64)
-    expect(boot.pixel(221, 279)).toEqual([64, 64, 64]);
-
+    await vi.waitFor(async () => {
+      if (!vmrp) throw new Error("vmrp is undefined");
+      const boot = await vmrp.screen("main");
+      // rgb(232, 236, 232)
+      expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);
+      // rgb(0, 12, 16)
+      expect(boot.pixel(216, 27)).toEqual([0, 12, 16]);
+      // rgb(64, 64, 64)
+      expect(boot.pixel(221, 279)).toEqual([64, 64, 64]);
+    }, { timeout: 90_000, interval: 1_000 });
     for (let i = 0; i < 20; i++) {
       {
         // 点击水杯图标，触发下载提示
