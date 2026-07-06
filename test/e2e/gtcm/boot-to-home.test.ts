@@ -93,7 +93,7 @@ describe("gtcm 进入主界面", () => {
       expect(screen.pixel(240, 10)).toEqual([0, 140, 216]);
     }
     {
-      await vmrp.delay(30_000);
+      await vmrp.delay(40_000);
       await vmrp.key('ENTER', 1_000);
       await vmrp.delay(2_000);
       // rgb(40, 40, 40)

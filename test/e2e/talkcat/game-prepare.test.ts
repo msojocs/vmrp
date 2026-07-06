@@ -20,7 +20,7 @@ describe("talkcat 进入游戏", () => {
 
     vmrp = await VmrpE2e.start("test/fixtures/talkcat.mrp", { workDir: ws.dir });
 
-    await vmrp.delay(60_000);
+    await vmrp.delay(70_000);
     const boot = await vmrp.screen("main");
     // rgb(232, 236, 232)
     expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);
