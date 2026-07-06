@@ -4021,6 +4021,30 @@ static void arm_ext_bump_block_remove(ArmExtBumpBlock *arr,
     (*count)--;
 }
 
+static void arm_ext_app_alloc_track(ArmExtModule *m,
+                                    uint32_t addr,
+                                    uint32_t len) {
+    if (!m || !addr || !len) return;
+    if (!arm_ext_bump_block_append(&m->app_live_blocks,
+                                   &m->app_live_count,
+                                   &m->app_live_cap,
+                                   m->app_live_count,
+                                   addr, align4(len))) {
+        return;
+    }
+}
+
+static void arm_ext_app_alloc_untrack(ArmExtModule *m, uint32_t addr) {
+    if (!m || !addr) return;
+    for (uint32_t i = 0; i < m->app_live_count; ++i) {
+        if (m->app_live_blocks[i].addr == addr) {
+            arm_ext_bump_block_remove(m->app_live_blocks,
+                                      &m->app_live_count, i);
+            return;
+        }
+    }
+}
+
 static int arm_ext_bump_free_insert(ArmExtModule *m, uint32_t addr,
                                     uint32_t len) {
     if (!m || !addr || !len) return 0;
@@ -4169,6 +4193,8 @@ static void arm_ext_protect_registered_module_storage(ArmExtModule *m,
                                     &m->bump_live_cap, file_addr, file_len);
     arm_ext_bump_block_remove_range(&m->bump_free_blocks, &m->bump_free_count,
                                     &m->bump_free_cap, file_addr, file_len);
+    arm_ext_bump_block_remove_range(&m->app_live_blocks, &m->app_live_count,
+                                    &m->app_live_cap, file_addr, file_len);
 }
 
 /* 应用可见内存分配/释放的统一入口(table[0]/[2]/[125] 输出):
@@ -4187,11 +4213,13 @@ static uint32_t arm_ext_app_mem_malloc(ArmExtModule *m, uint32_t len) {
             /* 登记失败(宿主内存不足)时块仍有效,只是不可回收 */
         }
     }
+    if (ret) arm_ext_app_alloc_track(m, ret, len);
     return ret;
 }
 
 static void arm_ext_app_mem_free(ArmExtModule *m, uint32_t p, uint32_t len) {
     if (!m || !p) return;
+    arm_ext_app_alloc_untrack(m, p);
     if (m->origin_mem_addr && p >= m->origin_mem_addr &&
         p < m->origin_mem_addr + m->origin_mem_len) {
         arm_ext_watch_alloc_report(m, "pool_free", p, len);
@@ -5607,6 +5635,224 @@ static int arm_ext_bitmap_source_uses_screen_stride(ArmExtModule *m,
     return 0;
 }
 
+enum {
+    ARM_EXT_BM_OR = 0,
+    ARM_EXT_BM_XOR = 1,
+    ARM_EXT_BM_COPY = 2,
+    ARM_EXT_BM_NOT = 3,
+    ARM_EXT_BM_MERGENOT = 4,
+    ARM_EXT_BM_ANDNOT = 5,
+    ARM_EXT_BM_TRANSPARENT = 6,
+    ARM_EXT_BM_AND = 7,
+    ARM_EXT_BM_GRAY = 8,
+    ARM_EXT_BM_REVERSE = 9,
+    ARM_EXT_SPRITE_INDEX_MASK = 0x03FF,
+    ARM_EXT_SPRITE_TRANSPARENT = 0x0400,
+    ARM_EXT_TILE_SHIFT = 11,
+    ARM_EXT_ROTATE_0 = 0,
+    ARM_EXT_ROTATE_90 = 1,
+    ARM_EXT_ROTATE_180 = 2,
+    ARM_EXT_ROTATE_270 = 3,
+};
+
+static int arm_ext_bitmap_source_bounds(ArmExtModule *m,
+                                        uint32_t p_addr,
+                                        uint32_t *lo,
+                                        uint32_t *hi) {
+    uint32_t bitmap_array =
+        arm_ext_read_u32_or_zero_(m, EXT_TABLE_ADDR + 95u * 4u);
+    if (lo) *lo = 0;
+    if (hi) *hi = 0;
+    if (!m || !p_addr) return 0;
+
+    if (bitmap_array) {
+        for (uint32_t i = 0; i < 31u; ++i) {
+            uint32_t desc = bitmap_array + i * 16u;
+            uint32_t len = arm_ext_read_u32_or_zero_(m, desc + 4u);
+            uint32_t base = arm_ext_read_u32_or_zero_(m, desc + 12u);
+            uint64_t end = (uint64_t)base + (uint64_t)len;
+            if (!base || !len || end > 0x100000000ull) continue;
+            if (p_addr >= base && (uint64_t)p_addr < end) {
+                if (lo) *lo = base;
+                if (hi) *hi = (uint32_t)end;
+                return 1;
+            }
+        }
+    }
+
+    for (uint32_t i = 0; i < m->app_live_count; ++i) {
+        uint32_t base = m->app_live_blocks[i].addr;
+        uint32_t len = m->app_live_blocks[i].len;
+        uint64_t end = (uint64_t)base + (uint64_t)len;
+        if (!base || !len || end > 0x100000000ull) continue;
+        if (p_addr >= base && (uint64_t)p_addr < end) {
+            if (lo) *lo = base;
+            if (hi) *hi = (uint32_t)end;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int arm_ext_bitmap_read_source_pixel(ArmExtModule *m,
+                                            uint64_t addr64,
+                                            int bounded,
+                                            uint32_t lo,
+                                            uint32_t hi,
+                                            uint16_t *color) {
+    if (color) *color = 0;
+    if (addr64 > 0xFFFFFFFEull) return 0;
+    uint32_t addr = (uint32_t)addr64;
+    if (bounded && (addr < lo || addr + sizeof(uint16_t) > hi)) return 0;
+    void *p = arm_ptr(m, addr);
+    if (!p || !arm_ptr(m, addr + 1u)) return 0;
+    memcpy(color, p, sizeof(uint16_t));
+    return 1;
+}
+
+static void arm_ext_bitmap_apply_rop(uint16_t *dst,
+                                     uint16_t src,
+                                     uint16_t rop,
+                                     uint16_t transcoler) {
+    if (!dst) return;
+    switch (rop) {
+        case ARM_EXT_BM_TRANSPARENT:
+            if (src != transcoler) *dst = src;
+            break;
+        case ARM_EXT_BM_COPY:
+            *dst = src;
+            break;
+        case ARM_EXT_BM_GRAY:
+            if (src != transcoler) {
+                uint32_t r = (src & 0xF800u) >> 11;
+                uint32_t g = (src & 0x07E0u) >> 6;
+                uint32_t b = src & 0x001Fu;
+                uint32_t gray = (r * 60u + g * 118u + b * 22u) / 25u;
+                *dst = MAKERGB565(gray, gray, gray);
+            }
+            break;
+        case ARM_EXT_BM_REVERSE:
+            if (src != transcoler) *dst = (uint16_t)~src;
+            break;
+        case ARM_EXT_BM_OR:
+            *dst = (uint16_t)(src | *dst);
+            break;
+        case ARM_EXT_BM_XOR:
+            *dst = (uint16_t)(src ^ *dst);
+            break;
+        case ARM_EXT_BM_NOT:
+            *dst = (uint16_t)~src;
+            break;
+        case ARM_EXT_BM_MERGENOT:
+            *dst = (uint16_t)((uint16_t)~src | *dst);
+            break;
+        case ARM_EXT_BM_ANDNOT:
+            *dst = (uint16_t)((uint16_t)~src & *dst);
+            break;
+        case ARM_EXT_BM_AND:
+            *dst = (uint16_t)(src & *dst);
+            break;
+        default:
+            break;
+    }
+}
+
+static void arm_ext_draw_bitmap_from_guest(ArmExtModule *m,
+                                           uint32_t p_addr,
+                                           int16_t x,
+                                           int16_t y,
+                                           uint16_t w,
+                                           uint16_t h,
+                                           uint16_t rop,
+                                           uint16_t transcoler,
+                                           int16_t sx,
+                                           int16_t sy,
+                                           int16_t mw) {
+    if (!m || !p_addr || !mr_screenBuf || mr_screen_w <= 0 ||
+        mr_screen_h <= 0) {
+        return;
+    }
+
+    int32_t min_x = x < 0 ? 0 : x;
+    int32_t min_y = y < 0 ? 0 : y;
+    int32_t max_x = (int32_t)x + (int32_t)w;
+    int32_t max_y = (int32_t)y + (int32_t)h;
+    if (max_x > mr_screen_w) max_x = mr_screen_w;
+    if (max_y > mr_screen_h) max_y = mr_screen_h;
+    if (min_x >= max_x || min_y >= max_y) return;
+
+    uint32_t src_lo = 0;
+    uint32_t src_hi = 0;
+    int bounded = arm_ext_bitmap_source_bounds(m, p_addr, &src_lo, &src_hi);
+
+    /*
+     * table[120] passes guest bitmap pointers into host C. The native helper
+     * indexes from that pointer without a byte length, but the emulator can see
+     * table[95] bitmap descriptors and live app allocations. Keep source reads
+     * inside that owner so a bad source rectangle cannot turn unrelated guest
+     * heap/code bytes into pixels; pixels outside the owner are not drawn.
+     */
+    for (int32_t dy = min_y; dy < max_y; ++dy) {
+        for (int32_t dx = min_x; dx < max_x; ++dx) {
+            int64_t src_offset = -1;
+            uint16_t src = 0;
+            uint16_t draw_rop = rop;
+            uint16_t *dst =
+                mr_screenBuf + (size_t)dy * (size_t)mr_screen_w + (size_t)dx;
+
+            if (rop > ARM_EXT_SPRITE_TRANSPARENT) {
+                uint16_t bitmap_rop = rop & ARM_EXT_SPRITE_INDEX_MASK;
+                uint16_t mode = (rop >> ARM_EXT_TILE_SHIFT) & 0x3u;
+                uint16_t flip = (rop >> ARM_EXT_TILE_SHIFT) & 0x4u;
+                int64_t rel_x = (int64_t)dx - (int64_t)x;
+                int64_t rel_y = (int64_t)dy - (int64_t)y;
+                int64_t row = 0;
+                int64_t col = 0;
+                if (bitmap_rop != ARM_EXT_BM_TRANSPARENT &&
+                    bitmap_rop != ARM_EXT_BM_COPY) {
+                    continue;
+                }
+                switch (mode) {
+                    case ARM_EXT_ROTATE_0:
+                        row = flip ? (int64_t)h - 1 - rel_y : rel_y;
+                        col = rel_x;
+                        break;
+                    case ARM_EXT_ROTATE_90:
+                        row = flip ? (int64_t)h - 1 - rel_x : rel_x;
+                        col = (int64_t)w - 1 - rel_y;
+                        break;
+                    case ARM_EXT_ROTATE_180:
+                        row = flip ? rel_y : (int64_t)h - 1 - rel_y;
+                        col = (int64_t)w - 1 - rel_x;
+                        break;
+                    case ARM_EXT_ROTATE_270:
+                        row = flip ? rel_x : (int64_t)h - 1 - rel_x;
+                        col = rel_y;
+                        break;
+                    default:
+                        continue;
+                }
+                src_offset = row * (int64_t)w + col;
+                draw_rop = bitmap_rop;
+            } else {
+                src_offset =
+                    ((int64_t)dy - (int64_t)y + (int64_t)sy) *
+                        (int64_t)mw +
+                    ((int64_t)dx - (int64_t)x + (int64_t)sx);
+            }
+
+            if (src_offset < 0) continue;
+            uint64_t src_addr =
+                (uint64_t)p_addr + (uint64_t)src_offset * sizeof(uint16_t);
+            if (!arm_ext_bitmap_read_source_pixel(m, src_addr, bounded,
+                                                  src_lo, src_hi, &src)) {
+                continue;
+            }
+            arm_ext_bitmap_apply_rop(dst, src, draw_rop, transcoler);
+        }
+    }
+}
+
 static void capture_timer_dispatches(ArmExtModule *m) {
     if (!m || !m->primary_helper_addr) return;
     uint32_t t31a = EXT_TABLE_ADDR + 31 * 4;
@@ -6705,8 +6951,9 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 ArmExtScreenContext screen_ctx;
                 if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
                     uint16_t *before = arm_ext_snapshot_screen(m);
-                    _DrawBitmap(arm_ptr(m, r0), (int16)r1, (int16)r2,
-                                (uint16)r3, h, rop, trans, sx, sy, mw);
+                    arm_ext_draw_bitmap_from_guest(
+                        m, r0, (int16)r1, (int16)r2,
+                        (uint16)r3, h, rop, trans, sx, sy, mw);
                     arm_ext_pop_draw_screen_context(&screen_ctx);
                     arm_ext_note_screen_damage_diff(m, before);
                     arm_ext_claim_foreground_screen_diff(m, claim_p,
@@ -9357,6 +9604,7 @@ void arm_ext_unload(ArmExtModule *m) {
     free(m->short_pack_aliases);
     free(m->bump_live);
     free(m->bump_free_blocks);
+    free(m->app_live_blocks);
     arm_ext_free_row_spans(&m->screen_damage);
     arm_ext_free_row_spans(&m->screen_present);
     arm_ext_free_row_spans(&m->foreground_cover);

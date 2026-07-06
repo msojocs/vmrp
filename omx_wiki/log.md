@@ -158,3 +158,11 @@
 ## [2026-07-01T11:08:41.058Z] add
 - **Pages:** wbrw-input-paste-ucs2-table77-fix.md
 - **Summary:** Created wiki page wbrw-input-paste-ucs2-table77-fix.md
+## [2026-07-05T14:42:16.444Z] ingest
+- **Pages:** gzwdzjs-arm-ext-drawbitmap-source-overrun.md
+- **Summary:** Created new page "gzwdzjs ARM EXT DrawBitmap source overrun"
+
+## [2026-07-05T14:42:16.454Z] add
+- **Pages:** gzwdzjs-arm-ext-drawbitmap-source-overrun.md
+- **Summary:** Created wiki page gzwdzjs-arm-ext-drawbitmap-source-overrun.md
+
