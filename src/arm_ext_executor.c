@@ -1834,6 +1834,58 @@ static int arm_ext_child_has_compact_timer_walker(const uint8_t *code,
     return 0;
 }
 
+static uint32_t find_wrapper_compact_heap_free_return(const uint8_t *code,
+                                                      uint32_t len,
+                                                      uint32_t *ctrl_off_out) {
+    if (ctrl_off_out) *ctrl_off_out = 0;
+    if (!code || len < 0x90u) return 0;
+
+    for (uint32_t off = 0; off + 0x90u <= len; off += 2u) {
+        uint16_t ldr = arm_ext_code_u16(code, off);
+        uint32_t ctrl_off = 0;
+        if ((ldr & 0xF800u) != 0x4800u || ((ldr >> 8) & 0x7u) != 2u)
+            continue;
+        if (!arm_ext_thumb_ldr_literal_u32(code, len, off, &ctrl_off))
+            continue;
+        if (ctrl_off < 0x80u || ctrl_off >= 0x1000u ||
+            (ctrl_off & 3u) != 0) {
+            continue;
+        }
+
+        /*
+         * Compact SDK mr_free() starts by loading the heap-control pointer
+         * from [R9+literal], then walks a {next,len} free-list rooted at
+         * ctrl+0x18.  The final block updates ctrl+0x0c before returning;
+         * a hook on the pop instruction lets the executor remove live timer
+         * nodes from the free-list after the allocator's own merge is done.
+         */
+        if (arm_ext_code_u16(code, off + 0x02u) != 0xB4F0u ||
+            arm_ext_code_u16(code, off + 0x04u) != 0x444Au ||
+            arm_ext_code_u16(code, off + 0x06u) != 0x6813u ||
+            arm_ext_code_u16(code, off + 0x08u) != 0x1C02u ||
+            arm_ext_code_u16(code, off + 0x0Au) != 0x3107u ||
+            arm_ext_code_u16(code, off + 0x0Cu) != 0x08CCu ||
+            arm_ext_code_u16(code, off + 0x0Eu) != 0x00E4u ||
+            arm_ext_code_u16(code, off + 0x16u) != 0x689Du ||
+            arm_ext_code_u16(code, off + 0x1Cu) != 0x691Eu ||
+            arm_ext_code_u16(code, off + 0x2Eu) != 0x3118u ||
+            arm_ext_code_u16(code, off + 0x30u) != 0x6998u ||
+            arm_ext_code_u16(code, off + 0x64u) != 0x600Du ||
+            arm_ext_code_u16(code, off + 0x6Cu) != 0xC114u ||
+            arm_ext_code_u16(code, off + 0x86u) != 0x68D8u ||
+            arm_ext_code_u16(code, off + 0x88u) != 0x1900u ||
+            arm_ext_code_u16(code, off + 0x8Au) != 0x60D8u ||
+            arm_ext_code_u16(code, off + 0x8Cu) != 0xBCF0u ||
+            arm_ext_code_u16(code, off + 0x8Eu) != 0x4770u) {
+            continue;
+        }
+
+        if (ctrl_off_out) *ctrl_off_out = ctrl_off;
+        return EXT_CODE_ADDR + off + 0x8Cu;
+    }
+    return 0;
+}
+
 static int arm_ext_child_reads_record100_to_compact_r9_buffer(
     const uint8_t *code,
     uint32_t file_len) {
@@ -4267,6 +4319,308 @@ static void write_game_timer_head(ArmExtModule *m, uint32_t grw, uint32_t val) {
     } else {
         memcpy(arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET_ALT), &val, 4);
     }
+}
+
+#define ARM_EXT_COMPACT_TIMER_MAGIC 0x79ABBCCFu
+#define ARM_EXT_COMPACT_TIMER_PROTECT_MAX 128u
+
+static int arm_ext_compact_timer_magic_node_is_valid(ArmExtModule *m,
+                                                     uint32_t node) {
+    if (!m || !node || !arm_ext_addr_range_mapped(m, node, 0x20u))
+        return 0;
+    return arm_ext_read_u32_or_zero_(m, node) == ARM_EXT_COMPACT_TIMER_MAGIC;
+}
+
+static void arm_ext_compact_timer_protect_add(ArmExtModule *m,
+                                              ArmExtBumpBlock *ranges,
+                                              uint32_t *count,
+                                              uint32_t node,
+                                              int include_alloc_header) {
+    if (!ranges || !count || *count >= ARM_EXT_COMPACT_TIMER_PROTECT_MAX)
+        return;
+    if (!arm_ext_compact_timer_magic_node_is_valid(m, node))
+        return;
+
+    uint32_t lo = node;
+    uint32_t hi = node + 0x20u;
+    if (hi < node) return;
+    if (include_alloc_header) {
+        if (node < 4u || node + 0x24u < node) return;
+        /*
+         * game.ext's SDK malloc fallback asks table[0] for len+4, stores the
+         * size header at user-4, then returns the timer node at user.  The
+         * compact allocator rounds that 0x24 request to 0x28, so the protected
+         * range must include the header and trailing alignment bytes.
+         */
+        lo = node - 4u;
+        hi = node + 0x24u;
+    }
+
+    for (uint32_t i = 0; i < *count; ++i) {
+        if (ranges[i].addr == lo && ranges[i].len == hi - lo)
+            return;
+    }
+    ranges[*count].addr = lo;
+    ranges[*count].len = hi - lo;
+    (*count)++;
+}
+
+static void arm_ext_collect_compact_timer_chain(ArmExtModule *m,
+                                                ArmExtBumpBlock *ranges,
+                                                uint32_t *count,
+                                                uint32_t node,
+                                                uint32_t next_off,
+                                                int include_alloc_header) {
+    for (uint32_t i = 0; i < ARM_EXT_COMPACT_TIMER_PROTECT_MAX && node; ++i) {
+        uint32_t next = 0;
+        if (!arm_ext_compact_timer_magic_node_is_valid(m, node))
+            return;
+        arm_ext_compact_timer_protect_add(m, ranges, count, node,
+                                          include_alloc_header);
+        next = arm_ext_read_u32_or_zero_(m, node + next_off);
+        if (next == node) return;
+        for (uint32_t seen = 0; seen < *count; ++seen) {
+            uint32_t seen_node = ranges[seen].addr;
+            if (include_alloc_header && seen_node + 4u >= seen_node)
+                seen_node += 4u;
+            if (next == seen_node) return;
+        }
+        node = next;
+    }
+}
+
+static void arm_ext_collect_compact_timer_queue_pair(ArmExtModule *m,
+                                                     ArmExtBumpBlock *ranges,
+                                                     uint32_t *count,
+                                                     uint32_t queued,
+                                                     uint32_t current,
+                                                     int include_alloc_header) {
+    arm_ext_collect_compact_timer_chain(m, ranges, count, queued, 0x18u,
+                                        include_alloc_header);
+    arm_ext_collect_compact_timer_chain(m, ranges, count, current, 0x1Cu,
+                                        include_alloc_header);
+}
+
+static void arm_ext_collect_primary_compact_timer_nodes(ArmExtModule *m,
+                                                       ArmExtBumpBlock *ranges,
+                                                       uint32_t *count) {
+    uint32_t rw = arm_ext_primary_rw_base_(m);
+    if (!rw) return;
+
+    /*
+     * gzwdzjs game.ext proves the compact game scheduler at R9+0x84:
+     * +0x08 is the delta queue, +0x0c is the fired/current queue, and timer
+     * nodes carry 0x79ABBCCF at word 0.  Trying R9+0x80 as well preserves the
+     * older read_game_timer_head() offsets without naming a package.
+     */
+    static const uint32_t sched_offsets[] = { 0x84u, 0x80u };
+    for (uint32_t i = 0; i < sizeof(sched_offsets) / sizeof(sched_offsets[0]);
+         ++i) {
+        uint32_t off = sched_offsets[i];
+        if (!arm_ext_addr_range_mapped(m, rw + off, 0x14u))
+            continue;
+        arm_ext_collect_compact_timer_queue_pair(
+            m, ranges, count,
+            arm_ext_read_u32_or_zero_(m, rw + off + 0x08u),
+            arm_ext_read_u32_or_zero_(m, rw + off + 0x0Cu), 1);
+    }
+    arm_ext_collect_compact_timer_chain(m, ranges, count,
+                                        read_game_timer_head(m, rw),
+                                        0x18u, 1);
+}
+
+static void arm_ext_collect_wrapper_compact_timer_nodes(ArmExtModule *m,
+                                                       ArmExtBumpBlock *ranges,
+                                                       uint32_t *count) {
+    uint32_t wrapper_rw = arm_ext_wrapper_rw_base_(m);
+    uint32_t off = m ? m->wrapper_compact_timer_scheduler_off : 0;
+    if (!wrapper_rw || !off ||
+        !arm_ext_addr_range_mapped(m, wrapper_rw + off, 0x18u)) {
+        return;
+    }
+
+    arm_ext_collect_compact_timer_queue_pair(
+        m, ranges, count,
+        arm_ext_read_u32_or_zero_(m, wrapper_rw + off + 0x0Cu),
+        arm_ext_read_u32_or_zero_(m, wrapper_rw + off + 0x10u), 0);
+}
+
+static void arm_ext_collect_active_compact_timer_nodes(ArmExtModule *m,
+                                                      ArmExtBumpBlock *ranges,
+                                                      uint32_t *count) {
+    if (!m || !m->active_p_addr || m->active_p_addr == m->primary_p_addr ||
+        m->active_p_addr == m->p_addr) {
+        return;
+    }
+    ArmExtNestedModule *mod = arm_ext_find_nested_module_by_p(
+        m, m->active_p_addr);
+    if (!mod || !mod->file_addr || !mod->file_len)
+        return;
+    const uint8_t *code = (const uint8_t *)arm_ptr(m, mod->file_addr);
+    if (!arm_ext_child_has_compact_timer_walker(code, mod->file_len))
+        return;
+
+    uint32_t rw = arm_ext_active_rw_base(m);
+    static const uint32_t sched_offsets[] = { 0x0C0u, 0x248u };
+    for (uint32_t i = 0; i < sizeof(sched_offsets) / sizeof(sched_offsets[0]);
+         ++i) {
+        uint32_t off = sched_offsets[i];
+        if (!arm_ext_addr_range_mapped(m, rw + off, 0x14u))
+            continue;
+        arm_ext_collect_compact_timer_queue_pair(
+            m, ranges, count,
+            arm_ext_read_u32_or_zero_(m, rw + off + 0x08u),
+            arm_ext_read_u32_or_zero_(m, rw + off + 0x0Cu), 0);
+    }
+}
+
+static int arm_ext_compact_heap_cut_range(ArmExtModule *m,
+                                          uint32_t ctrl,
+                                          uint32_t protect_lo,
+                                          uint32_t protect_hi) {
+    if (!m || !ctrl || protect_lo >= protect_hi ||
+        !arm_ext_addr_range_mapped(m, ctrl, 0x1Cu)) {
+        return 0;
+    }
+
+    uint32_t base = arm_ext_read_u32_or_zero_(m, ctrl + 0x08u);
+    uint32_t end = arm_ext_read_u32_or_zero_(m, ctrl + 0x10u);
+    if (end <= base || !arm_ext_addr_range_mapped(m, base, end - base))
+        return 0;
+
+    uint32_t heap_len = end - base;
+    uint32_t prev_slot = ctrl + 0x18u;
+    uint32_t off = arm_ext_read_u32_or_zero_(m, prev_slot);
+    uint32_t iter_limit = heap_len / 8u + 4u;
+    int changed = 0;
+
+    while (off < heap_len && iter_limit--) {
+        uint32_t node = base + off;
+        if (!arm_ext_addr_range_mapped(m, node, 8u))
+            break;
+        uint32_t next_off = arm_ext_read_u32_or_zero_(m, node);
+        uint32_t len = arm_ext_read_u32_or_zero_(m, node + 4u);
+        if (len < 8u || len > end - node)
+            break;
+
+        uint32_t node_end = node + len;
+        uint32_t lo = node > protect_lo ? node : protect_lo;
+        uint32_t hi = node_end < protect_hi ? node_end : protect_hi;
+        if (lo >= hi) {
+            prev_slot = node;
+            off = next_off;
+            continue;
+        }
+
+        uint32_t left_len = lo > node ? lo - node : 0;
+        uint32_t right_start = hi;
+        uint32_t right_len = node_end > right_start ? node_end - right_start : 0;
+        int keep_left = left_len >= 8u;
+        int keep_right = right_len >= 8u;
+        uint32_t removed = len -
+            (keep_left ? left_len : 0u) -
+            (keep_right ? right_len : 0u);
+
+        if (keep_left && keep_right) {
+            uint32_t right_off = right_start - base;
+            arm_ext_guest_mem_write_u32(m, node + 4u, left_len);
+            arm_ext_guest_mem_write_u32(m, node, right_off);
+            arm_ext_guest_mem_write_u32(m, right_start, next_off);
+            arm_ext_guest_mem_write_u32(m, right_start + 4u, right_len);
+            prev_slot = right_start;
+            off = next_off;
+        } else if (keep_left) {
+            arm_ext_guest_mem_write_u32(m, node + 4u, left_len);
+            arm_ext_guest_mem_write_u32(m, node, next_off);
+            prev_slot = node;
+            off = next_off;
+        } else if (keep_right) {
+            uint32_t right_off = right_start - base;
+            arm_ext_guest_mem_write_u32(m, right_start, next_off);
+            arm_ext_guest_mem_write_u32(m, right_start + 4u, right_len);
+            arm_ext_guest_mem_write_u32(m, prev_slot, right_off);
+            prev_slot = right_start;
+            off = next_off;
+        } else {
+            arm_ext_guest_mem_write_u32(m, prev_slot, next_off);
+            off = next_off;
+        }
+
+        if (removed) {
+            uint32_t free_bytes = arm_ext_read_u32_or_zero_(m, ctrl + 0x0Cu);
+            free_bytes = removed < free_bytes ? free_bytes - removed : 0;
+            arm_ext_guest_mem_write_u32(m, ctrl + 0x0Cu, free_bytes);
+        }
+        changed = 1;
+    }
+    return changed;
+}
+
+static void arm_ext_sanitize_compact_heap_for_rw(ArmExtModule *m,
+                                                 uint32_t rw,
+                                                 const ArmExtBumpBlock *ranges,
+                                                 uint32_t count) {
+    if (!m || !rw || !m->wrapper_compact_heap_ctrl_off ||
+        !ranges || !count) {
+        return;
+    }
+    uint32_t ctrl_slot = rw + m->wrapper_compact_heap_ctrl_off;
+    if (!arm_ext_addr_range_mapped(m, ctrl_slot, 4u))
+        return;
+    uint32_t ctrl = arm_ext_read_u32_or_zero_(m, ctrl_slot);
+    if (!ctrl) return;
+
+    /*
+     * The compact heap control block is per-module RW state, but the allocator
+     * routine itself is shared wrapper code and reads it through R9.  Sanitize
+     * each discovered control block structurally; no application name or MRP
+     * path participates in the decision.
+     */
+    for (uint32_t i = 0; i < count; ++i) {
+        arm_ext_compact_heap_cut_range(m, ctrl, ranges[i].addr,
+                                       ranges[i].addr + ranges[i].len);
+    }
+}
+
+static void arm_ext_sanitize_compact_timer_heaps(ArmExtModule *m) {
+    if (!m || !m->wrapper_compact_heap_ctrl_off)
+        return;
+
+    ArmExtBumpBlock ranges[ARM_EXT_COMPACT_TIMER_PROTECT_MAX];
+    uint32_t count = 0;
+    arm_ext_collect_primary_compact_timer_nodes(m, ranges, &count);
+    arm_ext_collect_wrapper_compact_timer_nodes(m, ranges, &count);
+    arm_ext_collect_active_compact_timer_nodes(m, ranges, &count);
+    if (!count) return;
+
+    arm_ext_sanitize_compact_heap_for_rw(m, arm_ext_primary_rw_base_(m),
+                                         ranges, count);
+    arm_ext_sanitize_compact_heap_for_rw(m, arm_ext_wrapper_rw_base_(m),
+                                         ranges, count);
+    arm_ext_sanitize_compact_heap_for_rw(m, arm_ext_active_rw_base(m),
+                                         ranges, count);
+    arm_ext_sanitize_compact_heap_for_rw(
+        m, reg_read32(m->uc, UC_ARM_REG_R9), ranges, count);
+    for (int i = 0; i < m->nested_module_count; ++i) {
+        uint32_t rw = arm_ext_read_u32_or_zero_(m,
+                                                m->nested_modules[i].p_addr);
+        arm_ext_sanitize_compact_heap_for_rw(m, rw, ranges, count);
+    }
+}
+
+static void hook_compact_heap_free_return(uc_engine *uc, uint64_t address,
+                                          uint32_t size, void *user_data) {
+    (void)uc;
+    (void)address;
+    (void)size;
+    ArmExtModule *m = (ArmExtModule *)user_data;
+    /*
+     * The hook is installed only on the discovered compact mr_free() return
+     * instruction.  At this point the ARM allocator has finished inserting or
+     * merging the free block, so removing live timer allocations preserves the
+     * allocator's own ordering instead of masking the callback that caused it.
+     */
+    arm_ext_sanitize_compact_timer_heaps(m);
 }
 
 static void arm_ext_free_row_spans(ArmExtRowSpans *spans) {
@@ -8322,10 +8676,15 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     m->wrapper_timer_dispatch_addr = find_wrapper_timer_dispatch(
         code, len, &m->chain_walker_thunk_addr,
         &m->wrapper_compact_timer_scheduler_off);
+    m->wrapper_compact_free_return_addr =
+        find_wrapper_compact_heap_free_return(
+            code, len, &m->wrapper_compact_heap_ctrl_off);
     if (getenv("VMRP_ARM_EXT_TRACE")) {
-        printf("arm_ext_executor: wrapper_timer_dispatch=0x%X wrapper_compact_sched=0x%X chain_walker_thunk=0x%X\n",
+        printf("arm_ext_executor: wrapper_timer_dispatch=0x%X wrapper_compact_sched=0x%X compact_heap_ctrl=0x%X compact_free_ret=0x%X chain_walker_thunk=0x%X\n",
                m->wrapper_timer_dispatch_addr,
                m->wrapper_compact_timer_scheduler_off,
+               m->wrapper_compact_heap_ctrl_off,
+               m->wrapper_compact_free_return_addr,
                m->chain_walker_thunk_addr);
     }
     patch_wrapper_stack_size(m);
@@ -8333,6 +8692,15 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     memcpy(arm_ptr(m, EXT_CODE_ADDR), &table, 4);
     err = uc_hook_add(m->uc, &m->hook, UC_HOOK_CODE, hook_table, m, EXT_TABLE_ADDR, EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4);
     if (err != UC_ERR_OK) goto fail;
+    if (m->wrapper_compact_free_return_addr &&
+        m->wrapper_compact_heap_ctrl_off) {
+        uc_hook compact_free_hook;
+        err = uc_hook_add(m->uc, &compact_free_hook, UC_HOOK_CODE,
+                          hook_compact_heap_free_return, m,
+                          m->wrapper_compact_free_return_addr,
+                          m->wrapper_compact_free_return_addr);
+        if (err != UC_ERR_OK) goto fail;
+    }
     uc_hook low_zero_hook;
     err = uc_hook_add(m->uc, &low_zero_hook, UC_HOOK_CODE, hook_low_zero, m, 0, EXT_LOW_TABLE_SIZE - 1);
     if (err != UC_ERR_OK) goto fail;
@@ -8721,6 +9089,9 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     uint32_t present_depth_before = 0;
     enter_screen_context(m, &saved_screenBuf, &present_depth_before);
     sync_internal_state_to_arm(m);
+    if (code == 2) {
+        arm_ext_sanitize_compact_timer_heaps(m);
+    }
     int was_host_timer_pending = m->host_timer_pending;
     if (code == 2) {
         m->host_timer_pending = 0;
@@ -8750,6 +9121,9 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     }
     leave_screen_context(m, saved_screenBuf, present_depth_before);
     capture_timer_dispatches(m);
+    if (code == 2) {
+        arm_ext_sanitize_compact_timer_heaps(m);
+    }
     arm_ext_diag_dump_layer_state(m, "call-post");
     if (getenv("VMRP_ARM_EXT_DIAG") && code == 2 &&
         suspended_foreground_child) {
@@ -9316,6 +9690,7 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     if (compact_wrapper_timer_owner) {
         arm_ext_diag_dump_wrapper_compact_timer_nodes(m, "dispatch_pre");
     }
+    arm_ext_sanitize_compact_timer_heaps(m);
     /* 19KB cfunction.ext 的 timer dispatcher 是 chain walker；它从
      * wrapper_rw+0x190 取节点并调用节点回调 0xE83590。该回调会读取
      * extChunk[8] 调 game helper(code=5)，所以这里只修复可能被 wrapper
@@ -9361,6 +9736,7 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     if (compact_wrapper_timer_owner) {
         arm_ext_diag_dump_wrapper_compact_timer_nodes(m, "dispatch_post");
     }
+    arm_ext_sanitize_compact_timer_heaps(m);
     /* 旧版 queue consumer 兼容路径可能会临时修改 suspend depth；
      * 当前 19KB chain walker 不需要该 patch，正常保持 no-op。 */
     if (depth_patched && arm_ptr(m, ext_chunk + 0x34)) {
