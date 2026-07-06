@@ -189,6 +189,12 @@ struct ArmExtModule {
     struct ArmExtBumpBlock *bump_free_blocks;
     uint32_t bump_free_count;
     uint32_t bump_free_cap;
+    /* table[0]/[2]/[125] app allocations, including both origin_mem pool and
+     * bump fallback blocks.  Host-side graphics bridges use these bounds to keep
+     * raw guest bitmap pointers from reading across unrelated allocations. */
+    struct ArmExtBumpBlock *app_live_blocks;
+    uint32_t app_live_count;
+    uint32_t app_live_cap;
     /* ARM 侧 origin_mem 统计 slot 地址，用于在宿主 table[0]/table[1]
      * 处理后同步 ARM 可见的剩余内存值，避免 ext 读到过期统计。 */
     uint32_t origin_mem_left_slot;
