@@ -47,6 +47,7 @@
  * 与既有应用完全一致(不平移任何其它分配)。1MB 覆盖 480x800x2 及以下。 */
 #define EXT_SCREEN_RESERVE (1024u * 1024u)
 #define EXT_TRACE_PC_RING 64u
+#define ARM_EXT_TABLE_RETURN_GUARD_MAX 64u
 /* game 的定时器链表头在 game_rw 中的偏移；不同版本的 game.ext SDK 使用
  * 不同偏移（0x8C 和 0x88 均有实例）。编译期常量用于初始尝试，运行时通过
  * auto-detect 修正。 */
@@ -275,6 +276,13 @@ struct ArmExtModule {
     uint32_t pc_ring[EXT_TRACE_PC_RING];
     uint32_t cpsr_ring[EXT_TRACE_PC_RING];
     uint32_t pc_ring_pos;
+    /* Native table bridges return by writing PC=LR; guard callsites where the
+     * next guest instruction is a Thumb pop-{...,pc} epilogue so it cannot be
+     * re-entered after that pop has already consumed the stack frame. */
+    uint32_t table_return_guard_pc[ARM_EXT_TABLE_RETURN_GUARD_MAX];
+    uint32_t table_return_guard_sp[ARM_EXT_TABLE_RETURN_GUARD_MAX];
+    uint8_t table_return_guard_pending[ARM_EXT_TABLE_RETURN_GUARD_MAX];
+    uint32_t table_return_guard_next;
     uint32_t busy_wait_count;
     uint32_t busy_wait_start_ms;
     int nested_loading;

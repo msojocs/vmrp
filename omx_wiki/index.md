@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 14 pages | Last updated: 2026-07-05T14:42:16.452Z
+> 15 pages | Last updated: 2026-07-06T13:15:59.660Z
 
 ## debugging
 
@@ -13,6 +13,7 @@
 - [gghjt modal timer and cold extraction regressions](gghjt-modal-timer-and-cold-extraction-regressions.md) — # gghjt modal timer and cold extraction regressions
 - [gms payment latency analysis](gms-payment-latency-analysis.md) — # gms payment latency analysis
 - [gzwdzjs ARM EXT DrawBitmap source overrun](gzwdzjs-arm-ext-drawbitmap-source-overrun.md) — # gzwdzjs ARM EXT DrawBitmap source overrun
+- [gzwdzjs table bridge stale epilogue guard](gzwdzjs-table-bridge-stale-epilogue-guard.md) — # gzwdzjs table bridge stale epilogue guard
 - [opglqa font download repeat investigation](opglqa-font-download-repeat-investigation.md) — # opglqa font download repeat investigation
 - [Optwar exit plugin component update stall](optwar-exit-plugin-component-update-stall.md) — # Optwar exit plugin component update stall
 - [Optwar exit plugin no-network investigation](optwar-exit-plugin-no-network-investigation.md) — # Optwar exit plugin no-network investigation

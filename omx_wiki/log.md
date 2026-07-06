@@ -166,3 +166,11 @@
 - **Pages:** gzwdzjs-arm-ext-drawbitmap-source-overrun.md
 - **Summary:** Created wiki page gzwdzjs-arm-ext-drawbitmap-source-overrun.md
 
+## [2026-07-06T13:15:59.658Z] ingest
+- **Pages:** gzwdzjs-table-bridge-stale-epilogue-guard.md
+- **Summary:** Created new page "gzwdzjs table bridge stale epilogue guard"
+
+## [2026-07-06T13:15:59.662Z] add
+- **Pages:** gzwdzjs-table-bridge-stale-epilogue-guard.md
+- **Summary:** Created wiki page gzwdzjs-table-bridge-stale-epilogue-guard.md
+
