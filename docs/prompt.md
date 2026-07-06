@@ -430,10 +430,10 @@ if (!exists('path/to/file'))
 记得存储记忆数据。
 
 
-测试用例`pnpm vitest run test/e2e/gzwdzjs/game-start.test.ts -t 教程`执行后，会卡在“读取中，请等待”界面，分析并修复它。
+测试用例`pnpm vitest run test/e2e/gzwdzjs/game-start.test.ts -t 教程`执行后，画面显示不正确，分析并修复它。
 
-预期结果：“读取中，请等待”过段时间加载成功。
-实际结果：一致卡住。
+预期结果：教程提示框消失，下面格子显示正常。
+实际结果：教程提示框残留，下面格子显示不正确。
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。

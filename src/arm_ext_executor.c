@@ -7493,6 +7493,13 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 122:
             {
                 uint32_t claim_p = 0, claim_helper = 0;
+                int16_t x = (int16)r0;
+                int16_t y = (int16)r1;
+                int16_t w = (int16)r2;
+                int16_t h = (int16)r3;
+                uint8_t cr = (uint8)arg_read(m, 4);
+                uint8_t cg = (uint8)arg_read(m, 5);
+                uint8_t cb = (uint8)arg_read(m, 6);
                 if (!arm_ext_should_accept_screen_write(m, &claim_p,
                                                         &claim_helper)) {
                     claim_p = 0;
@@ -7500,24 +7507,29 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 }
                 ArmExtScreenContext screen_ctx;
                 if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
-                    DrawRect((int16)r0, (int16)r1, (int16)r2, (int16)r3,
-                             (uint8)arg_read(m, 4),
-                             (uint8)arg_read(m, 5),
-                             (uint8)arg_read(m, 6));
+                    int full_black_clear =
+                        arm_ext_screen_context_targets_primary(m, &screen_ctx) &&
+                        x <= 0 && y <= 0 &&
+                        (int32_t)x + (int32_t)w >= m->screen_w &&
+                        (int32_t)y + (int32_t)h >= m->screen_h &&
+                        cr == 0 && cg == 0 && cb == 0;
+                    DrawRect(x, y, w, h, cr, cg, cb);
                     arm_ext_pop_draw_screen_context(&screen_ctx);
-                    arm_ext_note_screen_damage_rect(m, (int16)r0,
-                                                    (int16)r1,
-                                                    (int16)r2,
-                                                    (int16)r3);
-                    arm_ext_claim_foreground_screen_rect(m, claim_p,
-                                                         claim_helper,
-                                                         (int16)r0,
-                                                         (int16)r1,
-                                                         (int16)r2,
-                                                         (int16)r3);
-                    arm_ext_finish_screen_cache_write(m, &screen_ctx,
-                                                      claim_p,
-                                                      claim_helper);
+                    /*
+                     * A primary full-screen black DrawRect is commonly a cache
+                     * reset before partial repaint/present.  Treat it as a
+                     * backing write only so callback-exit damage synthesis does
+                     * not expose pixels the app never explicitly presented.
+                     */
+                    if (!full_black_clear) {
+                        arm_ext_note_screen_damage_rect(m, x, y, w, h);
+                        arm_ext_claim_foreground_screen_rect(m, claim_p,
+                                                             claim_helper,
+                                                             x, y, w, h);
+                        arm_ext_finish_screen_cache_write(m, &screen_ctx,
+                                                          claim_p,
+                                                          claim_helper);
+                    }
                 }
             }
             ret = 0;
