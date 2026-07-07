@@ -3055,19 +3055,24 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
     if (err == UC_ERR_INSN_INVALID || err == UC_ERR_EXCEPTION) {
         uint32_t pc = reg_read32(m->uc, UC_ARM_REG_PC);
         if (pc != EXT_STOP_ADDR && pc != 0) {
+            /* 只在 PC 位于已知可执行代码段时切 Thumb 重试。
+             * 被踩的栈帧可能把 extChunk/P 等数据地址弹入 PC，该地址
+             * 在 ARM 模式下解码失败后若盲目切 Thumb 重试，数据字节恰好
+             * 构成有效 Thumb 指令(如 strb)就会写入未映射地址导致崩溃。
+             * 只对 wrapper 代码段或已注册的子模块代码段做 Thumb 修正。 */
+            int pc_in_code = (pc >= EXT_CODE_ADDR &&
+                              pc < EXT_CODE_ADDR + m->code_len);
+            if (!pc_in_code) {
+                uint32_t _fa = 0, _fl = 0;
+                pc_in_code = arm_ext_nested_exec_range_for_lr(m, pc, &_fa, &_fl);
+            }
             uint32_t cpsr = reg_read32(m->uc, UC_ARM_REG_CPSR);
-            if ((cpsr & (1u << 5)) == 0) {
+            if (pc_in_code && (cpsr & (1u << 5)) == 0) {
                 cpsr |= (1u << 5);
                 reg_write32(m->uc, UC_ARM_REG_CPSR, cpsr);
                 if (getenv("VMRP_ARM_EXT_TRACE")) {
                     printf("arm_ext_executor: retrying in Thumb mode at pc=0x%X\n", pc);
                 }
-                /*
-                 * Unicorn selects Thumb entry semantics from the low address
-                 * bit on uc_emu_start().  Changing CPSR.T alone is not enough
-                 * when a BLX target lost bit 0 and stopped on valid Thumb
-                 * bytes, so restart the callback at the Thumb-tagged PC.
-                 */
                 err = uc_emu_start(m->uc, pc | 1u, EXT_STOP_ADDR, 0, 0);
                 if (err == UC_ERR_OK && m->pending_intr_no) {
                     err = UC_ERR_EXCEPTION;
