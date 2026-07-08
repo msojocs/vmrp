@@ -1616,3 +1616,28 @@ void arm_ext_draw_bitmap_from_guest(ArmExtModule *m,
     }
 }
 
+
+/*
+ * 模态子模块(下载 UI/支付窗)关闭时恢复被其覆盖的主画面快照并 present。
+ * Phase 3 去重:此前 arm_ext_call 与 arm_ext_call_dispatch 各有一份逐字
+ * 相同的实现,修一处漏一处(issues doc M1);统一为唯一出口,行为不变。
+ */
+void arm_ext_restore_modal_screen_snapshot(ArmExtModule *m) {
+    if (m->modal_screen_snapshot_valid &&
+        m->modal_screen_snapshot &&
+        m->modal_screen_snapshot_len == m->screen_len &&
+        m->screen_addr && arm_ptr(m, m->screen_addr)) {
+        memcpy(arm_ptr(m, m->screen_addr),
+               m->modal_screen_snapshot, m->screen_len);
+        if (mr_screenBuf) {
+            /* B1:回拷与 present 都按宿主容量夹断 */
+            uint16_t *snapshot = (uint16_t *)m->modal_screen_snapshot;
+            int32_t pw = 0, ph = 0;
+            arm_ext_copy_screen_to_host(m, mr_screenBuf, snapshot,
+                                        arm_ext_screen_stride(m), &pw, &ph);
+            if (pw > 0 && ph > 0)
+                mr_drawBitmap(mr_screenBuf, 0, 0, (uint16)pw, (uint16)ph);
+        }
+        m->modal_screen_snapshot_valid = 0;
+    }
+}
