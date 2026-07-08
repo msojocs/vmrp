@@ -16,6 +16,7 @@ describe("gzwdzjs 进入主菜单", () => {
   it("游戏教程开始", async () => {
     // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
     ws = await VmrpWorkspace.create();
+    fs.rmSync(ws.path("mythroad/plugins/netpay.mrp"), { recursive: true, force: true });
     // gzwdzjs 教程开始时的场景分配超过 1MB 默认应用堆:分配失败后游戏
     // 不检查返回值,拿垃圾指针调 DrawBitmap 导致崩溃(真机大内存下正常)。
     vmrp = await VmrpE2e.start("test/fixtures/gzwdzjs.mrp", { workDir: ws.dir, memory: "2M" });
@@ -41,11 +42,13 @@ describe("gzwdzjs 进入主菜单", () => {
       expect(screen.pixel(38, 22)).toEqual([152, 228, 0]);
     }
     {
+      console.info('开始游戏')
       // 7下回车
       for (let i = 0; i < 7; i++) {
         await vmrp.key('ENTER', 1_000);
         await vmrp.delay(1_000);
       }
+      console.info('等待演示动画')
       await vi.waitFor(async () => {
         if (!vmrp) throw new Error("vmrp is undefined");
         const screen = await vmrp.screen("need-power");
@@ -54,6 +57,7 @@ describe("gzwdzjs 进入主菜单", () => {
       }, { timeout: 90_000, interval: 1_000 });
     }
     {
+      console.info('继续游戏')
       // 5下回车
       for (let i = 0; i < 5; i++) {
         await vmrp.key('ENTER', 1_000);
@@ -66,7 +70,7 @@ describe("gzwdzjs 进入主菜单", () => {
       expect(screen.pixel(121, 57)).toEqual([0, 0, 0]);
     }
     {
-      // 左软键确定开始教程
+      console.info('左软键确定开始教程')
       await vmrp.key('LEFT_SOFT', 1_000);
       await vmrp.delay(5_000);
       const screen = await vmrp.screen("start-confirm");
