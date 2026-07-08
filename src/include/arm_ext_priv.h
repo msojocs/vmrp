@@ -46,6 +46,9 @@ char *arm_ext_guest_strncpy(char *dst, const char *src, size_t n);
 /* '\\'/'/' 归一化的路径比较 */
 int mrp_path_equal(const char *a, const char *b);
 
+/* FNV-1a 32 位内容指纹(P5.2 pack 归属缓存) */
+uint32_t arm_ext_fnv1a(const void *data, uint32_t len);
+
 /* 诊断输出的字节预览格式化(可打印字符直出,其余 \xNN) */
 void arm_ext_diag_preview_bytes(const void *data, uint32_t len,
                                 char *out, size_t out_len);

@@ -278,12 +278,46 @@ static void test_merge_protect_ranges(void) {
     CHECK(r4[0].addr == 0x100 && r4[0].len == 0x400);
 }
 
+/* ============ bytes_contain / fnv1a(P5.2)============ */
+
+static int naive_contains(const uint8_t *h, uint32_t hl,
+                          const uint8_t *n, uint32_t nl) {
+    if (!h || !n || !nl || nl > hl) return 0;
+    for (uint32_t off = 0; off + nl <= hl; ++off)
+        if (memcmp(h + off, n, nl) == 0) return 1;
+    return 0;
+}
+
+static void test_bytes_contain(void) {
+    /* memchr 跳跃版必须与朴素版逐一等价(含首字节高频重复的构造) */
+    const uint8_t hay[] = "aaaaabaaaaabaacaab";
+    struct { const char *n; } cases[] = {
+        {"aab"}, {"aac"}, {"caa"}, {"aaaaab"}, {"b"}, {"x"},
+        {"aaaaabaaaaabaacaab"}, {"aabx"},
+    };
+    for (unsigned i = 0; i < sizeof(cases)/sizeof(cases[0]); ++i) {
+        const uint8_t *n = (const uint8_t *)cases[i].n;
+        uint32_t nl = (uint32_t)strlen(cases[i].n);
+        CHECK(arm_ext_bytes_contain(hay, sizeof(hay)-1, n, nl) ==
+              naive_contains(hay, sizeof(hay)-1, n, nl));
+    }
+    /* 边界:needle 等长/超长/空 */
+    CHECK(arm_ext_bytes_contain(hay, 3, (const uint8_t *)"aaa", 3) == 1);
+    CHECK(arm_ext_bytes_contain(hay, 2, (const uint8_t *)"aaa", 3) == 0);
+    CHECK(arm_ext_bytes_contain(hay, 5, (const uint8_t *)"", 0) == 0);
+
+    /* FNV-1a 已知向量 */
+    CHECK(arm_ext_fnv1a("", 0) == 2166136261u);
+    CHECK(arm_ext_fnv1a("a", 1) == 0xE40C292Cu);
+}
+
 int main(void) {
     /* 不变量检查器由环境变量门控(进程内缓存),测试进程先行开启 */
     setenv("VMRP_ARM_EXT_INVARIANTS", "1", 1);
     test_arm_alloc();
     test_verify_invariants();
     test_merge_protect_ranges();
+    test_bytes_contain();
     test_cut_range_middle_split();
     test_cut_range_trim_head();
     test_cut_range_trim_tail();
