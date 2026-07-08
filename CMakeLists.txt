@@ -291,6 +291,23 @@ else()
 endif()
 set_source_files_properties(${VMRP_MYTHROAD_SOURCES} PROPERTIES COMPILE_OPTIONS "${VMRP_UNDEFINE_VMRP_OPTION}")
 
+# ARM EXT 执行器源码组(Phase 2 拆分中,见 docs/arm-ext-executor-refactor-plan.md
+# 第五节):从单文件 arm_ext_executor.c 逐步抽取到 src/arm_ext/ 子目录,三个
+# 构建目标(vmrp/wasm/shared)统一引用本变量,避免漏改。
+# 已抽出的拆分单元(vmrp-unit 只链接这部分,executor 主体经测试文件按翻译单元包含)
+set(VMRP_ARM_EXT_SPLIT_SOURCES
+  ./src/arm_ext/aex_support.c
+  ./src/arm_ext/aex_pack.c
+  ./src/arm_ext/aex_mem.c
+  ./src/arm_ext/aex_screen.c
+  ./src/arm_ext/aex_guard.c
+  ./src/arm_ext/aex_exec.c
+)
+set(VMRP_ARM_EXT_SOURCES
+  ./src/arm_ext_executor.c
+  ${VMRP_ARM_EXT_SPLIT_SOURCES}
+)
+
 # 严格警告作用面 = vmrp 可执行文件里除 mythroad 子项目外的全部第一方源码
 set(VMRP_FIRST_PARTY_SOURCES
   ${VMRP_PLATFORM_SDL_SOURCES}
@@ -298,7 +315,7 @@ set(VMRP_FIRST_PARTY_SOURCES
   ./src/native_platform_memory.c
   ./src/native_dsm_funcs.c
   ./src/runtime_native_mythroad.c
-  ./src/arm_ext_executor.c
+  ${VMRP_ARM_EXT_SOURCES}
   ./src/app_compat.c
   ./src/app_compat_gghjt.c
 )
@@ -319,7 +336,7 @@ add_executable(vmrp
   ./src/native_platform_memory.c
   ./src/native_dsm_funcs.c
   ./src/runtime_native_mythroad.c
-  ./src/arm_ext_executor.c
+  ${VMRP_ARM_EXT_SOURCES}
   ./src/app_compat.c
   ./src/app_compat_gghjt.c
   ${VMRP_MYTHROAD_SOURCES}
@@ -354,6 +371,7 @@ if(NOT MSVC)
   add_executable(vmrp-unit
     ./test/unit/test_arm_ext.c
     ./test/unit/unit_stubs.c
+    ${VMRP_ARM_EXT_SPLIT_SOURCES}
     ./src/utils.c
     ./src/rbtree.c
     ./src/fileLib.c
@@ -382,7 +400,7 @@ if(EMCC)
     ./src/native_platform_memory.c
     ./src/native_dsm_funcs.c
     ./src/runtime_native_mythroad.c
-    ./src/arm_ext_executor.c
+    ${VMRP_ARM_EXT_SOURCES}
     ./src/app_compat.c
     ./src/app_compat_gghjt.c
     ${VMRP_MYTHROAD_SOURCES}
@@ -431,7 +449,7 @@ if(VMRP_BUILD_SHARED)
     ./src/native_platform_memory.c
     ./src/native_dsm_funcs.c
     ./src/runtime_native_mythroad.c
-    ./src/arm_ext_executor.c
+    ${VMRP_ARM_EXT_SOURCES}
     ./src/app_compat.c
     ./src/app_compat_gghjt.c
     ${VMRP_MYTHROAD_SOURCES}
