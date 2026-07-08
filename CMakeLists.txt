@@ -302,6 +302,7 @@ set(VMRP_ARM_EXT_SPLIT_SOURCES
   ./src/arm_ext/aex_screen.c
   ./src/arm_ext/aex_guard.c
   ./src/arm_ext/aex_exec.c
+  ./src/arm_ext/aex_table.c
 )
 set(VMRP_ARM_EXT_SOURCES
   ./src/arm_ext_executor.c

@@ -49,7 +49,6 @@ extern const char *mr_get_start_filename(void);
 extern const char *mr_get_old_pack_filename(void);
 extern const char *mr_get_old_start_filename(void);
 extern const char *mr_get_start_fileparameter(void);
-typedef void (*MR_PLAT_EX_CB)(uint8 *output, int32 output_len);
 extern int32 mr_platEx(int32 code, uint8 *input, int32 input_len,
                        uint8 **output, int32 *output_len, MR_PLAT_EX_CB *cb);
 extern int32 mr_ferrno(void);
@@ -92,9 +91,7 @@ extern uint16 *c2u(const char *cp, int *err, int *size);
 extern int wstrlen(char *txt);
 
 /* mrporting.h 中定义的 mr_info 返回值，此处直接使用数值避免引入额外头文件 */
-#define MRP_IS_FILE 1
 /* mr_sendSms flag requesting an asynchronous MR_SMS_RESULT event. */
-#define ARM_EXT_MR_SMS_RESULT_FLAG 16
 
 extern void _DrawPoint(int16 x, int16 y, uint16 nativecolor);
 extern void _DrawBitmap(uint16 *p, int16 x, int16 y, uint16 w, uint16 h, uint16 rop, uint16 transcoler, int16 sx, int16 sy, int16 mw);
@@ -117,7 +114,6 @@ extern int32 mr_socket(int32 type, int32 protocol);
 extern int32 mr_connect(int32 s, int32 ip, uint16 port, int32 type);
 extern int32 mr_closeSocket(int32 s);
 extern int32 mr_getSocketState(int32 s);
-typedef int32 (*MR_INIT_NETWORK_CB_t)(int32 result);
 extern int32 mr_initNetwork(MR_INIT_NETWORK_CB_t cb, const char *mode);
 extern int32 mr_recv(int32 s, char *buf, int len);
 extern int32 mr_recvfrom(int32 s, char *buf, int len, int32 *ip, uint16 *port);
@@ -128,7 +124,7 @@ extern int32 my_openSocketCount(void);
 extern const char *mr_get_last_written_mrp_path(void);
 extern const uint8 *mr_get_last_written_mrp_data(uint32 *len);
 
-static uint32_t arm_addr(ArmExtModule *m, const void *ptr) {
+uint32_t arm_addr(ArmExtModule *m, const void *ptr) {
     if (ptr == NULL) return 0;
     const uint8_t *p = (const uint8_t *)ptr;
     if (m && m->mem && p >= m->mem && p < m->mem + EXT_MEM_SIZE)
@@ -539,7 +535,7 @@ static void arm_ext_init_pack_names(ArmExtModule *m) {
              (alias && *alias) ? alias : m->pack_host_path);
 }
 
-static const char *arm_ext_pack_to_host_path(ArmExtModule *m, const char *pack) {
+const char *arm_ext_pack_to_host_path(ArmExtModule *m, const char *pack) {
     if (!m || !pack || !*pack) return pack;
     if (m->pack_alias[0] && m->pack_host_path[0] &&
         strcmp(pack, m->pack_alias) == 0)
@@ -825,7 +821,7 @@ static int arm_ext_screen_owner_is_visible(ArmExtModule *m,
                                            uint32_t owner_p_addr,
                                            uint32_t owner_helper_addr);
 static void capture_timer_dispatches(ArmExtModule *m);
-static ArmExtNestedModule *arm_ext_resource_owner_for_lr(ArmExtModule *m,
+ArmExtNestedModule *arm_ext_resource_owner_for_lr(ArmExtModule *m,
                                                          uint32_t *owner_p,
                                                          uint32_t *owner_h);
 static void sync_internal_state_to_arm(ArmExtModule *m);
@@ -1150,7 +1146,7 @@ static const char *arm_ext_child_package_context(ArmExtModule *m,
     return package_host_path;
 }
 
-static void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
+void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
                                          uint32_t file_len, uint32_t p_addr,
                                          uint32_t helper_addr) {
     if (!m || !file_addr || !file_len || !p_addr || !helper_addr) return;
@@ -1285,7 +1281,7 @@ static uint32_t arm_ext_code_u32(const uint8_t *code, uint32_t off) {
            ((uint32_t)code[off + 3u] << 24);
 }
 
-static void arm_ext_diag_fd_set(ArmExtModule *m, int32_t handle,
+void arm_ext_diag_fd_set(ArmExtModule *m, int32_t handle,
                                 const char *name) {
     if (!m || handle <= 0 || !name) return;
     ArmExtDiagFd *free_slot = NULL;
@@ -1304,7 +1300,7 @@ static void arm_ext_diag_fd_set(ArmExtModule *m, int32_t handle,
     snprintf(free_slot->name, sizeof(free_slot->name), "%s", name);
 }
 
-static const char *arm_ext_diag_fd_name(ArmExtModule *m, int32_t handle) {
+const char *arm_ext_diag_fd_name(ArmExtModule *m, int32_t handle) {
     if (!m || handle <= 0) return "";
     for (uint32_t i = 0; i < ARM_EXT_DIAG_FD_MAX; ++i) {
         if (m->diag_fds[i].handle == handle)
@@ -1313,7 +1309,7 @@ static const char *arm_ext_diag_fd_name(ArmExtModule *m, int32_t handle) {
     return "";
 }
 
-static void arm_ext_diag_fd_clear(ArmExtModule *m, int32_t handle) {
+void arm_ext_diag_fd_clear(ArmExtModule *m, int32_t handle) {
     if (!m || handle <= 0) return;
     for (uint32_t i = 0; i < ARM_EXT_DIAG_FD_MAX; ++i) {
         if (m->diag_fds[i].handle == handle) {
@@ -1324,7 +1320,7 @@ static void arm_ext_diag_fd_clear(ArmExtModule *m, int32_t handle) {
     }
 }
 
-static void arm_ext_diag_owner_for_lr(ArmExtModule *m,
+void arm_ext_diag_owner_for_lr(ArmExtModule *m,
                                       uint32_t *owner_p,
                                       uint32_t *owner_h,
                                       uint32_t *owner_file,
@@ -1533,7 +1529,7 @@ static int arm_ext_private_child_record_src_is_unsafe(
     return 0;
 }
 
-static void arm_ext_repair_private_child_record_bridges(ArmExtModule *m,
+void arm_ext_repair_private_child_record_bridges(ArmExtModule *m,
                                                         uint32_t record,
                                                         uint32_t file_addr,
                                                         uint32_t file_len) {
@@ -1931,7 +1927,7 @@ static int arm_ext_child_needs_short_pack_alias(ArmExtModule *m,
     return 0;
 }
 
-static void arm_ext_apply_short_pack_alias_for_private_child(ArmExtModule *m,
+void arm_ext_apply_short_pack_alias_for_private_child(ArmExtModule *m,
                                                              uint32_t file_addr,
                                                              uint32_t file_len,
                                                              uint32_t p_addr) {
@@ -2120,7 +2116,7 @@ static int arm_ext_read_internal_loader_tuple(ArmExtModule *m,
     return 1;
 }
 
-static int arm_ext_has_internal_loader_chunk(ArmExtModule *m,
+int arm_ext_has_internal_loader_chunk(ArmExtModule *m,
                                              uint32_t file_addr,
                                              uint32_t file_len) {
     if (!m || !file_addr || !file_len) return 0;
@@ -2137,7 +2133,7 @@ static int arm_ext_has_internal_loader_chunk(ArmExtModule *m,
     return 0;
 }
 
-static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
+int arm_ext_sync_internal_nested_module(ArmExtModule *m,
                                                uint32_t file_addr,
                                                uint32_t file_len) {
     if (!m || !file_addr || !file_len) return 0;
@@ -2382,7 +2378,7 @@ static int arm_ext_mirror_read_file_to_adjacent_slot(ArmExtModule *m,
     return 1;
 }
 
-static void arm_ext_drop_overlapping_stale_nested_modules(ArmExtModule *m,
+void arm_ext_drop_overlapping_stale_nested_modules(ArmExtModule *m,
                                                           uint32_t file_addr,
                                                           uint32_t file_len) {
     if (!m || !file_addr || !file_len) return;
@@ -2844,7 +2840,7 @@ static void arm_ext_sync_r9_for_code_addr(ArmExtModule *m, uint32_t addr) {
     }
 }
 
-static ArmExtNestedModule *arm_ext_resource_owner_for_lr(ArmExtModule *m,
+ArmExtNestedModule *arm_ext_resource_owner_for_lr(ArmExtModule *m,
                                                          uint32_t *owner_p,
                                                          uint32_t *owner_helper) {
     uint32_t helper = 0;
@@ -2926,7 +2922,7 @@ static uint32_t alloc_string(ArmExtModule *m, const char *value) {
     return slot;
 }
 
-static uint32_t alloc_bytes(ArmExtModule *m, const void *value, uint32_t len) {
+uint32_t alloc_bytes(ArmExtModule *m, const void *value, uint32_t len) {
     uint32_t slot = arm_alloc(m, len);
     if (slot && value && len) memcpy(arm_ptr(m, slot), value, len);
     return slot;
@@ -3001,7 +2997,7 @@ static void arm_ext_set_child_record_pack_name(ArmExtModule *m,
     memcpy(arm_ptr(m, record + 100u * 4u), &slot, 4);
 }
 
-static void internal_slot_write(ArmExtModule *m, uint32_t slot, uint32_t value) {
+void internal_slot_write(ArmExtModule *m, uint32_t slot, uint32_t value) {
     if (slot) memcpy(arm_ptr(m, slot), &value, 4);
 }
 
@@ -3099,7 +3095,7 @@ static void sync_timer_state_from_arm(ArmExtModule *m) {
     }
 }
 
-static void arm_ext_record_timer_owner(ArmExtModule *m) {
+void arm_ext_record_timer_owner(ArmExtModule *m) {
     if (!m) return;
     uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR) & ~1u;
     uint32_t owner_p = 0;
@@ -3362,6 +3358,15 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         m->busy_wait_start_ms = 0;
     }
 
+    /* Phase 3:已函数化的 case 走 handler 表(aex_table.c);NULL 槽位
+     * 回落残余 switch,逐批迁移直至清空 */
+    if (aex_table_handlers[idx]) {
+        AexTableCtx c = { idx, r0, r1, r2, r3, MR_SUCCESS };
+        aex_table_handlers[idx](m, &c);
+        cb_ret(m, c.ret);
+        return;
+    }
+
     switch (idx) {
         case 0:
             /* 原生 table[0] = mr_malloc(first-fit,mem.c)。先走 guest
@@ -3412,38 +3417,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 }
             }
             break;
-        case 1:
-            /* 原生 table[1] = mr_free(p,len):池内块插回空闲链表并合并
-             * ("先 free 再让 readFile 复用该块"的原生模式据此成立);
-             * bump 后备块进宿主侧回收器(只认登记过的地址)。 */
-            arm_ext_app_mem_free(m, r0, r1);
-            note_origin_mem_free(m, r1);
-            ret = MR_SUCCESS;
-            break;
-        case 2: {
-            /* 原生 table[2] = mr_realloc(p,oldlen,newlen),mem.c:
-             * p==NULL 等价 malloc;newlen==0 等价 free 返回 NULL;
-             * 其余 malloc→拷贝 min(oldlen,newlen)→free(p,oldlen)。
-             * 分配同 table[0] 池优先、bump 后备;统计与修复前一致仅记
-             * 新块(note_origin_mem_alloc)。 */
-            if (!r0) {
-                ret = arm_ext_app_mem_malloc(m, r2);
-                if (ret) note_origin_mem_alloc(m, r2);
-                break;
-            }
-            if (!r2) { arm_ext_app_mem_free(m, r0, r1); ret = 0; break; }
-            uint32_t p = arm_ext_app_mem_malloc(m, r2);
-            if (p) {
-                note_origin_mem_alloc(m, r2);
-                /* B2:旧块指针非法(guest 状态损坏)时跳过拷贝,不解引用 NULL */
-                uint32_t n = r1 < r2 ? r1 : r2;
-                void *dst2 = arm_ptr_span(m, p, n);
-                void *src2 = arm_ptr_span(m, r0, n);
-                if (n && dst2 && src2) memmove(dst2, src2, n);
-                arm_ext_app_mem_free(m, r0, r1);
-            }
-            ret = p;
-        } break;
         case 3: {
             /* B2:两端都完整可映射才执行,guest 传坏指针时不解引用 NULL */
             void *cpy_dst = arm_ptr_span(m, r0, r2);
@@ -3469,61 +3442,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             ret = r0; break;
         /* case 4-9(B2):指针非法时跳过宿主操作;dst 类调用返回值仍是 r0,
          * 比较类返回 0(ret 初值)。只消除宿主 NULL 解引用,不改合法路径 */
-        case 4: {
-            void *mv_dst = arm_ptr_span(m, r0, r2);
-            void *mv_src = arm_ptr_span(m, r1, r2);
-            if (r2 && mv_dst && mv_src) memmove(mv_dst, mv_src, r2);
-            ret = r0;
-        } break;
-        case 5: {
-            const char *cp_src = arm_str(m, r1);
-            uint32_t n = (uint32_t)strlen(cp_src) + 1u;
-            char *cp_dst = (char *)arm_ptr_span(m, r0, n);
-            if (cp_dst) memcpy(cp_dst, cp_src, n); /* 等价 strcpy(含 NUL) */
-            ret = r0;
-        } break;
-        case 6: {
-            char *ncp_dst = (char *)arm_ptr_span(m, r0, r2);
-            if (r2 && ncp_dst)
-                arm_ext_guest_strncpy(ncp_dst, arm_str(m, r1), r2);
-            ret = r0;
-        } break;
-        case 7: {
-            const char *cat_src = arm_str(m, r1);
-            char *cat_dst0 = (char *)arm_ptr(m, r0);
-            if (cat_dst0) {
-                uint32_t need = (uint32_t)strlen(cat_dst0) +
-                                (uint32_t)strlen(cat_src) + 1u;
-                char *cat_dst = (char *)arm_ptr_span(m, r0, need);
-                if (cat_dst) strcat(cat_dst, cat_src);
-            }
-            ret = r0;
-        } break;
-        case 8: {
-            const char *ncat_src = arm_str(m, r1);
-            char *ncat_dst0 = (char *)arm_ptr(m, r0);
-            if (ncat_dst0) {
-                uint32_t sl = (uint32_t)strlen(ncat_src);
-                if (sl > r2) sl = r2;
-                uint32_t need = (uint32_t)strlen(ncat_dst0) + sl + 1u;
-                char *ncat_dst = (char *)arm_ptr_span(m, r0, need);
-                if (ncat_dst) strncat(ncat_dst, ncat_src, r2);
-            }
-            ret = r0;
-        } break;
-        case 9: {
-            const void *cmp_a = arm_ptr_span(m, r0, r2);
-            const void *cmp_b = arm_ptr_span(m, r1, r2);
-            if (r2 && cmp_a && cmp_b) ret = memcmp(cmp_a, cmp_b, r2);
-        } break;
-        case 10: ret = strcmp(arm_str(m, r0), arm_str(m, r1)); break;
-        case 11: ret = strncmp(arm_str(m, r0), arm_str(m, r1), r2); break;
-        case 13: {
-            /* B2:区间可映射才搜索 */
-            void *hay = arm_ptr_span(m, r0, r2);
-            void *p = (hay && r2) ? memchr(hay, (int)r1, r2) : NULL;
-            ret = p ? arm_addr(m, p) : 0;
-        } break;
         case 14: {
             /* B2:区间可映射才清写 */
             void *set_dst = arm_ptr_span(m, r0, r2);
@@ -3545,309 +3463,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 }
             }
             ret = r0; break;
-        case 12: ret = strcoll(arm_str(m, r0), arm_str(m, r1)); break;
-        case 15: ret = strlen(arm_str(m, r0)); break;
-        case 16: {
-            char *hay = (char *)arm_ptr(m, r0);
-            char *nee = (char *)arm_ptr(m, r1);
-            if (!hay || !nee) { ret = 0; break; }
-            char *p = strstr(hay, nee);
-            ret = p ? arm_addr(m, p) : 0;
-        } break;
-        case 17: {
-            char buf[1024];
-            ret = format_arm(m, buf, sizeof(buf), arm_str(m, r1), 2);
-            /* B2:输出区可映射才写回 */
-            char *fmt_dst =
-                (char *)arm_ptr_span(m, r0, (uint32_t)strlen(buf) + 1u);
-            if (fmt_dst) memcpy(fmt_dst, buf, strlen(buf) + 1u);
-        } break;
-        case 18: ret = atoi(arm_str(m, r0)); break;
-        case 19: ret = (uint32_t)strtoul(arm_str(m, r0), NULL, r1); break;
-        case 20: ret = mr_rand(); break;
-        case 22:
-            ret = mr_stop_ex((int16)r0);
-            internal_slot_write(m, m->mr_state_slot, 0);
-            internal_slot_write(m, m->mr_timer_state_slot, 0);
-            m->host_timer_pending = 0;
-            m->timer_p_addr = 0;
-            m->timer_helper_addr = 0;
-            break;
-        case 25: {
-            uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
-            uint32_t nested_file_addr = 0;
-            uint32_t nested_file_len = 0;
-            int nested = arm_ext_nested_exec_range_for_lr(
-                m, lr, &nested_file_addr, &nested_file_len);
-            uint32_t p_addr = nested ? m->nested_p_addr : 0;
-            int reuse_nested_p = p_addr && r1 == sizeof(mr_c_function_P_t) && arm_ptr(m, p_addr);
-            uint32_t p_len = r1;
-            /* wrapper ext 的 dispatch 入口会将 SP 设为 P + 0x20000（见 gxdzc 的
-             * 0x800FC: mov sp, P+0x20000），无论 ext 请求的 P 大小是多少都假定
-             * 有 128KB 栈空间。确保分配至少 EXT_WRAPPER_STACK_SIZE 避免栈溢出
-             * 到代码段导致数据损坏。 */
-            if (!nested && p_len < EXT_WRAPPER_STACK_SIZE + sizeof(mr_c_function_P_t)) {
-                p_len = EXT_WRAPPER_STACK_SIZE + sizeof(mr_c_function_P_t);
-            }
-            if (!p_addr || r1 != sizeof(mr_c_function_P_t) || !arm_ptr(m, p_addr)) {
-                p_addr = arm_alloc(m, p_len);
-            }
-            if (p_addr && !reuse_nested_p) memset(arm_ptr(m, p_addr), 0, p_len);
-            if (nested) {
-                memcpy(arm_ptr(m, nested_file_addr + 4), &p_addr, 4);
-                uint32_t wrapper_rw = 0;
-                memcpy(&wrapper_rw, arm_ptr(m, m->p_addr), 4);
-                if (wrapper_rw) {
-                    uint32_t callback_slot = wrapper_rw + 0x1A0u;
-                    if (arm_ptr(m, callback_slot))
-                        memcpy(arm_ptr(m, callback_slot), &r0, 4);
-                }
-                m->active_helper_addr = r0;
-                m->active_p_addr = p_addr;
-                arm_ext_clear_foreground_screen_owner(m);
-                arm_ext_record_nested_module(m, nested_file_addr,
-                                             nested_file_len, p_addr, r0);
-                if (!m->primary_helper_addr) {
-                    m->primary_helper_addr = r0;
-                    m->primary_p_addr = p_addr;
-                    m->primary_file_addr = nested_file_addr;
-                    m->primary_file_len = nested_file_len;
-                    /* Host table[25] only registers the child helper. Unlike
-                     * cfunction.ext's internal loader, it has not called the
-                     * child lifecycle handler yet, so mythroad.c must issue
-                     * one foreground code=0 call after the wrapper returns. */
-                    m->primary_host_init_pending = 1;
-                    /* wrapper 的 suspend/resume 通过 extChunk[8] 向 game
-                     * 派发 pauseApp/resumeApp。真机上 wrapper 在加载 nested
-                     * ext 时设置此字段，VMRP 下可能未被初始化（保持为 0），
-                     * 导致 suspend/resume 的 blx extChunk[8] 跳转到 0。
-                     * 此处在首次设置 primary_helper 时补写。 */
-                    uint32_t np = p_addr;
-                    uint32_t ec = 0;
-                    if (np && arm_ptr(m, np + 12))
-                        memcpy(&ec, arm_ptr(m, np + 12), 4);
-                    /* （extChunk[8] 修复移到 modal dispatch 路由中动态执行，
-                     * 因为 wrapper ARM 代码会在运行中覆盖此字段） */
-                } else if (m->primary_file_addr) {
-                    memcpy(arm_ptr(m, m->primary_file_addr + 4), &p_addr, 4);
-                }
-                if (arm_ext_trace_on()) {
-                    printf("arm_ext_executor: nested helper=0x%X P=0x%X len=%u primary=0x%X/0x%X\n",
-                           r0, p_addr, r1, m->primary_helper_addr, m->primary_p_addr);
-                }
-                m->nested_loading = 1;
-                m->nested_p_addr = 0;
-            } else {
-                m->helper_addr = r0;
-                m->p_addr = p_addr;
-                m->active_helper_addr = r0;
-                m->active_p_addr = p_addr;
-                arm_ext_clear_foreground_screen_owner(m);
-                memcpy(arm_ptr(m, EXT_CODE_ADDR + 4), &m->p_addr, 4);
-            }
-            ret = p_addr ? MR_SUCCESS : MR_FAILED;
-        } break;
-        case 26: {
-            char buf[1024];
-            const char *fmt = arm_str(m, r0);
-            format_arm(m, buf, sizeof(buf), fmt, 1);
-            mr_printf("%s", buf);
-            ret = 0;
-        } break;
-        case 27: {
-            uint32_t base = m->origin_mem_addr;
-            uint32_t len = m->origin_mem_len;
-            if (r0) memcpy(arm_ptr(m, r0), &base, 4);
-            if (r1) memcpy(arm_ptr(m, r1), &len, 4);
-            ret = base ? MR_SUCCESS : MR_FAILED;
-        } break;
-        case 28: ret = MR_SUCCESS; break;
-        case 29: {
-            void *bmp = arm_ptr(m, r0);
-            uint16_t h = (uint16_t)arg_read(m, 4);
-            uint32_t claim_p = 0, claim_helper = 0;
-            if (bmp) {
-                int screen_stride_source =
-                    arm_ext_bitmap_source_uses_screen_stride(m, r0);
-                int32_t source_stride = screen_stride_source ?
-                    arm_ext_screen_stride(m) : (int32_t)(uint16)r3;
-                int32_t source_x = screen_stride_source ? (int16)r1 : 0;
-                int32_t source_y = screen_stride_source ? (int16)r2 : 0;
-                int accept = arm_ext_should_accept_visible_present(m, &claim_p,
-                                                                   &claim_helper);
-                if (arm_ext_diag_on()) {
-                    int covered_diag = arm_ext_owner_is_covered_by_foreground(
-                        m, claim_p, claim_helper);
-                    printf("DIAG present29 x=%d y=%d w=%u h=%u accept=%d claimP=0x%X claimH=0x%X covered=%d\n",
-                           (int16)r1, (int16)r2, (uint16)r3, h, accept,
-                           claim_p, claim_helper, covered_diag);
-                    arm_ext_diag_dump_layer_state(m, "present29");
-                }
-                if (accept) {
-                    int covered = arm_ext_owner_is_covered_by_foreground(
-                        m, claim_p, claim_helper);
-                    arm_ext_present_bitmap_rect(m, bmp, (int16)r1, (int16)r2,
-                                                (uint16)r3, h,
-                                                source_stride, source_x,
-                                                source_y, covered);
-                }
-                /*
-                 * A rejected foreground present is still a write into the
-                 * shared backing screen cache when its source is a bitmap.
-                 * Foreground overlays can later proxy uncovered regions from
-                 * that cache; skipping this mirror leaves those regions black
-                 * even though the visible submit was correctly blocked.
-                 */
-                arm_ext_mirror_draw_bitmap_to_screen(m, r0, (int16)r1,
-                                                     (int16)r2,
-                                                     (uint16)r3, h,
-                                                     source_stride, source_x,
-                                                     source_y);
-                if (accept) {
-                    arm_ext_finish_accepted_screen_write(m, claim_p,
-                                                         claim_helper);
-                    arm_ext_claim_foreground_screen_rect(m, claim_p,
-                                                         claim_helper,
-                                                         (int16)r1,
-                                                         (int16)r2,
-                                                         (uint16)r3, h);
-                    if (arm_ext_owner_is_foreground_child(m, claim_p,
-                                                          claim_helper)) {
-                        arm_ext_note_foreground_cover_rect(m, (int16)r1,
-                                                           (int16)r2,
-                                                           (uint16)r3, h);
-                    }
-                }
-            }
-            ret = MR_SUCCESS;
-        } break;
-        case 30: {
-            int width = 0;
-            int height = 0;
-            const char *bitmap = mr_getCharBitmap((uint16)r0, (uint16)r1, &width, &height);
-            // 根据字体实际尺寸计算位图大小：gb12=18字节(12行×12位紧凑), gb16=32字节(16行×2字节)
-            int bitmap_size = ((width * height) + 7) >> 3;
-            if (r2 && arm_ptr(m, r2)) memcpy(arm_ptr(m, r2), &width, 4);
-            if (r3 && arm_ptr(m, r3)) memcpy(arm_ptr(m, r3), &height, 4);
-            if (bitmap) {
-                if (!m->char_bitmap_addr) m->char_bitmap_addr = arm_alloc(m, 32);
-                /* B5:缓冲固定 32 字节,当前 sky12/sky16 字体最大恰为 32;
-                 * 若将来字体返回更大位图,夹断并告警而不是越界写 ARM 堆 */
-                if (bitmap_size > 32) {
-                    printf("arm_ext_executor: char bitmap %dx%d size %d exceeds 32-byte slot, truncated\n",
-                           width, height, bitmap_size);
-                    bitmap_size = 32;
-                }
-                if (m->char_bitmap_addr && bitmap_size > 0) {
-                    memcpy(arm_ptr(m, m->char_bitmap_addr), bitmap, bitmap_size);
-                    ret = m->char_bitmap_addr;
-                } else {
-                    ret = 0;
-                }
-            } else {
-                ret = 0;
-            }
-        } break;
-        case 31: {
-            uint32_t pc_diag = 0;
-            uint32_t lr_diag = 0;
-            if (arm_ext_diag_on()) {
-                pc_diag = reg_read32(m->uc, UC_ARM_REG_PC);
-                lr_diag = reg_read32(m->uc, UC_ARM_REG_LR);
-                printf("DIAG table31_pre t=%u pc=0x%X lr=0x%X r0=0x%X r1=0x%X r2=0x%X r3=0x%X r4=0x%X r5=0x%X r6=0x%X r7=0x%X r9=0x%X activeP=0x%X activeH=0x%X currentP=0x%X currentH=0x%X timerP=0x%X timerH=0x%X\n",
-                       (uint16)r0, pc_diag, lr_diag,
-                       reg_read32(m->uc, UC_ARM_REG_R0),
-                       reg_read32(m->uc, UC_ARM_REG_R1),
-                       reg_read32(m->uc, UC_ARM_REG_R2),
-                       reg_read32(m->uc, UC_ARM_REG_R3),
-                       reg_read32(m->uc, UC_ARM_REG_R4),
-                       reg_read32(m->uc, UC_ARM_REG_R5),
-                       reg_read32(m->uc, UC_ARM_REG_R6),
-                       reg_read32(m->uc, UC_ARM_REG_R7),
-                       reg_read32(m->uc, UC_ARM_REG_R9),
-                       m->active_p_addr, m->active_helper_addr,
-                       m->current_p_addr, m->current_helper_addr,
-                       m->timer_p_addr, m->timer_helper_addr);
-            }
-            ret = mr_timerStart((uint16)r0);
-            internal_slot_write(m, m->mr_timer_state_slot, 1);
-            mr_timer_state = 1;
-            m->host_timer_pending = 1;
-            arm_ext_record_timer_owner(m);
-            if (arm_ext_diag_on()) {
-                printf("DIAG table31_post ret=0x%X pc=0x%X lr=0x%X r0=0x%X r1=0x%X r2=0x%X r3=0x%X r4=0x%X r5=0x%X r6=0x%X r7=0x%X r9=0x%X activeP=0x%X activeH=0x%X currentP=0x%X currentH=0x%X timerP=0x%X timerH=0x%X\n",
-                       ret, reg_read32(m->uc, UC_ARM_REG_PC),
-                       reg_read32(m->uc, UC_ARM_REG_LR),
-                       reg_read32(m->uc, UC_ARM_REG_R0),
-                       reg_read32(m->uc, UC_ARM_REG_R1),
-                       reg_read32(m->uc, UC_ARM_REG_R2),
-                       reg_read32(m->uc, UC_ARM_REG_R3),
-                       reg_read32(m->uc, UC_ARM_REG_R4),
-                       reg_read32(m->uc, UC_ARM_REG_R5),
-                       reg_read32(m->uc, UC_ARM_REG_R6),
-                       reg_read32(m->uc, UC_ARM_REG_R7),
-                       reg_read32(m->uc, UC_ARM_REG_R9),
-                       m->active_p_addr, m->active_helper_addr,
-                       m->current_p_addr, m->current_helper_addr,
-                       m->timer_p_addr, m->timer_helper_addr);
-            }
-            break;
-        }
-        case 32: {
-            ret = mr_timerStop();
-            internal_slot_write(m, m->mr_timer_state_slot, 0);
-            mr_timer_state = 0;
-            m->host_timer_pending = 0;
-            m->timer_p_addr = 0;
-            m->timer_helper_addr = 0;
-        } break;
-        case 33: {
-            ret = mr_getTime();
-            /* 部分 ext 用忙等循环反复调 mr_getTime() 等待真实时间流逝（如
-             * 菜单切换动画、定时器主循环）。真机上 OS 抢占让时钟自然推进；
-             * 模拟器里需 usleep 让宿主时间走动。连续 200 次无其它 table 调
-             * 用即视为忙等，每轮 usleep 5ms；超 3 秒强制停止 ARM 执行，
-             * 让宿主侧定时器有机会触发再重新进入。 */
-            m->busy_wait_count++;
-            if (m->busy_wait_count == 1) {
-                m->busy_wait_start_ms = ret;
-            }
-            if (m->busy_wait_count >= 200) {
-                usleep(5 * 1000);
-                m->busy_wait_count = 100;
-                uint32_t elapsed_ms = ret - m->busy_wait_start_ms;
-                if (elapsed_ms >= 3000) {
-                    m->busy_wait_count = 0;
-                    m->busy_wait_start_ms = 0;
-                    reg_write32(m->uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
-                    uc_emu_stop(m->uc);
-                }
-            }
-        } break;
-        /* case 34/35(B2):输出结构体指针非法时返回失败,宿主不向 NULL 写 */
-        case 34: {
-            void *dt = arm_ptr(m, r0);
-            ret = dt ? (uint32_t)mr_getDatetime(dt) : (uint32_t)MR_FAILED;
-        } break;
-        case 35: {
-            void *ui = arm_ptr(m, r0);
-            ret = ui ? (uint32_t)mr_getUserInfo(ui) : (uint32_t)MR_FAILED;
-        } break;
-        case 36: ret = mr_sleep(r0); break;
-        case 37:
-            ret = mr_plat((int32)r0, (int32)r1);
-            if (arm_ext_diag_on()) {
-                uint32_t owner_p = 0, owner_h = 0;
-                uint32_t owner_file = 0, owner_len = 0;
-                arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
-                                          &owner_file, &owner_len);
-                printf("DIAG table37 code=%d param=0x%X ret=0x%X lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
-                       (int32_t)r0, r1, ret,
-                       reg_read32(m->uc, UC_ARM_REG_LR),
-                       owner_p, owner_h, owner_file, owner_len,
-                       m->active_p_addr, m->primary_p_addr);
-            }
-            break;
         case 38: {
             int diag_enabled = arm_ext_diag_on();
             uint32_t diag_lr = 0;
@@ -3974,106 +3589,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                        m->primary_p_addr);
             }
         } break;
-        case 39: ret = mr_ferrno(); break;
-        case 40: {
-            const char *open_name = arm_str(m, r0);
-            ret = mr_open(arm_ext_pack_to_host_path(m, open_name), r1);
-            /* 磁盘上找不到时尝试从 MRP 缓存提供虚拟 fd */
-            if (ret == 0 && m->mrp_cache_count > 0) {
-                MrpCacheEntry *ce = mrp_cache_find(m, open_name);
-                if (ce) {
-                    ret = mrp_vfd_open(m, ce->data, ce->data_len);
-                }
-            }
-            if ((int32_t)ret > 0) {
-                arm_ext_diag_fd_set(m, (int32_t)ret, open_name);
-            }
-            if (arm_ext_diag_on()) {
-                uint32_t owner_p = 0, owner_h = 0;
-                ArmExtNestedModule *owner =
-                    arm_ext_resource_owner_for_lr(m, &owner_p, &owner_h);
-                printf("DIAG table40 name='%s' flags=0x%X ret=0x%X lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
-                       open_name, r1, ret, reg_read32(m->uc, UC_ARM_REG_LR),
-                       owner_p, owner_h, owner ? owner->file_addr : 0,
-                       owner ? owner->file_len : 0, m->active_p_addr,
-                       m->primary_p_addr);
-            }
-        } break;
-        case 41: {
-            const char *diag_name = arm_ext_diag_fd_name(m, (int32_t)r0);
-            MrpVirtualFd *vf = mrp_vfd_get(m, r0);
-            if (vf) { vf->in_use = 0; ret = MR_SUCCESS; }
-            else {
-                ret = mr_close((int32)r0);
-            }
-            if (arm_ext_diag_on()) {
-                uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
-                arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
-                                          &owner_file, &owner_len);
-                printf("DIAG table41 fd=%d name='%s' ret=0x%X lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
-                       (int32_t)r0, diag_name, ret,
-                       reg_read32(m->uc, UC_ARM_REG_LR),
-                       owner_p, owner_h, owner_file, owner_len,
-                       m->active_p_addr, m->primary_p_addr);
-            }
-            if (ret == MR_SUCCESS) {
-                arm_ext_diag_fd_clear(m, (int32_t)r0);
-            }
-        } break;
-        case 42: {
-            const char *info_name = arm_str(m, r0);
-            ret = mr_info(arm_ext_pack_to_host_path(m, info_name));
-            /* 磁盘上不存在时检查 MRP 缓存 */
-            if (ret != MRP_IS_FILE && m->mrp_cache_count > 0) {
-                if (mrp_cache_find(m, info_name))
-                    ret = MRP_IS_FILE;
-            }
-            if (arm_ext_diag_on()) {
-                uint32_t owner_p = 0, owner_h = 0;
-                ArmExtNestedModule *owner =
-                    arm_ext_resource_owner_for_lr(m, &owner_p, &owner_h);
-                printf("DIAG table42 name='%s' ret=0x%X lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
-                       info_name, ret, reg_read32(m->uc, UC_ARM_REG_LR),
-                       owner_p, owner_h, owner ? owner->file_addr : 0,
-                       owner ? owner->file_len : 0, m->active_p_addr,
-                       m->primary_p_addr);
-            }
-        } break;
-        case 43: {
-            void *src = arm_ptr(m, r1);
-            uint32_t len = r2;
-            int substituted = 0;
-            void *new_src = NULL;
-            uint32_t new_len = 0;
-            if (m->profile && m->profile->intercept_write &&
-                m->profile->intercept_write(m, m->app_state, r0, r1, r2,
-                                            &new_src, &new_len)) {
-                src = new_src;
-                len = new_len;
-                substituted = 1;
-            }
-            ret = mr_write((int32)r0, src, len);
-            if (substituted) {
-                if (m->profile && m->profile->post_write_cleanup)
-                    m->profile->post_write_cleanup(m->app_state);
-                /* ret 为 uint32_t,与 len 直接比较即位模式相等判定(与原
-                 * (int32_t) 强转比较数值等价),消除符号比较告警 */
-                if (ret == len) ret = (int32_t)r2;
-            }
-            if (arm_ext_diag_on()) {
-                char preview[192];
-                uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
-                arm_ext_diag_preview_bytes(src, len, preview, sizeof(preview));
-                arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
-                                          &owner_file, &owner_len);
-                printf("DIAG table43 fd=%d name='%s' src=0x%X len=%u ret=0x%X subst=%d preview='%s' lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
-                       (int32_t)r0, arm_ext_diag_fd_name(m, (int32_t)r0),
-                       r1, r2, ret, substituted, preview,
-                       reg_read32(m->uc, UC_ARM_REG_LR),
-                       owner_p, owner_h, owner_file, owner_len,
-                       m->active_p_addr, m->primary_p_addr);
-            }
-        } break;
         case 44: {
             /* B2:整个读缓冲区可映射才交给宿主写(对照 vfd 分支的 hp 判空,
              * 真实 mr_read 分支此前无保护) */
@@ -4146,379 +3661,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                         }
                     }
                 }
-            }
-        } break;
-        case 45: {
-            MrpVirtualFd *vf45 = mrp_vfd_get(m, r0);
-            if (vf45) {
-                /* SEEK_SET=0, SEEK_CUR=1, SEEK_END=2 */
-                int32_t new_pos;
-                if ((int)r2 == 0) new_pos = (int32_t)r1;
-                else if ((int)r2 == 1) new_pos = (int32_t)vf45->pos + (int32_t)r1;
-                else new_pos = (int32_t)vf45->data_len + (int32_t)r1;
-                if (new_pos < 0) new_pos = 0;
-                if ((uint32_t)new_pos > vf45->data_len) new_pos = (int32_t)vf45->data_len;
-                vf45->pos = (uint32_t)new_pos;
-                ret = MR_SUCCESS;
-            } else {
-                ret = mr_seek((int32)r0, (int32)r1, (int)r2);
-            }
-        } break;
-        case 46: {
-            const char *len_name = arm_str(m, r0);
-            ret = mr_getLen(arm_ext_pack_to_host_path(m, len_name));
-            /* 原有 "ret < 0 时查 MRP 缓存" 回退块因 ret 为 uint32_t 恒不成立,
-             * 属从未生效的死代码(-Wtype-limits 证实),按"禁止兜底逻辑"规范
-             * 删除;删除即保持现行为,getLen 失败语义与真机一致由调用方处理 */
-            if (arm_ext_diag_on()) {
-                uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
-                arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
-                                          &owner_file, &owner_len);
-                printf("DIAG table46 name='%s' ret=0x%X lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
-                       len_name, ret, reg_read32(m->uc, UC_ARM_REG_LR),
-                       owner_p, owner_h, owner_file, owner_len,
-                       m->active_p_addr, m->primary_p_addr);
-            }
-        } break;
-        case 47: ret = mr_remove(arm_str(m, r0)); break;
-        case 48: {
-            const char *old_name = arm_str(m, r0);
-            const char *new_name = arm_str(m, r1);
-            ret = mr_rename(old_name, new_name);
-        } break;
-        case 49: ret = mr_mkDir(arm_str(m, r0)); break;
-        case 50: ret = mr_rmDir(arm_str(m, r0)); break;
-        case 51: ret = mr_findStart(arm_str(m, r0), arm_ptr(m, r1), r2); break;
-        case 52: ret = mr_findGetNext((int32)r0, arm_ptr(m, r1), r2); break;
-        case 53: ret = mr_findStop((int32)r0); break;
-        case 54: ret = mr_exit(); break;
-        case 55: ret = mr_startShake((int32)r0); break;
-        case 56: ret = mr_stopShake(); break;
-        case 57: ret = mr_playSound((int)r0, arm_ptr(m, r1), r2, (int32)r3); break;
-        case 58: ret = mr_stopSound((int)r0); break;
-        /* table[59] mr_sendSms(pNumber, pContent, encode) */
-        case 59: {
-            int32 flags = (int32)r2;
-            ret = mr_sendSms(arm_str(m, r0), arm_str(m, r1), flags);
-            if (ret == MR_SUCCESS && (flags & ARM_EXT_MR_SMS_RESULT_FLAG)) {
-                m->pending_sms_result = 1;
-                m->pending_sms_result_value = ret;
-            }
-        } break;
-        case 60: mr_call(arm_str(m, r0)); ret = MR_SUCCESS; break;
-        /* table[61] mr_getNetworkID()：返回 0 表示移动网络（MR_NET_ID_MOBILE） */
-        case 61: ret = 0; break;
-        /* table[81] mr_initNetwork(cb, mode)：读取 mode 并设置 isCMWAP 标志，
-         * 同步返回成功。桌面端没有真实 GPRS 网络，但需要 isCMWAP 控制后续
-         * send/recv 的代理模拟逻辑。 */
-        case 81: {
-            const char *mode_str = arm_str(m, r1);
-            ret = mr_initNetwork(NULL, mode_str);
-        } break;
-        /* table[82] mr_closeNetwork()：return success，跟 mr_initNetwork 配对。 */
-        case 82: ret = MR_SUCCESS; break;
-        /* table[83] mr_getHostByName(name, cb)。
-         * 异步回调 cb 是 ARM 虚拟地址，不能在宿主线程调用（会把 ARM
-         * 地址当宿主函数指针，段错误）。绕过 DSM 回调链直接调用底层
-         * my_getHostByName(cb=NULL) 走同步 DNS 解析路径，返回 IP。 */
-        case 83: {
-            const char *host = arm_str(m, r0);
-            ret = my_getHostByName(NULL, host, NULL, NULL);
-        } break;
-        case 84: ret = mr_socket((int32)r0, (int32)r1); break;
-        case 85: ret = mr_connect((int32)r0, (int32)r1, (uint16)r2, (int32)r3); break;
-        case 86:
-            ret = mr_closeSocket((int32)r0);
-            if (arm_ext_diag_on()) {
-                uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
-                arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
-                                          &owner_file, &owner_len);
-                printf("DIAG table86 socket=%d ret=0x%X lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
-                       (int32_t)r0, ret, reg_read32(m->uc, UC_ARM_REG_LR),
-                       owner_p, owner_h, owner_file, owner_len,
-                       m->active_p_addr, m->primary_p_addr);
-            }
-            break;
-        case 87: {
-            void *dst = arm_ptr(m, r1);
-            ret = mr_recv((int32)r0, dst, (int)r2);
-            if (arm_ext_diag_on()) {
-                char preview[192];
-                uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
-                uint32_t preview_len = (int32_t)ret > 0 ? (uint32_t)ret : 0;
-                arm_ext_diag_preview_bytes(dst, preview_len, preview,
-                                           sizeof(preview));
-                arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
-                                          &owner_file, &owner_len);
-                printf("DIAG table87 socket=%d want=%u ret=0x%X dst=0x%X preview='%s' lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X openSockets=%d\n",
-                       (int32_t)r0, r2, ret, r1, preview,
-                       reg_read32(m->uc, UC_ARM_REG_LR),
-                       owner_p, owner_h, owner_file, owner_len,
-                       m->active_p_addr, m->primary_p_addr,
-                       my_openSocketCount());
-            }
-        } break;
-        case 88: { uint32_t a4 = arg_read(m, 4);
-                   ret = mr_recvfrom((int32)r0, arm_ptr(m, r1), (int)r2,
-                                    (int32 *)arm_ptr(m, r3), (uint16 *)arm_ptr(m, a4));
-                 } break;
-        case 89: {
-            void *src = arm_ptr(m, r1);
-            if (arm_ext_diag_on()) {
-                char preview[192];
-                uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
-                arm_ext_diag_preview_bytes(src, r2, preview, sizeof(preview));
-                arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
-                                          &owner_file, &owner_len);
-                printf("DIAG table89_pre socket=%d len=%u src=0x%X preview='%s' lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
-                       (int32_t)r0, r2, r1, preview,
-                       reg_read32(m->uc, UC_ARM_REG_LR),
-                       owner_p, owner_h, owner_file, owner_len,
-                       m->active_p_addr, m->primary_p_addr);
-            }
-            ret = mr_send((int32)r0, src, (int)r2);
-            if (arm_ext_diag_on()) {
-                printf("DIAG table89_post socket=%d len=%u ret=0x%X openSockets=%d\n",
-                       (int32_t)r0, r2, ret, my_openSocketCount());
-            }
-        } break;
-        case 90: { uint32_t a4 = arg_read(m, 4);
-                   ret = mr_sendto((int32)r0, arm_ptr(m, r1), (int)r2, (int32)r3, (uint16)a4);
-                 } break;
-        case 69: ret = mr_dialogCreate(arm_str(m, r0), arm_str(m, r1), (int32)r2); break;
-        case 70: ret = mr_dialogRelease((int32)r0); break;
-        case 71: ret = mr_dialogRefresh((int32)r0, arm_str(m, r1), arm_str(m, r2), (int32)r3); break;
-        case 72: ret = mr_textCreate(arm_str(m, r0), arm_str(m, r1), (int32)r2); break;
-        case 73: ret = mr_textRelease((int32)r0); break;
-        case 74: ret = mr_textRefresh((int32)r0, arm_str(m, r1), arm_str(m, r2)); break;
-        case 75: ret = mr_editCreate(arm_str(m, r0), arm_str(m, r1), (int32)r2, (int32)r3); break;
-        case 76: ret = mr_editRelease((int32)r0); break;
-        case 77: {
-            const char *text = mr_editGetText((int32)r0);
-            /* mr_editGetText returns UCS2-BE text.  ASCII therefore contains a
-             * zero high byte before every character, so strlen() would copy only
-             * the first byte and make ARM browser editors see an empty string. */
-            ret = text ? alloc_bytes(m, text, (uint32_t)wstrlen((char *)text) + 2) : 0;
-        } break;
-        /* table[78] mr_winCreate / table[79] mr_winRelease: 窗口功能不支持 */
-        case 78: ret = MR_IGNORE; break;
-        case 79: ret = MR_IGNORE; break;
-        case 80: {
-            /* B2:同 case 34/35 */
-            void *si = arm_ptr(m, r0);
-            ret = si ? (uint32_t)mr_getScreenInfo(si) : (uint32_t)MR_FAILED;
-        } break;
-        case 113: {
-            void *p = arm_ptr(m, r0);
-            if (p) mr_md5_init(p);
-            ret = 0;
-        } break;
-        case 114: {
-            void *p = arm_ptr(m, r0);
-            void *d = arm_ptr(m, r1);
-            if (p && d) mr_md5_append(p, d, (int)r2);
-            ret = 0;
-        } break;
-        case 115: {
-            void *p = arm_ptr(m, r0);
-            void *digest = arm_ptr(m, r1);
-            if (p && digest) mr_md5_finish(p, digest);
-            ret = 0;
-        } break;
-        case 118:
-            if (arm_ext_diag_on()) {
-                printf("DIAG DispUpEx x=%d y=%d w=%u h=%u currentP=0x%X currentH=0x%X activeP=0x%X activeH=0x%X\n",
-                       (int16)r0, (int16)r1, (uint16)r2, (uint16)r3,
-                       m->current_p_addr, m->current_helper_addr,
-                       m->active_p_addr, m->active_helper_addr);
-            }
-            {
-                uint32_t claim_p = 0, claim_helper = 0;
-                int accept = arm_ext_should_accept_visible_present(m, &claim_p,
-                                                                   &claim_helper);
-                if (arm_ext_diag_on()) {
-                    int covered_diag = arm_ext_owner_is_covered_by_foreground(
-                        m, claim_p, claim_helper);
-                    printf("DIAG present118 x=%d y=%d w=%u h=%u accept=%d claimP=0x%X claimH=0x%X covered=%d\n",
-                           (int16)r0, (int16)r1, (uint16)r2, (uint16)r3,
-                           accept, claim_p, claim_helper, covered_diag);
-                    arm_ext_diag_dump_layer_state(m, "present118");
-                }
-                if (accept) {
-                    ArmExtScreenContext screen_ctx;
-                    if (arm_ext_push_draw_screen_context(m, &screen_ctx) &&
-                        arm_ext_screen_context_targets_primary(m, &screen_ctx)) {
-                        int covered = arm_ext_owner_is_covered_by_foreground(
-                            m, claim_p, claim_helper);
-                        ret = arm_ext_dispup_rect(m, (int16)r0, (int16)r1,
-                                                  (uint16)r2, (uint16)r3,
-                                                  covered);
-                        arm_ext_finish_accepted_screen_write(m, claim_p,
-                                                             claim_helper);
-                        arm_ext_claim_foreground_screen_rect(m, claim_p,
-                                                             claim_helper,
-                                                             (int16)r0,
-                                                             (int16)r1,
-                                                             (uint16)r2,
-                                                             (uint16)r3);
-                        if (arm_ext_owner_is_foreground_child(m, claim_p,
-                                                              claim_helper)) {
-                            arm_ext_note_foreground_cover_rect(m, (int16)r0,
-                                                               (int16)r1,
-                                                               (uint16)r2,
-                                                               (uint16)r3);
-                        }
-                    } else {
-                        ret = 0;
-                    }
-                    arm_ext_pop_draw_screen_context(&screen_ctx);
-                } else {
-                    ret = 0;
-                }
-            }
-            break;
-        case 119:
-            {
-                uint32_t claim_p = 0, claim_helper = 0;
-                if (!arm_ext_should_accept_screen_write(m, &claim_p,
-                                                        &claim_helper)) {
-                    claim_p = 0;
-                    claim_helper = 0;
-                }
-                ArmExtScreenContext screen_ctx;
-                if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
-                    _DrawPoint((int16)r0, (int16)r1, (uint16)r2);
-                    arm_ext_pop_draw_screen_context(&screen_ctx);
-                    arm_ext_note_screen_damage_rect(m, (int16)r0,
-                                                    (int16)r1, 1, 1);
-                    arm_ext_claim_foreground_screen_rect(m, claim_p,
-                                                         claim_helper,
-                                                         (int16)r0,
-                                                         (int16)r1, 1, 1);
-                    arm_ext_finish_screen_cache_write(m, &screen_ctx,
-                                                      claim_p,
-                                                      claim_helper);
-                }
-            }
-            ret = 0;
-            break;
-        case 120:
-            {
-                uint32_t claim_p = 0, claim_helper = 0;
-                uint16_t h = (uint16_t)arg_read(m, 4);
-                uint16_t rop = (uint16_t)arg_read(m, 5);
-                uint16_t trans = (uint16_t)arg_read(m, 6);
-                int16_t sx = (int16)arg_read(m, 7);
-                int16_t sy = (int16)arg_read(m, 8);
-                int16_t mw = (int16)arg_read(m, 9);
-                if (!arm_ext_should_accept_screen_write(m, &claim_p,
-                                                        &claim_helper)) {
-                    claim_p = 0;
-                    claim_helper = 0;
-                }
-                ArmExtScreenContext screen_ctx;
-                if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
-                    uint16_t *before = arm_ext_snapshot_screen(m);
-                    arm_ext_draw_bitmap_from_guest(
-                        m, r0, (int16)r1, (int16)r2,
-                        (uint16)r3, h, rop, trans, sx, sy, mw);
-                    arm_ext_pop_draw_screen_context(&screen_ctx);
-                    arm_ext_note_screen_damage_diff(m, before);
-                    arm_ext_claim_foreground_screen_diff(m, claim_p,
-                                                         claim_helper,
-                                                         before);
-                    free(before);
-                    arm_ext_finish_screen_cache_write(m, &screen_ctx,
-                                                      claim_p,
-                                                      claim_helper);
-                }
-            }
-            ret = 0;
-            break;
-        case 122:
-            {
-                uint32_t claim_p = 0, claim_helper = 0;
-                int16_t x = (int16)r0;
-                int16_t y = (int16)r1;
-                int16_t w = (int16)r2;
-                int16_t h = (int16)r3;
-                uint8_t cr = (uint8)arg_read(m, 4);
-                uint8_t cg = (uint8)arg_read(m, 5);
-                uint8_t cb = (uint8)arg_read(m, 6);
-                if (!arm_ext_should_accept_screen_write(m, &claim_p,
-                                                        &claim_helper)) {
-                    claim_p = 0;
-                    claim_helper = 0;
-                }
-                ArmExtScreenContext screen_ctx;
-                if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
-                    int full_black_clear =
-                        arm_ext_screen_context_targets_primary(m, &screen_ctx) &&
-                        x <= 0 && y <= 0 &&
-                        (int32_t)x + (int32_t)w >= m->screen_w &&
-                        (int32_t)y + (int32_t)h >= m->screen_h &&
-                        cr == 0 && cg == 0 && cb == 0;
-                    DrawRect(x, y, w, h, cr, cg, cb);
-                    arm_ext_pop_draw_screen_context(&screen_ctx);
-                    /*
-                     * A primary full-screen black DrawRect is commonly a cache
-                     * reset before partial repaint/present.  Treat it as a
-                     * backing write only so callback-exit damage synthesis does
-                     * not expose pixels the app never explicitly presented.
-                     */
-                    if (!full_black_clear) {
-                        arm_ext_note_screen_damage_rect(m, x, y, w, h);
-                        arm_ext_claim_foreground_screen_rect(m, claim_p,
-                                                             claim_helper,
-                                                             x, y, w, h);
-                        arm_ext_finish_screen_cache_write(m, &screen_ctx,
-                                                          claim_p,
-                                                          claim_helper);
-                    }
-                }
-            }
-            ret = 0;
-            break;
-        case 123:
-            {
-                uint32_t claim_p = 0, claim_helper = 0;
-                if (!arm_ext_should_accept_screen_write(m, &claim_p,
-                                                        &claim_helper)) {
-                    claim_p = 0;
-                    claim_helper = 0;
-                }
-                ArmExtScreenContext screen_ctx;
-                if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
-                    uint16_t *before = arm_ext_snapshot_screen(m);
-                    ret = _DrawText(arm_str(m, r0), (int16)r1, (int16)r2,
-                                    (uint8)r3, (uint8)arg_read(m, 4),
-                                    (uint8)arg_read(m, 5),
-                                    (int)arg_read(m, 6),
-                                    (uint16)arg_read(m, 7));
-                    arm_ext_pop_draw_screen_context(&screen_ctx);
-                    arm_ext_note_screen_damage_diff(m, before);
-                    arm_ext_claim_foreground_screen_diff(m, claim_p,
-                                                         claim_helper,
-                                                         before);
-                    free(before);
-                    arm_ext_finish_screen_cache_write(m, &screen_ctx,
-                                                      claim_p,
-                                                      claim_helper);
-                } else {
-                    ret = 0;
-                }
-            }
-            break;
-        case 124: {
-            ArmExtScreenContext screen_ctx;
-            if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
-                ret = _BitmapCheck(arm_ptr(m, r0), (int16)r1, (int16)r2,
-                                   (uint16)r3, (uint16)arg_read(m, 4),
-                                   (uint16)arg_read(m, 5),
-                                   (uint16)arg_read(m, 6));
-                arm_ext_pop_draw_screen_context(&screen_ctx);
-            } else {
-                ret = 0;
             }
         } break;
         case 125: {
@@ -4698,180 +3840,12 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 arm_ext_release_host_read_file_buffer(hp, (uint32_t)fl);
             ret = ap;
         } break;
-        case 126: ret = wstrlen(arm_str(m, r0)); break;
-        case 127: ret = mr_registerAPP(arm_ptr(m, r0), (int32)r1, (int32)r2); break;
-        case 130: ret = _mr_TestCom(NULL, (int)r1, (int)r2); break;
-        case 131:
-            ret = _mr_TestCom1(NULL, (int)r1, arm_ptr(m, r2), (int32)r3);
-            /*
-             * cfunction.ext has a private child loader that never calls host
-             * table[25].  Its disassembly at 0xE8339C..0xE833C8 proves the
-             * loader writes file_base[0]=module record, file_base[4]=child P,
-             * extChunk[12]=file_base and extChunk[16]=len before mr_cacheSync.
-             * Once that extChunk exists, the staging image is already the
-             * wrapper-owned runtime form and must not be overwritten with the
-             * raw bytes cached by _mr_readFile.
-             */
-            int internal_loader_staging =
-                (r1 == 9 && arm_ext_has_internal_loader_chunk(m, r2, r3));
-            if (arm_ext_diag_on()) {
-                uint32_t record_addr_diag = 0;
-                uint32_t p_addr_diag = 0;
-                if (r2 && arm_ptr(m, r2))
-                    record_addr_diag = arm_ext_read_u32_or_zero_(m, r2);
-                if (r2 && arm_ptr(m, r2 + 4u))
-                    p_addr_diag = arm_ext_read_u32_or_zero_(m, r2 + 4u);
-                printf("DIAG table131 cmd=%u data=0x%X len=%u ret=0x%X internalLoader=%d record=0x%X P=0x%X lastFile=0x%X/%u lastPack='%s' lr=0x%X activeP=0x%X primaryP=0x%X\n",
-                       r1, r2, r3, ret, internal_loader_staging,
-                       record_addr_diag, p_addr_diag, m->last_file_addr,
-                       m->last_file_len, m->last_file_pack_host_path,
-                       reg_read32(m->uc, UC_ARM_REG_LR), m->active_p_addr,
-                       m->primary_p_addr);
-            }
-            if (r1 == 9 && internal_loader_staging &&
-                m->last_file_copy && r2 && r3 <= m->last_file_len &&
-                r3 > 8 && arm_ptr(m, r2 + 8)) {
-                memcpy(arm_ptr(m, r2 + 8), m->last_file_copy + 8, r3 - 8);
-                uint32_t record_addr = 0;
-                uint32_t p_addr = arm_ext_read_u32_or_zero_(m, r2 + 4u);
-                memcpy(&record_addr, arm_ptr(m, r2), 4);
-                /*
-                 * The private loader writes the runtime header before
-                 * mr_cacheSync, but several wrappers leave the body in a
-                 * transient scratch form.  Copy only the immutable payload tail
-                 * from the host-decoded readFile result; keep file_base[0]/[4]
-                 * as the wrapper's record/P metadata.
-                 */
-                arm_ext_repair_private_child_record_bridges(m, record_addr,
-                                                            r2, r3);
-                /*
-                 * file_base[0] 是私有 loader 写入的 module record 指针——它是
-                 * EXT_TABLE 的逐槽镜像，被子模块当作自己的 C 函数表基址使用。
-                 * 该 record 把 table[125] (_mr_readFile) 重定向到 wrapper 自身的
-                 * readFile (0xE819xx)。wrapper 的 readFile 工作在 wrapper 的内存
-                 * 模型里，返回的是挂载/索引缓冲(0x66xxxx 区)而非宿主 readFile 解码
-                 * 出的位图像素；子模块据此取位图源指针时拿到的是文件索引/文件名字节，
-                 * 绘制即花屏。把 record 的 readFile 槽还原成宿主 EXT_TABLE 的桥接值，
-                 * 让子模块的资源读取走宿主 readFile，得到正确解码的位图。
-                 * 仅还原 readFile 槽：malloc/free/loader(table[25]) 仍走 wrapper，
-                 * 以保留 wrapper 对子模块内存与子加载的管理。
-                 */
-                if (record_addr && arm_ptr(m, record_addr + 125 * 4)) {
-                    memcpy(arm_ptr(m, record_addr + 125 * 4),
-                           arm_ptr(m, EXT_TABLE_ADDR + 125 * 4), 4);
-                }
-                arm_ext_apply_short_pack_alias_for_private_child(m, r2, r3,
-                                                                 p_addr);
-                /*
-                 * From this point on the executable owner is the runtime image
-                 * at r2, not the raw buffer returned by _mr_readFile.  Keep
-                 * last_file_copy as immutable package provenance, but make
-                 * later generic nested-load ownership and P-header writes use
-                 * the same file_base that the private loader will BLX into.
-                 */
-                m->last_file_addr = r2;
-                m->last_file_len = r3;
-            }
-            if (r1 == 9 && !internal_loader_staging &&
-                m->last_file_copy && r2 && r3 <= m->last_file_len &&
-                arm_ptr(m, r2)) {
-                memcpy(arm_ptr(m, r2), m->last_file_copy, r3);
-                uint32_t table_addr = EXT_TABLE_ADDR;
-                memcpy(arm_ptr(m, r2), &table_addr, 4);
-                m->last_file_addr = r2;
-                m->last_file_len = r3;
-                if (m->last_alloc_len == sizeof(mr_c_function_P_t) && arm_ptr(m, m->last_alloc_addr)) {
-                    m->nested_p_addr = m->last_alloc_addr;
-                }
-                if (arm_ext_trace_on()) {
-                    printf("arm_ext_executor: staged nested ext at 0x%X len=%u P=0x%X\n",
-                           r2, r3, m->nested_p_addr);
-                }
-            }
-            /*
-             * 关键修复：case 131 (r1=9) 是 mr_cacheSync。原意是同步指令缓存，
-             * 因为 wrapper 刚把新的 .ext 二进制写到了 [r2, r2+r3) 范围。在真机
-             * 上这会清掉 D-cache 并 invalidate I-cache，让后续取指看到新指令。
-             *
-             * 我们用 Unicorn 跑 ARM，Unicorn 通过 QEMU TCG 做 JIT 翻译并 cache
-             * translation blocks（TB）。当 gghjt 把 netpay 的 smcheck/advsms
-             * 等子插件 staging 到同一段内存时，TB cache 仍然是上一个插件留下的
-             * 翻译结果，结果就是 PC 进了新 .ext 的代码区，执行的却是旧代码。
-             *
-             * 表现为 r3 不被 LDR 重新加载、movs r1/r2 立即数被跳过等"鬼指令"，
-             * 最后 BLX r3 跳到一个看着像数据/字符串的地址，崩在 0x627A60 一类
-             * 位置。修复方式就是 mimic 真机的 mr_cacheSync：在 staging 完成后
-             * 通过 uc_ctl_remove_cache 让 Unicorn 把这段地址的 TB 翻译丢掉，
-             * 下次执行强制重新翻译现在的字节。
-             */
-            if (r1 == 9 && r2 && r3 > 0 && arm_ptr(m, r2) && arm_ptr(m, r2 + r3 - 1)) {
-                /*
-                 * The internal loader overwrites the MRPGCMAP header before
-                 * mr_cacheSync: file_base[0] becomes the module record and
-                 * file_base[4] becomes the child P pointer.  The authoritative
-                 * check is therefore the extChunk magic/file/length tuple.
-                 */
-                arm_ext_drop_overlapping_stale_nested_modules(m, r2, r3);
-                m->pending_internal_file_addr = r2;
-                m->pending_internal_file_len = r3;
-                arm_ext_sync_internal_nested_module(m, r2, r3);
-                uc_err cerr = uc_ctl_remove_cache(m->uc, r2, r2 + r3);
-                if (cerr != UC_ERR_OK && arm_ext_trace_on()) {
-                    printf("arm_ext_executor: uc_ctl_remove_cache(0x%X, 0x%X) failed: %u\n",
-                           r2, r2 + r3, cerr);
-                }
-            }
-            break;
-        case 132: {
-            int err_pos = -1;
-            int out_size = 0;
-            uint16 *host = c2u(arm_str(m, r0), r1 ? &err_pos : NULL, &out_size);
-            if (r1 && arm_ptr(m, r1)) memcpy(arm_ptr(m, r1), &err_pos, 4);
-            if (r2 && arm_ptr(m, r2)) memcpy(arm_ptr(m, r2), &out_size, 4);
-            if (host && out_size > 0) {
-                uint32_t out_addr = arm_alloc(m, (uint32_t)out_size);
-                if (out_addr) {
-                    memcpy(arm_ptr(m, out_addr), host, (uint32_t)out_size);
-                }
-                mr_free(host, (uint32)out_size);
-                ret = out_addr;
-            } else {
-                ret = 0;
-            }
-        } break;
-        case 133: ret = ((int32)r1 == 0) ? 0 : (int32)r0 / (int32)r1; break;
-        case 134: ret = ((int32)r1 == 0) ? 0 : (int32)r0 % (int32)r1; break;
-        case 145:
-            {
-                uint32_t claim_p = 0, claim_helper = 0;
-                if (!arm_ext_should_accept_screen_write(m, &claim_p,
-                                                        &claim_helper)) {
-                    claim_p = 0;
-                    claim_helper = 0;
-                }
-                ArmExtScreenContext screen_ctx;
-                if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
-                    uint16_t *before = arm_ext_snapshot_screen(m);
-                    mr_platDrawChar((uint16)r0, (int32)r1, (int32)r2,
-                                    (uint32)r3);
-                    arm_ext_pop_draw_screen_context(&screen_ctx);
-                    arm_ext_note_screen_damage_diff(m, before);
-                    arm_ext_claim_foreground_screen_diff(m, claim_p,
-                                                         claim_helper,
-                                                         before);
-                    free(before);
-                    arm_ext_finish_screen_cache_write(m, &screen_ctx,
-                                                      claim_p,
-                                                      claim_helper);
-                }
-            }
-            ret = 0;
-            break;
         default:
             printf("arm_ext_executor: table[%u] not implemented (r0=0x%X r1=0x%X r2=0x%X r3=0x%X)\n", idx, r0, r1, r2, r3);
             ret = MR_IGNORE;
             break;
     }
+
     cb_ret(m, ret);
 }
 
@@ -5693,6 +4667,16 @@ static void arm_ext_restore_modal_fg_snapshot(ArmExtModule *m) {
     m->modal_fg_snapshot_valid = 0;
 }
 
+/* code=2 之后宿主 timer 已停但仍有活跃队列(四处判活条件各异)时,统一
+ * 保持 50ms 宿主 tick,动作与 table[31] mr_timerStart 语义一致。
+ * Phase 3 去重:此前四段逐字重复(issues doc M1)。 */
+static void arm_ext_keep_host_tick_alive(ArmExtModule *m) {
+    mr_timerStart(50);
+    mr_timer_state = 1;
+    m->host_timer_pending = 1;
+    internal_slot_write(m, m->mr_timer_state_slot, 1);
+}
+
 static void arm_ext_dispatch_pending_sms_result(ArmExtModule *m) {
     if (!m || !m->pending_sms_result || m->dispatching_sms_result) return;
     int32_t result = m->pending_sms_result_value;
@@ -5952,10 +4936,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
      * 注册 primary module。 */
     if (code == 2 && !m->host_timer_pending &&
         !m->primary_p_addr && m->wrapper_timer_dispatch_addr) {
-        mr_timerStart(50);
-        mr_timer_state = 1;
-        m->host_timer_pending = 1;
-        internal_slot_write(m, m->mr_timer_state_slot, 1);
+        arm_ext_keep_host_tick_alive(m);
     }
     /* arm_ext_call 后检查 game timer head (state[8]) 变化：wrapper 的
      * suspend 会清零 game_rw[0x8C]，保存旧值以便 resume 时恢复。 */
@@ -6054,10 +5035,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
          * Keep the host tick alive without faking wrapper flags or calling
          * code=5 directly.
          */
-        mr_timerStart(50);
-        mr_timer_state = 1;
-        m->host_timer_pending = 1;
-        internal_slot_write(m, m->mr_timer_state_slot, 1);
+        arm_ext_keep_host_tick_alive(m);
     }
     if (code == 2 && !m->host_timer_pending &&
         foreground_child_live_post &&
@@ -6074,10 +5052,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
          */
         m->timer_p_addr = m->p_addr;
         m->timer_helper_addr = m->helper_addr;
-        mr_timerStart(50);
-        mr_timer_state = 1;
-        m->host_timer_pending = 1;
-        internal_slot_write(m, m->mr_timer_state_slot, 1);
+        arm_ext_keep_host_tick_alive(m);
     }
     if (code == 2 && !m->host_timer_pending &&
         foreground_child_timer_live_post) {
@@ -6087,10 +5062,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
          * responses, but the error/close transition after an HTTP failure can
          * leave no sockets open while the child still has a cleanup timer node.
          */
-        mr_timerStart(50);
-        mr_timer_state = 1;
-        m->host_timer_pending = 1;
-        internal_slot_write(m, m->mr_timer_state_slot, 1);
+        arm_ext_keep_host_tick_alive(m);
     }
 
     /* wrapper 的定时器回调中，前台子模块可能已经完成（如下载器
@@ -6187,29 +5159,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
                 write_game_timer_head(m, grw, m->saved_game_timer_head);
             m->saved_game_timer_head = 0;
         }
-        if (m->modal_screen_snapshot_valid &&
-            m->modal_screen_snapshot &&
-            m->modal_screen_snapshot_len == m->screen_len &&
-            m->screen_addr && arm_ptr(m, m->screen_addr)) {
-            memcpy(arm_ptr(m, m->screen_addr),
-                   m->modal_screen_snapshot, m->screen_len);
-            extern uint16 *mr_screenBuf;
-            extern void mr_drawBitmap(uint16 *bmp, int16 x, int16 y,
-                                      uint16 w, uint16 h);
-            if (mr_screenBuf) {
-                /* B1:回拷与 present 都按宿主容量夹断 */
-                uint16_t *snapshot =
-                    (uint16_t *)m->modal_screen_snapshot;
-                int32_t pw = 0, ph = 0;
-                arm_ext_copy_screen_to_host(m, mr_screenBuf, snapshot,
-                                            arm_ext_screen_stride(m),
-                                            &pw, &ph);
-                if (pw > 0 && ph > 0)
-                    mr_drawBitmap(mr_screenBuf, 0, 0,
-                                  (uint16)pw, (uint16)ph);
-            }
-            m->modal_screen_snapshot_valid = 0;
-        }
+        arm_ext_restore_modal_screen_snapshot(m);
         m->primary_child_reopen_timer_needed = 1;
         reopen_set_this_call = 1;
     }
@@ -6656,29 +5606,7 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
                     write_game_timer_head(m, _grw2, m->saved_game_timer_head);
                 m->saved_game_timer_head = 0;
             }
-            if (m->modal_screen_snapshot_valid &&
-                m->modal_screen_snapshot &&
-                m->modal_screen_snapshot_len == m->screen_len &&
-                m->screen_addr && arm_ptr(m, m->screen_addr)) {
-                memcpy(arm_ptr(m, m->screen_addr),
-                       m->modal_screen_snapshot, m->screen_len);
-                extern uint16 *mr_screenBuf;
-                extern void mr_drawBitmap(uint16 *bmp, int16 x, int16 y,
-                                          uint16 w, uint16 h);
-                if (mr_screenBuf) {
-                    /* B1:回拷与 present 都按宿主容量夹断 */
-                    uint16_t *snapshot =
-                        (uint16_t *)m->modal_screen_snapshot;
-                    int32_t pw = 0, ph = 0;
-                    arm_ext_copy_screen_to_host(m, mr_screenBuf, snapshot,
-                                                arm_ext_screen_stride(m),
-                                                &pw, &ph);
-                    if (pw > 0 && ph > 0)
-                        mr_drawBitmap(mr_screenBuf, 0, 0,
-                                      (uint16)pw, (uint16)ph);
-                }
-                m->modal_screen_snapshot_valid = 0;
-            }
+            arm_ext_restore_modal_screen_snapshot(m);
             m->primary_child_reopen_timer_needed = 1;
         }
     }

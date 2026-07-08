@@ -12,6 +12,7 @@
  */
 
 #include "arm_ext_internal.h"
+#include "arm_ext_host.h"
 
 /* ---- 微工具(拆分期间上收,多个单元共用) ---- */
 static inline uint32_t align4(uint32_t v) { return (v + 3u) & ~3u; }
@@ -116,6 +117,7 @@ void arm_ext_claim_foreground_screen_rect(ArmExtModule *m,
                                           uint32_t owner_helper_addr,
                                           int32_t x, int32_t y,
                                           int32_t w, int32_t h);
+void arm_ext_restore_modal_screen_snapshot(ArmExtModule *m);
 void enter_screen_context(ArmExtModule *m, uint16 **saved_screenBuf,
                           uint32_t *saved_present_depth);
 void leave_screen_context(ArmExtModule *m, uint16 *saved_screenBuf,
@@ -160,6 +162,43 @@ ArmExtNestedModule *arm_ext_find_nested_module_by_rw(ArmExtModule *m, uint32_t r
 void arm_ext_note_table_return_guard(ArmExtModule *m, uint32_t lr, uint32_t sp);
 int arm_ext_guard_table_return_block(uc_engine *uc, ArmExtModule *m,
                                      uint32_t address);
+
+#define MRP_IS_FILE 1
+#define ARM_EXT_MR_SMS_RESULT_FLAG 16
+
+/* executor 主体中被 table handler 调用的符号(自动登记) */
+uint32_t alloc_bytes(ArmExtModule *m, const void *value, uint32_t len);
+uint32_t arm_addr(ArmExtModule *m, const void *ptr);
+void arm_ext_apply_short_pack_alias_for_private_child(ArmExtModule *m, uint32_t file_addr, uint32_t file_len, uint32_t p_addr);
+void arm_ext_diag_fd_clear(ArmExtModule *m, int32_t handle);
+const char *arm_ext_diag_fd_name(ArmExtModule *m, int32_t handle);
+void arm_ext_diag_fd_set(ArmExtModule *m, int32_t handle, const char *name);
+void arm_ext_drop_overlapping_stale_nested_modules(ArmExtModule *m, uint32_t file_addr, uint32_t file_len);
+int arm_ext_has_internal_loader_chunk(ArmExtModule *m, uint32_t file_addr, uint32_t file_len);
+const char *arm_ext_pack_to_host_path(ArmExtModule *m, const char *pack);
+void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr, uint32_t file_len, uint32_t p_addr, uint32_t helper_addr);
+void arm_ext_record_timer_owner(ArmExtModule *m);
+void arm_ext_repair_private_child_record_bridges(ArmExtModule *m, uint32_t record, uint32_t file_addr, uint32_t file_len);
+ArmExtNestedModule *arm_ext_resource_owner_for_lr(ArmExtModule *m, uint32_t *owner_p, uint32_t *owner_helper);
+int arm_ext_sync_internal_nested_module(ArmExtModule *m, uint32_t file_addr, uint32_t file_len);
+void internal_slot_write(ArmExtModule *m, uint32_t slot, uint32_t value);
+void arm_ext_diag_owner_for_lr(ArmExtModule *m, uint32_t *owner_p, uint32_t *owner_h, uint32_t *owner_file, uint32_t *owner_len);
+
+/* ---- aex_table.c:mr_table 系统调用分发(Phase 3 case 函数化) ---- */
+
+/* 单次 table 调用的上下文:r0-r3 为 guest 参数,ret 为回写 R0 的返回值。
+ * handler 只读参数、写 ret;寄存器/内存副作用仍经 m。 */
+typedef struct AexTableCtx {
+    uint32_t idx;
+    uint32_t r0, r1, r2, r3;
+    uint32_t ret;
+} AexTableCtx;
+
+typedef void (*AexTableHandler)(ArmExtModule *m, AexTableCtx *c);
+
+/* 按 table 编号索引的 handler 表;NULL 槽位回落到 hook_table 的残余
+ * switch(未转换 case,逐批迁移直至 switch 清空)。 */
+extern const AexTableHandler aex_table_handlers[EXT_TABLE_COUNT];
 
 /* ---- aex_exec.c:执行引擎与 guest 字符串 ---- */
 
