@@ -2419,6 +2419,8 @@ void arm_ext_drop_overlapping_stale_nested_modules(ArmExtModule *m,
         m->nested_modules[out++] = mod;
     }
     m->nested_module_count = out;
+    /* P4.3:模块状态迁移后的结构一致性断言(VMRP_ARM_EXT_INVARIANTS 门控) */
+    arm_ext_verify_invariants(m, "drop-stale");
 }
 
 static void arm_ext_retire_modules_overwritten_by_data_read(ArmExtModule *m,
@@ -2455,6 +2457,8 @@ static void arm_ext_retire_modules_overwritten_by_data_read(ArmExtModule *m,
         m->active_helper_addr = m->primary_helper_addr;
         arm_ext_clear_foreground_screen_owner(m);
     }
+    /* P4.3:模块状态迁移后的结构一致性断言(VMRP_ARM_EXT_INVARIANTS 门控) */
+    arm_ext_verify_invariants(m, "retire-data-read");
 }
 
 static void arm_ext_restore_primary_mapping_after_dump0(ArmExtModule *m,
@@ -2518,6 +2522,8 @@ static void arm_ext_restore_primary_mapping_after_dump0(ArmExtModule *m,
         arm_ext_range_contains(read_addr, read_len, m->dispatch_timer_stop & ~1u, 2)) {
         m->dispatch_timer_stop = 0;
     }
+    /* P4.3:模块状态迁移后的结构一致性断言(VMRP_ARM_EXT_INVARIANTS 门控) */
+    arm_ext_verify_invariants(m, "restore-dump0");
 }
 
 uint32_t arm_ext_p_for_code_addr(ArmExtModule *m, uint32_t addr,
@@ -4469,14 +4475,17 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     m->wrapper_compact_free_return_addr =
         find_wrapper_compact_heap_free_return(
             code, len, &m->wrapper_compact_heap_ctrl_off);
-    if (arm_ext_trace_on()) {
-        printf("arm_ext_executor: wrapper_timer_dispatch=0x%X wrapper_compact_sched=0x%X compact_heap_ctrl=0x%X compact_free_ret=0x%X chain_walker_thunk=0x%X\n",
-               m->wrapper_timer_dispatch_addr,
-               m->wrapper_compact_timer_scheduler_off,
-               m->wrapper_compact_heap_ctrl_off,
-               m->wrapper_compact_free_return_addr,
-               m->chain_walker_thunk_addr);
-    }
+    /* P4.1:wrapper 二进制模式探测结果摘要,默认可见(每次 arm_ext_load
+     * 一行)。此前失配时静默降级——compact 堆 sanitize/timer 直连路由整体
+     * 不生效且无任何输出,新 SDK 变体表现为"莫名其妙的花屏/卡死";现在
+     * 一行日志即可判断哪个探测没命中(值为 0 即未命中)。 */
+    printf("arm_ext_executor: wrapper probes len=%u timer_dispatch=0x%X compact_sched_off=0x%X compact_heap_ctrl=0x%X compact_free_ret=0x%X chain_walker=0x%X\n",
+           len,
+           m->wrapper_timer_dispatch_addr,
+           m->wrapper_compact_timer_scheduler_off,
+           m->wrapper_compact_heap_ctrl_off,
+           m->wrapper_compact_free_return_addr,
+           m->chain_walker_thunk_addr);
     patch_wrapper_stack_size(m);
     uint32_t table = EXT_TABLE_ADDR;
     memcpy(arm_ptr(m, EXT_CODE_ADDR), &table, 4);

@@ -813,17 +813,57 @@ static void arm_ext_collect_registered_module_ranges(ArmExtModule *m,
     }
 }
 
-void arm_ext_sanitize_compact_timer_heaps(ArmExtModule *m) {
-    if (!m || !m->wrapper_compact_heap_ctrl_off)
-        return;
+/*
+ * P4.3:保护集区间排序 + 合并(重叠或相邻区间并为一段)。
+ * 四个收集器(primary/wrapper/active timer 节点 + 注册模块映像/ER_RW)
+ * 各自独立追加且可能重复登记同一节点(issues doc "无去重"),cut_range
+ * 对重复区间只是空跑;合并后语义不变,遍历次数确定且便于诊断输出。
+ * 非 static:单元测试直接覆盖合并逻辑。
+ */
+uint32_t arm_ext_merge_protect_ranges(ArmExtBumpBlock *r, uint32_t n) {
+    if (n < 2) return n;
+    /* 区间数 ≤128,插入排序足够 */
+    for (uint32_t i = 1; i < n; ++i) {
+        ArmExtBumpBlock key = r[i];
+        uint32_t j = i;
+        while (j > 0 && r[j - 1].addr > key.addr) {
+            r[j] = r[j - 1];
+            --j;
+        }
+        r[j] = key;
+    }
+    uint32_t out = 0;
+    for (uint32_t i = 1; i < n; ++i) {
+        uint32_t cur_end = r[out].addr + r[out].len;
+        if (r[i].addr <= cur_end) { /* 重叠或相邻 */
+            uint32_t new_end = r[i].addr + r[i].len;
+            if (new_end > cur_end) r[out].len = new_end - r[out].addr;
+        } else {
+            r[++out] = r[i];
+        }
+    }
+    return out + 1;
+}
 
-    ArmExtBumpBlock ranges[ARM_EXT_COMPACT_TIMER_PROTECT_MAX];
+/* P4.3:统一保护集收集入口 —— live timer 节点 + 注册模块存活存储,
+ * 收集后排序合并。sanitize 与后续诊断/分配期检查共用同一集合。 */
+uint32_t arm_ext_collect_protected_ranges(ArmExtModule *m,
+                                          ArmExtBumpBlock *ranges) {
     uint32_t count = 0;
     arm_ext_collect_primary_compact_timer_nodes(m, ranges, &count);
     arm_ext_collect_wrapper_compact_timer_nodes(m, ranges, &count);
     arm_ext_collect_active_compact_timer_nodes(m, ranges, &count);
     /* 注册模块的映像与 ER_RW 静态段与 live timer node 一样属于不可分配区间 */
     arm_ext_collect_registered_module_ranges(m, ranges, &count);
+    return arm_ext_merge_protect_ranges(ranges, count);
+}
+
+void arm_ext_sanitize_compact_timer_heaps(ArmExtModule *m) {
+    if (!m || !m->wrapper_compact_heap_ctrl_off)
+        return;
+
+    ArmExtBumpBlock ranges[ARM_EXT_COMPACT_TIMER_PROTECT_MAX];
+    uint32_t count = arm_ext_collect_protected_ranges(m, ranges);
     if (!count) return;
 
     arm_ext_sanitize_compact_heap_for_rw(m, arm_ext_primary_rw_base_(m),

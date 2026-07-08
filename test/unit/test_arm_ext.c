@@ -244,11 +244,46 @@ static void test_verify_invariants(void) {
     free_module(m);
 }
 
+/* ============ 保护集区间合并(P4.3)============ */
+
+static void test_merge_protect_ranges(void) {
+    /* 乱序 + 重叠 + 相邻 + 重复 -> 合并为有序不相交集合 */
+    ArmExtBumpBlock r1[] = {
+        {0x300, 0x100}, /* 0x300..0x400 */
+        {0x100, 0x080}, /* 0x100..0x180 */
+        {0x3F0, 0x020}, /* 与第一段重叠 -> 并入 0x300..0x410 */
+        {0x180, 0x040}, /* 与第二段相邻 -> 并入 0x100..0x1C0 */
+        {0x100, 0x080}, /* 完全重复 */
+    };
+    uint32_t n = arm_ext_merge_protect_ranges(r1, 5);
+    CHECK(n == 2);
+    CHECK(r1[0].addr == 0x100 && r1[0].len == 0xC0);
+    CHECK(r1[1].addr == 0x300 && r1[1].len == 0x110);
+
+    /* 不相交保持原样(排序后) */
+    ArmExtBumpBlock r2[] = {{0x500, 0x10}, {0x100, 0x10}};
+    n = arm_ext_merge_protect_ranges(r2, 2);
+    CHECK(n == 2);
+    CHECK(r2[0].addr == 0x100 && r2[1].addr == 0x500);
+
+    /* 单区间与空集 */
+    ArmExtBumpBlock r3[] = {{0x100, 0x10}};
+    CHECK(arm_ext_merge_protect_ranges(r3, 1) == 1);
+    CHECK(arm_ext_merge_protect_ranges(r3, 0) == 0);
+
+    /* 大区间吞并小区间 */
+    ArmExtBumpBlock r4[] = {{0x200, 0x10}, {0x100, 0x400}};
+    n = arm_ext_merge_protect_ranges(r4, 2);
+    CHECK(n == 1);
+    CHECK(r4[0].addr == 0x100 && r4[0].len == 0x400);
+}
+
 int main(void) {
     /* 不变量检查器由环境变量门控(进程内缓存),测试进程先行开启 */
     setenv("VMRP_ARM_EXT_INVARIANTS", "1", 1);
     test_arm_alloc();
     test_verify_invariants();
+    test_merge_protect_ranges();
     test_cut_range_middle_split();
     test_cut_range_trim_head();
     test_cut_range_trim_tail();
