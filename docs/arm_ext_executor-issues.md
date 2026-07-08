@@ -65,6 +65,27 @@
 - `arm_ext_record_nested_module`（约 1259–1265）：注册表满时仅在 `VMRP_ARM_EXT_TRACE` 下打印一行后 `return`，默认构建无任何提示。该模块此后在 PC→owner 归属查找中查不到，事件被派发给错误 owner。这是功能被破坏的状态，应无条件告警。
 - `arm_ext_bump_reuse`（约 4178–4197）：命中空闲块后先摘除空闲表再 `arm_ext_bump_track`，track 失败（宿主 OOM）时块既不在空闲表也不在 live 表，永久泄漏。应先 track 成功再改空闲表。
 
+### B7. `bridge_dsm_network_cb` 截断 host 函数指针（中,2026-07-08 新增）
+
+- 位置:`src/native_dsm_funcs.c` bridge_dsm_network_cb 及 `src/network.c` 两处
+  `(uint32_t)(uintptr_t)data->cb` 调用点。
+- 问题:回调地址统一收窄为 32 位再还原成函数指针调用。guest 地址(32 位)无损,
+  但 native 路径(native_getHostByName 等)传入的是 **host 函数指针**,64 位下
+  地址超 4GB 即被截断,回调时跳向坏地址。
+- 触发:仅 native/共享库路径;e2e(全走 guest 地址)不触发。
+- 修复方向:bridge 接口为 native 路径保留完整指针(如 uintptr_t 参数或独立
+  native 回调槽),不能靠截断往返。
+
+### 已修复(2026-07-08,Phase 0 sanitizer 基线)
+
+- **B3**:`arm_alloc` 已加 `len > EXT_MEM_SIZE` 上限守卫。
+- **新类:table[3]/table[6] 重叠区间 UB**:guest 以重叠区间调 memcpy/strncpy
+  桥(多应用实测),宿主 libc 对此是 UB;已改为重叠时前向逐字节循环
+  (`arm_ext_guest_memcpy/strncpy`,与真机朴素实现语义一致)。
+- **新类:`arm_str` 空串退路 1 字节 `""`**:UCS2 消费方(_DrawText)按双字节
+  读首字符越界;已改 4 字节全零静态缓冲。
+- **case 46 死回退块**:`ret < 0`(uint32)恒假,MRP 缓存回退从未生效,已删除。
+
 ---
 
 ## 三、死代码 / 常驻的临时诊断（违反规范）

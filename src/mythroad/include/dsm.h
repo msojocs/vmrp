@@ -74,7 +74,8 @@ typedef struct {
     void (*drawBitmap)(uint16 *bmp, int16 x, int16 y, uint16 w, uint16 h);
     int32 (*getHostByName)(const char *ptr, NETWORK_CB cb, void *userData);
     int32 (*initNetwork)(NETWORK_CB cb, const char *mode, void *userData);
-    int32 (*mr_closeNetwork)();
+    /* ()→(void):补全 C 原型,调用约定与 ABI 不变(消除 -Wstrict-prototypes) */
+    int32 (*mr_closeNetwork)(void);
     int32 (*mr_socket)(int32 type, int32 protocol);
     int32 (*mr_connect)(int32 s, int32 ip, uint16 port, int32 type);
     int32 (*mr_getSocketState)(int32 s);
@@ -84,7 +85,7 @@ typedef struct {
     int32 (*mr_recvfrom)(int32 s, char *buf, int len, int32 *ip, uint16 *port);
     int32 (*mr_sendto)(int32 s, const char *buf, int len, int32 ip, uint16 port);
     int32 (*mr_startShake)(int32 ms);
-    int32 (*mr_stopShake)();
+    int32 (*mr_stopShake)(void);
     int32 (*mr_playSound)(int type, const void *data, uint32 dataLen, int32 loop);
     int32 (*mr_stopSound)(int type);
     int32 (*mr_dialogCreate)(const char *title, const char *text, int32 type);

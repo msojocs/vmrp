@@ -202,7 +202,7 @@ int32_t event(int32_t code, int32_t p1, int32_t p2) {
     return vmrp_runtime_event(&runtime, code, p1, p2);
 }
 
-int32_t timer() {
+int32_t timer(void) {
     if (vmrp_exit_requested) return MR_FAILED;
     return vmrp_runtime_timer(&runtime);
 }

@@ -151,6 +151,7 @@ int32_t editCreate(const char *title, const char *text, int32_t type, int32_t ma
 }
 
 int32 editRelease(int32 edit) {
+    (void)edit; /* 单编辑框实现,句柄未使用;签名由 bridge ABI 固定 */
     isEditMode = false;
     if (holdEditText != NULL) {
         my_freeExt(holdEditText);
@@ -160,6 +161,7 @@ int32 editRelease(int32 edit) {
 }
 
 char *editGetText(int32 edit) {
+    (void)edit; /* 同 editRelease:单编辑框实现,句柄未使用 */
     SDL_Log("editGetText(): '%s'", holdEditText);
     return holdEditText;
 }
@@ -230,6 +232,8 @@ void setEventEnable(int v) {
 #endif
 
 uint32_t timerCb(uint32_t interval, void *param) {
+    (void)interval; /* 签名由 SDL_AddTimer 回调 ABI 固定 */
+    (void)param;
     SDL_RemoveTimer(timeId);
     timeId = 0;
     /* 不在定时器线程调用 timer()，改为推送事件到主线程 */
@@ -250,7 +254,7 @@ int32_t timerStart(uint16_t t) {
     return MR_SUCCESS;
 }
 
-int32_t timerStop() {
+int32_t timerStop(void) {
     if (timeId) {
         SDL_RemoveTimer(timeId);
         timeId = 0;
@@ -487,7 +491,7 @@ static void startAutoClicksIfRequested(void) {
     }
 }
 
-void loop() {
+void loop(void) {
     SDL_Event ev;
     bool isLoop = true;
 
@@ -541,6 +545,8 @@ void loop() {
                             }
                         }
                     }
+                    /* 非 Ctrl+V/Z 的按键与鼠标点击一样,只提示编辑操作方式 */
+                    /* fall through */
                     case SDL_MOUSEBUTTONDOWN:
                         SDL_Log("ctrl+v输入内容，ctrl+z取消输入");
                 }

@@ -444,7 +444,7 @@ typedef struct {
 } initNetworkAsyncData_t;
 #endif
 
-static int32 my_initNetworkSync() {
+static int32 my_initNetworkSync(void) {
 #ifdef WIN_PLAT
     WSADATA wsaData;
     int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -475,7 +475,10 @@ static void* my_initNetworkAsync(void* arg) {
     initNetworkAsyncData_t* data = (initNetworkAsyncData_t*)arg;
     int32 r = my_initNetworkSync();
     printf("my_initNetworkAsync(): %d\n", r);
-    bridge_dsm_network_cb(data->uc, (uint32_t)data->cb, r, (uint32_t)data->userData);
+    /* cb/userData 装的是 guest 32 位地址(经指针类型转运),显式经 uintptr_t
+     * 截断,语义与原先的直接窄化转换一致 */
+    bridge_dsm_network_cb(data->uc, (uint32_t)(uintptr_t)data->cb, r,
+                          (uint32_t)(uintptr_t)data->userData);
     free(data);
     return NULL;
 }
@@ -563,7 +566,9 @@ static void* my_getHostByNameAsync(void* arg) {
     getHostByNameAsyncData_t* data = (getHostByNameAsyncData_t*)arg;
     int32 r = my_getHostByNameSync(data->name);
     printf("my_getHostByNameAsync(): 0x%X\n", r);
-    bridge_dsm_network_cb(data->uc, (uint32_t)data->cb, r, (uint32_t)data->userData);
+    /* 同 my_initNetworkAsync:guest 32 位地址显式经 uintptr_t 截断 */
+    bridge_dsm_network_cb(data->uc, (uint32_t)(uintptr_t)data->cb, r,
+                          (uint32_t)(uintptr_t)data->userData);
     free(data->name);
     free(data);
     return NULL;
@@ -742,7 +747,7 @@ int32 my_recvfrom(int32 s, char* buf, int len, int32* ip, uint16* port) {
         return 0;
     }
     struct sockaddr_in from;
-    int fromLen = sizeof(from);
+    socklen_t fromLen = sizeof(from);
     ret = recvfrom(data->s, buf, len, 0, (struct sockaddr*)&from, &fromLen);
     if (ret == -1) {
         return MR_FAILED;

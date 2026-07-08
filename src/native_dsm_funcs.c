@@ -203,11 +203,18 @@ static char *native_readdir(int32 f) {
 }
 
 static int32 native_initNetwork(NETWORK_CB cb, const char *mode, void *userData) {
+    /* native 路径同步初始化,不使用回调;签名由 dsm 函数表 ABI 固定 */
+    (void)cb;
+    (void)userData;
     return my_initNetwork(NULL, NULL, mode, NULL);
 }
 
 static int32 native_getHostByName(const char *ptr, NETWORK_CB cb, void *userData) {
-    return my_getHostByName(NULL, ptr, (MR_GET_HOST_CB)cb, userData);
+    /* NETWORK_CB(int,void*) 与形参类型 MR_GET_HOST_CB(int32) 原型不同,历史上
+     * 直接强转传递;下游 bridge_dsm_network_cb 最终仍按 int32(*)(int32,void*)
+     * 即 NETWORK_CB 原型回调,所以这里的强转只是类型转运。经 void(*)(void)
+     * 中转仅消除 -Wcast-function-type,行为与原先完全一致 */
+    return my_getHostByName(NULL, ptr, (MR_GET_HOST_CB)(void (*)(void))cb, userData);
 }
 
 static int32 native_timerStop(void) {

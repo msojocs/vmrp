@@ -12,7 +12,7 @@ extern void guiDrawBitmapWithStride(uint16_t *bmp, int32_t x, int32_t y,
                                     int32_t source_x,
                                     int32_t source_y);
 extern int32_t timerStart(uint16_t t);
-extern int32_t timerStop();
+extern int32_t timerStop(void);
 extern int32_t editCreate(const char *title, const char *text, int32_t type, int32_t max_size);
 extern int32 editRelease(int32 edit);
 extern char *editGetText(int32 edit);
