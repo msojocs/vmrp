@@ -26,7 +26,7 @@ static inline uint32_t vmrp_memory_bytes(int memory_mb) {
 extern VmrpConfig vmrp_config;
 
 int32_t event(int32_t code, int32_t p1, int32_t p2);
-int32_t timer();
+int32_t timer(void);
 int configureVmrpDnsMap(const char *map);
 int startVmrp(const VmrpArgs *args);
 void stopVmrp(void);

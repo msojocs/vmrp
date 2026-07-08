@@ -134,7 +134,8 @@ int32_t my_close(int32_t f) {
     if (obj == NULL) {
         return MR_FAILED;
     }
-    if (f == filef_count) {
+    /* 句柄在 map 中按 uint32 键查得,此处 f 必为有效正值,显式转换消除符号比较告警 */
+    if ((uint32_t)f == filef_count) {
         filef_count--;
     }
     int fh = (int)(intptr_t)obj->data;
@@ -355,7 +356,8 @@ int32_t my_closedir(int32_t f) {
     if (obj == NULL) {
         return MR_FAILED;
     }
-    if (f == dirf_count) {
+    /* 同 my_close:map 命中即 f 为有效正值,显式转换消除符号比较告警 */
+    if ((uint32_t)f == dirf_count) {
         dirf_count--;
     }
     DIR *pDir = (DIR *)obj->data;

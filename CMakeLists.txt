@@ -32,6 +32,11 @@ endif()
 if(VMRP_BUILD_SHARED_ONLY)
   set(VMRP_BUILD_SHARED ON CACHE BOOL "" FORCE)
 endif()
+# --- 第一方源码严格警告(重构安全网,见 docs/arm-ext-executor-refactor-plan.md P0.1)---
+# 只作用于 src/ 外层模拟器源码;third_party/unicorn 与 src/mythroad(独立子项目)
+# 不受影响。存量告警清零后用 VMRP_WERROR=ON 升级为错误,防止重构期间无声引入新告警。
+option(VMRP_STRICT_WARNINGS "Enable extra warnings for first-party src/ sources" ON)
+option(VMRP_WERROR "Treat first-party src/ warnings as errors" OFF)
 # --- zlib ---
 if(MSVC)
   include(FetchContent)
@@ -286,6 +291,26 @@ else()
 endif()
 set_source_files_properties(${VMRP_MYTHROAD_SOURCES} PROPERTIES COMPILE_OPTIONS "${VMRP_UNDEFINE_VMRP_OPTION}")
 
+# 严格警告作用面 = vmrp 可执行文件里除 mythroad 子项目外的全部第一方源码
+set(VMRP_FIRST_PARTY_SOURCES
+  ${VMRP_PLATFORM_SDL_SOURCES}
+  ${VMRP_CORE_SOURCES}
+  ./src/native_platform_memory.c
+  ./src/native_dsm_funcs.c
+  ./src/runtime_native_mythroad.c
+  ./src/arm_ext_executor.c
+  ./src/app_compat.c
+  ./src/app_compat_gghjt.c
+)
+if(NOT MSVC AND VMRP_STRICT_WARNINGS)
+  set(VMRP_STRICT_WARNING_OPTIONS -Wextra -Wshadow -Wstrict-prototypes)
+  if(VMRP_WERROR)
+    list(APPEND VMRP_STRICT_WARNING_OPTIONS -Werror)
+  endif()
+  set_source_files_properties(${VMRP_FIRST_PARTY_SOURCES} PROPERTIES
+    COMPILE_OPTIONS "${VMRP_STRICT_WARNING_OPTIONS}")
+endif()
+
 if(NOT VMRP_BUILD_SHARED_ONLY)
 # --- Native 构建 ---
 add_executable(vmrp
@@ -319,6 +344,28 @@ else()
   # --no-as-needed 确保 libm 不被 GNU ld 按需跳过——unicorn 的内部静态库
   # （arm-softmmu）在链接顺序上排在 -lm 之后，需要其中的 sqrtf 等符号
   target_link_libraries(vmrp unicorn "-Wl,--no-as-needed" SDL2main SDL2 m pthread z)
+endif()
+
+# --- C 层单元测试(重构安全网 P0.2,docs/arm-ext-executor-refactor-plan.md)---
+# test_arm_ext.c 直接 #include arm_ext_executor.c 以测试其 static 纯内存函数;
+# mythroad/bridge 外部符号由 unit_stubs.c 提供 abort 桩。ctest 运行。
+if(NOT MSVC)
+  enable_testing()
+  add_executable(vmrp-unit
+    ./test/unit/test_arm_ext.c
+    ./test/unit/unit_stubs.c
+    ./src/utils.c
+    ./src/rbtree.c
+    ./src/fileLib.c
+    ./src/network.c
+    ./src/app_compat.c
+    ./src/app_compat_gghjt.c
+  )
+  target_compile_definitions(vmrp-unit PRIVATE VMRP_NATIVE TRUST_BINARIES)
+  target_include_directories(vmrp-unit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
+  # --no-as-needed 原因同 vmrp 目标:unicorn 内部静态库需要 -lm 的 fma/sqrt
+  target_link_libraries(vmrp-unit unicorn "-Wl,--no-as-needed" m pthread z)
+  add_test(NAME vmrp-unit COMMAND vmrp-unit)
 endif()
 
 # --- Wasm 构建（emcc）---

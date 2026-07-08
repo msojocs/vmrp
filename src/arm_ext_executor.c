@@ -684,6 +684,10 @@ static void arm_ext_protect_registered_module_storage(ArmExtModule *m,
                                                       uint32_t file_len);
 
 static uint32_t arm_alloc(ArmExtModule *m, uint32_t len) {
+    /* 长度上限守卫:len 接近 UINT32_MAX 时 align4 与 heap_top+len 均会回绕,
+     * 绕过下方容量检查返回"成功"地址(guest 负长度经 case 132/25 等传入,
+     * issues doc B3)。EXT 总内存只有 16MB,超过即明确失败,合法调用不受影响 */
+    if (len > EXT_MEM_SIZE) return 0;
     len = align4(len ? len : 1);
     /* bump 堆从 EXT_HEAP_ADDR(0x200000) 向上生长,必须跳过
      * EXT 栈区 [EXT_STACK_ADDR, EXT_CODE_ADDR) 和 wrapper 代码区
@@ -3215,7 +3219,11 @@ static void restore_ext_r9(ArmExtModule *m) {
 
 static char *arm_str(ArmExtModule *m, uint32_t addr) {
     char *p = (char *)arm_ptr(m, addr);
-    return p ? p : (char *)"";
+    /* 空串退路必须 ≥2 字节全零:_DrawText 等 UCS2 消费方按双字节读首字符,
+     * 1 字节的 "" 字面量会越界读 1 字节(ASan global-buffer-overflow 实测
+     * 命中,mythroad.c _DrawText)。返回值语义不变:窄串/宽串解释都是空串。 */
+    static const char arm_str_empty[4] = {0, 0, 0, 0};
+    return p ? p : (char *)arm_str_empty;
 }
 
 static ArmExtNestedModule *arm_ext_resource_owner_for_lr(ArmExtModule *m,
@@ -3890,13 +3898,14 @@ static uint32_t arm_ext_guest_mem_malloc(ArmExtModule *m, uint32_t len) {
             uint32_t node_end = nextfree + node_len;
             uint32_t l = nextfree + len;
             uint32_t right_len = node_end - l;
-            uint32_t protected_lo = 0;
-            uint32_t protected_hi = 0;
+            /* split_lo/hi:与函数开头的 protected_lo/hi 区分,避免遮蔽 */
+            uint32_t split_lo = 0;
+            uint32_t split_hi = 0;
             if (right_len &&
                 arm_ext_find_first_registered_code_overlap(
-                    m, l, right_len, &protected_lo, &protected_hi) &&
-                protected_lo < l + 8u) {
-                l = protected_hi;
+                    m, l, right_len, &split_lo, &split_hi) &&
+                split_lo < l + 8u) {
+                l = split_hi;
                 right_len = l < node_end ? node_end - l : 0;
             }
             if (right_len) {
@@ -3915,13 +3924,14 @@ static uint32_t arm_ext_guest_mem_malloc(ArmExtModule *m, uint32_t len) {
             uint32_t right_len = node_end - alloc_end;
             arm_ext_guest_mem_write_u32(m, nextfree + 4, left_len);
             if (right_len) {
-                uint32_t protected_lo = 0;
-                uint32_t protected_hi = 0;
+                /* tail_lo/hi:与函数开头的 protected_lo/hi 区分,避免遮蔽 */
+                uint32_t tail_lo = 0;
+                uint32_t tail_hi = 0;
                 if (arm_ext_find_first_registered_code_overlap(
-                        m, alloc_end, right_len, &protected_lo,
-                        &protected_hi) &&
-                    protected_lo < alloc_end + 8u) {
-                    alloc_end = protected_hi;
+                        m, alloc_end, right_len, &tail_lo,
+                        &tail_hi) &&
+                    tail_lo < alloc_end + 8u) {
+                    alloc_end = tail_hi;
                     right_len = alloc_end < node_end ? node_end - alloc_end : 0;
                 }
             }
@@ -4695,6 +4705,136 @@ static void hook_compact_heap_free_return(uc_engine *uc, uint64_t address,
      * allocator's own ordering instead of masking the callback that caused it.
      */
     arm_ext_sanitize_compact_timer_heaps(m);
+}
+
+/*
+ * ============ 运行时不变量检查器(重构安全网 P0.3)============
+ *
+ * VMRP_ARM_EXT_INVARIANTS=1 时,在 arm_ext_call / arm_ext_call_dispatch 的
+ * 出入口做结构一致性检查。目的:把"修 A 坏 B"从像素级症状(冻结/花屏)
+ * 提前到状态级报警——gzwdzjs 无 netpay 冻结(free-list 覆盖模块存活区)
+ * 这类问题在覆写发生前就能打印出来。只读检查,不修改任何 guest 状态;
+ * 违反时打印 "INVARIANT ..." 一行并计数,不中断执行(由观察者决定处置)。
+ */
+
+static int arm_ext_invariants_enabled_(void) {
+    static int cached = -1;
+    if (cached < 0) cached = getenv("VMRP_ARM_EXT_INVARIANTS") ? 1 : 0;
+    return cached;
+}
+
+/* 单个 compact 堆 free-list 与保护区间(模块映像+ER_RW+live timer)求交,
+ * 遍历逻辑与 arm_ext_compact_heap_cut_range 相同但只读 */
+static int arm_ext_invariant_check_freelist_overlap_(
+    ArmExtModule *m, const char *where, uint32_t rw,
+    const ArmExtBumpBlock *ranges, uint32_t count) {
+    int violations = 0;
+    if (!m || !rw || !m->wrapper_compact_heap_ctrl_off) return 0;
+    uint32_t ctrl_slot = rw + m->wrapper_compact_heap_ctrl_off;
+    if (!arm_ext_addr_range_mapped(m, ctrl_slot, 4u)) return 0;
+    uint32_t ctrl = arm_ext_read_u32_or_zero_(m, ctrl_slot);
+    if (!ctrl || !arm_ext_addr_range_mapped(m, ctrl, 0x1Cu)) return 0;
+    uint32_t base = arm_ext_read_u32_or_zero_(m, ctrl + 0x08u);
+    uint32_t end = arm_ext_read_u32_or_zero_(m, ctrl + 0x10u);
+    if (end <= base || !arm_ext_addr_range_mapped(m, base, end - base))
+        return 0;
+    uint32_t heap_len = end - base;
+    uint32_t off = arm_ext_read_u32_or_zero_(m, ctrl + 0x18u);
+    uint32_t iter_limit = heap_len / 8u + 4u;
+    while (off < heap_len && iter_limit--) {
+        uint32_t node = base + off;
+        if (!arm_ext_addr_range_mapped(m, node, 8u)) break;
+        uint32_t next_off = arm_ext_read_u32_or_zero_(m, node);
+        uint32_t len = arm_ext_read_u32_or_zero_(m, node + 4u);
+        if (len < 8u || len > end - node) break;
+        for (uint32_t i = 0; i < count; ++i) {
+            uint32_t lo = ranges[i].addr;
+            uint32_t hi = ranges[i].addr + ranges[i].len;
+            uint32_t olo = node > lo ? node : lo;
+            uint32_t ohi = node + len < hi ? node + len : hi;
+            if (olo < ohi) {
+                printf("INVARIANT %s: compact free node 0x%X+0x%X overlaps protected 0x%X..0x%X (rw=0x%X)\n",
+                       where, node, len, lo, hi, rw);
+                violations++;
+            }
+        }
+        off = next_off;
+    }
+    return violations;
+}
+
+static int arm_ext_invariant_owner_is_known_(ArmExtModule *m, uint32_t p) {
+    if (!p || p == m->p_addr) return 1;
+    for (int i = 0; i < m->nested_module_count; ++i) {
+        if (m->nested_modules[i].p_addr == p) return 1;
+    }
+    return 0;
+}
+
+static int arm_ext_verify_invariants(ArmExtModule *m, const char *where) {
+    if (!m || !arm_ext_invariants_enabled_()) return 0;
+    int violations = 0;
+
+    /* 1. bump 堆顶界内 */
+    if (m->heap_top < EXT_HEAP_ADDR ||
+        m->heap_top > EXT_BASE_ADDR + EXT_MEM_SIZE) {
+        printf("INVARIANT %s: heap_top 0x%X out of range\n", where,
+               m->heap_top);
+        violations++;
+    }
+
+    /* 2. 注册表容量与模块映像可映射 */
+    if (m->nested_module_count < 0 ||
+        m->nested_module_count > ARM_EXT_NESTED_MODULE_MAX) {
+        printf("INVARIANT %s: nested_module_count %d out of range\n", where,
+               m->nested_module_count);
+        violations++;
+    }
+    for (int i = 0; i < m->nested_module_count; ++i) {
+        ArmExtNestedModule *mod = &m->nested_modules[i];
+        if (mod->file_addr && mod->file_len &&
+            !arm_ext_addr_range_mapped(m, mod->file_addr, mod->file_len)) {
+            printf("INVARIANT %s: nested[%d] file 0x%X+0x%X unmapped\n",
+                   where, i, mod->file_addr, mod->file_len);
+            violations++;
+        }
+    }
+
+    /* 3. active/timer owner 必须指向 wrapper 或已注册模块的 P */
+    if (!arm_ext_invariant_owner_is_known_(m, m->active_p_addr)) {
+        printf("INVARIANT %s: active_p 0x%X not a registered module P\n",
+               where, m->active_p_addr);
+        violations++;
+    }
+    if (!arm_ext_invariant_owner_is_known_(m, m->timer_p_addr)) {
+        printf("INVARIANT %s: timer_p 0x%X not a registered module P\n",
+               where, m->timer_p_addr);
+        violations++;
+    }
+
+    /* 4. compact free-list 不得覆盖模块存活存储/live timer(gzwdzjs 根因类) */
+    ArmExtBumpBlock ranges[ARM_EXT_COMPACT_TIMER_PROTECT_MAX];
+    uint32_t count = 0;
+    arm_ext_collect_registered_module_ranges(m, ranges, &count);
+    if (count) {
+        violations += arm_ext_invariant_check_freelist_overlap_(
+            m, where, arm_ext_primary_rw_base_(m), ranges, count);
+        violations += arm_ext_invariant_check_freelist_overlap_(
+            m, where, arm_ext_wrapper_rw_base_(m), ranges, count);
+        violations += arm_ext_invariant_check_freelist_overlap_(
+            m, where, arm_ext_active_rw_base(m), ranges, count);
+        for (int i = 0; i < m->nested_module_count; ++i) {
+            uint32_t rw = arm_ext_read_u32_or_zero_(
+                m, m->nested_modules[i].p_addr);
+            violations += arm_ext_invariant_check_freelist_overlap_(
+                m, where, rw, ranges, count);
+        }
+    }
+
+    if (violations) {
+        printf("INVARIANT %s: %d violation(s)\n", where, violations);
+    }
+    return violations;
 }
 
 static void arm_ext_free_row_spans(ArmExtRowSpans *spans) {
@@ -6555,7 +6695,36 @@ static void hook_low_zero(uc_engine *uc, uint64_t address, uint32_t size, void *
     }
 }
 
+/*
+ * table[3](memcpy)/table[6](strncpy) 桥的重叠区间处理:真机 SDK 的
+ * memcpy/strncpy 是朴素前向逐字节循环,应用会依赖前向搬移语义(sanitizer
+ * 基线实测:多款应用以 dst<src 重叠 2 字节整理缓冲,talkcat 以 dst==src
+ * 调 strncpy)。宿主 libc 对重叠区间是 UB(ASan *-param-overlap 命中,
+ * 且 glibc 向量化实现不保证前向序)。重叠时改用与真机一致的前向逐字节
+ * 循环,不重叠时仍走宿主快速路径,结果与真机语义完全一致。
+ */
+static void arm_ext_guest_memcpy(void *dst, const void *src, size_t n) {
+    uint8_t *d = (uint8_t *)dst;
+    const uint8_t *s = (const uint8_t *)src;
+    if (d < s + n && s < d + n) {
+        for (size_t i = 0; i < n; i++) d[i] = s[i];
+        return;
+    }
+    memcpy(d, s, n);
+}
+
+static char *arm_ext_guest_strncpy(char *dst, const char *src, size_t n) {
+    if (dst < src + n && src < dst + n) {
+        size_t i = 0;
+        for (; i < n && src[i]; i++) dst[i] = src[i];
+        for (; i < n; i++) dst[i] = '\0';
+        return dst;
+    }
+    return strncpy(dst, src, n);
+}
+
 static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *user_data) {
+    (void)uc; /* 统一通过 m->uc 访问引擎;参数由 Unicorn hook ABI 固定 */
     (void)size;
     ArmExtModule *m = (ArmExtModule *)user_data;
     if (address < EXT_TABLE_ADDR || address >= EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4) return;
@@ -6660,7 +6829,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             ret = p;
         } break;
         case 3:
-            memcpy(arm_ptr(m, r0), arm_ptr(m, r1), r2);
+            arm_ext_guest_memcpy(arm_ptr(m, r0), arm_ptr(m, r1), r2);
             /* memcpy 后修复 GOT 中的 bridge 指针 */
             if (m->got_snapshot_base) {
                 uint32_t got_base = m->got_snapshot_base;
@@ -6679,7 +6848,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             ret = r0; break;
         case 4: memmove(arm_ptr(m, r0), arm_ptr(m, r1), r2); ret = r0; break;
         case 5: strcpy(arm_ptr(m, r0), arm_str(m, r1)); ret = r0; break;
-        case 6: strncpy(arm_ptr(m, r0), arm_str(m, r1), r2); ret = r0; break;
+        case 6: arm_ext_guest_strncpy(arm_ptr(m, r0), arm_str(m, r1), r2); ret = r0; break;
         case 7: strcat(arm_ptr(m, r0), arm_str(m, r1)); ret = r0; break;
         case 8: strncat(arm_ptr(m, r0), arm_str(m, r1), r2); ret = r0; break;
         case 9: ret = memcmp(arm_ptr(m, r0), arm_ptr(m, r1), r2); break;
@@ -7194,7 +7363,9 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             if (substituted) {
                 if (m->profile && m->profile->post_write_cleanup)
                     m->profile->post_write_cleanup(m->app_state);
-                if (ret == (int32_t)len) ret = (int32_t)r2;
+                /* ret 为 uint32_t,与 len 直接比较即位模式相等判定(与原
+                 * (int32_t) 强转比较数值等价),消除符号比较告警 */
+                if (ret == len) ret = (int32_t)r2;
             }
             if (getenv("VMRP_ARM_EXT_DIAG")) {
                 char preview[192];
@@ -7299,10 +7470,9 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 46: {
             const char *len_name = arm_str(m, r0);
             ret = mr_getLen(arm_ext_pack_to_host_path(m, len_name));
-            if (ret < 0 && m->mrp_cache_count > 0) {
-                MrpCacheEntry *ce = mrp_cache_find(m, len_name);
-                if (ce) ret = (int32_t)ce->data_len;
-            }
+            /* 原有 "ret < 0 时查 MRP 缓存" 回退块因 ret 为 uint32_t 恒不成立,
+             * 属从未生效的死代码(-Wtype-limits 证实),按"禁止兜底逻辑"规范
+             * 删除;删除即保持现行为,getLen 失败语义与真机一致由调用方处理 */
             if (getenv("VMRP_ARM_EXT_DIAG")) {
                 uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
                 arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
@@ -9164,6 +9334,9 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if (output) *output = NULL;
     if (output_len) *output_len = 0;
     if (!m || !m->helper_addr || !m->p_addr) return MR_FAILED;
+    /* 不变量入口检查(P0.3):事件/定时器高频进入,入口检查等价于上一次
+     * 调用的出口检查(只差一拍),避免给 550 行函数的每个 return 加桩 */
+    arm_ext_verify_invariants(m, "call-entry");
     m->busy_wait_count = 0;
     m->busy_wait_start_ms = 0;
     uint32_t input_addr = 0;
@@ -9858,6 +10031,8 @@ uint32 arm_ext_read_timer_queue(ArmExtModule *m) {
 
 int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval) {
     if (!m || !m->p_addr) return MR_FAILED;
+    /* 不变量入口检查(P0.3),同 arm_ext_call */
+    arm_ext_verify_invariants(m, "dispatch-entry");
     uint32_t nested_p = m->primary_p_addr ? m->primary_p_addr : 0;
     if (!nested_p && m->last_file_addr) {
         void *p4 = arm_ptr(m, m->last_file_addr + 4);

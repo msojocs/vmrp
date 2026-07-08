@@ -122,7 +122,7 @@ void dumpREG(uc_engine *uc) {
 
 void dumpMemStr(void *ptr, size_t len) {
     char *p = ptr;
-    for (int i = 0; i < len; i++) {
+    for (size_t i = 0; i < len; i++) {
         if (isgraph(*p)) {
             putchar(*p);
         } else {
@@ -167,14 +167,6 @@ retResult:
     }
     *mem = '\0';
     return ret;
-}
-
-static int vmrp_wstrlen(char *txt) {
-    int i = 0;
-    if (txt) {
-        while (txt[i] || txt[i + 1]) i += 2;
-    }
-    return i;
 }
 
 
@@ -307,7 +299,7 @@ static void testDelete(struct rb_root *root, uint32_t key) {
     }
 }
 
-void uIntMap_testMain() {
+void uIntMap_testMain(void) {
     struct rb_root root = RB_ROOT;
 
     testInsert(&root, 100, "hell");
