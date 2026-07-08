@@ -4587,6 +4587,73 @@ static void arm_ext_sanitize_compact_heap_for_rw(ArmExtModule *m,
     }
 }
 
+static void arm_ext_collect_protect_range_(ArmExtBumpBlock *ranges,
+                                           uint32_t *count,
+                                           uint32_t addr, uint32_t len) {
+    if (!addr || !len || *count >= ARM_EXT_COMPACT_TIMER_PROTECT_MAX)
+        return;
+    ranges[*count].addr = addr;
+    ranges[*count].len = len;
+    (*count)++;
+}
+
+/*
+ * 已注册 EXT 模块的存活存储(文件映像 + ER_RW 静态段)不允许出现在 compact
+ * free-list 里,否则后续 malloc 会把精灵/位图缓冲切进正在执行的代码或静态
+ * 变量区。gzwdzjs 删除 plugins/netpay.mrp 后的错误路径实测:
+ *   - 启动时 wrapper 把 gzip 代码段读进 RAM pack 缓冲 0x2314C0(len 72570,
+ *     尾部到 0x24303A),readFile('abc') 解压出 game.ext 到 0x226118+0x1C70C,
+ *     其映像与随后的 ER_RW(0x24282C+0x4DF4)都落在 RAM pack 区间内;
+ *   - RAM pack 其后被 free 进 compact free-list,free-list 便获得覆盖模块
+ *     存活存储的空闲段;
+ *   - 只保护文件映像时,精灵缓存仍会分配到 0x242828 附近,RGB565 像素
+ *     (0xF81F 等)覆写 ER_RW 头部,帧回调指针变成像素垃圾 0x9359B3BB,
+ *     事件回调 blx 到未映射地址崩溃一次后定时器泵瘫痪、画面冻结;
+ *   - 只保护代码前的版本则是像素覆写 0x231550 指令→SP=0x61/0x9 崩溃循环。
+ * 与 LG_mem 侧 arm_ext_find_first_registered_code_overlap 的保护语义一致,
+ * 这里把当前注册模块的文件映像和 ER_RW 区间一并加入 compact 堆保护集。
+ * ER_RW 基址/长度读自各模块 P 结构(start_of_ER_RW / ER_RW_Length)。模块被
+ * 替换/丢弃后不再注册,区间自然恢复可分配,不影响"先 free 再 readFile
+ * 复用"的行为。
+ */
+static void arm_ext_collect_registered_module_ranges(ArmExtModule *m,
+                                                     ArmExtBumpBlock *ranges,
+                                                     uint32_t *count) {
+    if (!m || !ranges || !count) return;
+    /* 每个模块条目:文件映像 {file_addr,file_len} + P 结构地址(取 ER_RW) */
+    struct { uint32_t addr, len, p_addr; } mod[2 + ARM_EXT_NESTED_MODULE_MAX];
+    uint32_t n = 0;
+    mod[n].addr = m->primary_file_addr;
+    mod[n].len = m->primary_file_len;
+    mod[n].p_addr = m->p_addr;
+    n++;
+    /* pending_internal 尚未 sync,还没有 P 结构,只保护文件映像 */
+    mod[n].addr = m->pending_internal_file_addr;
+    mod[n].len = m->pending_internal_file_len;
+    mod[n].p_addr = 0;
+    n++;
+    for (int i = 0; i < m->nested_module_count && n < 2 + ARM_EXT_NESTED_MODULE_MAX; ++i) {
+        mod[n].addr = m->nested_modules[i].file_addr;
+        mod[n].len = m->nested_modules[i].file_len;
+        mod[n].p_addr = m->nested_modules[i].p_addr;
+        n++;
+    }
+    for (uint32_t i = 0; i < n; ++i) {
+        if (!mod[i].addr || !mod[i].len)
+            continue;
+        arm_ext_collect_protect_range_(ranges, count, mod[i].addr, mod[i].len);
+        if (!mod[i].p_addr ||
+            !arm_ext_addr_range_mapped(m, mod[i].p_addr, 8u))
+            continue;
+        /* mr_c_function_P_t: +0=start_of_ER_RW,+4=ER_RW_Length */
+        uint32_t rw = arm_ext_read_u32_or_zero_(m, mod[i].p_addr);
+        uint32_t rw_len = arm_ext_read_u32_or_zero_(m, mod[i].p_addr + 4u);
+        if (!rw || !rw_len || !arm_ext_addr_range_mapped(m, rw, rw_len))
+            continue;
+        arm_ext_collect_protect_range_(ranges, count, rw, rw_len);
+    }
+}
+
 static void arm_ext_sanitize_compact_timer_heaps(ArmExtModule *m) {
     if (!m || !m->wrapper_compact_heap_ctrl_off)
         return;
@@ -4596,6 +4663,8 @@ static void arm_ext_sanitize_compact_timer_heaps(ArmExtModule *m) {
     arm_ext_collect_primary_compact_timer_nodes(m, ranges, &count);
     arm_ext_collect_wrapper_compact_timer_nodes(m, ranges, &count);
     arm_ext_collect_active_compact_timer_nodes(m, ranges, &count);
+    /* 注册模块的映像与 ER_RW 静态段与 live timer node 一样属于不可分配区间 */
+    arm_ext_collect_registered_module_ranges(m, ranges, &count);
     if (!count) return;
 
     arm_ext_sanitize_compact_heap_for_rw(m, arm_ext_primary_rw_base_(m),
