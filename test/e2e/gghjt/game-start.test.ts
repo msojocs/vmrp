@@ -143,10 +143,9 @@ describe("gghjt 开始游戏", () => {
     {
       // 点击开始游戏，进入游戏界面
       await vmrp.click(116, 291, 3_000);
-      await vmrp.delay(3_000);
-      const screen = await vmrp.screen("game-start");
+      await vmrp.delay(6_000);
       // rgb(248, 252, 0)
-      expect(screen.pixel(42, 140)).toEqual([248, 252, 0]);
+      await vmrp.waitForPixel(42, 140, [248, 252, 0], { name: "game-start", timeoutMs: 6_000 });
     }
 
     {

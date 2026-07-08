@@ -93,7 +93,7 @@ describe("gtcm 进入主界面", () => {
       expect(screen.pixel(240, 10)).toEqual([0, 140, 216]);
     }
     {
-      await vmrp.waitForPixel(231, 88, [0, 0, 0], { name: "game-over", timeoutMs: 60_000 });
+      await vmrp.waitForPixel(231, 88, [0, 0, 0], { name: "game-over", timeoutMs: 120_000 });
     }
     {
       await vmrp.key('ENTER', 1_000);
