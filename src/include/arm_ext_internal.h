@@ -62,6 +62,35 @@
 #define ARM_EXT_SHORT_PACK_ALIAS_MAX 32u
 #define ARM_EXT_DIAG_FD_MAX 32u
 
+/*
+ * ── wrapper ABI 偏移常量(P1-C 常量化,布局与证据来源见 docs/arm-ext-abi.md)──
+ * extChunk(mrc_extChunk)字段偏移。此前 0x34(suspend 深度)等裸写十余处,
+ * 修改 ABI 认知时极易漏改;统一经命名宏访问。
+ */
+#define AEX_CHUNK_INIT_OFF       0x04u /* 模块 init 入口 */
+#define AEX_CHUNK_HELPER_OFF     0x08u /* helper 入口(code=2 回调链读取) */
+#define AEX_CHUNK_FILE_BASE_OFF  0x0Cu /* 文件映像基址 */
+#define AEX_CHUNK_FILE_LEN_OFF   0x10u /* 文件映像长度 */
+#define AEX_CHUNK_RW_BASE_OFF    0x14u /* ER_RW 基址 */
+#define AEX_CHUNK_RW_LEN_OFF     0x18u /* ER_RW 长度 */
+#define AEX_CHUNK_P_ADDR_OFF     0x1Cu /* P 结构地址 */
+#define AEX_CHUNK_P_LEN_OFF      0x20u /* P 结构长度 */
+#define AEX_CHUNK_EVENT_DATA_OFF 0x24u /* code=2 参数 */
+#define AEX_CHUNK_EVENT_FUNC_OFF 0x28u /* code=2 目标函数 */
+#define AEX_CHUNK_RECORD_OFF     0x2Cu /* 私有 loader record 缓冲 */
+#define AEX_CHUNK_SUSPEND_OFF    0x34u /* 暂停/挂起深度(不是退出标志) */
+#define AEX_CHUNK_HEAP_TOP_OFF   0x38u /* 模块堆顶界 */
+/* mr_c_function_P_t 字段偏移(结构定义见下方,guest 侧按偏移访问) */
+#define AEX_P_ER_RW_OFF     0x00u
+#define AEX_P_ER_RW_LEN_OFF 0x04u
+#define AEX_P_EXT_TYPE_OFF  0x08u
+#define AEX_P_EXT_CHUNK_OFF 0x0Cu
+/* wrapper compact 堆控制块字段偏移(ctrl 定位方式见 abi 文档第 4 节) */
+#define AEX_COMPACT_CTRL_BASE_OFF 0x08u /* 堆基址 */
+#define AEX_COMPACT_CTRL_FREE_OFF 0x0Cu /* 当前空闲字节 */
+#define AEX_COMPACT_CTRL_END_OFF  0x10u /* 堆末地址 */
+#define AEX_COMPACT_CTRL_HEAD_OFF 0x18u /* free-list 头(节点 {next_off,len}) */
+
 typedef struct mr_c_function_P_t {
     uint32 start_of_ER_RW;
     uint32 ER_RW_Length;
@@ -355,6 +384,21 @@ static inline void *arm_ptr(ArmExtModule *m, uint32_t addr) {
         addr - EXT_EXECUTOR_META_ADDR < EXT_EXECUTOR_META_SIZE)
         return m->executor_meta_mem + (addr - EXT_EXECUTOR_META_ADDR);
     return NULL;
+}
+
+/* B2:带长度校验的 arm_ptr。返回能容纳 [addr, addr+need) 的宿主指针;
+ * 区间任一端未映射、跨越不同映射区(宿主指针不连续)或回绕时返回 NULL。
+ * 用于替换"裸 arm_ptr + memcpy/strcpy"模式:guest 状态损坏时宿主必须
+ * 拒绝操作而不是段错误。 */
+static inline void *arm_ptr_span(ArmExtModule *m, uint32_t addr, uint32_t need) {
+    uint8_t *lo = (uint8_t *)arm_ptr(m, addr);
+    if (!lo || !need) return NULL;
+    if (need > 1u) {
+        if (need - 1u > UINT32_MAX - addr) return NULL;
+        uint8_t *hi = (uint8_t *)arm_ptr(m, addr + need - 1u);
+        if (!hi || (size_t)(hi - lo) != (size_t)(need - 1u)) return NULL;
+    }
+    return lo;
 }
 
 static inline uint32_t arm_ext_read_u32_or_zero_(ArmExtModule *m, uint32_t addr) {
