@@ -311,6 +311,124 @@ static void test_bytes_contain(void) {
     CHECK(arm_ext_fnv1a("a", 1) == 0xE40C292Cu);
 }
 
+/* ============ wrapper 指纹字节资产(P4.2 迁移安全网)============ */
+
+#include "wrapper_assets.h"
+
+/* 解出资产中某条 Thumb LDR literal 的 literal pool 窗口内偏移 */
+static uint32_t asset_ldr_lit_off(const uint8_t *code, uint32_t insn_off) {
+    uint16_t insn = (uint16_t)(code[insn_off] | (code[insn_off + 1] << 8));
+    return ((insn_off + 4u) & ~3u) + (insn & 0xFFu) * 4u;
+}
+
+static void test_find_wrapper_timer_dispatch(void) {
+    uint8_t buf[sizeof(asset_timer_dispatch_gxdzc)];
+    uint32_t chain = 1, sched = 1;
+
+    /* 正样本 gxdzc(16984 字节 SDK wrapper):命中 + sched_off=0x1FC */
+    uint32_t ret = find_wrapper_timer_dispatch(
+        asset_timer_dispatch_gxdzc, sizeof(asset_timer_dispatch_gxdzc),
+        &chain, &sched);
+    CHECK(ret == EXT_CODE_ADDR + asset_timer_dispatch_gxdzc_match_off + 1u);
+    CHECK(chain == 0);
+    CHECK(sched == 0x1FCu);
+
+    /* 正样本 wbrw(20272 字节变体):同形指令流,literal 布局不同 */
+    ret = find_wrapper_timer_dispatch(
+        asset_timer_dispatch_wbrw, sizeof(asset_timer_dispatch_wbrw),
+        &chain, &sched);
+    CHECK(ret == EXT_CODE_ADDR + asset_timer_dispatch_wbrw_match_off + 1u);
+    CHECK(sched == 0x2A8u);
+
+    /* 通配位(i==0/16 为 LDR literal 立即数)扰动不影响命中 */
+    memcpy(buf, asset_timer_dispatch_gxdzc, sizeof(buf));
+    buf[asset_timer_dispatch_gxdzc_match_off + 0] ^= 0xFF;
+    ret = find_wrapper_timer_dispatch(buf, sizeof(buf), &chain, &sched);
+    CHECK(ret == EXT_CODE_ADDR + asset_timer_dispatch_gxdzc_match_off + 1u);
+
+    /* 负样本:固定指令字节扰动 -> 不命中 */
+    memcpy(buf, asset_timer_dispatch_gxdzc, sizeof(buf));
+    buf[asset_timer_dispatch_gxdzc_match_off + 2] ^= 0x01;
+    CHECK(find_wrapper_timer_dispatch(buf, sizeof(buf), &chain, &sched) == 0);
+    CHECK(chain == 0 && sched == 0);
+
+    /* sched literal 越界(>=0x1000)/未对齐 -> 地址仍命中但不提取偏移 */
+    uint32_t lit = asset_ldr_lit_off(
+        asset_timer_dispatch_gxdzc, asset_timer_dispatch_gxdzc_match_off + 16u);
+    memcpy(buf, asset_timer_dispatch_gxdzc, sizeof(buf));
+    buf[lit] = 0x00; buf[lit + 1] = 0x20; /* 0x2000 */
+    ret = find_wrapper_timer_dispatch(buf, sizeof(buf), &chain, &sched);
+    CHECK(ret != 0 && sched == 0);
+    memcpy(buf, asset_timer_dispatch_gxdzc, sizeof(buf));
+    buf[lit] = 0xFE; /* 0x1FE:未 4 对齐 */
+    ret = find_wrapper_timer_dispatch(buf, sizeof(buf), &chain, &sched);
+    CHECK(ret != 0 && sched == 0);
+}
+
+static void test_find_wrapper_chain_thunk(void) {
+    /* gghjt/gwkdl 19428 字节 wrapper:链式 thunk 只记录地址供 code=2
+     * 补发,绝不能作为宿主 timer dispatcher(返回值必须为 0) */
+    uint8_t buf[sizeof(asset_chain_thunk_gghjt)];
+    uint32_t chain = 1, sched = 1;
+    uint32_t ret = find_wrapper_timer_dispatch(
+        asset_chain_thunk_gghjt, sizeof(asset_chain_thunk_gghjt),
+        &chain, &sched);
+    CHECK(ret == 0);
+    CHECK(chain == EXT_CODE_ADDR + asset_chain_thunk_gghjt_match_off + 1u);
+    CHECK(sched == 0);
+
+    /* 零通配指纹:任何一字节扰动都不命中 */
+    memcpy(buf, asset_chain_thunk_gghjt, sizeof(buf));
+    buf[asset_chain_thunk_gghjt_match_off + 4] ^= 0x01;
+    ret = find_wrapper_timer_dispatch(buf, sizeof(buf), &chain, &sched);
+    CHECK(ret == 0 && chain == 0);
+}
+
+static void test_find_wrapper_compact_heap_free_return(void) {
+    uint8_t buf[sizeof(asset_free_return_gxdzc)];
+    uint32_t ctrl = 1;
+
+    /* 正样本 gxdzc:hook 点在 pop(+0x8C),ctrl_off=0x14C */
+    uint32_t ret = find_wrapper_compact_heap_free_return(
+        asset_free_return_gxdzc, sizeof(asset_free_return_gxdzc), &ctrl);
+    CHECK(ret == EXT_CODE_ADDR + asset_free_return_gxdzc_match_off + 0x8Cu);
+    CHECK(ctrl == 0x14Cu);
+
+    /* 正样本 optwar(23492 字节变体):ctrl_off=0x270 */
+    ret = find_wrapper_compact_heap_free_return(
+        asset_free_return_optwar, sizeof(asset_free_return_optwar), &ctrl);
+    CHECK(ret == EXT_CODE_ADDR + asset_free_return_optwar_match_off + 0x8Cu);
+    CHECK(ctrl == 0x270u);
+
+    /* 负样本:17 个固定半字任意扰动 -> 不命中 */
+    memcpy(buf, asset_free_return_gxdzc, sizeof(buf));
+    buf[asset_free_return_gxdzc_match_off + 0x8E] ^= 0x01; /* bx lr */
+    CHECK(find_wrapper_compact_heap_free_return(buf, sizeof(buf), &ctrl) == 0);
+    CHECK(ctrl == 0);
+
+    /* 候选 LDR 必须是 r2:改写 rd -> 不命中 */
+    memcpy(buf, asset_free_return_gxdzc, sizeof(buf));
+    buf[asset_free_return_gxdzc_match_off + 1] = 0x49; /* ldr r1,[pc,...] */
+    CHECK(find_wrapper_compact_heap_free_return(buf, sizeof(buf), &ctrl) == 0);
+
+    /* ctrl literal 越界(<0x80 / >=0x1000)与未对齐 -> 不命中 */
+    uint32_t lit = asset_ldr_lit_off(asset_free_return_gxdzc,
+                                     asset_free_return_gxdzc_match_off);
+    memcpy(buf, asset_free_return_gxdzc, sizeof(buf));
+    buf[lit] = 0x7C; buf[lit + 1] = 0x00;
+    CHECK(find_wrapper_compact_heap_free_return(buf, sizeof(buf), &ctrl) == 0);
+    memcpy(buf, asset_free_return_gxdzc, sizeof(buf));
+    buf[lit] = 0x00; buf[lit + 1] = 0x10; /* 0x1000 */
+    CHECK(find_wrapper_compact_heap_free_return(buf, sizeof(buf), &ctrl) == 0);
+    memcpy(buf, asset_free_return_gxdzc, sizeof(buf));
+    buf[lit] = 0x4E; /* 0x14E:未对齐 */
+    CHECK(find_wrapper_compact_heap_free_return(buf, sizeof(buf), &ctrl) == 0);
+
+    /* 长度不足 0x90 -> 直接拒绝 */
+    CHECK(find_wrapper_compact_heap_free_return(
+              asset_free_return_gxdzc, 0x80u, &ctrl) == 0);
+}
+
 int main(void) {
     /* 不变量检查器由环境变量门控(进程内缓存),测试进程先行开启 */
     setenv("VMRP_ARM_EXT_INVARIANTS", "1", 1);
@@ -325,6 +443,9 @@ int main(void) {
     test_cut_range_no_overlap();
     test_guest_memcpy();
     test_guest_strncpy();
+    test_find_wrapper_timer_dispatch();
+    test_find_wrapper_chain_thunk();
+    test_find_wrapper_compact_heap_free_return();
     printf("%s: %d checks, %d failures\n",
            g_failures ? "FAIL" : "PASS", g_checks, g_failures);
     return g_failures ? 1 : 0;

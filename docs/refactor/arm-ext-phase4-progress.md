@@ -38,11 +38,34 @@
 - vmrp-unit 56 checks ✅;全量 e2e 27/27 ✅;第一方告警 0 ✅;
   VMRP_ARM_EXT_INVARIANTS=1 下 gzwdzjs 双用例零报警 ✅。
 
-## 待续(第 2 批起,按分级清单执行)
+## 第 2 批(同日续):指纹字节资产单测 ✅
+
+- 新增 `tool/extract-wrapper-asset.py`:解 MRP fixture → 离线复刻三个
+  扫描器(timer_dispatch 主段 / chain_thunk / free_return)定位命中 →
+  切 4 对齐窗口(LDR literal 解码依赖 `(off+4)&~3`,窗口必须覆盖
+  literal pool 且 ≥ 主模式 32 字节,否则扫描入口即拒绝)→ `--emit`
+  生成 `test/unit/wrapper_assets.h`(5 个正样本,注释含来源与原始偏移)。
+- 离线扫描全部 fixtures 与分级清单一致:timer_dispatch 命中 gxdzc/
+  gzwdzjs/gtcm/dota/talkcat/opglqa/sky_istore/wbrw 各版 wrapper
+  (sched_off 0x1FC~0x2A8 各异);chain_thunk 仅 gghjt/gwkdl 19428 字节
+  wrapper;free_return 命中面最广(ctrl_off 0x14C~0x270)。
+- 单测(test_arm_ext.c,vmrp-unit 69→94 checks):
+  - timer_dispatch:gxdzc/wbrw 正样本(地址+sched_off 提取)、通配位
+    (i==0/16)扰动仍命中、固定字节扰动不命中、literal 越界/未对齐时
+    "命中但不提取偏移"。
+  - chain_thunk:gghjt 正样本(返回值必须为 0,仅记录 thunk 地址——
+    锁死"不把 walker 当宿主 dispatcher"的语义)、零通配任意字节扰动
+    不命中。
+  - free_return:gxdzc/optwar 正样本、17 半字扰动/候选 LDR 非 r2/
+    ctrl literal <0x80、≥0x1000、未对齐/len<0x90 全部拒绝。
+- 这组资产是后续迁移(app_compat 化/两段式改造)的行为基线:改造若
+  改变扫描器语义,必须先改单测再改实现。
+
+## 待续(第 3 批起,按分级清单执行)
 
 1. **单应用指纹迁移**(10 个):优先 `find_wrapper_compact_heap_free_return`
    (17 半字)与 `chain_thunk_pat`——迁 app_compat 或改运行时结构判据;
-   每迁一个配 P0.2 字节资产单测(正样本从 fixtures 解出 wrapper 片段)。
+   字节资产单测已就位(第 2 批)。
 2. **灰区两段式改造**(10 个):代码探测段替换为运行时 compact_sched_off /
    magic 校验(清单 #16/#26 已给出具体路径)。
 3. **WrapperProfile 结构体**:把 wrapper_timer_dispatch_addr/
