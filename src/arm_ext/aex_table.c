@@ -1894,7 +1894,550 @@ aex_done:
     c->ret = ret;
 }
 
+static void aex_t000(ArmExtModule *m, AexTableCtx *c) {
+    (void)m;
+    uint32_t r0 = c->r0;
+    uint32_t ret = MR_SUCCESS;
+
+            /* 原生 table[0] = mr_malloc(first-fit,mem.c)。先走 guest
+             * 空闲链表使地址预测成立,池内无合适块再走 bump 空闲块
+             * 复用/新块(见分配器头注释与 bump 回收器注释)。 */
+            ret = arm_ext_app_mem_malloc(m, r0);
+            m->last_alloc_addr = ret;
+            m->last_alloc_len = r0;
+            if (ret) note_origin_mem_alloc(m, r0);
+            {
+                uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR) & ~1u;
+                uint32_t nested_file_addr = 0;
+                uint32_t nested_file_len = 0;
+                if (m->nested_loading &&
+                    arm_ext_nested_exec_range_for_lr(m, lr, &nested_file_addr,
+                                                     &nested_file_len) &&
+                    r0 > 0x1000) {
+                    if (!m->outer_r9) {
+                        m->outer_r9 = reg_read32(m->uc, UC_ARM_REG_R9);
+                    }
+                    if (!m->nested_return_addr) {
+                        uint32_t sp = reg_read32(m->uc, UC_ARM_REG_SP);
+                        uint32_t saved_lr = 0;
+                        if (arm_ptr(m, sp + 12)) {
+                            uc_mem_read(m->uc, sp + 12, &saved_lr, 4);
+                            /*
+                             * The private loader temporarily switches R9 from
+                             * wrapper RW to the child RW while child startup
+                             * allocates its own data.  Restore the wrapper R9
+                             * only at the real wrapper return site.  A saved LR
+                             * inside the staged child is just an internal
+                             * Thumb return and restoring there makes the child
+                             * run with wrapper globals.
+                             */
+                            uint32_t ret_pc = saved_lr & ~1u;
+                            if (ret_pc >= EXT_CODE_ADDR &&
+                                ret_pc < EXT_CODE_ADDR + m->code_len) {
+                                m->nested_return_addr = saved_lr;
+                            }
+                        }
+                    }
+                    reg_write32(m->uc, UC_ARM_REG_R9, ret + 4);
+                    m->nested_loading = 0;
+                    if (arm_ext_trace_on()) {
+                        printf("arm_ext_executor: nested R9=0x%X after malloc 0x%X outer=0x%X return=0x%X\n",
+                               ret + 4, r0, m->outer_r9, m->nested_return_addr);
+                    }
+                }
+            }
+            goto aex_done;
+    goto aex_done; /* 复杂 case:循环内 break 原样保留,此处显式收敛 */
+aex_done:
+    c->ret = ret;
+}
+
+static void aex_t003(ArmExtModule *m, AexTableCtx *c) {
+    (void)m;
+    uint32_t r0 = c->r0;
+    uint32_t r1 = c->r1;
+    uint32_t r2 = c->r2;
+    uint32_t ret = MR_SUCCESS;
+ {
+            /* B2:两端都完整可映射才执行,guest 传坏指针时不解引用 NULL */
+            void *cpy_dst = arm_ptr_span(m, r0, r2);
+            const void *cpy_src = arm_ptr_span(m, r1, r2);
+            if (r2 && cpy_dst && cpy_src)
+                arm_ext_guest_memcpy(cpy_dst, cpy_src, r2);
+        }
+            /* memcpy 后修复 GOT 中的 bridge 指针 */
+            if (m->got_snapshot_base) {
+                uint32_t got_base = m->got_snapshot_base;
+                uint32_t cpy_end = r0 + r2;
+                for (uint32_t i = 0; i < EXT_TABLE_COUNT; i++) {
+                    uint32_t addr = got_base + i * 4;
+                    if (m->got_snapshot[i] >= EXT_TABLE_ADDR &&
+                        m->got_snapshot[i] < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4 &&
+                        addr >= r0 && addr + 4 <= cpy_end &&
+                        !arm_ext_should_skip_got_snapshot_restore(m, addr) &&
+                        !app_should_protect_got_addr(m, addr)) {
+                        memcpy(arm_ptr(m, addr), &m->got_snapshot[i], 4);
+                    }
+                }
+            }
+            ret = r0; goto aex_done;
+        /* case 4-9(B2):指针非法时跳过宿主操作;dst 类调用返回值仍是 r0,
+         * 比较类返回 0(ret 初值)。只消除宿主 NULL 解引用,不改合法路径 */
+    goto aex_done; /* 复杂 case:循环内 break 原样保留,此处显式收敛 */
+aex_done:
+    c->ret = ret;
+}
+
+static void aex_t014(ArmExtModule *m, AexTableCtx *c) {
+    (void)m;
+    uint32_t r0 = c->r0;
+    uint32_t r1 = c->r1;
+    uint32_t r2 = c->r2;
+    uint32_t ret = MR_SUCCESS;
+ {
+            /* B2:区间可映射才清写 */
+            void *set_dst = arm_ptr_span(m, r0, r2);
+            if (r2 && set_dst) memset(set_dst, (int)r1, r2);
+        }
+            /* memset 后修复 GOT 中的 bridge 指针 */
+            if (m->got_snapshot_base) {
+                uint32_t got_base = m->got_snapshot_base;
+                uint32_t set_end = r0 + r2;
+                for (uint32_t i = 0; i < EXT_TABLE_COUNT; i++) {
+                    uint32_t addr = got_base + i * 4;
+                    if (m->got_snapshot[i] >= EXT_TABLE_ADDR &&
+                        m->got_snapshot[i] < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4 &&
+                        addr >= r0 && addr + 4 <= set_end &&
+                        !arm_ext_should_skip_got_snapshot_restore(m, addr) &&
+                        !app_should_protect_got_addr(m, addr)) {
+                        memcpy(arm_ptr(m, addr), &m->got_snapshot[i], 4);
+                    }
+                }
+            }
+            ret = r0; goto aex_done;
+    goto aex_done; /* 复杂 case:循环内 break 原样保留,此处显式收敛 */
+aex_done:
+    c->ret = ret;
+}
+
+static void aex_t038(ArmExtModule *m, AexTableCtx *c) {
+    (void)m;
+    uint32_t r0 = c->r0;
+    uint32_t r1 = c->r1;
+    uint32_t r2 = c->r2;
+    uint32_t r3 = c->r3;
+    uint32_t ret = MR_SUCCESS;
+ {
+            int diag_enabled = arm_ext_diag_on();
+            uint32_t diag_lr = 0;
+            uint32_t diag_owner_p = 0, diag_owner_h = 0;
+            uint32_t diag_owner_file = 0, diag_owner_len = 0;
+            char diag_input_preview[192];
+            diag_input_preview[0] = '\0';
+            if (diag_enabled) {
+                diag_lr = reg_read32(m->uc, UC_ARM_REG_LR);
+                arm_ext_diag_owner_for_lr(m, &diag_owner_p, &diag_owner_h,
+                                          &diag_owner_file, &diag_owner_len);
+                arm_ext_diag_preview_bytes(arm_ptr(m, r1), r2,
+                                           diag_input_preview,
+                                           sizeof(diag_input_preview));
+            }
+            /*
+             * MR_MALLOC_SCRRAM/MR_FREE_SCRRAM provide scratch RAM that native
+             * code treats as ARM-visible storage, often for large off-screen
+             * framebuffers. Allocate it from the emulated ARM heap so later
+             * pointer arithmetic and blits can access the returned address.
+             */
+            if (r0 == 1014) {
+                uint32_t outp = r3, outlenp = arg_read(m, 4);
+                uint32_t want = (uint32_t)r2;
+                uint32_t a = 0;
+                if (want) {
+                    if (m->exram_addr && want <= m->exram_len) {
+                        a = m->exram_addr;          /* 复用已有 exRam（幂等） */
+                    } else {
+                        a = arm_alloc(m, want);
+                        if (a) {
+                            m->exram_addr = a;
+                            m->exram_len = want;
+                            void *ep = arm_ptr(m, a);
+                            if (ep) memset(ep, 0, want);
+                        }
+                    }
+                }
+                if (a) {
+                    if (outp) uc_mem_write(m->uc, outp, &a, 4);
+                    if (outlenp) uc_mem_write(m->uc, outlenp, &want, 4);
+                }
+                ret = a ? MR_SUCCESS : MR_FAILED;
+                if (diag_enabled) {
+                    printf("DIAG table38 code=%d input=0x%X inputLen=%u outputp=0x%X outputLenp=0x%X ret=0x%X out=0x%X outLen=%u inputPreview='%s' lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
+                           (int32_t)r0, r1, r2, r3, arg_read(m, 4), ret,
+                           a, want, diag_input_preview, diag_lr,
+                           diag_owner_p, diag_owner_h, diag_owner_file,
+                           diag_owner_len, m->active_p_addr,
+                           m->primary_p_addr);
+                }
+                goto aex_done;
+            }
+            if (r0 == 1015) {
+                ret = MR_SUCCESS;
+                if (diag_enabled) {
+                    printf("DIAG table38 code=%d input=0x%X inputLen=%u outputp=0x%X outputLenp=0x%X ret=0x%X out=0x0 outLen=0 inputPreview='%s' lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
+                           (int32_t)r0, r1, r2, r3, arg_read(m, 4), ret,
+                           diag_input_preview, diag_lr, diag_owner_p,
+                           diag_owner_h, diag_owner_file, diag_owner_len,
+                           m->active_p_addr, m->primary_p_addr);
+                }
+                goto aex_done;
+            }
+            uint32_t outputp_addr = r3;
+            uint32_t output_lenp_addr = arg_read(m, 4);
+            uint32_t arm_output = 0;
+            int32 host_output_len = 0;
+            uint8 *host_output = NULL;
+            uint8 *input = (uint8 *)arm_ptr(m, r1);
+
+            if (outputp_addr) {
+                uc_mem_read(m->uc, outputp_addr, &arm_output, 4);
+                host_output = arm_output ? (uint8 *)arm_ptr(m, arm_output) : NULL;
+            }
+            if (output_lenp_addr) {
+                uc_mem_read(m->uc, output_lenp_addr, &host_output_len, 4);
+            }
+
+            ret = mr_platEx((int32)r0, input, (int32)r2,
+                            outputp_addr ? &host_output : NULL,
+                            output_lenp_addr ? &host_output_len : NULL,
+                            NULL);
+
+            if (outputp_addr) {
+                uint32_t new_arm_output = arm_output;
+                if (host_output && host_output_len > 0) {
+                    void *old_arm_ptr = arm_output ? arm_ptr(m, arm_output) : NULL;
+                    if (host_output != old_arm_ptr) {
+                        new_arm_output = arm_alloc(m, (uint32_t)host_output_len + 1);
+                        if (new_arm_output) {
+                            memcpy(arm_ptr(m, new_arm_output), host_output, (uint32_t)host_output_len);
+                            ((uint8 *)arm_ptr(m, new_arm_output))[host_output_len] = '\0';
+                        }
+                    }
+                } else {
+                    new_arm_output = 0;
+                }
+                uc_mem_write(m->uc, outputp_addr, &new_arm_output, 4);
+            }
+            if (output_lenp_addr) {
+                uc_mem_write(m->uc, output_lenp_addr, &host_output_len, 4);
+            }
+            if (diag_enabled) {
+                uint32_t new_arm_output = 0;
+                int32_t new_output_len = 0;
+                char output_preview[192];
+                output_preview[0] = '\0';
+                if (outputp_addr)
+                    uc_mem_read(m->uc, outputp_addr, &new_arm_output, 4);
+                if (output_lenp_addr)
+                    uc_mem_read(m->uc, output_lenp_addr, &new_output_len, 4);
+                arm_ext_diag_preview_bytes(arm_ptr(m, new_arm_output),
+                                           new_output_len > 0 ?
+                                           (uint32_t)new_output_len : 0,
+                                           output_preview,
+                                           sizeof(output_preview));
+                printf("DIAG table38 code=%d input=0x%X inputLen=%u outputp=0x%X outputLenp=0x%X ret=0x%X out=0x%X outLen=%d inputPreview='%s' outputPreview='%s' lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
+                       (int32_t)r0, r1, r2, outputp_addr,
+                       output_lenp_addr, ret, new_arm_output,
+                       new_output_len, diag_input_preview, output_preview,
+                       diag_lr, diag_owner_p, diag_owner_h,
+                       diag_owner_file, diag_owner_len, m->active_p_addr,
+                       m->primary_p_addr);
+            }
+        } goto aex_done;
+    goto aex_done; /* 复杂 case:循环内 break 原样保留,此处显式收敛 */
+aex_done:
+    c->ret = ret;
+}
+
+static void aex_t044(ArmExtModule *m, AexTableCtx *c) {
+    (void)m;
+    uint32_t r0 = c->r0;
+    uint32_t r1 = c->r1;
+    uint32_t r2 = c->r2;
+    uint32_t ret = MR_SUCCESS;
+ {
+            /* B2:整个读缓冲区可映射才交给宿主写(对照 vfd 分支的 hp 判空,
+             * 真实 mr_read 分支此前无保护) */
+            void *hp = arm_ptr_span(m, r1, r2 ? r2 : 1u);
+            MrpVirtualFd *vf44 = mrp_vfd_get(m, r0);
+            if (vf44) {
+                uint32_t avail = vf44->pos < vf44->data_len ? vf44->data_len - vf44->pos : 0;
+                uint32_t n = r2 < avail ? r2 : avail;
+                if (n && hp) memcpy(hp, vf44->data + vf44->pos, n);
+                vf44->pos += n;
+                ret = (int32_t)n;
+            } else if (hp) {
+                ret = mr_read((int32)r0, hp, r2);
+            } else {
+                ret = MR_FAILED;
+            }
+            if (arm_ext_diag_on()) {
+                char preview[192];
+                uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
+                uint32_t overlap_lo = 0, overlap_hi = 0;
+                uint32_t preview_len = (int32_t)ret > 0 ? (uint32_t)ret : 0;
+                arm_ext_diag_preview_bytes(hp, preview_len, preview,
+                                           sizeof(preview));
+                arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
+                                          &owner_file, &owner_len);
+                arm_ext_find_first_registered_code_overlap(
+                    m, r1, preview_len, &overlap_lo, &overlap_hi);
+                printf("DIAG table44 fd=%d name='%s' want=%u ret=0x%X dst=0x%X preview='%s' lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X codeOverlap=0x%X..0x%X\n",
+                       (int32_t)r0, arm_ext_diag_fd_name(m, (int32_t)r0),
+                       r2, ret, r1, preview,
+                       reg_read32(m->uc, UC_ARM_REG_LR),
+                       owner_p, owner_h, owner_file, owner_len,
+                       m->active_p_addr, m->primary_p_addr,
+                       overlap_lo, overlap_hi);
+            }
+            if (m->profile && m->profile->post_read_hook)
+                m->profile->post_read_hook(m, m->app_state, r1, r2, ret, hp);
+            if ((int32_t)ret > 0)
+                arm_ext_retire_modules_overwritten_by_data_read(
+                    m, r1, (uint32_t)ret);
+            /* dump/restore 读回整块模块内存后，需要：
+             * 1) 修复 GOT 中的 bridge 函数指针（文件数据中是原始未重定位的值）
+             * 2) invalidate Unicorn TB cache（否则执行旧翻译） */
+            if ((int32_t)ret > 0 && (uint32_t)ret > 0x1000) {
+                /* 仅在 dump0 恢复时（目标地址匹配）才恢复间隙数据 */
+                int read_covers_primary =
+                    m->primary_file_addr && m->primary_file_len &&
+                    arm_ext_range_contains(r1, (uint32_t)ret,
+                                           m->primary_file_addr,
+                                           m->primary_file_len);
+                uc_ctl_remove_cache(m->uc, r1, r1 + (uint32_t)ret);
+                arm_ext_restore_primary_mapping_after_dump0(m, r1, (uint32_t)ret);
+                /*
+                 * table[44] also reads downloaded packages and RAM staging
+                 * buffers.  Only rewrite bridge GOT slots when this read is
+                 * proven to be an executable dump/restore of the primary
+                 * image; otherwise compressed payload bytes can be corrupted.
+                 */
+                if (read_covers_primary && m->got_snapshot_base) {
+                    uint32_t got_base = m->got_snapshot_base;
+                    uint32_t read_end = r1 + (uint32_t)ret;
+                    for (uint32_t i = 0; i < EXT_TABLE_COUNT; i++) {
+                        uint32_t addr = got_base + i * 4;
+                        if (m->got_snapshot[i] >= EXT_TABLE_ADDR &&
+                            m->got_snapshot[i] < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4 &&
+                            addr >= r1 && addr + 4 <= read_end &&
+                            !arm_ext_should_skip_got_snapshot_restore(m, addr) &&
+                            !app_should_protect_got_addr(m, addr)) {
+                            memcpy(arm_ptr(m, addr), &m->got_snapshot[i], 4);
+                        }
+                    }
+                }
+            }
+        } goto aex_done;
+    goto aex_done; /* 复杂 case:循环内 break 原样保留,此处显式收敛 */
+aex_done:
+    c->ret = ret;
+}
+
+static void aex_t125(ArmExtModule *m, AexTableCtx *c) {
+    (void)m;
+    uint32_t r0 = c->r0;
+    uint32_t r1 = c->r1;
+    uint32_t r2 = c->r2;
+    uint32_t ret = MR_SUCCESS;
+ {
+            int fl = 0;
+            uint32_t packp = 0, ramp_slot = 0, raml_slot = 0, ramp = 0, raml = 0;
+            uint32_t read_pack_ram_addr = 0, read_pack_ram_len = 0;
+            char read_pack_host_path[PATH_MAX];
+            read_pack_host_path[0] = '\0';
+            const char *read_name = arm_str(m, r0);
+            uc_mem_read(m->uc, EXT_TABLE_ADDR + 100 * 4, &packp, 4);
+            uc_mem_read(m->uc, EXT_TABLE_ADDR + 104 * 4, &ramp_slot, 4);
+            uc_mem_read(m->uc, EXT_TABLE_ADDR + 105 * 4, &raml_slot, 4);
+            if (ramp_slot) uc_mem_read(m->uc, ramp_slot, &ramp, 4);
+            if (raml_slot) uc_mem_read(m->uc, raml_slot, &raml, 4);
+
+            void *hp = NULL;
+            const char *pack = arm_str(m, packp);
+            const char *host_pack = arm_ext_pack_to_host_path(m, pack);
+            ArmExtNestedModule *owner =
+                arm_ext_resource_owner_for_lr(m, NULL, NULL);
+            uint32_t owner_p_diag = owner ? owner->p_addr : 0;
+            uint32_t owner_h_diag = owner ? owner->helper_addr : 0;
+            int pack_is_root =
+                pack[0] && host_pack && m->pack_host_path[0] &&
+                strcmp(host_pack, m->pack_host_path) == 0;
+            int child_scoped_pack =
+                arm_ext_child_has_package_owner(m, owner) &&
+                (!pack[0] || pack_is_root);
+            if (child_scoped_pack) {
+                hp = arm_ext_read_child_resource(
+                    m, owner, read_name, &fl, (int)r2,
+                    read_pack_host_path, &read_pack_ram_addr,
+                    &read_pack_ram_len);
+            }
+            if (!hp && !child_scoped_pack && pack[0] == '$' && ramp && raml) {
+                hp = mr_readFile_from_ram(read_name, &fl, (int)r2, arm_ptr(m, ramp), (int)raml);
+                if (hp) {
+                    read_pack_ram_addr = ramp;
+                    read_pack_ram_len = raml;
+                    const char *last_mrp_path = mr_get_last_written_mrp_path();
+                    uint32 last_mrp_len = 0;
+                    const uint8 *last_mrp =
+                        mr_get_last_written_mrp_data(&last_mrp_len);
+                    if (last_mrp && last_mrp_len == raml &&
+                        last_mrp_path && last_mrp_path[0] &&
+                        memcmp(arm_ptr(m, ramp), last_mrp, raml) == 0) {
+                        snprintf(read_pack_host_path,
+                                 sizeof(read_pack_host_path), "%s",
+                                 last_mrp_path);
+                    }
+                }
+            } else if (!hp && !child_scoped_pack && !pack[0]) {
+                /*
+                 * Native pack_filename[128] is writable, and private child
+                 * helpers may clear it after their loader has installed the
+                 * child.  Once the LR maps to a registered child module, that
+                 * module's package is the ABI context for table[125]; otherwise
+                 * a blank table[100] means the VM-global package.
+                 */
+                hp = _mr_readFile(read_name, &fl, (int)r2);
+            } else if (!hp && !child_scoped_pack) {
+                /*
+                 * EXT modules expose their current MRP through table[100].
+                 * Nested download/install helpers may switch that slot to a
+                 * transient package while the VM-level pack_filename still
+                 * names the outer app. Bind the host read to the ARM-visible
+                 * package for this bridge call, matching the native C table ABI.
+                 */
+                hp = mr_readFile_from_pack(host_pack, read_name, &fl, (int)r2);
+                if (hp && host_pack && host_pack[0]) {
+                    snprintf(read_pack_host_path, sizeof(read_pack_host_path),
+                             "%s", host_pack);
+                }
+            }
+            if (arm_ext_diag_on()) {
+                char ram_preview[192];
+                char out_preview[192];
+                ram_preview[0] = '\0';
+                out_preview[0] = '\0';
+                if (ramp && raml && arm_ptr(m, ramp)) {
+                    arm_ext_diag_preview_bytes(arm_ptr(m, ramp), raml,
+                                               ram_preview,
+                                               sizeof(ram_preview));
+                }
+                if (hp && fl > 0) {
+                    arm_ext_diag_preview_bytes(hp, (uint32_t)fl,
+                                               out_preview,
+                                               sizeof(out_preview));
+                }
+                printf("DIAG table125 name='%s' lookfor=%u pack='%s' host_pack='%s' childScoped=%d ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u ramp=0x%X raml=%u found=%d fl=%d readPack='%s' readRam=0x%X/%u lr=0x%X\n",
+                       read_name, r2, pack, host_pack ? host_pack : "",
+                       child_scoped_pack, owner_p_diag, owner_h_diag,
+                       owner ? owner->file_addr : 0,
+                       owner ? owner->file_len : 0, ramp, raml,
+                       hp != NULL, fl, read_pack_host_path,
+                       read_pack_ram_addr, read_pack_ram_len,
+                       reg_read32(m->uc, UC_ARM_REG_LR));
+            }
+            if (!hp) {
+                ret = 0;
+                goto aex_done;
+            }
+            /* 原生 asm_mr_readFile 的输出缓冲来自 mr_malloc(LG_mem
+             * first-fit),应用会预先 free 一块自有内存构造空闲链表,让
+             * 该分配按 first-fit 落在预测地址,并丢弃返回值直接读预测
+             * 地址(talkcat 图标花屏根因)。先走 guest 空闲链表;池内
+             * 无合适块时与 table[0] 一样退回 bump(修复前行为)。
+             * 若该缓冲随后经 mr_cacheSync 注册为 EXT 映像,注册路径会把
+             * 文件范围标记为不可再分配的代码区。 */
+            uint32_t ap = 0;
+            int direct_ram_package_ptr = 0;
+            uint32_t mapped_hp = fl > 0 ? arm_addr(m, hp) : 0;
+            if (mapped_hp && read_pack_ram_addr && read_pack_ram_len &&
+                arm_ext_range_contains(read_pack_ram_addr, read_pack_ram_len,
+                                       mapped_hp, (uint32_t)fl)) {
+                /*
+                 * Native _mr_readFile returns uncompressed '*'/'$' package
+                 * entries as pointers inside the package buffer.  Do the same
+                 * when the host result already maps to ARM-visible package
+                 * RAM; copying it to a new mr_malloc block gives the caller a
+                 * shorter lifetime than native and lets later readFile calls
+                 * recycle storage still referenced by cached bitmap records.
+                 */
+                ap = mapped_hp;
+                direct_ram_package_ptr = 1;
+            } else {
+                ap = arm_ext_app_mem_malloc(m, (uint32_t)fl);
+                if (!ap) {
+                    ret = 0;
+                    goto aex_done;
+                }
+                /*
+                 * Compressed package entries and filesystem reads return
+                 * native mr_malloc-owned buffers (mr_gzOutBuf/filebuf).  The
+                 * bridge allocation is therefore app-visible LG_mem and must
+                 * update the same counters as table[0].
+                 */
+                note_origin_mem_alloc(m, (uint32_t)fl);
+                memcpy(arm_ptr(m, ap), hp, fl);
+            }
+            if (r1 && arm_ptr(m, r1)) {
+                memcpy(arm_ptr(m, r1), &fl, 4);
+            }
+            arm_ext_sync_read_file_gzip_slots(m, hp, ap);
+            free(m->last_file_copy);
+            m->last_file_copy = malloc((size_t)fl);
+            if (m->last_file_copy) {
+                memcpy(m->last_file_copy, hp, (size_t)fl);
+                m->last_file_addr = ap;
+                m->last_file_len = (uint32_t)fl;
+                snprintf(m->last_file_pack_host_path,
+                         sizeof(m->last_file_pack_host_path), "%s",
+                         read_pack_host_path);
+                m->last_file_pack_ram_addr = read_pack_ram_addr;
+                m->last_file_pack_ram_len = read_pack_ram_len;
+            }
+            uint32_t mirrored_slot = 0;
+            int mirrored_to_adjacent_slot =
+                m->last_file_copy &&
+                arm_ext_mirror_read_file_to_adjacent_slot(
+                    m, r1, m->last_file_copy, (uint32_t)fl, ap,
+                    &mirrored_slot);
+            if (arm_ext_diag_on()) {
+                char ret_preview[192];
+                ret_preview[0] = '\0';
+                arm_ext_diag_preview_bytes(arm_ptr(m, ap), (uint32_t)fl,
+                                           ret_preview,
+                                           sizeof(ret_preview));
+                printf("DIAG table125_ret name='%s' ret=0x%X fl=%d lenSlot=0x%X/%u mirror=%d mirrorSlot=0x%X lr=0x%X preview='%s'\n",
+                       read_name, ap, fl, r1,
+                       r1 ? arm_ext_read_u32_or_zero_(m, r1) : 0,
+                       mirrored_to_adjacent_slot,
+                       mirrored_slot, reg_read32(m->uc, UC_ARM_REG_LR),
+                       ret_preview);
+            }
+            if (!direct_ram_package_ptr)
+                arm_ext_release_host_read_file_buffer(hp, (uint32_t)fl);
+            ret = ap;
+        } goto aex_done;
+    goto aex_done; /* 复杂 case:循环内 break 原样保留,此处显式收敛 */
+aex_done:
+    c->ret = ret;
+}
+
 const AexTableHandler aex_table_handlers[EXT_TABLE_COUNT] = {
+    [125] = aex_t125,
+    [44] = aex_t044,
+    [38] = aex_t038,
+    [14] = aex_t014,
+    [3] = aex_t003,
+    [0] = aex_t000,
     [1] = aex_t001,
     [2] = aex_t002,
     [4] = aex_t004,

@@ -65,6 +65,13 @@ int arm_ext_screen_diag_on(void);
 uint32_t arm_alloc(ArmExtModule *m, uint32_t len);
 void sync_origin_mem_slots(ArmExtModule *m);
 uint32_t read_game_timer_head(ArmExtModule *m, uint32_t grw);
+void write_game_timer_head(ArmExtModule *m, uint32_t grw, uint32_t val);
+int arm_ext_foreground_child_has_compact_timer_queue(ArmExtModule *m);
+int arm_ext_foreground_child_has_frame_timer_queue(ArmExtModule *m);
+int arm_ext_wrapper_dispatch_is_busy(ArmExtModule *m);
+void capture_timer_dispatches(ArmExtModule *m);
+void sync_timer_state_from_arm(ArmExtModule *m);
+int internal_slot_read(ArmExtModule *m, uint32_t slot, uint32_t *out);
 ArmExtNestedModule *arm_ext_find_nested_module_by_p(ArmExtModule *m,
                                                     uint32_t p_addr);
 int arm_ext_child_has_compact_timer_walker(const uint8_t *code, uint32_t len);
@@ -80,6 +87,7 @@ int arm_ext_first_unprotected_subrange(ArmExtModule *m, uint32_t node,
 /* ---- aex_mem.c:分配器/compact 堆/不变量 ---- */
 
 uint32_t arm_ext_app_mem_malloc(ArmExtModule *m, uint32_t len);
+uint32_t arm_ext_meta_alloc(ArmExtModule *m, uint32_t len);
 void arm_ext_protect_registered_module_storage(ArmExtModule *m,
                                                uint32_t file_addr,
                                                uint32_t file_len);
@@ -125,6 +133,10 @@ void arm_ext_claim_foreground_screen_rect(ArmExtModule *m,
                                           int32_t x, int32_t y,
                                           int32_t w, int32_t h);
 void arm_ext_restore_modal_screen_snapshot(ArmExtModule *m);
+void hook_screen_dim_write(uc_engine *uc, uc_mem_type type, uint64_t address,
+                           int size, int64_t value, void *user_data);
+void hook_screen_dim_read(uc_engine *uc, uc_mem_type type, uint64_t address,
+                          int size, int64_t value, void *user_data);
 void enter_screen_context(ArmExtModule *m, uint16 **saved_screenBuf,
                           uint32_t *saved_present_depth);
 void leave_screen_context(ArmExtModule *m, uint16 *saved_screenBuf,
@@ -148,6 +160,7 @@ int arm_ext_should_accept_visible_present(ArmExtModule *m, uint32_t *claim_p_add
 int arm_ext_screen_context_targets_primary(ArmExtModule *m, const ArmExtScreenContext *ctx);
 int arm_ext_owner_is_foreground_child(ArmExtModule *m, uint32_t owner_p_addr, uint32_t owner_helper_addr);
 void arm_ext_note_screen_damage_rect(ArmExtModule *m, int32_t x, int32_t y, int32_t w, int32_t h);
+int arm_ext_ensure_foreground_cover_regions(ArmExtModule *m);
 void arm_ext_note_foreground_cover_rect(ArmExtModule *m, int32_t x, int32_t y, int32_t w, int32_t h);
 void arm_ext_diag_dump_wrapper_timer_state(ArmExtModule *m, const char *tag);
 int arm_ext_suspend_depth_for_p(ArmExtModule *m, uint32_t p_addr, uint32_t *suspend_depth);
@@ -191,6 +204,22 @@ int arm_ext_sync_internal_nested_module(ArmExtModule *m, uint32_t file_addr, uin
 void internal_slot_write(ArmExtModule *m, uint32_t slot, uint32_t value);
 void arm_ext_diag_owner_for_lr(ArmExtModule *m, uint32_t *owner_p, uint32_t *owner_h, uint32_t *owner_file, uint32_t *owner_len);
 
+/* 复杂 case(0/3/14/38/44/125)迁移所需的 executor 符号 */
+static inline int app_should_protect_got_addr(ArmExtModule *m, uint32_t addr) {
+    if (m && m->profile && m->profile->should_protect_got_addr)
+        return m->profile->should_protect_got_addr(m, m->app_state, addr);
+    return 0;
+}
+int arm_ext_child_has_package_owner(ArmExtModule *m, ArmExtNestedModule *owner);
+int arm_ext_mirror_read_file_to_adjacent_slot(ArmExtModule *m, uint32_t len_slot, const void *data, uint32_t len, uint32_t ret_addr, uint32_t *slot_out);
+int arm_ext_range_contains(uint32_t outer, uint32_t outer_len, uint32_t inner, uint32_t inner_len);
+void *arm_ext_read_child_resource(ArmExtModule *m, ArmExtNestedModule *owner, const char *read_name, int *file_len, int lookfor, char *read_pack_host_path, uint32_t *read_pack_ram_addr, uint32_t *read_pack_ram_len);
+void arm_ext_release_host_read_file_buffer(const void *hp, uint32_t len);
+void arm_ext_restore_primary_mapping_after_dump0(ArmExtModule *m, uint32_t read_addr, uint32_t read_len);
+void arm_ext_retire_modules_overwritten_by_data_read(ArmExtModule *m, uint32_t read_addr, uint32_t read_len);
+int arm_ext_should_skip_got_snapshot_restore(ArmExtModule *m, uint32_t addr);
+void arm_ext_sync_read_file_gzip_slots(ArmExtModule *m, const void *read_file_ret, uint32_t arm_ret);
+
 /* ---- aex_table.c:mr_table 系统调用分发(Phase 3 case 函数化) ---- */
 
 /* 单次 table 调用的上下文:r0-r3 为 guest 参数,ret 为回写 R0 的返回值。
@@ -221,6 +250,22 @@ int format_arm(ArmExtModule *m, char *dst, size_t dst_size, const char *fmt,
                unsigned first_arg);
 int arm_ext_nested_exec_range_for_lr(ArmExtModule *m, uint32_t lr,
                                      uint32_t *file_addr, uint32_t *file_len);
+
+/* ---- aex_module.c:模块注册/生命周期/指纹扫描 ---- */
+
+ArmExtNestedModule *arm_ext_find_nested_module(ArmExtModule *m, uint32_t addr);
+int arm_ext_has_suspended_foreground_child(ArmExtModule *m,
+                                           uint32_t primary_ext_chunk);
+void arm_ext_init_pack_names(ArmExtModule *m);
+uint32_t find_wrapper_compact_heap_free_return(const uint8_t *code,
+                                               uint32_t len,
+                                               uint32_t *ctrl_off_out);
+uint32_t find_wrapper_timer_dispatch(const uint8_t *code, uint32_t len,
+                                     uint32_t *chain_thunk_out,
+                                     uint32_t *sched_off_out);
+void arm_ext_set_pack_table_name(ArmExtModule *m, const char *name);
+void arm_ext_set_child_record_pack_name(ArmExtModule *m, uint32_t file_addr,
+                                        const char *name);
 
 /* ---- aex_pack.c:MRP 包缓存与虚拟 fd ---- */
 

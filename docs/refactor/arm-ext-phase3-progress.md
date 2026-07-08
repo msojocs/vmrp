@@ -37,8 +37,19 @@
   0 条** ✅,6 个失败与既定基线同类同集合(像素时序,普通构建全绿)。
 - 当前布局:executor 主体 5736 行 + src/arm_ext/ 七单元 5454 行。
 
+## 收尾批(同日续):残余复杂 case 迁移 ✅(99/99)
+
+- 6 个复杂 case(0 分配+嵌套加载、3/14 GOT 修复循环、38 platEx、44 读文件、
+  125 readFile)手工迁入 aex_table.c(aex_t000/003/014/038/044/125),
+  循环内 break 逐个人工核对(不做机械替换);hook_table 的残余 switch
+  删除,NULL 槽位回落 default 语义(打印 + MR_IGNORE)保持不变。
+- 迁移所需 executor 符号(GOT 保护判定、read_file 镜像/gzip 槽同步、
+  retire/restore 等 15 个)经 priv 头登记;`app_should_protect_got_addr`
+  上收为 priv 内联(经 profile 回调)。
+- aex_table.c 现 2534 行,handler 表 99 槽全满。
+
 ## 后续
 
-- 残余 6 个复杂 case 手工迁移(需逐个处理循环内 break 与 GOT 修复逻辑),
-  之后按域把 aex_table.c 拆成 mem/file/screen/timer/misc 子文件(方案原意)。
-- Phase 2 剩余单元(timer/diag/module)与 Phase 4 启发式治理衔接。
+- 按域把 aex_table.c 拆成 mem/file/screen/timer/misc 子文件(方案原意,
+  择机)。
+- Phase 4 启发式治理衔接(指纹迁移按分级清单)。

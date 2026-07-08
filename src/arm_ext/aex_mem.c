@@ -1026,3 +1026,58 @@ int arm_ext_verify_invariants(ArmExtModule *m, const char *where) {
     return violations;
 }
 
+
+uint32_t arm_alloc(ArmExtModule *m, uint32_t len) {
+    /* 长度上限守卫:len 接近 UINT32_MAX 时 align4 与 heap_top+len 均会回绕,
+     * 绕过下方容量检查返回"成功"地址(guest 负长度经 case 132/25 等传入,
+     * issues doc B3)。EXT 总内存只有 16MB,超过即明确失败,合法调用不受影响 */
+    if (len > EXT_MEM_SIZE) return 0;
+    len = align4(len ? len : 1);
+    /* bump 堆从 EXT_HEAP_ADDR(0x200000) 向上生长,必须跳过
+     * EXT 栈区 [EXT_STACK_ADDR, EXT_CODE_ADDR) 和 wrapper 代码区
+     * [EXT_CODE_ADDR, +code_len):此前只检查 16MB 总界,长流程
+     * (talkcat 喝水资源包下载安装)累计分配越过 0xE00000 后,
+     * SCRRAM/大缓冲直接落在 wrapper 栈里,整屏位图把返回地址踩成
+     * 像素值(PC=0x6246834A 一类 FETCH_UNMAPPED)。跳过保留区后
+     * [代码区末, 16MB) 仍可继续分配。 */
+    uint32_t reserved_lo = EXT_STACK_ADDR;
+    uint32_t reserved_hi = EXT_CODE_ADDR + align4(m->code_len);
+    if (m->heap_top < reserved_hi && m->heap_top + len > reserved_lo) {
+        m->heap_top = reserved_hi;
+    }
+    /* 屏幕缓冲迁移到顶部保留区后(hook_screen_dim_write),该区对 bump 堆
+     * 关闭,否则宿主绘制会覆写堆上分配。未迁移时保持完整 16MB 可用,
+     * 与旧版本布局/容量完全一致(gghjt 等长流程依赖)。 */
+    uint32_t mem_end = EXT_BASE_ADDR + EXT_MEM_SIZE;
+    if (m->screen_addr == mem_end - EXT_SCREEN_RESERVE) {
+        mem_end -= EXT_SCREEN_RESERVE;
+    }
+    if (m->heap_top + len >= mem_end) return 0;
+    uint32_t ret = m->heap_top;
+    m->heap_top += len;
+    return ret;
+}
+
+/* guest 改写 ARM 可见 mr_screen_w/h 变量(table[92/93] 指向的 u32)时触发。
+ * 部分 C SDK 游戏(gtcm 的 SphinxJoy 引擎)在 init 用这两个变量配置比物理
+ * 屏更大的逻辑画布(横屏 480x320):真机上 DSM framebuffer 与配置一致,而
+ * 模拟器的 EXT 屏幕缓冲按物理分辨率分配在 bump 堆首,若不处理,宿主
+ * DrawRect/DrawBitmap 按新尺寸写入旧缓冲会越界抹掉紧随其后的模块镜像
+ * (gtcm 黑屏根因)。超出容量时把缓冲迁移到 16MB 空间顶部的专属保留区:
+ * 迁移发生在写变量的瞬间,早于 graphics.ext 缓存 framebuffer 指针,guest
+ * 后续读 table[91] 拿到的即是新地址;bump 堆布局保持与旧版本一致,不影响
+ * 依赖既有堆地址的应用(gghjt netpay dump0 恢复等)。 */
+
+uint32_t arm_ext_meta_alloc(ArmExtModule *m, uint32_t len) {
+    if (!m) return 0;
+    len = align4(len ? len : 1);
+    if (len > EXT_EXECUTOR_META_SIZE ||
+        m->executor_meta_top > EXT_EXECUTOR_META_SIZE - len) {
+        return 0;
+    }
+    uint32_t ret = EXT_EXECUTOR_META_ADDR + m->executor_meta_top;
+    m->executor_meta_top += len;
+    return ret;
+}
+
+
