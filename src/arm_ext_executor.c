@@ -127,6 +127,36 @@ extern int32 my_openSocketCount(void);
 extern const char *mr_get_last_written_mrp_path(void);
 extern const uint8 *mr_get_last_written_mrp_data(uint32 *len);
 
+/*
+ * 诊断开关进程级缓存(P1-C):环境变量运行期不变,而 hook_table 等热路径
+ * 每次进入都 getenv 是纯浪费(72 处调用)。统一经以下缓存访问;各开关
+ * 语义见 docs/arm-ext-phase0-progress.md 与 abi 文档。
+ */
+static int arm_ext_env_flag_(const char *name, int *cache) {
+    if (*cache < 0) *cache = getenv(name) ? 1 : 0;
+    return *cache;
+}
+static int arm_ext_diag_on(void) {
+    static int c = -1;
+    return arm_ext_env_flag_("VMRP_ARM_EXT_DIAG", &c);
+}
+static int arm_ext_trace_on(void) {
+    static int c = -1;
+    return arm_ext_env_flag_("VMRP_ARM_EXT_TRACE", &c);
+}
+static int arm_ext_trace_pc_on(void) {
+    static int c = -1;
+    return arm_ext_env_flag_("VMRP_ARM_EXT_TRACE_PC", &c);
+}
+static int arm_ext_timer_liveness_diag_on(void) {
+    static int c = -1;
+    return arm_ext_env_flag_("VMRP_ARM_EXT_TIMER_LIVENESS_DIAG", &c);
+}
+static int arm_ext_screen_diag_on(void) {
+    static int c = -1;
+    return arm_ext_env_flag_("VMRP_ARM_EXT_SCREEN_DIAG", &c);
+}
+
 static uint32_t arm_addr(ArmExtModule *m, const void *ptr) {
     if (ptr == NULL) return 0;
     const uint8_t *p = (const uint8_t *)ptr;
@@ -664,20 +694,6 @@ static const char *arm_ext_current_pack_table_name(ArmExtModule *m) {
     return (const char *)arm_ptr(m, packp);
 }
 
-/* 临时诊断前置声明(定义见 hook_got_write 上方,修复后删除) */
-static int arm_ext_watch_write_range(uint32_t *lo, uint32_t *hi);
-static int arm_ext_watch_alloc_range(uint32_t *lo, uint32_t *hi);
-static void arm_ext_watch_alloc_report(ArmExtModule *m, const char *tag,
-                                       uint32_t addr, uint32_t len);
-static uint32_t arm_ext_watch_hash32(const void *data, uint32_t len);
-static void arm_ext_watch_hex16(const void *data, uint32_t len,
-                                char *out, size_t out_size);
-static void arm_ext_watch_sentinel_check(ArmExtModule *m, uint32_t idx,
-                                         uint32_t r0, uint32_t r1,
-                                         uint32_t r2, uint32_t r3);
-static void arm_ext_watch_module_event(ArmExtModule *m, const char *tag,
-                                       uint32_t file_addr, uint32_t file_len,
-                                       uint32_t p_addr);
 static ArmExtNestedModule *arm_ext_find_nested_module(ArmExtModule *m, uint32_t addr);
 static void arm_ext_protect_registered_module_storage(ArmExtModule *m,
                                                       uint32_t file_addr,
@@ -892,6 +908,32 @@ static void leave_screen_context(ArmExtModule *m,
 static int32_t arm_ext_screen_stride(ArmExtModule *m) {
     if (!m) return 0;
     return m->screen_w;
+}
+
+/*
+ * B1 修复:guest 逻辑画布回拷宿主 mr_screenBuf 的统一出口。
+ * 宿主缓冲按物理分辨率 mr_screen_w*mr_screen_h 分配,而 m->screen_w/h 可被
+ * guest 配置成更大的逻辑画布(gtcm 的 SphinxJoy 引擎配 480x320,宿主 240x320)。
+ * 此前 leave_screen_context / 模态快照恢复(arm_ext_call、call_dispatch)三处
+ * 各自按 guest 尺寸整块拷贝,越过宿主堆缓冲末尾写。统一按两侧尺寸交集逐行
+ * 拷贝,行距按各自真实 stride;通过 out_w/out_h 返回实际尺寸供 present 夹断。
+ */
+static void arm_ext_copy_screen_to_host(ArmExtModule *m, uint16_t *dst,
+                                        const uint16_t *src,
+                                        int32_t src_stride,
+                                        int32_t *out_w, int32_t *out_h) {
+    int32_t w = m ? m->screen_w : 0;
+    int32_t h = m ? m->screen_h : 0;
+    if (mr_screen_w > 0 && w > mr_screen_w) w = mr_screen_w;
+    if (mr_screen_h > 0 && h > mr_screen_h) h = mr_screen_h;
+    if (out_w) *out_w = w;
+    if (out_h) *out_h = h;
+    if (!dst || !src || w <= 0 || h <= 0 || src_stride <= 0) return;
+    for (int32_t y = 0; y < h; ++y) {
+        memcpy(dst + (size_t)y * (size_t)mr_screen_w,
+               src + (size_t)y * (size_t)src_stride,
+               (size_t)w * sizeof(uint16_t));
+    }
 }
 
 static inline void app_on_child_confirmed(ArmExtModule *m, uint32_t p, uint32_t h) {
@@ -1261,16 +1303,15 @@ static void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
     }
 
     if (m->nested_module_count >= ARM_EXT_NESTED_MODULE_MAX) {
-        if (getenv("VMRP_ARM_EXT_TRACE")) {
-            printf("arm_ext_executor: nested module registry full, file=0x%X len=%u\n",
-                   file_addr, file_len);
-        }
+        /* B6:注册表满意味着该模块此后在 PC→owner 归属查找中不可见,事件会
+         * 派发给错误 owner——这是功能已损坏的状态,必须无条件告警而不是只在
+         * TRACE 下打印 */
+        printf("arm_ext_executor: nested module registry full, file=0x%X len=%u (events may route to wrong owner)\n",
+               file_addr, file_len);
         return;
     }
 
     ArmExtNestedModule *slot = &m->nested_modules[m->nested_module_count++];
-    /* 临时诊断:记录模块注册(修复后删除) */
-    arm_ext_watch_module_event(m, "register", file_addr, file_len, p_addr);
     slot->file_addr = file_addr;
     slot->file_len = file_len;
     slot->p_addr = p_addr;
@@ -1742,7 +1783,7 @@ static int arm_ext_should_skip_got_snapshot_restore(ArmExtModule *m,
      * a callable bridge table.  Do not restore stale self-pointers there after
      * the child intentionally clears the window with memset.
      */
-    if (getenv("VMRP_ARM_EXT_DIAG")) {
+    if (arm_ext_diag_on()) {
         static uint32_t skip_diag_count = 0;
         if (skip_diag_count < 64u) {
             printf("DIAG got_restore_skip addr=0x%X off=0x%X rw=0x%X ownerFile=0x%X/%u ownerP=0x%X ownerH=0x%X\n",
@@ -2133,7 +2174,7 @@ static void arm_ext_repair_private_child_bridges(ArmExtModule *m,
                 if (arm_ext_read_u32_or_zero_(m, rw_base + dst + i * 4u))
                     continue; /* 只写空白 RW 槽，保证 no-op 安全 */
                 memcpy(arm_ptr(m, rw_base + dst + i * 4u), &v, 4);
-                if (getenv("VMRP_ARM_EXT_DIAG")) {
+                if (arm_ext_diag_on()) {
                     printf("DIAG private-child bridge repair[%s]: shift=%d rw+0x%X = 0x%X\n",
                            lay->note, shift, dst + i * 4u, v);
                 }
@@ -2169,15 +2210,15 @@ static int arm_ext_read_internal_loader_tuple(ArmExtModule *m,
     uint32_t rw_base = 0, p_ext_chunk = 0;
     memcpy(&magic, arm_ptr(m, ext_chunk), 4);
     if (magic != EXT_CHUNK_MAGIC) return 0;
-    memcpy(&init_func, arm_ptr(m, ext_chunk + 0x04u), 4);
-    memcpy(&helper_addr, arm_ptr(m, ext_chunk + 0x08u), 4);
-    memcpy(&chunk_file, arm_ptr(m, ext_chunk + 0x0Cu), 4);
-    memcpy(&chunk_len, arm_ptr(m, ext_chunk + 0x10u), 4);
-    memcpy(&chunk_rw, arm_ptr(m, ext_chunk + 0x14u), 4);
-    memcpy(&chunk_rw_len, arm_ptr(m, ext_chunk + 0x18u), 4);
-    memcpy(&p_addr, arm_ptr(m, ext_chunk + 0x1Cu), 4);
-    memcpy(&p_len, arm_ptr(m, ext_chunk + 0x20u), 4);
-    memcpy(&chunk_record, arm_ptr(m, ext_chunk + 0x2Cu), 4);
+    memcpy(&init_func, arm_ptr(m, ext_chunk + AEX_CHUNK_INIT_OFF), 4);
+    memcpy(&helper_addr, arm_ptr(m, ext_chunk + AEX_CHUNK_HELPER_OFF), 4);
+    memcpy(&chunk_file, arm_ptr(m, ext_chunk + AEX_CHUNK_FILE_BASE_OFF), 4);
+    memcpy(&chunk_len, arm_ptr(m, ext_chunk + AEX_CHUNK_FILE_LEN_OFF), 4);
+    memcpy(&chunk_rw, arm_ptr(m, ext_chunk + AEX_CHUNK_RW_BASE_OFF), 4);
+    memcpy(&chunk_rw_len, arm_ptr(m, ext_chunk + AEX_CHUNK_RW_LEN_OFF), 4);
+    memcpy(&p_addr, arm_ptr(m, ext_chunk + AEX_CHUNK_P_ADDR_OFF), 4);
+    memcpy(&p_len, arm_ptr(m, ext_chunk + AEX_CHUNK_P_LEN_OFF), 4);
+    memcpy(&chunk_record, arm_ptr(m, ext_chunk + AEX_CHUNK_RECORD_OFF), 4);
     memcpy(&record, arm_ptr(m, file_addr), 4);
     memcpy(&file_p_addr, arm_ptr(m, file_addr + 4u), 4);
     if (chunk_file != file_addr || chunk_len != file_len ||
@@ -2195,7 +2236,7 @@ static int arm_ext_read_internal_loader_tuple(ArmExtModule *m,
     }
 
     memcpy(&rw_base, arm_ptr(m, p_addr), 4);
-    memcpy(&p_ext_chunk, arm_ptr(m, p_addr + 0x0Cu), 4);
+    memcpy(&p_ext_chunk, arm_ptr(m, p_addr + AEX_P_EXT_CHUNK_OFF), 4);
     /*
      * cfunction.ext private loader at 0xE8339C..0xE833CA stores child entry
      * (file_base+8), file_base, file_len, module record and P before
@@ -2211,7 +2252,7 @@ static int arm_ext_read_internal_loader_tuple(ArmExtModule *m,
     }
     if (require_confirmed && chunk_rw_len) {
         uint32_t rw_len = 0;
-        memcpy(&rw_len, arm_ptr(m, p_addr + 4u), 4);
+        memcpy(&rw_len, arm_ptr(m, p_addr + AEX_P_ER_RW_LEN_OFF), 4);
         if (rw_len != chunk_rw_len) return 0;
     }
     if (require_confirmed && rw_base &&
@@ -2233,7 +2274,7 @@ static int arm_ext_has_internal_loader_chunk(ArmExtModule *m,
     if (!m || !file_addr || !file_len) return 0;
 
     for (uint32_t ext_chunk = EXT_HEAP_ADDR;
-         ext_chunk + 0x38 <= m->heap_top;
+         ext_chunk + AEX_CHUNK_HEAP_TOP_OFF <= m->heap_top;
          ext_chunk += 4) {
         if (arm_ext_read_internal_loader_tuple(m, ext_chunk,
                                                file_addr, file_len, 0, NULL)) {
@@ -2250,7 +2291,7 @@ static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
     if (!m || !file_addr || !file_len) return 0;
 
     for (uint32_t ext_chunk = EXT_HEAP_ADDR;
-         ext_chunk + 0x38 <= m->heap_top;
+         ext_chunk + AEX_CHUNK_HEAP_TOP_OFF <= m->heap_top;
          ext_chunk += 4) {
         ArmExtInternalLoaderTuple tuple;
         if (!arm_ext_read_internal_loader_tuple(m, ext_chunk, file_addr,
@@ -2309,16 +2350,16 @@ static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
          * 定时器。如果在这里清除标志，arm_ext_call 返回后的定时器检查就无法
          * 发现需要重启，导致子插件界面无法显示。标志由 arm_ext_call 的
          * post-processing 在确认定时器已重启后清除。 */
-        if (getenv("VMRP_ARM_EXT_DIAG")) {
+        if (arm_ext_diag_on()) {
             uint32_t ext_type = 0, is_pause = 0;
             uint32_t p_rw = 0, p_rw_len = 0;
             uint32_t chunk_rw = 0, chunk_rw_len = 0;
-            memcpy(&ext_type, arm_ptr(m, p_addr + 8), 4);
-            memcpy(&is_pause, arm_ptr(m, ext_chunk + 0x34), 4);
+            memcpy(&ext_type, arm_ptr(m, p_addr + AEX_P_EXT_TYPE_OFF), 4);
+            memcpy(&is_pause, arm_ptr(m, ext_chunk + AEX_CHUNK_SUSPEND_OFF), 4);
             memcpy(&p_rw, arm_ptr(m, p_addr), 4);
-            memcpy(&p_rw_len, arm_ptr(m, p_addr + 4), 4);
-            memcpy(&chunk_rw, arm_ptr(m, ext_chunk + 0x14), 4);
-            memcpy(&chunk_rw_len, arm_ptr(m, ext_chunk + 0x18), 4);
+            memcpy(&p_rw_len, arm_ptr(m, p_addr + AEX_P_ER_RW_LEN_OFF), 4);
+            memcpy(&chunk_rw, arm_ptr(m, ext_chunk + AEX_CHUNK_RW_BASE_OFF), 4);
+            memcpy(&chunk_rw_len, arm_ptr(m, ext_chunk + AEX_CHUNK_RW_LEN_OFF), 4);
             printf("DIAG synced file=0x%X len=%u chunk=0x%X P=0x%X H=0x%X p_rw=0x%X p_rw_len=%u chunk_rw=0x%X chunk_rw_len=%u ext_type=%u pause=%u activeP=0x%X activeH=0x%X primaryP=0x%X primaryH=0x%X timerP=0x%X timerH=0x%X\n",
                    file_addr, file_len, ext_chunk, p_addr, helper_addr,
                    p_rw, p_rw_len, chunk_rw, chunk_rw_len, ext_type, is_pause,
@@ -2326,7 +2367,7 @@ static int arm_ext_sync_internal_nested_module(ArmExtModule *m,
                    m->primary_helper_addr, m->timer_p_addr, m->timer_helper_addr);
             arm_ext_diag_dump_rw_timer_state(m, "sync-child", rw_base);
         }
-        if (getenv("VMRP_ARM_EXT_TRACE")) {
+        if (arm_ext_trace_on()) {
             printf("arm_ext_executor: synced internal nested helper=0x%X P=0x%X file=0x%X len=%u primary=0x%X/0x%X\n",
                    helper_addr, p_addr, file_addr, file_len,
                    m->primary_helper_addr, m->primary_p_addr);
@@ -2527,14 +2568,11 @@ static void arm_ext_drop_overlapping_stale_nested_modules(ArmExtModule *m,
                 m->timer_p_addr = 0;
                 m->timer_helper_addr = 0;
             }
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 printf("DIAG stale_child_drop oldFile=0x%X/%u oldP=0x%X oldH=0x%X newFile=0x%X/%u\n",
                        mod.file_addr, mod.file_len, mod.p_addr,
                        mod.helper_addr, file_addr, file_len);
             }
-            /* 临时诊断:记录 stale 模块卸载(修复后删除) */
-            arm_ext_watch_module_event(m, "drop_stale", mod.file_addr,
-                                       mod.file_len, mod.p_addr);
             continue;
         }
         m->nested_modules[out++] = mod;
@@ -2675,11 +2713,11 @@ static int arm_ext_has_suspended_foreground_child(ArmExtModule *m,
                                                   uint32_t primary_ext_chunk) {
     if (!arm_ext_has_foreground_child(m) ||
         !primary_ext_chunk ||
-        !arm_ptr(m, primary_ext_chunk + 0x34u)) {
+        !arm_ptr(m, primary_ext_chunk + AEX_CHUNK_SUSPEND_OFF)) {
         return 0;
     }
     uint32_t suspend_depth = 0;
-    memcpy(&suspend_depth, arm_ptr(m, primary_ext_chunk + 0x34u), 4);
+    memcpy(&suspend_depth, arm_ptr(m, primary_ext_chunk + AEX_CHUNK_SUSPEND_OFF), 4);
     return suspend_depth > 0;
 }
 
@@ -2970,7 +3008,7 @@ static void trace_pc(uc_engine *uc, uint64_t address, uint32_t size, void *user_
 }
 
 static void dump_pc_ring(ArmExtModule *m) {
-    if (!getenv("VMRP_ARM_EXT_TRACE_PC")) return;
+    if (!arm_ext_trace_pc_on()) return;
     uint32_t total = m->pc_ring_pos < EXT_TRACE_PC_RING ? m->pc_ring_pos : EXT_TRACE_PC_RING;
     printf("arm_ext_executor: recent PCs:\n");
     for (uint32_t i = 0; i < total; ++i) {
@@ -3004,7 +3042,7 @@ static void hook_intr(uc_engine *uc, uint32_t intno, void *user_data) {
      * preserved as real execution errors by stopping with pending_intr_* set.
      */
     if (intno == 2u && r0 == 3u && arm_ptr(m, r1)) {
-        if (getenv("VMRP_ARM_EXT_DIAG")) {
+        if (arm_ext_diag_on()) {
             static uint32_t semihost_diag_count = 0;
             if (semihost_diag_count < 64u) {
                 unsigned ch = arm_ext_read_u8_or_zero_(m, r1);
@@ -3074,7 +3112,7 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
             if (pc_in_code && (cpsr & (1u << 5)) == 0) {
                 cpsr |= (1u << 5);
                 reg_write32(m->uc, UC_ARM_REG_CPSR, cpsr);
-                if (getenv("VMRP_ARM_EXT_TRACE")) {
+                if (arm_ext_trace_on()) {
                     printf("arm_ext_executor: retrying in Thumb mode at pc=0x%X\n", pc);
                 }
                 err = uc_emu_start(m->uc, pc | 1u, EXT_STOP_ADDR, 0, 0);
@@ -3089,7 +3127,7 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
         if (reg_read32(m->uc, UC_ARM_REG_PC) == EXT_STOP_ADDR) return MR_SUCCESS;
         uint32_t pc = reg_read32(m->uc, UC_ARM_REG_PC) & ~1u;
         uint32_t cur_sp = reg_read32(m->uc, UC_ARM_REG_SP);
-        if (m->pending_intr_no && getenv("VMRP_ARM_EXT_DIAG")) {
+        if (m->pending_intr_no && arm_ext_diag_on()) {
             printf("DIAG unhandled_intr intno=%u pc=0x%X r0=0x%X r1=0x%X start=0x%X\n",
                    m->pending_intr_no, m->pending_intr_pc,
                    m->pending_intr_r0, m->pending_intr_r1, start);
@@ -3100,7 +3138,7 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
              * callback，让平台层保持原状态继续调度；退出/重启必须来自
              * ARM 程序自己的 mr_exit/mr_state 路径，不能在异常处理里推断。
              */
-            if (getenv("VMRP_ARM_EXT_TRACE")) {
+            if (arm_ext_trace_on()) {
                 printf("arm_ext_executor: ARM callback stopped at non-instruction pc=0x%X sp=0x%X\n", pc, cur_sp);
                 dump_pc_ring(m);
             }
@@ -3122,7 +3160,7 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
                 uint16_t prev_hw = (uint16_t)(p[0] | (p[1] << 8));
                 uint32_t top5 = prev_hw >> 11;
                 if (top5 == 0x1d || top5 == 0x1e || top5 == 0x1f) {
-                    if (getenv("VMRP_ARM_EXT_TRACE")) {
+                    if (arm_ext_trace_on()) {
                         printf("arm_ext_executor: plugin returned to mid-Thumb2 pc=0x%X sp=0x%X (treated as clean exit)\n", pc, cur_sp);
                         dump_pc_ring(m);
                     }
@@ -3163,7 +3201,7 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
             if (pcp && ((pcp[0] == 0xFF && pcp[1] == 0xFF) ||
                        (pcp[0] == 0x00 && pcp[1] == 0x00 && pcp[2] == 0x00 && pcp[3] == 0x00) ||
                        lr_in_wrapper)) {
-                if (getenv("VMRP_ARM_EXT_TRACE")) {
+                if (arm_ext_trace_on()) {
                     printf("arm_ext_executor: plugin returned to heap data pc=0x%X sp=0x%X (treated as clean exit)\n", pc, cur_sp);
                     dump_pc_ring(m);
                 }
@@ -3182,7 +3220,7 @@ static int run_arm_with_sp(ArmExtModule *m, uint32_t start, uint32_t sp) {
         if (err == UC_ERR_EXCEPTION) {
             uint32_t sp_diff = (pc > cur_sp) ? pc - cur_sp : cur_sp - pc;
             if (sp_diff < 0x4000) {
-                if (getenv("VMRP_ARM_EXT_TRACE")) {
+                if (arm_ext_trace_on()) {
                     printf("arm_ext_executor: stack-corrupt plugin callback pc=0x%X sp=0x%X (treated as clean exit)\n", pc, cur_sp);
                     dump_pc_ring(m);
                 }
@@ -3769,7 +3807,7 @@ static void arm_ext_record_timer_owner(ArmExtModule *m) {
     if (owner_p && owner_helper) {
         m->timer_p_addr = owner_p;
         m->timer_helper_addr = owner_helper;
-        if (getenv("VMRP_ARM_EXT_DIAG")) {
+        if (arm_ext_diag_on()) {
             printf("DIAG timer_owner lr=0x%X ownerP=0x%X ownerH=0x%X fromCurrent=%d activeP=0x%X activeH=0x%X currentP=0x%X currentH=0x%X\n",
                    lr, owner_p, owner_helper, owner_from_current_dispatch,
                    m->active_p_addr, m->active_helper_addr,
@@ -3944,8 +3982,8 @@ static uint32_t arm_ext_guest_mem_malloc(ArmExtModule *m, uint32_t len) {
             }
             return alloc_addr;
         }
-        previous = nextfree;
-        nextfree = base + node_next;
+        /* D1:此处不再有链表推进语句——上方分支要么 return,要么在"无合适
+         * 子区间"时已 continue,循环尾推进自始不可达 */
     }
     return 0; /* mem.c: no memory2(池内无足够大的块,调用方退回 bump) */
 }
@@ -4196,16 +4234,19 @@ static uint32_t arm_ext_bump_reuse(ArmExtModule *m, uint32_t len) {
         ArmExtBumpBlock *b = &m->bump_free_blocks[i];
         if (b->len < len) continue;
         uint32_t addr = b->addr;
-        if (b->len - len >= 8) {
-            b->addr += len;
-            b->len -= len;
+        /* 剩余不足以成块时整块给出(与池分配器拆分粒度一致) */
+        int split = (b->len - len >= 8);
+        uint32_t give = split ? len : b->len;
+        /* B6:先登记 live 成功再改空闲表。此前先摘链后登记,登记失败
+         * (宿主 OOM)时块既不在空闲表也不在 live 表,永久泄漏 */
+        if (!arm_ext_bump_track(m, addr, give)) return 0;
+        if (split) {
+            b->addr += give;
+            b->len -= give;
         } else {
-            /* 剩余不足以成块,整块给出(与池分配器拆分粒度一致) */
-            len = b->len;
             arm_ext_bump_block_remove(m->bump_free_blocks,
                                       &m->bump_free_count, i);
         }
-        if (!arm_ext_bump_track(m, addr, len)) return 0;
         return addr;
     }
     return 0;
@@ -4268,14 +4309,11 @@ static void arm_ext_protect_registered_module_storage(ArmExtModule *m,
  * 池 first-fit(地址预测成立)→ bump 空闲块复用 → bump 新块。 */
 static uint32_t arm_ext_app_mem_malloc(ArmExtModule *m, uint32_t len) {
     uint32_t ret = arm_ext_guest_mem_malloc(m, len);
-    if (ret) arm_ext_watch_alloc_report(m, "pool_malloc", ret, len);
     if (!ret) {
         ret = arm_ext_bump_reuse(m, len);
-        if (ret) arm_ext_watch_alloc_report(m, "bump_reuse", ret, len);
     }
     if (!ret) {
         ret = arm_alloc(m, len);
-        if (ret) arm_ext_watch_alloc_report(m, "bump_new", ret, len);
         if (ret && !arm_ext_bump_track(m, ret, len)) {
             /* 登记失败(宿主内存不足)时块仍有效,只是不可回收 */
         }
@@ -4289,11 +4327,9 @@ static void arm_ext_app_mem_free(ArmExtModule *m, uint32_t p, uint32_t len) {
     arm_ext_app_alloc_untrack(m, p);
     if (m->origin_mem_addr && p >= m->origin_mem_addr &&
         p < m->origin_mem_addr + m->origin_mem_len) {
-        arm_ext_watch_alloc_report(m, "pool_free", p, len);
         arm_ext_guest_mem_free(m, p, len);
         return;
     }
-    arm_ext_watch_alloc_report(m, "bump_recycle", p, len ? len : 4);
     arm_ext_bump_recycle(m, p);
 }
 
@@ -4326,13 +4362,15 @@ static uint32_t read_game_timer_head(ArmExtModule *m, uint32_t grw) {
 static void write_game_timer_head(ArmExtModule *m, uint32_t grw, uint32_t val) {
     if (!grw) return;
     uint32_t cur = 0;
-    if (arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET))
-        memcpy(&cur, arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET), 4);
-    if ((cur && !arm_ext_is_standard_ext_self_pointer(cur)) ||
-        !arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET_ALT)) {
-        memcpy(arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET), &val, 4);
+    void *main_slot = arm_ptr_span(m, grw + GAME_TIMER_HEAD_OFFSET, 4u);
+    void *alt_slot = arm_ptr_span(m, grw + GAME_TIMER_HEAD_OFFSET_ALT, 4u);
+    if (main_slot) memcpy(&cur, main_slot, 4);
+    if ((cur && !arm_ext_is_standard_ext_self_pointer(cur)) || !alt_slot) {
+        /* B2:两个候选槽都不可映射时放弃写入(此前主槽为 NULL 仍 memcpy,
+         * 宿主段错误;读侧本就判空,写侧对齐) */
+        if (main_slot) memcpy(main_slot, &val, 4);
     } else {
-        memcpy(arm_ptr(m, grw + GAME_TIMER_HEAD_OFFSET_ALT), &val, 4);
+        memcpy(alt_slot, &val, 4);
     }
 }
 
@@ -4498,13 +4536,13 @@ static int arm_ext_compact_heap_cut_range(ArmExtModule *m,
         return 0;
     }
 
-    uint32_t base = arm_ext_read_u32_or_zero_(m, ctrl + 0x08u);
-    uint32_t end = arm_ext_read_u32_or_zero_(m, ctrl + 0x10u);
+    uint32_t base = arm_ext_read_u32_or_zero_(m, ctrl + AEX_COMPACT_CTRL_BASE_OFF);
+    uint32_t end = arm_ext_read_u32_or_zero_(m, ctrl + AEX_COMPACT_CTRL_END_OFF);
     if (end <= base || !arm_ext_addr_range_mapped(m, base, end - base))
         return 0;
 
     uint32_t heap_len = end - base;
-    uint32_t prev_slot = ctrl + 0x18u;
+    uint32_t prev_slot = ctrl + AEX_COMPACT_CTRL_HEAD_OFF;
     uint32_t off = arm_ext_read_u32_or_zero_(m, prev_slot);
     uint32_t iter_limit = heap_len / 8u + 4u;
     int changed = 0;
@@ -4562,9 +4600,9 @@ static int arm_ext_compact_heap_cut_range(ArmExtModule *m,
         }
 
         if (removed) {
-            uint32_t free_bytes = arm_ext_read_u32_or_zero_(m, ctrl + 0x0Cu);
+            uint32_t free_bytes = arm_ext_read_u32_or_zero_(m, ctrl + AEX_COMPACT_CTRL_FREE_OFF);
             free_bytes = removed < free_bytes ? free_bytes - removed : 0;
-            arm_ext_guest_mem_write_u32(m, ctrl + 0x0Cu, free_bytes);
+            arm_ext_guest_mem_write_u32(m, ctrl + AEX_COMPACT_CTRL_FREE_OFF, free_bytes);
         }
         changed = 1;
     }
@@ -4657,7 +4695,7 @@ static void arm_ext_collect_registered_module_ranges(ArmExtModule *m,
             continue;
         /* mr_c_function_P_t: +0=start_of_ER_RW,+4=ER_RW_Length */
         uint32_t rw = arm_ext_read_u32_or_zero_(m, mod[i].p_addr);
-        uint32_t rw_len = arm_ext_read_u32_or_zero_(m, mod[i].p_addr + 4u);
+        uint32_t rw_len = arm_ext_read_u32_or_zero_(m, mod[i].p_addr + AEX_P_ER_RW_LEN_OFF);
         if (!rw || !rw_len || !arm_ext_addr_range_mapped(m, rw, rw_len))
             continue;
         arm_ext_collect_protect_range_(ranges, count, rw, rw_len);
@@ -4734,12 +4772,12 @@ static int arm_ext_invariant_check_freelist_overlap_(
     if (!arm_ext_addr_range_mapped(m, ctrl_slot, 4u)) return 0;
     uint32_t ctrl = arm_ext_read_u32_or_zero_(m, ctrl_slot);
     if (!ctrl || !arm_ext_addr_range_mapped(m, ctrl, 0x1Cu)) return 0;
-    uint32_t base = arm_ext_read_u32_or_zero_(m, ctrl + 0x08u);
-    uint32_t end = arm_ext_read_u32_or_zero_(m, ctrl + 0x10u);
+    uint32_t base = arm_ext_read_u32_or_zero_(m, ctrl + AEX_COMPACT_CTRL_BASE_OFF);
+    uint32_t end = arm_ext_read_u32_or_zero_(m, ctrl + AEX_COMPACT_CTRL_END_OFF);
     if (end <= base || !arm_ext_addr_range_mapped(m, base, end - base))
         return 0;
     uint32_t heap_len = end - base;
-    uint32_t off = arm_ext_read_u32_or_zero_(m, ctrl + 0x18u);
+    uint32_t off = arm_ext_read_u32_or_zero_(m, ctrl + AEX_COMPACT_CTRL_HEAD_OFF);
     uint32_t iter_limit = heap_len / 8u + 4u;
     while (off < heap_len && iter_limit--) {
         uint32_t node = base + off;
@@ -4906,18 +4944,18 @@ static void arm_ext_clear_foreground_cover_regions(ArmExtModule *m) {
 }
 
 static void arm_ext_diag_dump_layer_state(ArmExtModule *m, const char *tag) {
-    if (!m || !getenv("VMRP_ARM_EXT_DIAG")) return;
+    if (!m || !arm_ext_diag_on()) return;
     uint32_t primary_chunk = 0;
     uint32_t active_chunk = 0;
     uint32_t primary_rw = 0;
     uint32_t active_rw = 0;
-    if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr + 12)) {
+    if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr + AEX_P_EXT_CHUNK_OFF)) {
         memcpy(&primary_rw, arm_ptr(m, m->primary_p_addr), 4);
-        memcpy(&primary_chunk, arm_ptr(m, m->primary_p_addr + 12), 4);
+        memcpy(&primary_chunk, arm_ptr(m, m->primary_p_addr + AEX_P_EXT_CHUNK_OFF), 4);
     }
-    if (m->active_p_addr && arm_ptr(m, m->active_p_addr + 12)) {
+    if (m->active_p_addr && arm_ptr(m, m->active_p_addr + AEX_P_EXT_CHUNK_OFF)) {
         memcpy(&active_rw, arm_ptr(m, m->active_p_addr), 4);
-        memcpy(&active_chunk, arm_ptr(m, m->active_p_addr + 12), 4);
+        memcpy(&active_chunk, arm_ptr(m, m->active_p_addr + AEX_P_EXT_CHUNK_OFF), 4);
     }
     uint32_t pc = reg_read32(m->uc, UC_ARM_REG_PC);
     uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
@@ -4932,14 +4970,14 @@ static void arm_ext_diag_dump_layer_state(ArmExtModule *m, const char *tag) {
     uint32_t p24 = 0, p28 = 0, p34 = 0;
     uint32_t a24 = 0, a28 = 0, a34 = 0;
     if (primary_chunk) {
-        p24 = arm_ext_read_u32_or_zero_(m, primary_chunk + 0x24);
-        p28 = arm_ext_read_u32_or_zero_(m, primary_chunk + 0x28);
-        p34 = arm_ext_read_u32_or_zero_(m, primary_chunk + 0x34);
+        p24 = arm_ext_read_u32_or_zero_(m, primary_chunk + AEX_CHUNK_EVENT_DATA_OFF);
+        p28 = arm_ext_read_u32_or_zero_(m, primary_chunk + AEX_CHUNK_EVENT_FUNC_OFF);
+        p34 = arm_ext_read_u32_or_zero_(m, primary_chunk + AEX_CHUNK_SUSPEND_OFF);
     }
     if (active_chunk) {
-        a24 = arm_ext_read_u32_or_zero_(m, active_chunk + 0x24);
-        a28 = arm_ext_read_u32_or_zero_(m, active_chunk + 0x28);
-        a34 = arm_ext_read_u32_or_zero_(m, active_chunk + 0x34);
+        a24 = arm_ext_read_u32_or_zero_(m, active_chunk + AEX_CHUNK_EVENT_DATA_OFF);
+        a28 = arm_ext_read_u32_or_zero_(m, active_chunk + AEX_CHUNK_EVENT_FUNC_OFF);
+        a34 = arm_ext_read_u32_or_zero_(m, active_chunk + AEX_CHUNK_SUSPEND_OFF);
     }
     printf("DIAG layer %s pc=0x%X lr=0x%X r9=0x%X activeP=0x%X activeH=0x%X activeRW=0x%X activeChunk=0x%X active[24]=0x%X active[28]=0x%X active[34]=0x%X primaryP=0x%X primaryH=0x%X primaryRW=0x%X primaryChunk=0x%X primary[24]=0x%X primary[28]=0x%X primary[34]=0x%X timerP=0x%X timerH=0x%X cover27=%u..%u fgOwnerP=0x%X fgOwnerH=0x%X fgValid=%d hostTimer=%d mrTimer=%d\n",
            tag ? tag : "?",
@@ -4960,7 +4998,7 @@ static void arm_ext_diag_dump_timer_node(ArmExtModule *m,
                                          const char *tag,
                                          const char *name,
                                          uint32_t node) {
-    if (!m || !getenv("VMRP_ARM_EXT_DIAG") || !node) return;
+    if (!m || !arm_ext_diag_on() || !node) return;
     if (!arm_ptr(m, node) || !arm_ptr(m, node + 0x1Cu)) {
         printf("DIAG timer_node %s %s=0x%X unmapped\n",
                tag ? tag : "?", name ? name : "?", node);
@@ -4976,7 +5014,7 @@ static void arm_ext_diag_dump_timer_node(ArmExtModule *m,
 
 static void arm_ext_diag_dump_wrapper_compact_timer_nodes(ArmExtModule *m,
                                                          const char *tag) {
-    if (!m || !getenv("VMRP_ARM_EXT_TIMER_LIVENESS_DIAG") ||
+    if (!m || !arm_ext_timer_liveness_diag_on() ||
         !m->wrapper_compact_timer_scheduler_off) {
         return;
     }
@@ -5029,7 +5067,7 @@ static void arm_ext_diag_dump_wrapper_compact_timer_nodes(ArmExtModule *m,
 static void arm_ext_diag_dump_rw_timer_state(ArmExtModule *m,
                                              const char *tag,
                                              uint32_t rw_base) {
-    if (!m || !getenv("VMRP_ARM_EXT_DIAG") || !rw_base) return;
+    if (!m || !arm_ext_diag_on() || !rw_base) return;
     if (!arm_ptr(m, rw_base) || !arm_ptr(m, rw_base + 0x1Cu)) {
         printf("DIAG rw_low %s rw=0x%X unmapped\n",
                tag ? tag : "?", rw_base);
@@ -5125,7 +5163,7 @@ static void arm_ext_diag_dump_rw_timer_state(ArmExtModule *m,
 
 static void arm_ext_diag_dump_wrapper_timer_state(ArmExtModule *m,
                                                   const char *tag) {
-    if (!m || !getenv("VMRP_ARM_EXT_DIAG")) return;
+    if (!m || !arm_ext_diag_on()) return;
     uint32_t wrapper_rw = arm_ext_wrapper_rw_base_(m);
     if (!wrapper_rw) return;
 
@@ -5285,11 +5323,11 @@ static int arm_ext_suspend_depth_for_p(ArmExtModule *m,
                                        uint32_t *suspend_depth) {
     uint32_t ext_chunk = 0;
     if (suspend_depth) *suspend_depth = 0;
-    if (m && p_addr && arm_ptr(m, p_addr + 12)) {
-        memcpy(&ext_chunk, arm_ptr(m, p_addr + 12), 4);
+    if (m && p_addr && arm_ptr(m, p_addr + AEX_P_EXT_CHUNK_OFF)) {
+        memcpy(&ext_chunk, arm_ptr(m, p_addr + AEX_P_EXT_CHUNK_OFF), 4);
     }
-    if (!ext_chunk || !arm_ptr(m, ext_chunk + 0x34) || !suspend_depth) return 0;
-    memcpy(suspend_depth, arm_ptr(m, ext_chunk + 0x34), 4);
+    if (!ext_chunk || !arm_ptr(m, ext_chunk + AEX_CHUNK_SUSPEND_OFF) || !suspend_depth) return 0;
+    memcpy(suspend_depth, arm_ptr(m, ext_chunk + AEX_CHUNK_SUSPEND_OFF), 4);
     return 1;
 }
 
@@ -5439,7 +5477,7 @@ static void arm_ext_diag_visible_present(ArmExtModule *m,
                                          int32_t w,
                                          int32_t h,
                                          int covered_by_foreground) {
-    if (!m || !getenv("VMRP_ARM_EXT_SCREEN_DIAG")) return;
+    if (!m || !arm_ext_screen_diag_on()) return;
     if (!arm_ext_has_foreground_child(m) &&
         !(w >= m->screen_w && h >= m->screen_h)) {
         return;
@@ -5628,9 +5666,11 @@ static int arm_ext_dispup_rect(ArmExtModule *m,
         .screen = (uint16_t *)arm_ptr(m, m->screen_addr),
         .source_stride = arm_ext_screen_stride(m),
     };
-    return arm_ext_submit_uncovered_present_segments(
-        m, x, y, w, h, arm_ext_submit_dispup_segment, &dispup_ctx)
-        ? MR_SUCCESS : 0;
+    /* D1:MR_SUCCESS==0,原三目两分支同值不可区分;分段提交本就无失败
+     * 语义,统一返回 MR_SUCCESS,guest 可见行为不变 */
+    arm_ext_submit_uncovered_present_segments(
+        m, x, y, w, h, arm_ext_submit_dispup_segment, &dispup_ctx);
+    return MR_SUCCESS;
 }
 
 static int arm_ext_has_screen_damage(ArmExtModule *m) {
@@ -5793,18 +5833,10 @@ static void leave_screen_context(ArmExtModule *m,
                                  uint32_t present_depth_before) {
     if (m->screen_addr && saved_screen && m->screen_len) {
         uint16_t *arm_screen = (uint16_t *)arm_ptr(m, m->screen_addr);
-        int32_t stride = arm_ext_screen_stride(m);
-        if (arm_screen && stride == m->screen_w) {
-            memcpy(saved_screen, arm_screen,
-                   (size_t)m->screen_w * (size_t)m->screen_h *
-                   sizeof(uint16_t));
-        } else if (arm_screen && stride > 0) {
-            for (int32_t y = 0; y < m->screen_h; ++y) {
-                memcpy(saved_screen + (size_t)y * (size_t)m->screen_w,
-                       arm_screen + (size_t)y * (size_t)stride,
-                       (size_t)m->screen_w * sizeof(uint16_t));
-            }
-        }
+        /* B1:统一经宿主容量夹断的回拷;顺带消除旧代码里 stride 恒等于
+         * screen_w(arm_ext_screen_stride 实现如此)导致的不可达逐行分支 */
+        arm_ext_copy_screen_to_host(m, saved_screen, arm_screen,
+                                    arm_ext_screen_stride(m), NULL, NULL);
     }
     mr_screenBuf = saved_screen;
     if (saved_screen && m && m->screen_dirty && m->screen_presented_in_callback) {
@@ -6031,7 +6063,7 @@ static int arm_ext_should_accept_screen_write(ArmExtModule *m,
     if (caller_p_addr == m->active_p_addr) {
         if (claim_p_addr) *claim_p_addr = caller_p_addr;
         if (claim_helper_addr) *claim_helper_addr = caller_helper_addr;
-        if (getenv("VMRP_ARM_EXT_DIAG")) {
+        if (arm_ext_diag_on()) {
             static int screen_claim_diag_count = 0;
             if (screen_claim_diag_count++ < 40) {
                 printf("DIAG screen_claim callerP=0x%X callerH=0x%X activeP=0x%X activeH=0x%X valid=%d\n",
@@ -6063,7 +6095,7 @@ static int arm_ext_should_accept_screen_write(ArmExtModule *m,
      * layer or another active child claims the screen.
     */
     if (caller_p_addr == m->primary_p_addr) {
-        if (getenv("VMRP_ARM_EXT_DIAG")) {
+        if (arm_ext_diag_on()) {
             printf("DIAG screen_reject primary callerP=0x%X callerH=0x%X activeP=0x%X activeH=0x%X valid=%d\n",
                    caller_p_addr, caller_helper_addr,
                    m->active_p_addr, m->active_helper_addr,
@@ -6073,7 +6105,7 @@ static int arm_ext_should_accept_screen_write(ArmExtModule *m,
     }
     if (caller_p_addr == m->p_addr &&
         caller_helper_addr == m->helper_addr) {
-        if (getenv("VMRP_ARM_EXT_DIAG")) {
+        if (arm_ext_diag_on()) {
             printf("DIAG screen_reject wrapper callerP=0x%X callerH=0x%X activeP=0x%X activeH=0x%X valid=%d\n",
                    caller_p_addr, caller_helper_addr,
                    m->active_p_addr, m->active_helper_addr,
@@ -6442,7 +6474,7 @@ static void capture_timer_dispatches(ArmExtModule *m) {
             m->dispatch_timer_start = t31v;
         }
         memcpy(arm_ptr(m, t31a), &t31a, 4);
-        if (getenv("VMRP_ARM_EXT_TRACE")) {
+        if (arm_ext_trace_on()) {
             printf("arm_ext_executor: %s timerStart dispatch=0x%X\n",
                    captured ? "captured" : "ignored", t31v);
         }
@@ -6454,7 +6486,7 @@ static void capture_timer_dispatches(ArmExtModule *m) {
             m->dispatch_timer_stop = t32v;
         }
         memcpy(arm_ptr(m, t32a), &t32a, 4);
-        if (getenv("VMRP_ARM_EXT_TRACE")) {
+        if (arm_ext_trace_on()) {
             printf("arm_ext_executor: %s timerStop dispatch=0x%X\n",
                    captured ? "captured" : "ignored", t32v);
         }
@@ -6617,7 +6649,7 @@ static int arm_ext_guard_table_return_block(uc_engine *uc, ArmExtModule *m,
         return 0;
     }
 
-    if (getenv("VMRP_ARM_EXT_TRACE")) {
+    if (arm_ext_trace_on()) {
         uint32_t target = 0;
         int have_target = arm_ext_pop_pc_target(m, pc, sp, &target);
         printf("arm_ext_executor: stopped stale table return epilogue pc=0x%X sp=0x%X lr=0x%X pop_pc=0x%X\n",
@@ -6652,7 +6684,7 @@ static void hook_low_zero(uc_engine *uc, uint64_t address, uint32_t size, void *
      * 不做真实分发（参数可能是给嵌套 ext 函数而非 table 函数的），
      * 安全地返回 0（NULL/失败），让调用方走错误处理路径。 */
     if (address < EXT_TABLE_COUNT * 4) {
-        if (m && getenv("VMRP_ARM_EXT_DIAG")) {
+        if (m && arm_ext_diag_on()) {
             static uint32_t low_zero_diag_count = 0;
             uint32_t idx = (uint32_t)(address / 4u);
             uint32_t lr_helper = 0;
@@ -6735,10 +6767,8 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
     }
     capture_timer_dispatches(m);
     uint32_t r0 = arg_read(m, 0), r1 = arg_read(m, 1), r2 = arg_read(m, 2), r3 = arg_read(m, 3);
-    /* 临时诊断:哨兵完整性校验(捕获宿主侧覆写,修复后删除) */
-    arm_ext_watch_sentinel_check(m, idx, r0, r1, r2, r3);
     uint32_t ret = MR_SUCCESS;
-    int trace_table = getenv("VMRP_ARM_EXT_TRACE") != NULL;
+    int trace_table = arm_ext_trace_on();
     if (trace_table) {
         uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
         printf("arm_ext_executor: table[%u](0x%X,0x%X,0x%X,0x%X) lr=0x%X\n", idx, r0, r1, r2, r3, lr);
@@ -6793,7 +6823,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                     }
                     reg_write32(m->uc, UC_ARM_REG_R9, ret + 4);
                     m->nested_loading = 0;
-                    if (getenv("VMRP_ARM_EXT_TRACE")) {
+                    if (arm_ext_trace_on()) {
                         printf("arm_ext_executor: nested R9=0x%X after malloc 0x%X outer=0x%X return=0x%X\n",
                                ret + 4, r0, m->outer_r9, m->nested_return_addr);
                     }
@@ -6823,13 +6853,22 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             uint32_t p = arm_ext_app_mem_malloc(m, r2);
             if (p) {
                 note_origin_mem_alloc(m, r2);
-                memmove(arm_ptr(m, p), arm_ptr(m, r0), r1 < r2 ? r1 : r2);
+                /* B2:旧块指针非法(guest 状态损坏)时跳过拷贝,不解引用 NULL */
+                uint32_t n = r1 < r2 ? r1 : r2;
+                void *dst2 = arm_ptr_span(m, p, n);
+                void *src2 = arm_ptr_span(m, r0, n);
+                if (n && dst2 && src2) memmove(dst2, src2, n);
                 arm_ext_app_mem_free(m, r0, r1);
             }
             ret = p;
         } break;
-        case 3:
-            arm_ext_guest_memcpy(arm_ptr(m, r0), arm_ptr(m, r1), r2);
+        case 3: {
+            /* B2:两端都完整可映射才执行,guest 传坏指针时不解引用 NULL */
+            void *cpy_dst = arm_ptr_span(m, r0, r2);
+            const void *cpy_src = arm_ptr_span(m, r1, r2);
+            if (r2 && cpy_dst && cpy_src)
+                arm_ext_guest_memcpy(cpy_dst, cpy_src, r2);
+        }
             /* memcpy 后修复 GOT 中的 bridge 指针 */
             if (m->got_snapshot_base) {
                 uint32_t got_base = m->got_snapshot_base;
@@ -6846,17 +6885,68 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 }
             }
             ret = r0; break;
-        case 4: memmove(arm_ptr(m, r0), arm_ptr(m, r1), r2); ret = r0; break;
-        case 5: strcpy(arm_ptr(m, r0), arm_str(m, r1)); ret = r0; break;
-        case 6: arm_ext_guest_strncpy(arm_ptr(m, r0), arm_str(m, r1), r2); ret = r0; break;
-        case 7: strcat(arm_ptr(m, r0), arm_str(m, r1)); ret = r0; break;
-        case 8: strncat(arm_ptr(m, r0), arm_str(m, r1), r2); ret = r0; break;
-        case 9: ret = memcmp(arm_ptr(m, r0), arm_ptr(m, r1), r2); break;
+        /* case 4-9(B2):指针非法时跳过宿主操作;dst 类调用返回值仍是 r0,
+         * 比较类返回 0(ret 初值)。只消除宿主 NULL 解引用,不改合法路径 */
+        case 4: {
+            void *mv_dst = arm_ptr_span(m, r0, r2);
+            void *mv_src = arm_ptr_span(m, r1, r2);
+            if (r2 && mv_dst && mv_src) memmove(mv_dst, mv_src, r2);
+            ret = r0;
+        } break;
+        case 5: {
+            const char *cp_src = arm_str(m, r1);
+            uint32_t n = (uint32_t)strlen(cp_src) + 1u;
+            char *cp_dst = (char *)arm_ptr_span(m, r0, n);
+            if (cp_dst) memcpy(cp_dst, cp_src, n); /* 等价 strcpy(含 NUL) */
+            ret = r0;
+        } break;
+        case 6: {
+            char *ncp_dst = (char *)arm_ptr_span(m, r0, r2);
+            if (r2 && ncp_dst)
+                arm_ext_guest_strncpy(ncp_dst, arm_str(m, r1), r2);
+            ret = r0;
+        } break;
+        case 7: {
+            const char *cat_src = arm_str(m, r1);
+            char *cat_dst0 = (char *)arm_ptr(m, r0);
+            if (cat_dst0) {
+                uint32_t need = (uint32_t)strlen(cat_dst0) +
+                                (uint32_t)strlen(cat_src) + 1u;
+                char *cat_dst = (char *)arm_ptr_span(m, r0, need);
+                if (cat_dst) strcat(cat_dst, cat_src);
+            }
+            ret = r0;
+        } break;
+        case 8: {
+            const char *ncat_src = arm_str(m, r1);
+            char *ncat_dst0 = (char *)arm_ptr(m, r0);
+            if (ncat_dst0) {
+                uint32_t sl = (uint32_t)strlen(ncat_src);
+                if (sl > r2) sl = r2;
+                uint32_t need = (uint32_t)strlen(ncat_dst0) + sl + 1u;
+                char *ncat_dst = (char *)arm_ptr_span(m, r0, need);
+                if (ncat_dst) strncat(ncat_dst, ncat_src, r2);
+            }
+            ret = r0;
+        } break;
+        case 9: {
+            const void *cmp_a = arm_ptr_span(m, r0, r2);
+            const void *cmp_b = arm_ptr_span(m, r1, r2);
+            if (r2 && cmp_a && cmp_b) ret = memcmp(cmp_a, cmp_b, r2);
+        } break;
         case 10: ret = strcmp(arm_str(m, r0), arm_str(m, r1)); break;
         case 11: ret = strncmp(arm_str(m, r0), arm_str(m, r1), r2); break;
-        case 13: { void *p = memchr(arm_ptr(m, r0), (int)r1, r2); ret = p ? arm_addr(m, p) : 0; } break;
-        case 14:
-            memset(arm_ptr(m, r0), (int)r1, r2);
+        case 13: {
+            /* B2:区间可映射才搜索 */
+            void *hay = arm_ptr_span(m, r0, r2);
+            void *p = (hay && r2) ? memchr(hay, (int)r1, r2) : NULL;
+            ret = p ? arm_addr(m, p) : 0;
+        } break;
+        case 14: {
+            /* B2:区间可映射才清写 */
+            void *set_dst = arm_ptr_span(m, r0, r2);
+            if (r2 && set_dst) memset(set_dst, (int)r1, r2);
+        }
             /* memset 后修复 GOT 中的 bridge 指针 */
             if (m->got_snapshot_base) {
                 uint32_t got_base = m->got_snapshot_base;
@@ -6882,7 +6972,14 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             char *p = strstr(hay, nee);
             ret = p ? arm_addr(m, p) : 0;
         } break;
-        case 17: { char buf[1024]; ret = format_arm(m, buf, sizeof(buf), arm_str(m, r1), 2); strcpy(arm_ptr(m, r0), buf); } break;
+        case 17: {
+            char buf[1024];
+            ret = format_arm(m, buf, sizeof(buf), arm_str(m, r1), 2);
+            /* B2:输出区可映射才写回 */
+            char *fmt_dst =
+                (char *)arm_ptr_span(m, r0, (uint32_t)strlen(buf) + 1u);
+            if (fmt_dst) memcpy(fmt_dst, buf, strlen(buf) + 1u);
+        } break;
         case 18: ret = atoi(arm_str(m, r0)); break;
         case 19: ret = (uint32_t)strtoul(arm_str(m, r0), NULL, r1); break;
         case 20: ret = mr_rand(); break;
@@ -6952,7 +7049,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 } else if (m->primary_file_addr) {
                     memcpy(arm_ptr(m, m->primary_file_addr + 4), &p_addr, 4);
                 }
-                if (getenv("VMRP_ARM_EXT_TRACE")) {
+                if (arm_ext_trace_on()) {
                     printf("arm_ext_executor: nested helper=0x%X P=0x%X len=%u primary=0x%X/0x%X\n",
                            r0, p_addr, r1, m->primary_helper_addr, m->primary_p_addr);
                 }
@@ -6996,7 +7093,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 int32_t source_y = screen_stride_source ? (int16)r2 : 0;
                 int accept = arm_ext_should_accept_visible_present(m, &claim_p,
                                                                    &claim_helper);
-                if (getenv("VMRP_ARM_EXT_DIAG")) {
+                if (arm_ext_diag_on()) {
                     int covered_diag = arm_ext_owner_is_covered_by_foreground(
                         m, claim_p, claim_helper);
                     printf("DIAG present29 x=%d y=%d w=%u h=%u accept=%d claimP=0x%X claimH=0x%X covered=%d\n",
@@ -7052,7 +7149,14 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             if (r3 && arm_ptr(m, r3)) memcpy(arm_ptr(m, r3), &height, 4);
             if (bitmap) {
                 if (!m->char_bitmap_addr) m->char_bitmap_addr = arm_alloc(m, 32);
-                if (m->char_bitmap_addr) {
+                /* B5:缓冲固定 32 字节,当前 sky12/sky16 字体最大恰为 32;
+                 * 若将来字体返回更大位图,夹断并告警而不是越界写 ARM 堆 */
+                if (bitmap_size > 32) {
+                    printf("arm_ext_executor: char bitmap %dx%d size %d exceeds 32-byte slot, truncated\n",
+                           width, height, bitmap_size);
+                    bitmap_size = 32;
+                }
+                if (m->char_bitmap_addr && bitmap_size > 0) {
                     memcpy(arm_ptr(m, m->char_bitmap_addr), bitmap, bitmap_size);
                     ret = m->char_bitmap_addr;
                 } else {
@@ -7065,7 +7169,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 31: {
             uint32_t pc_diag = 0;
             uint32_t lr_diag = 0;
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 pc_diag = reg_read32(m->uc, UC_ARM_REG_PC);
                 lr_diag = reg_read32(m->uc, UC_ARM_REG_LR);
                 printf("DIAG table31_pre t=%u pc=0x%X lr=0x%X r0=0x%X r1=0x%X r2=0x%X r3=0x%X r4=0x%X r5=0x%X r6=0x%X r7=0x%X r9=0x%X activeP=0x%X activeH=0x%X currentP=0x%X currentH=0x%X timerP=0x%X timerH=0x%X\n",
@@ -7088,7 +7192,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             mr_timer_state = 1;
             m->host_timer_pending = 1;
             arm_ext_record_timer_owner(m);
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 printf("DIAG table31_post ret=0x%X pc=0x%X lr=0x%X r0=0x%X r1=0x%X r2=0x%X r3=0x%X r4=0x%X r5=0x%X r6=0x%X r7=0x%X r9=0x%X activeP=0x%X activeH=0x%X currentP=0x%X currentH=0x%X timerP=0x%X timerH=0x%X\n",
                        ret, reg_read32(m->uc, UC_ARM_REG_PC),
                        reg_read32(m->uc, UC_ARM_REG_LR),
@@ -7138,12 +7242,19 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 }
             }
         } break;
-        case 34: ret = mr_getDatetime(arm_ptr(m, r0)); break;
-        case 35: ret = mr_getUserInfo(arm_ptr(m, r0)); break;
+        /* case 34/35(B2):输出结构体指针非法时返回失败,宿主不向 NULL 写 */
+        case 34: {
+            void *dt = arm_ptr(m, r0);
+            ret = dt ? (uint32_t)mr_getDatetime(dt) : (uint32_t)MR_FAILED;
+        } break;
+        case 35: {
+            void *ui = arm_ptr(m, r0);
+            ret = ui ? (uint32_t)mr_getUserInfo(ui) : (uint32_t)MR_FAILED;
+        } break;
         case 36: ret = mr_sleep(r0); break;
         case 37:
             ret = mr_plat((int32)r0, (int32)r1);
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 uint32_t owner_p = 0, owner_h = 0;
                 uint32_t owner_file = 0, owner_len = 0;
                 arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
@@ -7156,7 +7267,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             }
             break;
         case 38: {
-            int diag_enabled = getenv("VMRP_ARM_EXT_DIAG") != NULL;
+            int diag_enabled = arm_ext_diag_on();
             uint32_t diag_lr = 0;
             uint32_t diag_owner_p = 0, diag_owner_h = 0;
             uint32_t diag_owner_file = 0, diag_owner_len = 0;
@@ -7295,7 +7406,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             if ((int32_t)ret > 0) {
                 arm_ext_diag_fd_set(m, (int32_t)ret, open_name);
             }
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 uint32_t owner_p = 0, owner_h = 0;
                 ArmExtNestedModule *owner =
                     arm_ext_resource_owner_for_lr(m, &owner_p, &owner_h);
@@ -7313,7 +7424,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             else {
                 ret = mr_close((int32)r0);
             }
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
                 arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
                                           &owner_file, &owner_len);
@@ -7335,7 +7446,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 if (mrp_cache_find(m, info_name))
                     ret = MRP_IS_FILE;
             }
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 uint32_t owner_p = 0, owner_h = 0;
                 ArmExtNestedModule *owner =
                     arm_ext_resource_owner_for_lr(m, &owner_p, &owner_h);
@@ -7367,7 +7478,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                  * (int32_t) 强转比较数值等价),消除符号比较告警 */
                 if (ret == len) ret = (int32_t)r2;
             }
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 char preview[192];
                 uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
                 arm_ext_diag_preview_bytes(src, len, preview, sizeof(preview));
@@ -7382,7 +7493,9 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             }
         } break;
         case 44: {
-            void *hp = arm_ptr(m, r1);
+            /* B2:整个读缓冲区可映射才交给宿主写(对照 vfd 分支的 hp 判空,
+             * 真实 mr_read 分支此前无保护) */
+            void *hp = arm_ptr_span(m, r1, r2 ? r2 : 1u);
             MrpVirtualFd *vf44 = mrp_vfd_get(m, r0);
             if (vf44) {
                 uint32_t avail = vf44->pos < vf44->data_len ? vf44->data_len - vf44->pos : 0;
@@ -7390,10 +7503,12 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 if (n && hp) memcpy(hp, vf44->data + vf44->pos, n);
                 vf44->pos += n;
                 ret = (int32_t)n;
-            } else {
+            } else if (hp) {
                 ret = mr_read((int32)r0, hp, r2);
+            } else {
+                ret = MR_FAILED;
             }
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 char preview[192];
                 uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
                 uint32_t overlap_lo = 0, overlap_hi = 0;
@@ -7473,7 +7588,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             /* 原有 "ret < 0 时查 MRP 缓存" 回退块因 ret 为 uint32_t 恒不成立,
              * 属从未生效的死代码(-Wtype-limits 证实),按"禁止兜底逻辑"规范
              * 删除;删除即保持现行为,getLen 失败语义与真机一致由调用方处理 */
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
                 arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
                                           &owner_file, &owner_len);
@@ -7532,7 +7647,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 85: ret = mr_connect((int32)r0, (int32)r1, (uint16)r2, (int32)r3); break;
         case 86:
             ret = mr_closeSocket((int32)r0);
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
                 arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
                                           &owner_file, &owner_len);
@@ -7545,7 +7660,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         case 87: {
             void *dst = arm_ptr(m, r1);
             ret = mr_recv((int32)r0, dst, (int)r2);
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 char preview[192];
                 uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
                 uint32_t preview_len = (int32_t)ret > 0 ? (uint32_t)ret : 0;
@@ -7567,7 +7682,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                  } break;
         case 89: {
             void *src = arm_ptr(m, r1);
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 char preview[192];
                 uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
                 arm_ext_diag_preview_bytes(src, r2, preview, sizeof(preview));
@@ -7580,7 +7695,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                        m->active_p_addr, m->primary_p_addr);
             }
             ret = mr_send((int32)r0, src, (int)r2);
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 printf("DIAG table89_post socket=%d len=%u ret=0x%X openSockets=%d\n",
                        (int32_t)r0, r2, ret, my_openSocketCount());
             }
@@ -7606,7 +7721,11 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         /* table[78] mr_winCreate / table[79] mr_winRelease: 窗口功能不支持 */
         case 78: ret = MR_IGNORE; break;
         case 79: ret = MR_IGNORE; break;
-        case 80: ret = mr_getScreenInfo(arm_ptr(m, r0)); break;
+        case 80: {
+            /* B2:同 case 34/35 */
+            void *si = arm_ptr(m, r0);
+            ret = si ? (uint32_t)mr_getScreenInfo(si) : (uint32_t)MR_FAILED;
+        } break;
         case 113: {
             void *p = arm_ptr(m, r0);
             if (p) mr_md5_init(p);
@@ -7625,7 +7744,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             ret = 0;
         } break;
         case 118:
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 printf("DIAG DispUpEx x=%d y=%d w=%u h=%u currentP=0x%X currentH=0x%X activeP=0x%X activeH=0x%X\n",
                        (int16)r0, (int16)r1, (uint16)r2, (uint16)r3,
                        m->current_p_addr, m->current_helper_addr,
@@ -7635,7 +7754,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 uint32_t claim_p = 0, claim_helper = 0;
                 int accept = arm_ext_should_accept_visible_present(m, &claim_p,
                                                                    &claim_helper);
-                if (getenv("VMRP_ARM_EXT_DIAG")) {
+                if (arm_ext_diag_on()) {
                     int covered_diag = arm_ext_owner_is_covered_by_foreground(
                         m, claim_p, claim_helper);
                     printf("DIAG present118 x=%d y=%d w=%u h=%u accept=%d claimP=0x%X claimH=0x%X covered=%d\n",
@@ -7892,7 +8011,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                              "%s", host_pack);
                 }
             }
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 char ram_preview[192];
                 char out_preview[192];
                 ram_preview[0] = '\0';
@@ -7917,16 +8036,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                        reg_read32(m->uc, UC_ARM_REG_LR));
             }
             if (!hp) {
-                uint32_t watch_lo = 0, watch_hi = 0;
-                if (arm_ext_watch_alloc_range(&watch_lo, &watch_hi)) {
-                    printf("WATCH_READFILE_FAIL name='%s' reason=no_host_data fl=%d lookfor=%u pack='%s' host_pack='%s' childScoped=%d ownerP=0x%X ownerH=0x%X lenSlot=0x%X sp=0x%X r9=0x%X lr=0x%X\n",
-                           read_name, fl, r2, pack, host_pack ? host_pack : "",
-                           child_scoped_pack, owner_p_diag, owner_h_diag, r1,
-                           reg_read32(m->uc, UC_ARM_REG_SP),
-                           reg_read32(m->uc, UC_ARM_REG_R9),
-                           reg_read32(m->uc, UC_ARM_REG_LR));
-                    fflush(stdout);
-                }
                 ret = 0;
                 break;
             }
@@ -7956,17 +8065,6 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
             } else {
                 ap = arm_ext_app_mem_malloc(m, (uint32_t)fl);
                 if (!ap) {
-                    uint32_t watch_lo = 0, watch_hi = 0;
-                    if (arm_ext_watch_alloc_range(&watch_lo, &watch_hi)) {
-                        printf("WATCH_READFILE_FAIL name='%s' reason=no_arm_buffer fl=%d lookfor=%u pack='%s' host_pack='%s' childScoped=%d ownerP=0x%X ownerH=0x%X lenSlot=0x%X sp=0x%X r9=0x%X lr=0x%X\n",
-                               read_name, fl, r2, pack,
-                               host_pack ? host_pack : "", child_scoped_pack,
-                               owner_p_diag, owner_h_diag, r1,
-                               reg_read32(m->uc, UC_ARM_REG_SP),
-                               reg_read32(m->uc, UC_ARM_REG_R9),
-                               reg_read32(m->uc, UC_ARM_REG_LR));
-                        fflush(stdout);
-                    }
                     ret = 0;
                     break;
                 }
@@ -7979,34 +8077,8 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 note_origin_mem_alloc(m, (uint32_t)fl);
                 memcpy(arm_ptr(m, ap), hp, fl);
             }
-            uint32_t len_slot_value = 0;
             if (r1 && arm_ptr(m, r1)) {
                 memcpy(arm_ptr(m, r1), &fl, 4);
-                memcpy(&len_slot_value, arm_ptr(m, r1), 4);
-            }
-            {
-                uint32_t watch_lo = 0, watch_hi = 0;
-                if (arm_ext_watch_alloc_range(&watch_lo, &watch_hi) &&
-                    ((ap < watch_hi && ap + (uint32_t)fl > watch_lo) ||
-                     direct_ram_package_ptr)) {
-                    uint32_t slot4 = r1 && arm_ptr(m, r1 + 4u) ?
-                        arm_ext_read_u32_or_zero_(m, r1 + 4u) : 0;
-                    uint32_t slot8 = r1 && arm_ptr(m, r1 + 8u) ?
-                        arm_ext_read_u32_or_zero_(m, r1 + 8u) : 0;
-                    char head[64];
-                    arm_ext_watch_hex16(hp, (uint32_t)fl, head, sizeof(head));
-                    printf("WATCH_READFILE name='%s' ret=0x%X fl=%d direct=%d hash=0x%08X head=%s lookfor=%u pack='%s' host_pack='%s' childScoped=%d ownerP=0x%X ownerH=0x%X lenSlot=0x%X lenVal=%u slot4=0x%X slot8=0x%X sp=0x%X r9=0x%X lr=0x%X\n",
-                           read_name, ap, fl,
-                           direct_ram_package_ptr,
-                           arm_ext_watch_hash32(hp, (uint32_t)fl), head, r2,
-                           pack, host_pack ? host_pack : "",
-                           child_scoped_pack, owner_p_diag, owner_h_diag, r1,
-                           len_slot_value, slot4, slot8,
-                           reg_read32(m->uc, UC_ARM_REG_SP),
-                           reg_read32(m->uc, UC_ARM_REG_R9),
-                           reg_read32(m->uc, UC_ARM_REG_LR));
-                    fflush(stdout);
-                }
             }
             arm_ext_sync_read_file_gzip_slots(m, hp, ap);
             free(m->last_file_copy);
@@ -8027,14 +8099,15 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 arm_ext_mirror_read_file_to_adjacent_slot(
                     m, r1, m->last_file_copy, (uint32_t)fl, ap,
                     &mirrored_slot);
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 char ret_preview[192];
                 ret_preview[0] = '\0';
                 arm_ext_diag_preview_bytes(arm_ptr(m, ap), (uint32_t)fl,
                                            ret_preview,
                                            sizeof(ret_preview));
                 printf("DIAG table125_ret name='%s' ret=0x%X fl=%d lenSlot=0x%X/%u mirror=%d mirrorSlot=0x%X lr=0x%X preview='%s'\n",
-                       read_name, ap, fl, r1, len_slot_value,
+                       read_name, ap, fl, r1,
+                       r1 ? arm_ext_read_u32_or_zero_(m, r1) : 0,
                        mirrored_to_adjacent_slot,
                        mirrored_slot, reg_read32(m->uc, UC_ARM_REG_LR),
                        ret_preview);
@@ -8059,7 +8132,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
              */
             int internal_loader_staging =
                 (r1 == 9 && arm_ext_has_internal_loader_chunk(m, r2, r3));
-            if (getenv("VMRP_ARM_EXT_DIAG")) {
+            if (arm_ext_diag_on()) {
                 uint32_t record_addr_diag = 0;
                 uint32_t p_addr_diag = 0;
                 if (r2 && arm_ptr(m, r2))
@@ -8128,7 +8201,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 if (m->last_alloc_len == sizeof(mr_c_function_P_t) && arm_ptr(m, m->last_alloc_addr)) {
                     m->nested_p_addr = m->last_alloc_addr;
                 }
-                if (getenv("VMRP_ARM_EXT_TRACE")) {
+                if (arm_ext_trace_on()) {
                     printf("arm_ext_executor: staged nested ext at 0x%X len=%u P=0x%X\n",
                            r2, r3, m->nested_p_addr);
                 }
@@ -8161,7 +8234,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
                 m->pending_internal_file_len = r3;
                 arm_ext_sync_internal_nested_module(m, r2, r3);
                 uc_err cerr = uc_ctl_remove_cache(m->uc, r2, r2 + r3);
-                if (cerr != UC_ERR_OK && getenv("VMRP_ARM_EXT_TRACE")) {
+                if (cerr != UC_ERR_OK && arm_ext_trace_on()) {
                     printf("arm_ext_executor: uc_ctl_remove_cache(0x%X, 0x%X) failed: %u\n",
                            r2, r2 + r3, cerr);
                 }
@@ -8226,7 +8299,7 @@ static bool hook_invalid(uc_engine *uc, uc_mem_type type, uint64_t address, int 
     if (type == UC_MEM_FETCH_UNMAPPED && address == 0) {
         uint32_t lr = 0;
         uc_reg_read(uc, UC_ARM_REG_LR, &lr);
-        if (getenv("VMRP_ARM_EXT_TRACE")) {
+        if (arm_ext_trace_on()) {
             printf("arm_ext_executor: treated fetch from 0 as return to 0x%X\n", lr);
             dumpREG(uc);
         }
@@ -8254,7 +8327,7 @@ static bool hook_invalid(uc_engine *uc, uc_mem_type type, uint64_t address, int 
         printf("  crash PC=0x%X (%s) last_file=0x%X..0x%X\n",
                pc, thumb ? "thumb" : "arm",
                m->last_file_addr, m->last_file_addr + m->last_file_len);
-        if (getenv("VMRP_ARM_EXT_DIAG")) {
+        if (arm_ext_diag_on()) {
             uint32_t r9 = reg_read32(uc, UC_ARM_REG_R9);
             arm_ext_diag_dump_layer_state(m, "invalid");
             arm_ext_diag_dump_rw_timer_state(m, "invalid-r9", r9);
@@ -8315,280 +8388,6 @@ static bool hook_invalid(uc_engine *uc, uc_mem_type type, uint64_t address, int 
 }
 
 /* GOT 写监控 */
-/* ---- 临时诊断(talkcat 循环下载-取消 代码区覆写取证,修复后删除) ----
- * VMRP_WATCH_WRITE="lo,hi":监视 guest 对 [lo,hi) 的写入,打印 PC/LR。
- * VMRP_WATCH_SENTINEL="addr":在每次 table 调用入口校验 addr 处 16 字节,
- *   变化时打印上一次 table 调用(可捕获宿主 memcpy 侧的覆写并定位到桥调用)。 */
-static int arm_ext_watch_write_range(uint32_t *lo, uint32_t *hi) {
-    static int parsed = -1;
-    static uint32_t s_lo = 0, s_hi = 0;
-    if (parsed < 0) {
-        const char *env = getenv("VMRP_WATCH_WRITE");
-        parsed = 0;
-        if (env && *env) {
-            char *end = NULL;
-            s_lo = (uint32_t)strtoul(env, &end, 0);
-            if (end && *end == ',')
-                s_hi = (uint32_t)strtoul(end + 1, NULL, 0);
-            if (s_hi > s_lo) parsed = 1;
-        }
-    }
-    if (parsed > 0) {
-        *lo = s_lo;
-        *hi = s_hi;
-    }
-    return parsed > 0;
-}
-
-static int arm_ext_watch_alloc_range(uint32_t *lo, uint32_t *hi) {
-    static int parsed = -1;
-    static uint32_t s_lo = 0, s_hi = 0;
-    if (parsed < 0) {
-        const char *env = getenv("VMRP_WATCH_ALLOC");
-        parsed = 0;
-        if (env && *env) {
-            char *end = NULL;
-            s_lo = (uint32_t)strtoul(env, &end, 0);
-            if (end && *end == ',')
-                s_hi = (uint32_t)strtoul(end + 1, NULL, 0);
-            if (s_hi > s_lo) parsed = 1;
-        }
-    }
-    if (parsed > 0) {
-        if (lo) *lo = s_lo;
-        if (hi) *hi = s_hi;
-        return 1;
-    }
-    /*
-     * Keep older watch runs useful: without VMRP_WATCH_ALLOC, allocation
-     * reports follow the write watch range that triggered this diagnostic.
-     */
-    return arm_ext_watch_write_range(lo, hi);
-}
-
-/* 每个 uc 实例(arm_ext_load 一次)独立的诊断状态。此前版本用共享 static,
- * 两个实例互相污染(哨兵跨实例比较、写日志配额被另一实例耗尽),取证无效。 */
-typedef struct {
-    ArmExtModule *m;
-    int id;
-    uint32_t write_hits;
-    uint8_t sent[16];
-    int sent_primed;
-    uint32_t sent_changes;
-    uint32_t last_idx, last_r0, last_r1, last_r2, last_r3, last_lr, last_pc;
-} ArmExtWatchState;
-
-static ArmExtWatchState *arm_ext_watch_state(ArmExtModule *m) {
-    static ArmExtWatchState slots[8];
-    static int used = 0;
-    for (int i = 0; i < used; ++i)
-        if (slots[i].m == m) return &slots[i];
-    if (used >= 8) return NULL;
-    slots[used].m = m;
-    slots[used].id = used;
-    return &slots[used++];
-}
-
-static void arm_ext_watch_alloc_report(ArmExtModule *m, const char *tag,
-                                       uint32_t addr, uint32_t len) {
-    uint32_t lo, hi;
-    if (!addr || !arm_ext_watch_alloc_range(&lo, &hi)) return;
-    if (addr >= hi || addr + len <= lo) return;
-    ArmExtWatchState *w = arm_ext_watch_state(m);
-    printf("WATCH_ALLOC[m%d] %s addr=0x%X len=%u overlaps [0x%X,0x%X)\n",
-           w ? w->id : -1, tag, addr, len, lo, hi);
-    fflush(stdout);
-}
-
-static uint32_t arm_ext_watch_hash32(const void *data, uint32_t len) {
-    const uint8_t *p = (const uint8_t *)data;
-    uint32_t h = 2166136261u;
-    if (!p) return 0;
-    for (uint32_t i = 0; i < len; ++i) {
-        h ^= p[i];
-        h *= 16777619u;
-    }
-    return h;
-}
-
-static void arm_ext_watch_hex16(const void *data, uint32_t len,
-                                char *out, size_t out_size) {
-    const uint8_t *p = (const uint8_t *)data;
-    size_t pos = 0;
-    if (!out || !out_size) return;
-    out[0] = '\0';
-    if (!p) return;
-    uint32_t n = len < 16u ? len : 16u;
-    for (uint32_t i = 0; i < n && pos + 4 < out_size; ++i) {
-        int wrote = snprintf(out + pos, out_size - pos, "%s%02X",
-                             i ? " " : "", p[i]);
-        if (wrote < 0) break;
-        pos += (size_t)wrote;
-    }
-}
-
-/* 模块注册/清除生命周期(仅 VMRP_WATCH_WRITE 设置时打印) */
-static void arm_ext_watch_module_event(ArmExtModule *m, const char *tag,
-                                       uint32_t file_addr, uint32_t file_len,
-                                       uint32_t p_addr) {
-    uint32_t lo, hi;
-    if (!arm_ext_watch_write_range(&lo, &hi)) return;
-    ArmExtWatchState *w = arm_ext_watch_state(m);
-    printf("WATCH_MOD[m%d] %s file=0x%X+0x%X p=0x%X\n",
-           w ? w->id : -1, tag, file_addr, file_len, p_addr);
-    fflush(stdout);
-}
-
-/* 只记录落在"已注册嵌套模块 file 范围内"的 guest 写——模块注册后其代码区
- * 不应再被写,任何命中都是覆写嫌疑。注册前的池数据写(合法)被过滤掉。 */
-static void hook_watch_write(uc_engine *uc, uc_mem_type type, uint64_t address,
-                             int size, int64_t value, void *user_data) {
-    (void)type;
-    ArmExtModule *m = (ArmExtModule *)user_data;
-    ArmExtWatchState *w = arm_ext_watch_state(m);
-    if (!w || w->write_hits >= 2000) return;
-    uint32_t watch_lo = 0;
-    uint32_t watch_hi = 0;
-    int small_data_watch =
-        arm_ext_watch_write_range(&watch_lo, &watch_hi) &&
-        watch_hi > watch_lo && watch_hi - watch_lo <= 0x100u;
-    ArmExtNestedModule *mod = arm_ext_find_nested_module(m, (uint32_t)address);
-    if (!mod && !small_data_watch) return;
-    w->write_hits++;
-    uint32_t pc = reg_read32(uc, UC_ARM_REG_PC);
-    uint32_t lr = reg_read32(uc, UC_ARM_REG_LR);
-    uint32_t sp = reg_read32(uc, UC_ARM_REG_SP);
-    uint32_t r9 = reg_read32(uc, UC_ARM_REG_R9);
-    uint32_t r0 = reg_read32(uc, UC_ARM_REG_R0);
-    uint32_t r1 = reg_read32(uc, UC_ARM_REG_R1);
-    uint32_t r2 = reg_read32(uc, UC_ARM_REG_R2);
-    uint32_t r3 = reg_read32(uc, UC_ARM_REG_R3);
-    uint32_t r4 = reg_read32(uc, UC_ARM_REG_R4);
-    uint32_t r5 = reg_read32(uc, UC_ARM_REG_R5);
-    uint32_t r6 = reg_read32(uc, UC_ARM_REG_R6);
-    uint32_t r7 = reg_read32(uc, UC_ARM_REG_R7);
-    printf("WATCH_WRITE[m%d] #%u addr=0x%llX size=%d value=0x%llX pc=0x%X lr=0x%X sp=0x%X r9=0x%X r0=0x%X r1=0x%X r2=0x%X r3=0x%X r4=0x%X r5=0x%X r6=0x%X r7=0x%X mod=0x%X+0x%X\n",
-           w->id, w->write_hits, (unsigned long long)address, size,
-           (unsigned long long)value, pc, lr, sp, r9, r0, r1, r2, r3, r4, r5,
-           r6, r7, mod ? mod->file_addr : 0, mod ? mod->file_len : 0);
-    if (!mod && small_data_watch) {
-        uint32_t base = watch_lo;
-        printf("WATCH_WRITE[m%d] data_watch [0x%X,0x%X) old_words={0x%X,0x%X,0x%X,0x%X}\n",
-               w->id, watch_lo, watch_hi,
-               arm_ext_read_u32_or_zero_(m, base),
-               arm_ext_read_u32_or_zero_(m, base + 4u),
-               arm_ext_read_u32_or_zero_(m, base + 8u),
-               arm_ext_read_u32_or_zero_(m, base + 12u));
-    }
-    if (mod && w->write_hits <= 5) {
-        /*
-         * 0x226C08 is a guest-side bitmap blitter.  At the write instruction
-         * LR has often been overwritten by an inner memcpy/blend callback, so
-         * dump the saved entry registers and stack arguments from that frame:
-         *   saved r0-r3 = destination x/y/w/h
-         *   sp+0x68..0x74 = source x/y/w/h
-         *   sp+0x78/0x7C = destination/source bitmap descriptors
-         * This keeps the loop-cancel diagnosis tied to the disassembled ABI
-         * instead of guessing from the current scratch registers.
-         */
-        uint32_t saved_r0 = arm_ext_read_u32_or_zero_(m, sp + 0x44u);
-        uint32_t saved_r1 = arm_ext_read_u32_or_zero_(m, sp + 0x48u);
-        uint32_t saved_r2 = arm_ext_read_u32_or_zero_(m, sp + 0x4Cu);
-        uint32_t saved_r3 = arm_ext_read_u32_or_zero_(m, sp + 0x50u);
-        uint32_t saved_lr = arm_ext_read_u32_or_zero_(m, sp + 0x64u);
-        uint32_t a68 = arm_ext_read_u32_or_zero_(m, sp + 0x68u);
-        uint32_t a6c = arm_ext_read_u32_or_zero_(m, sp + 0x6Cu);
-        uint32_t a70 = arm_ext_read_u32_or_zero_(m, sp + 0x70u);
-        uint32_t a74 = arm_ext_read_u32_or_zero_(m, sp + 0x74u);
-        uint32_t dst_desc = arm_ext_read_u32_or_zero_(m, sp + 0x78u);
-        uint32_t src_desc = arm_ext_read_u32_or_zero_(m, sp + 0x7Cu);
-        uint32_t dst_0 = arm_ext_read_u32_or_zero_(m, dst_desc);
-        uint32_t dst_len = arm_ext_read_u32_or_zero_(m, dst_desc + 4u);
-        uint32_t dst_type = arm_ext_read_u32_or_zero_(m, dst_desc + 8u);
-        uint32_t dst_base = arm_ext_read_u32_or_zero_(m, dst_desc + 12u);
-        uint32_t src_0 = arm_ext_read_u32_or_zero_(m, src_desc);
-        uint32_t src_len = arm_ext_read_u32_or_zero_(m, src_desc + 4u);
-        uint32_t src_type = arm_ext_read_u32_or_zero_(m, src_desc + 8u);
-        uint32_t src_base = arm_ext_read_u32_or_zero_(m, src_desc + 12u);
-        uint32_t local24 = arm_ext_read_u32_or_zero_(m, sp + 0x24u);
-        uint32_t local28 = arm_ext_read_u32_or_zero_(m, sp + 0x28u);
-        uint32_t local2c = arm_ext_read_u32_or_zero_(m, sp + 0x2Cu);
-        uint32_t local30 = arm_ext_read_u32_or_zero_(m, sp + 0x30u);
-        uint32_t local38 = arm_ext_read_u32_or_zero_(m, sp + 0x38u);
-        uint32_t local3c = arm_ext_read_u32_or_zero_(m, sp + 0x3Cu);
-        uint32_t local40 = arm_ext_read_u32_or_zero_(m, sp + 0x40u);
-        uint32_t dst_w16 = dst_0 & 0xFFFFu;
-        uint32_t dst_h16 = dst_0 >> 16;
-        uint32_t dst_pixel = dst_base && r4 >= dst_base ?
-            (uint32_t)((r4 - dst_base) / 2u) : 0;
-        uint32_t dst_col = dst_w16 ? dst_pixel % dst_w16 : 0;
-        uint32_t dst_row = dst_w16 ? dst_pixel / dst_w16 : 0;
-        printf("WATCH_WRITE[m%d] args saved={r0/x=0x%X,r1/y=0x%X,r2/w=0x%X,r3/h=0x%X,lr=0x%X} stack68={sx=0x%X,sy=0x%X,sw=0x%X,sh=0x%X,dst=0x%X,src=0x%X}\n",
-               w->id, saved_r0, saved_r1, saved_r2, saved_r3, saved_lr,
-               a68, a6c, a70, a74, dst_desc, src_desc);
-        printf("WATCH_WRITE[m%d] desc dst=0x%X {w=%u,h=%u,len=0x%X,type=0x%X,base=0x%X,pos=%u,%u} src=0x%X {w=%u,h=%u,len=0x%X,type=0x%X,base=0x%X}\n",
-               w->id, dst_desc, dst_w16, dst_h16, dst_len, dst_type,
-               dst_base, dst_col, dst_row, src_desc, src_0 & 0xFFFFu,
-               src_0 >> 16, src_len, src_type, src_base);
-        printf("WATCH_WRITE[m%d] locals clip={x=0x%X,y=0x%X,rows=0x%X,dst_gap=0x%X,src_gap=0x%X,src_h=0x%X,src_w=0x%X,dst_w=0x%X}\n",
-               w->id, local24, arm_ext_read_u32_or_zero_(m, sp + 0x20u),
-               local28, local2c, local30, local38, local3c, local40);
-    }
-    fflush(stdout);
-}
-
-static void arm_ext_watch_sentinel_check(ArmExtModule *m, uint32_t idx,
-                                         uint32_t r0, uint32_t r1,
-                                         uint32_t r2, uint32_t r3) {
-    static int parsed = -1;
-    static uint32_t addr = 0;
-    if (parsed < 0) {
-        const char *env = getenv("VMRP_WATCH_SENTINEL");
-        parsed = 0;
-        if (env && *env) {
-            addr = (uint32_t)strtoul(env, NULL, 0);
-            if (addr) parsed = 1;
-        }
-    }
-    if (parsed <= 0) return;
-    ArmExtWatchState *w = arm_ext_watch_state(m);
-    if (!w || w->sent_changes >= 20) return;
-    void *p = arm_ptr(m, addr);
-    if (!p) return;
-    /* 哨兵地址属于已注册模块代码后才 prime,避免注册前的池数据写误报 */
-    if (!w->sent_primed) {
-        if (arm_ext_find_nested_module(m, addr)) {
-            memcpy(w->sent, p, 16);
-            w->sent_primed = 1;
-            printf("WATCH_SENTINEL[m%d] primed addr=0x%X bytes=", w->id, addr);
-            for (int i = 0; i < 16; ++i) printf("%02X ", w->sent[i]);
-            printf("\n");
-            fflush(stdout);
-        }
-    } else if (memcmp(w->sent, p, 16) != 0) {
-        w->sent_changes++;
-        printf("WATCH_SENTINEL[m%d] CHANGED#%u addr=0x%X now=", w->id,
-               w->sent_changes, addr);
-        for (int i = 0; i < 16; ++i) printf("%02X ", ((uint8_t *)p)[i]);
-        printf("\n  prev table[%u](0x%X,0x%X,0x%X,0x%X) lr=0x%X pc=0x%X\n",
-               w->last_idx, w->last_r0, w->last_r1, w->last_r2, w->last_r3,
-               w->last_lr, w->last_pc);
-        printf("  cur  table[%u](0x%X,0x%X,0x%X,0x%X) lr=0x%X\n",
-               idx, r0, r1, r2, r3, reg_read32(m->uc, UC_ARM_REG_LR));
-        fflush(stdout);
-        memcpy(w->sent, p, 16); /* 重新 prime,继续捕获后续变化 */
-    }
-    w->last_idx = idx;
-    w->last_r0 = r0;
-    w->last_r1 = r1;
-    w->last_r2 = r2;
-    w->last_r3 = r3;
-    w->last_lr = reg_read32(m->uc, UC_ARM_REG_LR);
-    w->last_pc = reg_read32(m->uc, UC_ARM_REG_PC);
-}
-
-/* ---- 临时诊断结束 ---- */
-
 static void hook_got_write(uc_engine *uc, uc_mem_type type, uint64_t address, int size, int64_t value, void *user_data) {
     (void)type;
     ArmExtModule *m = (ArmExtModule *)user_data;
@@ -8654,7 +8453,7 @@ static void hook_screen_write(uc_engine *uc, uc_mem_type type, uint64_t address,
         m->screen_dirty = 1;
         arm_ext_note_screen_damage_addr_range(m, address, size);
     }
-    if (getenv("VMRP_ARM_EXT_TRACE") && m->screen_write_count <= 20) {
+    if (arm_ext_trace_on() && m->screen_write_count <= 20) {
         printf("arm_ext_executor: screen write #%u addr=0x%llX size=%d value=0x%llX\n",
                m->screen_write_count, (unsigned long long)address, size, (unsigned long long)value);
     }
@@ -8668,7 +8467,7 @@ static void hook_restore_r9(uc_engine *uc, uint64_t address, uint32_t size, void
     }
     if (m->outer_r9 && m->nested_return_addr && (uint32_t)address == (m->nested_return_addr & ~1u)) {
         uc_reg_write(uc, UC_ARM_REG_R9, &m->outer_r9);
-        if (getenv("VMRP_ARM_EXT_TRACE")) {
+        if (arm_ext_trace_on()) {
             printf("arm_ext_executor: restored outer R9=0x%X at 0x%X\n",
                    m->outer_r9, (uint32_t)address);
         }
@@ -8810,7 +8609,7 @@ static void patch_wrapper_stack_size(ArmExtModule *m) {
         for (size_t i = 0; i < sizeof(patches) / sizeof(patches[0]); ++i) {
             if (value == patches[i].old_value) {
                 memcpy(arm_ptr(m, EXT_CODE_ADDR + off), &patches[i].new_value, 4);
-                if (getenv("VMRP_ARM_EXT_TRACE")) {
+                if (arm_ext_trace_on()) {
                     printf("arm_ext_executor: patched wrapper stack at 0x%X\n", EXT_CODE_ADDR + off);
                 }
                 break;
@@ -8889,6 +8688,12 @@ static void init_table(ArmExtModule *m) {
      * slot 写监视钩子把缓冲迁移到顶部保留区(见 hook_screen_dim_write)。 */
     m->screen_cap = m->screen_len;
     m->screen_addr = arm_alloc(m, m->screen_len);
+    /* B6:堆首分配理论上不会失败(堆空、screen_len≤1MB),但一旦失败,0 会被
+     * 当作屏幕地址写进 table[91]/bitmap 描述符;无条件大声报错便于定位 */
+    if (!m->screen_addr) {
+        printf("arm_ext_executor: FATAL screen buffer alloc failed (len=%u)\n",
+               m->screen_len);
+    }
     if (m->screen_addr && mr_screenBuf) {
         memcpy(arm_ptr(m, m->screen_addr), mr_screenBuf, m->screen_len);
     }
@@ -9108,7 +8913,7 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     m->wrapper_compact_free_return_addr =
         find_wrapper_compact_heap_free_return(
             code, len, &m->wrapper_compact_heap_ctrl_off);
-    if (getenv("VMRP_ARM_EXT_TRACE")) {
+    if (arm_ext_trace_on()) {
         printf("arm_ext_executor: wrapper_timer_dispatch=0x%X wrapper_compact_sched=0x%X compact_heap_ctrl=0x%X compact_free_ret=0x%X chain_walker_thunk=0x%X\n",
                m->wrapper_timer_dispatch_addr,
                m->wrapper_compact_timer_scheduler_off,
@@ -9133,7 +8938,7 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     uc_hook low_zero_hook;
     err = uc_hook_add(m->uc, &low_zero_hook, UC_HOOK_CODE, hook_low_zero, m, 0, EXT_LOW_TABLE_SIZE - 1);
     if (err != UC_ERR_OK) goto fail;
-    if (getenv("VMRP_ARM_EXT_TRACE_PC")) {
+    if (arm_ext_trace_pc_on()) {
         uc_hook pc_hook;
         err = uc_hook_add(m->uc, &pc_hook, UC_HOOK_CODE, trace_pc, m,
                           EXT_CODE_ADDR, EXT_CODE_ADDR + len);
@@ -9180,17 +8985,6 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
         uc_hook_add(m->uc, &got_hook, UC_HOOK_MEM_WRITE, hook_got_write, m,
                     EXT_HEAP_ADDR, EXT_BASE_ADDR + EXT_MEM_SIZE - 1);
     }
-    /* 临时诊断:VMRP_WATCH_WRITE 指定范围的 guest 写监视(修复后删除) */
-    {
-        uint32_t watch_lo = 0, watch_hi = 0;
-        if (arm_ext_watch_write_range(&watch_lo, &watch_hi)) {
-            uc_hook watch_hook;
-            uc_hook_add(m->uc, &watch_hook, UC_HOOK_MEM_WRITE,
-                        hook_watch_write, m, watch_lo, watch_hi - 1);
-            printf("arm_ext_executor: WATCH_WRITE hook [0x%X,0x%X)\n",
-                   watch_lo, watch_hi);
-        }
-    }
 
     reg_write32(m->uc, UC_ARM_REG_R0, (uint32_t)load_code);
     uint16 *saved_screenBuf = NULL;
@@ -9226,7 +9020,7 @@ static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk) {
         }
     }
 
-    if (!ext_chunk || !arm_ptr(m, ext_chunk + 0x34)) {
+    if (!ext_chunk || !arm_ptr(m, ext_chunk + AEX_CHUNK_SUSPEND_OFF)) {
         return 0;
     }
 
@@ -9241,7 +9035,7 @@ static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk) {
      * mr_exit()，把 wrapper 状态同步到宿主平台层。 */
     enum { MR_TIMER_STATE_IDLE = 0 };
     uint32_t suspend_depth = 0;
-    memcpy(&suspend_depth, arm_ptr(m, ext_chunk + 0x34), 4);
+    memcpy(&suspend_depth, arm_ptr(m, ext_chunk + AEX_CHUNK_SUSPEND_OFF), 4);
     int foreground_child =
         m->primary_helper_addr &&
         m->active_helper_addr &&
@@ -9359,6 +9153,8 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     }
     uint32_t outp_addr = arm_alloc(m, 4);
     uint32_t outl_addr = arm_alloc(m, 4);
+    /* B6:与上方 input_addr 一致地检查分配失败,否则 helper 会向地址 0 写输出 */
+    if (!outp_addr || !outl_addr) return MR_FAILED;
     /* 真机上事件(code=1)始终先经 wrapper 的 mrc_extHelper（反汇编
      * docs/反汇编研究.c:428-476），wrapper 通过 mrc_event 的内部回调链
      * 分发给 game。code=0/3-5 为生命周期调用，路由到 primary game helper。
@@ -9384,10 +9180,10 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     int reopen_set_this_call = 0;
     uint32_t modal_ext_chunk = 0;
     uint32_t modal_suspend_depth_pre = 0;
-    if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr + 12))
-        memcpy(&modal_ext_chunk, arm_ptr(m, m->primary_p_addr + 12), 4);
-    if (modal_ext_chunk && arm_ptr(m, modal_ext_chunk + 0x34))
-        memcpy(&modal_suspend_depth_pre, arm_ptr(m, modal_ext_chunk + 0x34), 4);
+    if (m->primary_p_addr && arm_ptr(m, m->primary_p_addr + AEX_P_EXT_CHUNK_OFF))
+        memcpy(&modal_ext_chunk, arm_ptr(m, m->primary_p_addr + AEX_P_EXT_CHUNK_OFF), 4);
+    if (modal_ext_chunk && arm_ptr(m, modal_ext_chunk + AEX_CHUNK_SUSPEND_OFF))
+        memcpy(&modal_suspend_depth_pre, arm_ptr(m, modal_ext_chunk + AEX_CHUNK_SUSPEND_OFF), 4);
     int suspended_foreground_child =
         arm_ext_has_suspended_foreground_child(m, modal_ext_chunk);
     int foreground_child_has_private_timer =
@@ -9452,7 +9248,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
 
     uint32_t rw_base = 0;
     memcpy(&rw_base, arm_ptr(m, call_p_addr), 4);
-    if (getenv("VMRP_ARM_EXT_DIAG")) {
+    if (arm_ext_diag_on()) {
         uint32_t ev[5] = {0, 0, 0, 0, 0};
         if (code == 1 && input_addr && input_len >= sizeof(ev) &&
             arm_ptr(m, input_addr + sizeof(ev) - 1)) {
@@ -9557,7 +9353,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         arm_ext_sanitize_compact_timer_heaps(m);
     }
     arm_ext_diag_dump_layer_state(m, "call-post");
-    if (getenv("VMRP_ARM_EXT_DIAG") && code == 2 &&
+    if (arm_ext_diag_on() && code == 2 &&
         suspended_foreground_child) {
         uint32_t active_rw_post = 0;
         if (m->active_p_addr && arm_ptr(m, m->active_p_addr)) {
@@ -9585,14 +9381,14 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if (_ac_grw && _ac_s8_pre) {
         uint32_t _ac_s8_post = read_game_timer_head(m, _ac_grw);
         primary_game_timer_live_post = _ac_s8_post != 0;
-        if (getenv("VMRP_ARM_EXT_DIAG")) {
+        if (arm_ext_diag_on()) {
             printf("DIAG game_timer_head grw=0x%X pre=0x%X post=0x%X code=%d\n",
                    _ac_grw, _ac_s8_pre, _ac_s8_post, code);
         }
         if (_ac_s8_post == 0) {
             m->saved_game_timer_head = _ac_s8_pre;
         }
-    } else if (_ac_grw && !_ac_s8_pre && getenv("VMRP_ARM_EXT_DIAG")) {
+    } else if (_ac_grw && !_ac_s8_pre && arm_ext_diag_on()) {
         printf("DIAG game_timer_head_zero grw=0x%X code=%d\n", _ac_grw, code);
     }
     int wrapper_timer_live_post = arm_ext_wrapper_has_timer_queue(m);
@@ -9602,7 +9398,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         (arm_ext_foreground_child_has_frame_timer_queue(m) ||
          arm_ext_foreground_child_has_compact_timer_queue(m));
     int wrapper_dispatch_busy_post = arm_ext_wrapper_dispatch_is_busy(m);
-    if (getenv("VMRP_ARM_EXT_TIMER_LIVENESS_DIAG") && code == 2) {
+    if (arm_ext_timer_liveness_diag_on() && code == 2) {
         printf("DIAG timer_liveness suspended=%d fgChildPre=%d fgChildPost=%d childTimerPre=%d childTimerPost=%d wrapperBusy=%d wrapperTimer=%d primaryTimer=%d openSockets=%d hostTimer=%d mrTimer=%d activeP=0x%X activeH=0x%X timerP=0x%X timerH=0x%X callP=0x%X callH=0x%X\n",
                suspended_foreground_child, foreground_child_active,
                foreground_child_live_post, foreground_child_has_private_timer,
@@ -9634,7 +9430,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
          */
         m->timer_p_addr = 0;
         m->timer_helper_addr = 0;
-        if (getenv("VMRP_ARM_EXT_DIAG")) {
+        if (arm_ext_diag_on()) {
             printf("DIAG timer_owner_clear staleWrapper primaryTimer=0x%X activeP=0x%X activeH=0x%X\n",
                    read_game_timer_head(m, _ac_grw),
                    m->active_p_addr, m->active_helper_addr);
@@ -9655,7 +9451,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         wrapper_timer_live_post) {
         m->timer_p_addr = m->p_addr;
         m->timer_helper_addr = m->helper_addr;
-        if (getenv("VMRP_ARM_EXT_DIAG")) {
+        if (arm_ext_diag_on()) {
             printf("DIAG timer_owner_transfer staleChild->wrapper wrapperTimer=%d activeP=0x%X activeH=0x%X\n",
                    wrapper_timer_live_post,
                    m->active_p_addr, m->active_helper_addr);
@@ -9760,8 +9556,8 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     /* wrapper helper code=2 自己消费 timer delta chain。宿主侧只负责在
      * timer tick 到达时调用 helper，不伪造 wrapper busy 状态或 code=5。 */
     uint32_t modal_suspend_depth_post = modal_suspend_depth_pre;
-    if (modal_ext_chunk && arm_ptr(m, modal_ext_chunk + 0x34))
-        memcpy(&modal_suspend_depth_post, arm_ptr(m, modal_ext_chunk + 0x34), 4);
+    if (modal_ext_chunk && arm_ptr(m, modal_ext_chunk + AEX_CHUNK_SUSPEND_OFF))
+        memcpy(&modal_suspend_depth_post, arm_ptr(m, modal_ext_chunk + AEX_CHUNK_SUSPEND_OFF), 4);
     int wrapper_entered_modal =
         code == 1 && has_separate_wrapper && input_len >= 12 && input_addr &&
         modal_suspend_depth_pre == 0 && modal_suspend_depth_post > 0;
@@ -9819,16 +9615,16 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
             extern void mr_drawBitmap(uint16 *bmp, int16 x, int16 y,
                                       uint16 w, uint16 h);
             if (mr_screenBuf) {
-                int32_t stride = arm_ext_screen_stride(m);
+                /* B1:回拷与 present 都按宿主容量夹断 */
                 uint16_t *snapshot =
                     (uint16_t *)m->modal_screen_snapshot;
-                for (int32_t y = 0; y < m->screen_h; ++y) {
-                    memcpy(mr_screenBuf + (size_t)y * (size_t)m->screen_w,
-                           snapshot + (size_t)y * (size_t)stride,
-                           (size_t)m->screen_w * sizeof(uint16_t));
-                }
-                mr_drawBitmap(mr_screenBuf, 0, 0,
-                              (uint16)m->screen_w, (uint16)m->screen_h);
+                int32_t pw = 0, ph = 0;
+                arm_ext_copy_screen_to_host(m, mr_screenBuf, snapshot,
+                                            arm_ext_screen_stride(m),
+                                            &pw, &ph);
+                if (pw > 0 && ph > 0)
+                    mr_drawBitmap(mr_screenBuf, 0, 0,
+                                  (uint16)pw, (uint16)ph);
             }
             m->modal_screen_snapshot_valid = 0;
         }
@@ -9869,7 +9665,7 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if (output_len) *output_len = (int32)arm_output_len;
     if (output) *output = arm_output ? (uint8 *)arm_ptr(m, arm_output) : NULL;
     int32_t call_result = (int32_t)reg_read32(m->uc, UC_ARM_REG_R0);
-    if (getenv("VMRP_ARM_EXT_DIAG")) {
+    if (arm_ext_diag_on()) {
         printf("DIAG arm_ext_return code=%d input_len=%u callR0=%d wrapperRaw=%d enteredModal=%d modalPre=%u modalPost=%u activeP=0x%X activeH=0x%X timerP=0x%X timerH=0x%X hostTimer=%d mrTimer=%d\n",
                (int)code, input_len, call_result, wrapper_raw_event_routed,
                wrapper_entered_modal, modal_suspend_depth_pre,
@@ -9931,11 +9727,11 @@ uint32 arm_ext_primary_helper(ArmExtModule *m) {
             suspend_depth > 0;
         uint32_t active_chunk = 0;
         uint32_t active_dispatch = 0;
-        if (m->active_p_addr && arm_ptr(m, m->active_p_addr + 12)) {
-            memcpy(&active_chunk, arm_ptr(m, m->active_p_addr + 12), 4);
+        if (m->active_p_addr && arm_ptr(m, m->active_p_addr + AEX_P_EXT_CHUNK_OFF)) {
+            memcpy(&active_chunk, arm_ptr(m, m->active_p_addr + AEX_P_EXT_CHUNK_OFF), 4);
         }
-        if (active_chunk && arm_ptr(m, active_chunk + 0x28)) {
-            memcpy(&active_dispatch, arm_ptr(m, active_chunk + 0x28), 4);
+        if (active_chunk && arm_ptr(m, active_chunk + AEX_CHUNK_EVENT_FUNC_OFF)) {
+            memcpy(&active_dispatch, arm_ptr(m, active_chunk + AEX_CHUNK_EVENT_FUNC_OFF), 4);
         }
         uint32_t active_dispatch_addr = active_dispatch & ~1u;
         /*
@@ -9956,12 +9752,12 @@ uint32 arm_ext_primary_helper(ArmExtModule *m) {
             goto out;
         }
     }
-    if (!m->primary_p_addr || !arm_ptr(m, m->primary_p_addr + 12)) {
+    if (!m->primary_p_addr || !arm_ptr(m, m->primary_p_addr + AEX_P_EXT_CHUNK_OFF)) {
         goto out;
     }
-    memcpy(&ext_chunk, arm_ptr(m, m->primary_p_addr + 12), 4);
-    if (ext_chunk && arm_ptr(m, ext_chunk + 0x28)) {
-        memcpy(&dispatch, arm_ptr(m, ext_chunk + 0x28), 4);
+    memcpy(&ext_chunk, arm_ptr(m, m->primary_p_addr + AEX_P_EXT_CHUNK_OFF), 4);
+    if (ext_chunk && arm_ptr(m, ext_chunk + AEX_CHUNK_EVENT_FUNC_OFF)) {
+        memcpy(&dispatch, arm_ptr(m, ext_chunk + AEX_CHUNK_EVENT_FUNC_OFF), 4);
     }
     uint32_t dispatch_addr = dispatch & ~1u;
     /* 只有指向外层 wrapper 代码段、且已定位到 wrapper timer queue consumer
@@ -9980,7 +9776,7 @@ uint32 arm_ext_primary_helper(ArmExtModule *m) {
            m->wrapper_timer_dispatch_addr)
           ? m->primary_helper_addr : 0;
 out:
-    if (getenv("VMRP_ARM_EXT_DIAG")) {
+    if (arm_ext_diag_on()) {
         printf("DIAG primary_helper ret=0x%X timerP=0x%X timerH=0x%X wrapperP=0x%X wrapperH=0x%X primaryP=0x%X primaryH=0x%X chunk=0x%X dispatch=0x%X wrapperTimer=0x%X\n",
                ret, m->timer_p_addr, m->timer_helper_addr, m->p_addr, m->helper_addr,
                m->primary_p_addr, m->primary_helper_addr, ext_chunk, dispatch,
@@ -10009,10 +9805,6 @@ void arm_ext_reset_child_modules(ArmExtModule *m) {
                          mod->file_len == m->primary_file_len;
         if (is_primary) {
             m->nested_modules[out++] = *mod;
-        } else {
-            /* 临时诊断:记录 child 模块清除(修复后删除) */
-            arm_ext_watch_module_event(m, "reset_drop", mod->file_addr,
-                                       mod->file_len, mod->p_addr);
         }
     }
     m->nested_module_count = out;
@@ -10038,15 +9830,15 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
         void *p4 = arm_ptr(m, m->last_file_addr + 4);
         if (p4) memcpy(&nested_p, p4, 4);
     }
-    if (!nested_p || !arm_ptr(m, nested_p + 12)) return MR_FAILED;
+    if (!nested_p || !arm_ptr(m, nested_p + AEX_P_EXT_CHUNK_OFF)) return MR_FAILED;
     /* 读取 P->mrc_extChunk (offset 12) */
     uint32_t ext_chunk = 0;
-    memcpy(&ext_chunk, arm_ptr(m, nested_p + 12), 4);
-    if (!ext_chunk || !arm_ptr(m, ext_chunk + 0x28)) return MR_FAILED;
+    memcpy(&ext_chunk, arm_ptr(m, nested_p + AEX_P_EXT_CHUNK_OFF), 4);
+    if (!ext_chunk || !arm_ptr(m, ext_chunk + AEX_CHUNK_EVENT_FUNC_OFF)) return MR_FAILED;
     /* 读取目标函数 extChunk[0x28] 和参数 extChunk[0x24] */
     uint32_t func = 0, param = 0;
-    memcpy(&func, arm_ptr(m, ext_chunk + 0x28), 4);
-    memcpy(&param, arm_ptr(m, ext_chunk + 0x24), 4);
+    memcpy(&func, arm_ptr(m, ext_chunk + AEX_CHUNK_EVENT_FUNC_OFF), 4);
+    memcpy(&param, arm_ptr(m, ext_chunk + AEX_CHUNK_EVENT_DATA_OFF), 4);
     int wrapper_timer_owner =
         m->timer_p_addr == m->p_addr &&
         m->timer_helper_addr == m->helper_addr &&
@@ -10070,7 +9862,7 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     } else if (chain_walker_owner) {
         func = m->chain_walker_thunk_addr;
     }
-    if (getenv("VMRP_ARM_EXT_DIAG")) {
+    if (arm_ext_diag_on()) {
         printf("DIAG call_dispatch nestedP=0x%X chunk=0x%X func=0x%X param=0x%X wrapperOwner=%d timerP=0x%X timerH=0x%X\n",
                nested_p, ext_chunk, func, param, wrapper_timer_owner,
                m->timer_p_addr, m->timer_helper_addr);
@@ -10104,8 +9896,8 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     if (_game_rw)
         _s8_pre = read_game_timer_head(m, _game_rw);
     uint32_t suspend_depth_pre = 0;
-    if (arm_ptr(m, ext_chunk + 0x34))
-        memcpy(&suspend_depth_pre, arm_ptr(m, ext_chunk + 0x34), 4);
+    if (arm_ptr(m, ext_chunk + AEX_CHUNK_SUSPEND_OFF))
+        memcpy(&suspend_depth_pre, arm_ptr(m, ext_chunk + AEX_CHUNK_SUSPEND_OFF), 4);
     int modal_snapshot_candidate = 0;
     /* cfunction.ext 的 suspend(0xE831A4) 在同一次 dispatch 内把
      * extChunk[0x34] 从 0 加到 1 并绘制模态层。这里只在尚未 suspend
@@ -10129,9 +9921,8 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
      * wrapper_rw+0x190 取节点并调用节点回调 0xE83590。该回调会读取
      * extChunk[8] 调 game helper(code=5)，所以这里只修复可能被 wrapper
      * 清零的 helper 槽，不篡改 suspend depth。 */
-    uint32_t depth_patched = 0;
     if ((wrapper_timer_owner || chain_walker_owner) && suspend_depth_pre == 0 &&
-        arm_ptr(m, ext_chunk + 0x34)) {
+        arm_ptr(m, ext_chunk + AEX_CHUNK_SUSPEND_OFF)) {
         /* 确保 extChunk[8] = game helper (wrapper 代码可能已清零) */
         if (m->primary_helper_addr && arm_ptr(m, ext_chunk + 8)) {
             memcpy(arm_ptr(m, ext_chunk + 8), &m->primary_helper_addr, 4);
@@ -10147,8 +9938,8 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
                 ArmExtNestedModule *mod = &m->nested_modules[ci];
                 if (!mod->p_addr || !mod->helper_addr) continue;
                 uint32_t child_chunk = 0;
-                if (arm_ptr(m, mod->p_addr + 12))
-                    memcpy(&child_chunk, arm_ptr(m, mod->p_addr + 12), 4);
+                if (arm_ptr(m, mod->p_addr + AEX_P_EXT_CHUNK_OFF))
+                    memcpy(&child_chunk, arm_ptr(m, mod->p_addr + AEX_P_EXT_CHUNK_OFF), 4);
                 if (child_chunk && arm_ptr(m, child_chunk + 8)) {
                     uint32_t cur = 0;
                     memcpy(&cur, arm_ptr(m, child_chunk + 8), 4);
@@ -10171,11 +9962,8 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
         arm_ext_diag_dump_wrapper_compact_timer_nodes(m, "dispatch_post");
     }
     arm_ext_sanitize_compact_timer_heaps(m);
-    /* 旧版 queue consumer 兼容路径可能会临时修改 suspend depth；
-     * 当前 19KB chain walker 不需要该 patch，正常保持 no-op。 */
-    if (depth_patched && arm_ptr(m, ext_chunk + 0x34)) {
-        memcpy(arm_ptr(m, ext_chunk + 0x34), &suspend_depth_pre, 4);
-    }
+    /* D1:旧版 depth_patched 恢复块已删——该标志在函数内从未被置位,恢复
+     * 分支自始不可达(19KB chain walker 不需要 suspend depth 补丁) */
     sync_timer_state_from_arm(m);
     leave_screen_context(m, saved_screenBuf, present_depth_before);
     capture_timer_dispatches(m);
@@ -10236,18 +10024,18 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
             mr_timerStart((uint16)timer_interval);
         }
         /* 0xE83590 递减了 extChunk[0x34]，恢复所有嵌套模块的 suspend depth */
-        if (arm_ptr(m, ext_chunk + 0x34))
-            memcpy(arm_ptr(m, ext_chunk + 0x34), &suspend_depth_pre, 4);
+        if (arm_ptr(m, ext_chunk + AEX_CHUNK_SUSPEND_OFF))
+            memcpy(arm_ptr(m, ext_chunk + AEX_CHUNK_SUSPEND_OFF), &suspend_depth_pre, 4);
         for (int ci = 0; ci < m->nested_module_count; ++ci) {
             ArmExtNestedModule *mod = &m->nested_modules[ci];
             if (!mod->p_addr) continue;
             uint32_t child_chunk = 0;
-            if (arm_ptr(m, mod->p_addr + 12))
-                memcpy(&child_chunk, arm_ptr(m, mod->p_addr + 12), 4);
+            if (arm_ptr(m, mod->p_addr + AEX_P_EXT_CHUNK_OFF))
+                memcpy(&child_chunk, arm_ptr(m, mod->p_addr + AEX_P_EXT_CHUNK_OFF), 4);
             if (child_chunk && child_chunk != ext_chunk &&
-                arm_ptr(m, child_chunk + 0x34)) {
+                arm_ptr(m, child_chunk + AEX_CHUNK_SUSPEND_OFF)) {
                 uint32_t zero = 0;
-                memcpy(arm_ptr(m, child_chunk + 0x34), &zero, 4);
+                memcpy(arm_ptr(m, child_chunk + AEX_CHUNK_SUSPEND_OFF), &zero, 4);
             }
         }
     }
@@ -10263,8 +10051,8 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
             m->saved_game_timer_head = _s8_pre;
         }
         uint32_t suspend_depth_post = 0;
-        if (arm_ptr(m, ext_chunk + 0x34))
-            memcpy(&suspend_depth_post, arm_ptr(m, ext_chunk + 0x34), 4);
+        if (arm_ptr(m, ext_chunk + AEX_CHUNK_SUSPEND_OFF))
+            memcpy(&suspend_depth_post, arm_ptr(m, ext_chunk + AEX_CHUNK_SUSPEND_OFF), 4);
         if (suspend_depth_pre == 0 && suspend_depth_post > 0 && modal_snapshot_candidate) {
             m->modal_screen_snapshot_valid = 1;
         }
@@ -10296,16 +10084,16 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
                 extern void mr_drawBitmap(uint16 *bmp, int16 x, int16 y,
                                           uint16 w, uint16 h);
                 if (mr_screenBuf) {
-                    int32_t stride = arm_ext_screen_stride(m);
+                    /* B1:回拷与 present 都按宿主容量夹断 */
                     uint16_t *snapshot =
                         (uint16_t *)m->modal_screen_snapshot;
-                    for (int32_t y = 0; y < m->screen_h; ++y) {
-                        memcpy(mr_screenBuf + (size_t)y * (size_t)m->screen_w,
-                               snapshot + (size_t)y * (size_t)stride,
-                               (size_t)m->screen_w * sizeof(uint16_t));
-                    }
-                    mr_drawBitmap(mr_screenBuf, 0, 0,
-                                  (uint16)m->screen_w, (uint16)m->screen_h);
+                    int32_t pw = 0, ph = 0;
+                    arm_ext_copy_screen_to_host(m, mr_screenBuf, snapshot,
+                                                arm_ext_screen_stride(m),
+                                                &pw, &ph);
+                    if (pw > 0 && ph > 0)
+                        mr_drawBitmap(mr_screenBuf, 0, 0,
+                                      (uint16)pw, (uint16)ph);
                 }
                 m->modal_screen_snapshot_valid = 0;
             }
@@ -10398,7 +10186,9 @@ void arm_ext_host_cache_sync(ArmExtModule *m, const void *host_data, uint32 len)
     if (!dst) return;
     memcpy(dst, host_data, copy_len);
     uc_ctl_remove_cache(m->uc, addr, addr + copy_len);
-    arm_ext_sync_internal_nested_module(m, addr, flen);
+    /* B4:按实际拷入的 copy_len 解析。宿主数据比 pending 声明短时,
+     * [addr+copy_len, addr+flen) 是陈旧字节,按 flen 解析会越过有效数据 */
+    arm_ext_sync_internal_nested_module(m, addr, copy_len);
 }
 
 void arm_ext_unload(ArmExtModule *m) {
