@@ -90,6 +90,24 @@
 #define AEX_COMPACT_CTRL_FREE_OFF 0x0Cu /* 当前空闲字节 */
 #define AEX_COMPACT_CTRL_END_OFF  0x10u /* 堆末地址 */
 #define AEX_COMPACT_CTRL_HEAD_OFF 0x18u /* free-list 头(节点 {next_off,len}) */
+/*
+ * 定时器节点结构 magic(P4.2 常量化,分级清单 #11/#17)。两种节点 ABI:
+ *  - compact/frame 节点:magic 在 node+0x00(next/链字段在 +0x18/+0x1C);
+ *  - 旧式 wrapper 节点(optwar cfunction.ext 0xE84920):next/prev 在
+ *    node+0/+4,magic 在 node+0x08,到期时间 +0x0C,回调/数据 +0x14..+0x1C。
+ * 校验时须按布局选偏移,不能只看常量值。
+ */
+#define ARM_EXT_COMPACT_TIMER_MAGIC 0x79ABBCCFu
+/* frame.ext 定时器调度头(R9 相对,DOTA 0x2C96A0 消费):头+0x08 为排队链,
+ * 头+0x0C 为活跃链(分级清单 #13) */
+#define AEX_FRAME_TIMER_SCHED_OFF 0x94u
+/* compact 子模块调度头的两种已观测 SDK 布局(R9+0xC0 / R9+0x248) */
+#define AEX_COMPACT_SCHED_OFF_A 0x0C0u
+#define AEX_COMPACT_SCHED_OFF_B 0x248u
+/* 旧式(非 compact)wrapper 定时器队列固定偏移(分级清单 #20):
+ * wrapper_rw+0x3C8 排队链,+0x3D8 活跃链;节点用 magic@+8 布局校验 */
+#define AEX_WRAPPER_LEGACY_TIMER_QUEUED_OFF  0x3C8u
+#define AEX_WRAPPER_LEGACY_TIMER_CURRENT_OFF 0x3D8u
 
 typedef struct mr_c_function_P_t {
     uint32 start_of_ER_RW;

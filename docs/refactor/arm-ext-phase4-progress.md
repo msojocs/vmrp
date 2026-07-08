@@ -60,6 +60,14 @@
     ctrl literal <0x80、≥0x1000、未对齐/len<0x90 全部拒绝。
 - 这组资产是后续迁移(app_compat 化/两段式改造)的行为基线:改造若
   改变扫描器语义,必须先改单测再改实现。
+- **ABI 常量化**(分级清单 #11/#13/#17/#20 处置建议):
+  `ARM_EXT_COMPACT_TIMER_MAGIC` 从 aex_mem.c 上收 arm_ext_internal.h,
+  并在定义处文档化两种 timer node 布局(compact/frame magic@+0 vs
+  旧式 wrapper magic@+8);新增 `AEX_FRAME_TIMER_SCHED_OFF`(0x94)、
+  `AEX_COMPACT_SCHED_OFF_A/B`(0xC0/0x248)、
+  `AEX_WRAPPER_LEGACY_TIMER_QUEUED/CURRENT_OFF`(0x3C8/0x3D8),
+  aex_timer/aex_mem 决策路径全部改用具名常量(diag dump 打印保持
+  裸偏移,与格式串互相印证)。
 
 ## 待续(第 3 批起,按分级清单执行)
 

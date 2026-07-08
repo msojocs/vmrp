@@ -17,14 +17,15 @@ static int arm_ext_frame_timer_node_is_valid(ArmExtModule *m,
      * Require that structural marker so unrelated child RW data is not
      * mistaken for a private timer queue.
      */
-    return arm_ext_read_u32_or_zero_(m, node) == 0x79ABBCCFu;
+    return arm_ext_read_u32_or_zero_(m, node) == ARM_EXT_COMPACT_TIMER_MAGIC;
 }
 
 int arm_ext_foreground_child_has_frame_timer_queue(ArmExtModule *m) {
     if (!arm_ext_has_foreground_child(m)) return 0;
     uint32_t rw_base = arm_ext_active_rw_base(m);
-    if (!rw_base || !arm_ptr(m, rw_base + 0x94u) ||
-        !arm_ptr(m, rw_base + 0xA0u)) {
+    if (!rw_base ||
+        !arm_ptr(m, rw_base + AEX_FRAME_TIMER_SCHED_OFF) ||
+        !arm_ptr(m, rw_base + AEX_FRAME_TIMER_SCHED_OFF + 0x0Cu)) {
         return 0;
     }
     /*
@@ -33,8 +34,10 @@ int arm_ext_foreground_child_has_frame_timer_queue(ArmExtModule *m) {
      * If both are empty, direct child code=2 immediately returns and can
      * starve the wrapper-owned loading queue that installed the child.
      */
-    uint32_t queued = arm_ext_read_u32_or_zero_(m, rw_base + 0x9Cu);
-    uint32_t active = arm_ext_read_u32_or_zero_(m, rw_base + 0xA0u);
+    uint32_t queued = arm_ext_read_u32_or_zero_(
+        m, rw_base + AEX_FRAME_TIMER_SCHED_OFF + 0x08u);
+    uint32_t active = arm_ext_read_u32_or_zero_(
+        m, rw_base + AEX_FRAME_TIMER_SCHED_OFF + 0x0Cu);
     return arm_ext_frame_timer_node_is_valid(m, queued) ||
            arm_ext_frame_timer_node_is_valid(m, active);
 }
@@ -80,8 +83,8 @@ int arm_ext_foreground_child_has_compact_timer_queue(ArmExtModule *m) {
      * wrapper-owned host timer tick for the foreground child.
      */
     uint32_t rw_base = arm_ext_active_rw_base(m);
-    return arm_ext_compact_timer_queue_at(m, rw_base, 0x0C0u) ||
-           arm_ext_compact_timer_queue_at(m, rw_base, 0x248u);
+    return arm_ext_compact_timer_queue_at(m, rw_base, AEX_COMPACT_SCHED_OFF_A) ||
+           arm_ext_compact_timer_queue_at(m, rw_base, AEX_COMPACT_SCHED_OFF_B);
 }
 
 int arm_ext_wrapper_dispatch_is_busy(ArmExtModule *m) {
@@ -121,7 +124,8 @@ static int arm_ext_wrapper_timer_node_is_valid(ArmExtModule *m,
      * node+0/+4, stamps 0x79ABBCCF at node+8, compares due time at +0x0C,
      * and invokes callback/data fields through +0x14/+0x18/+0x1C.
      */
-    return arm_ext_read_u32_or_zero_(m, node + 0x08u) == 0x79ABBCCFu;
+    return arm_ext_read_u32_or_zero_(m, node + 0x08u) ==
+           ARM_EXT_COMPACT_TIMER_MAGIC;
 }
 
 static int arm_ext_wrapper_compact_timer_node_is_valid(ArmExtModule *m,
@@ -132,7 +136,7 @@ static int arm_ext_wrapper_compact_timer_node_is_valid(ArmExtModule *m,
      * The compact wrapper add/remove path compares node[0] with this SDK
      * marker before linking through node+0x18/node+0x1c.
      */
-    return arm_ext_read_u32_or_zero_(m, node) == 0x79ABBCCFu;
+    return arm_ext_read_u32_or_zero_(m, node) == ARM_EXT_COMPACT_TIMER_MAGIC;
 }
 
 static int arm_ext_wrapper_compact_timer_queue_at(ArmExtModule *m,
@@ -167,10 +171,12 @@ int arm_ext_wrapper_has_timer_queue(ArmExtModule *m) {
         return 1;
     }
 
-    if (arm_ptr(m, wrapper_rw + 0x3C8u) &&
-        arm_ptr(m, wrapper_rw + 0x3D8u)) {
-        uint32_t queued = arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x3C8u);
-        uint32_t current = arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x3D8u);
+    if (arm_ptr(m, wrapper_rw + AEX_WRAPPER_LEGACY_TIMER_QUEUED_OFF) &&
+        arm_ptr(m, wrapper_rw + AEX_WRAPPER_LEGACY_TIMER_CURRENT_OFF)) {
+        uint32_t queued = arm_ext_read_u32_or_zero_(
+            m, wrapper_rw + AEX_WRAPPER_LEGACY_TIMER_QUEUED_OFF);
+        uint32_t current = arm_ext_read_u32_or_zero_(
+            m, wrapper_rw + AEX_WRAPPER_LEGACY_TIMER_CURRENT_OFF);
         return arm_ext_wrapper_timer_node_is_valid(m, queued) ||
                arm_ext_wrapper_timer_node_is_valid(m, current);
     }

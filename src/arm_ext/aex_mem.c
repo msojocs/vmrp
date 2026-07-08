@@ -485,7 +485,6 @@ void arm_ext_app_mem_free(ArmExtModule *m, uint32_t p, uint32_t len) {
 }
 
 
-#define ARM_EXT_COMPACT_TIMER_MAGIC 0x79ABBCCFu
 #define ARM_EXT_COMPACT_TIMER_PROTECT_MAX 128u
 
 static int arm_ext_compact_timer_magic_node_is_valid(ArmExtModule *m,
@@ -625,7 +624,8 @@ static void arm_ext_collect_active_compact_timer_nodes(ArmExtModule *m,
         return;
 
     uint32_t rw = arm_ext_active_rw_base(m);
-    static const uint32_t sched_offsets[] = { 0x0C0u, 0x248u };
+    static const uint32_t sched_offsets[] = { AEX_COMPACT_SCHED_OFF_A,
+                                              AEX_COMPACT_SCHED_OFF_B };
     for (uint32_t i = 0; i < sizeof(sched_offsets) / sizeof(sched_offsets[0]);
          ++i) {
         uint32_t off = sched_offsets[i];
