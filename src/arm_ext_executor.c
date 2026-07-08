@@ -1056,6 +1056,30 @@ static int arm_ext_current_pack_matches_staged_file(ArmExtModule *m,
     if (!staged) return 0;
     fl = mr_getLen(host_pack);
     if (fl <= 0) return 0;
+    /* P5.2:正向结果缓存。键 = staged 内容 FNV + 包路径/长度/包头 FNV;
+     * 包被重装(下载流程)时长度或包头必变,staged 变化时 FNV 变——
+     * 不会拿旧结论冒充。未命中才走整包读入+逐条目解压比对的慢路径。 */
+    uint32_t staged_fnv = arm_ext_fnv1a(staged, file_len);
+    uint8_t pack_head[64];
+    uint32_t pack_head_fnv = 0;
+    {
+        int32_t hfd = mr_open(host_pack, MR_FILE_RDONLY);
+        if (hfd == 0) return 0;
+        int32_t hgot = mr_read(hfd, pack_head, sizeof(pack_head));
+        mr_close(hfd);
+        if (hgot <= 0) return 0;
+        pack_head_fnv = arm_ext_fnv1a(pack_head, (uint32_t)hgot);
+    }
+    for (uint32_t ci = 0; ci < ARM_EXT_PACK_MATCH_CACHE_MAX; ++ci) {
+        ArmExtPackMatchCache *e = &m->pack_match_cache[ci];
+        if (e->file_len == file_len && e->file_addr == file_addr &&
+            e->staged_fnv == staged_fnv && e->pack_len == (uint32_t)fl &&
+            e->pack_head_fnv == pack_head_fnv &&
+            mrp_path_equal(e->pack, host_pack)) {
+            if (pack_out) *pack_out = host_pack;
+            return 1;
+        }
+    }
     pkg = (uint8_t *)malloc((size_t)fl);
     if (!pkg) return 0;
     int32_t fd = mr_open(host_pack, MR_FILE_RDONLY);
@@ -1083,6 +1107,19 @@ static int arm_ext_current_pack_matches_staged_file(ArmExtModule *m,
                                arm_ext_decoded_payload_match_cb, &match);
     free(pkg);
     if (!match.found) return 0;
+    /* 记入正向缓存(环形覆盖) */
+    {
+        ArmExtPackMatchCache *e =
+            &m->pack_match_cache[m->pack_match_cache_next %
+                                 ARM_EXT_PACK_MATCH_CACHE_MAX];
+        m->pack_match_cache_next++;
+        e->file_addr = file_addr;
+        e->file_len = file_len;
+        e->staged_fnv = staged_fnv;
+        e->pack_len = (uint32_t)fl;
+        e->pack_head_fnv = pack_head_fnv;
+        snprintf(e->pack, sizeof(e->pack), "%s", host_pack);
+    }
     if (pack_out) *pack_out = host_pack;
     return 1;
 }

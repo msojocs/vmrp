@@ -162,6 +162,21 @@ typedef struct ArmExtReadAlias {
     uint32_t decoded_len;
 } ArmExtReadAlias;
 
+/* P5.2:pack↔staged 子模块归属判定的正向结果缓存。
+ * arm_ext_current_pack_matches_staged_file 每次要整包读入+逐条目解压比对
+ * (大 MRP 下模块注册路径秒级卡顿,issues doc M5)。命中键包含 staged
+ * 内容 FNV、包路径、包长与包头 FNV:包被重新下载/替换(dota/talkcat 流程)
+ * 时包长或包头必变,不会拿旧包的归属结论冒充新包。只缓存"匹配成功"。 */
+#define ARM_EXT_PACK_MATCH_CACHE_MAX 8u
+typedef struct ArmExtPackMatchCache {
+    uint32_t file_addr;
+    uint32_t file_len;
+    uint32_t staged_fnv;
+    uint32_t pack_len;
+    uint32_t pack_head_fnv;
+    char pack[PATH_MAX];
+} ArmExtPackMatchCache;
+
 struct ArmExtModule {
     uc_engine *uc;
     uint8_t *mem;
@@ -358,6 +373,9 @@ struct ArmExtModule {
     int mrp_cache_capacity;
     MrpVirtualFd mrp_vfds[MRP_VFD_MAX];
     ArmExtDiagFd diag_fds[ARM_EXT_DIAG_FD_MAX];
+    /* P5.2 pack 归属正向缓存(环形写入) */
+    ArmExtPackMatchCache pack_match_cache[ARM_EXT_PACK_MATCH_CACHE_MAX];
+    uint32_t pack_match_cache_next;
 
     const AppCompatProfile *profile;
     void *app_state;

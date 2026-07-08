@@ -11,11 +11,33 @@ int arm_ext_bytes_contain(const uint8_t *haystack, uint32_t haystack_len,
                           const uint8_t *needle, uint32_t needle_len) {
     if (!haystack || !needle || !needle_len || needle_len > haystack_len)
         return 0;
-    for (uint32_t off = 0; off + needle_len <= haystack_len; ++off) {
+    /* P5.2:先用 memchr 跳到下一个首字节候选再整段比对(此前逐字节推进,
+     * ≥1KB payload 对整包 O(n·m) 扫描是注册路径卡顿点之一)。结果与朴素
+     * 实现完全一致。 */
+    uint32_t off = 0;
+    uint32_t last = haystack_len - needle_len;
+    while (off <= last) {
+        const uint8_t *hit = (const uint8_t *)memchr(haystack + off,
+                                                     needle[0],
+                                                     (size_t)(last - off) + 1u);
+        if (!hit) return 0;
+        off = (uint32_t)(hit - haystack);
         if (memcmp(haystack + off, needle, needle_len) == 0)
             return 1;
+        ++off;
     }
     return 0;
+}
+
+/* FNV-1a(32 位):pack 归属缓存的内容指纹 */
+uint32_t arm_ext_fnv1a(const void *data, uint32_t len) {
+    const uint8_t *p = (const uint8_t *)data;
+    uint32_t h = 2166136261u;
+    for (uint32_t i = 0; i < len; ++i) {
+        h ^= p[i];
+        h *= 16777619u;
+    }
+    return h;
 }
 
 /*
