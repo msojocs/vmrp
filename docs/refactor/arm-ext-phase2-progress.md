@@ -41,19 +41,25 @@ executor 主体:7324 → **6808 行**;`reg_write32` 上收 priv 内联。
 内容抽查"的脚本规范重做。**拆分脚本规范:所有切割锚点用定义形态并
 assert count==1,切割后 assert 行数/内容。**
 
-## 待办(第 2 批起)
+## 收尾批(同日续):timer/diag/module 三单元 ✅
 
-按方案顺序,剩余单元与注意点:
+| 单元 | 行数 | 内容 |
+|---|---|---|
+| `aex_timer.c` | 336 | frame/compact/wrapper timer 节点与队列校验(foreground_child_has_*_timer_queue、wrapper_has_timer_queue、dispatch_is_busy 等) |
+| `aex_diag.c` | 334 | diag_dump_* 从 aex_screen 归位 + diag_fd_* + diag_owner_for_lr |
+| `aex_module.c` | 2356 | nested 模块注册/retire/drop/restore、pack alias、find_wrapper_*/child_has_* 模式扫描、Thumb LDR literal 解码 |
 
-1. `aex_timer.c`:capture_timer_dispatches、wrapper/compact timer 队列扫描
-   (foreground_child_has_*_timer_queue 等)、read/write_game_timer_head、
-   sync_timer_state_from_arm。
-2. `aex_diag.c`:diag_dump_* 从 aex_screen 归位 + diag_fd_*;
-   hook_invalid/hook_low_zero/hook_got_write/cb_ret 择域安放。
-3. `aex_module.c`:nested 模块注册/retire/drop/restore、pack alias、
-   find_wrapper_* 模式扫描(与 Phase 4 治理联动)——耦合最深,放最后做。
-4. `aex_table.c` + `aex_lifecycle.c`:hook_table(~1500 行)与
-   load/call/dispatch/unload(Phase 3 一并做 case 函数化)。
+- `arm_alloc`/`arm_ext_meta_alloc` 归位 aex_mem.c;screen 维度 hook
+  (hook_screen_dim_read/write)经 priv 头跨单元登记。
+- executor 主体:5736 → **2406 行**(生命周期 load/call/dispatch/unload、
+  hook_table 序言、hook_invalid/low_zero 等 Unicorn hook 留守,
+  aex_lifecycle 单独成文件的必要性消失,不再拆)。
+- 布局终态:executor 2406 行 + src/arm_ext/ 十单元 8981 行。
+
+### 验证(收尾批,与 Phase 3 收尾同一提交)
+
+构建零告警(非 mythroad)→ vmrp-unit 69 checks → 全量 e2e **29/29**
+(golden 帧逐字节断言含在用例内)。
 
 ## 验证纪律(沿用)
 
