@@ -87,6 +87,10 @@ void hook_compact_heap_free_return(uc_engine *uc, uint64_t address,
                                    uint32_t size, void *user_data);
 void arm_ext_sanitize_compact_timer_heaps(ArmExtModule *m);
 int arm_ext_verify_invariants(ArmExtModule *m, const char *where);
+/* P4.3 统一保护集:收集(timer 节点+模块存活存储)→排序合并 */
+uint32_t arm_ext_collect_protected_ranges(ArmExtModule *m,
+                                          ArmExtBumpBlock *ranges);
+uint32_t arm_ext_merge_protect_ranges(ArmExtBumpBlock *r, uint32_t n);
 /* 单测直接调用(test/unit),因此跨单元可见 */
 int arm_ext_compact_heap_cut_range(ArmExtModule *m, uint32_t ctrl,
                                    uint32_t protect_lo, uint32_t protect_hi);
