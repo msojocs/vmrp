@@ -332,3 +332,52 @@ void arm_ext_diag_dump_wrapper_compact_timer_nodes(ArmExtModule *m,
         node = due_next;
     }
 }
+
+/*
+ * VMRP_ARM_EXT_WATCH_PC —— 精确 PC 观察点。
+ *
+ * 值为逗号分隔的模块相对文件偏移(hex,可带0x)。嵌套模块注册时按
+ * file_addr+off 挂单地址 UC_HOOK_CODE,命中打印基址/相对偏移/R0-R3/LR。
+ * 用途:把静态反汇编得到的文件偏移(如 game.ext 0x366c 焦点移动、
+ * 0x1edf8 browser_load_url)对到运行时执行流,验证按键→激活链路走没走到。
+ * 与全量 VMRP_ARM_EXT_TRACE_PC 不同,只有命中观察点才输出,日志量可控。
+ */
+typedef struct {
+    uint32_t base;
+    uint32_t rel;
+} ArmExtPcWatch;
+
+static void hook_watch_pc(uc_engine *uc, uint64_t address, uint32_t size,
+                          void *user_data) {
+    (void)size;
+    ArmExtPcWatch *w = (ArmExtPcWatch *)user_data;
+    printf("arm_ext_watch: base=0x%X rel=0x%X pc=0x%X r0=0x%X r1=0x%X r2=0x%X r3=0x%X lr=0x%X\n",
+           w->base, w->rel, (uint32_t)address,
+           reg_read32(uc, UC_ARM_REG_R0), reg_read32(uc, UC_ARM_REG_R1),
+           reg_read32(uc, UC_ARM_REG_R2), reg_read32(uc, UC_ARM_REG_R3),
+           reg_read32(uc, UC_ARM_REG_LR));
+}
+
+void arm_ext_install_pc_watches(ArmExtModule *m, uint32_t base, uint32_t len) {
+    const char *list = getenv("VMRP_ARM_EXT_WATCH_PC");
+    if (!m || !list || !*list) return;
+    char buf[512];
+    snprintf(buf, sizeof(buf), "%s", list);
+    for (char *save = NULL, *tok = strtok_r(buf, ",", &save); tok;
+         tok = strtok_r(NULL, ",", &save)) {
+        uint32_t off = (uint32_t)strtoul(tok, NULL, 16);
+        if (off == 0 || off >= len) continue;
+        ArmExtPcWatch *w = (ArmExtPcWatch *)malloc(sizeof(*w));
+        if (!w) return;
+        w->base = base;
+        w->rel = off;
+        uc_hook h;
+        if (uc_hook_add(m->uc, &h, UC_HOOK_CODE, hook_watch_pc, w,
+                        base + off, base + off + 1) != UC_ERR_OK) {
+            printf("arm_ext_watch: hook add failed base=0x%X rel=0x%X\n", base, off);
+            free(w);
+            return;
+        }
+        printf("arm_ext_watch: armed base=0x%X rel=0x%X\n", base, off);
+    }
+}
