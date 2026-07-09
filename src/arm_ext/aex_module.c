@@ -924,6 +924,8 @@ void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
     slot->got_memcpy_off = 0;
     slot->pack_name_addr = 0;
     arm_ext_protect_registered_module_storage(m, file_addr, file_len);
+    // 新嵌套模块注册后安装 PC 观察点(VMRP_ARM_EXT_WATCH_PC,诊断用)
+    arm_ext_install_pc_watches(m, file_addr, file_len);
 }
 
 /*

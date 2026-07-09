@@ -135,10 +135,14 @@ export class VmrpE2e {
    * Supported key names:
    * ENTER/SELECT, ESC/ESCAPE/POWER, SOFTLEFT/LEFT_SOFT, SOFTRIGHT/RIGHT_SOFT,
    * UP, DOWN, LEFT, RIGHT, SEND, STAR/*, POUND/HASH/#, digits 0-9, letters A-Z.
+   *
+   * holdMs: 本次按住时长(毫秒),覆盖 VMRP_E2E_HOLD_MS。Mythroad 应用按定时器
+   * 轮询按键状态,按住时长决定语义(短按=激活/单步移动,长按=按键重复或长按菜单)。
+   * 全局 HOLD_MS 为粘贴稳定性调大后,需要单步语义的按键应显式传短时长。
    */
-  async key(name: KeyName, timeoutMs = 2_000): Promise<void> {
+  async key(name: KeyName, timeoutMs = 2_000, holdMs?: number): Promise<void> {
     const previous = await this.drawCount();
-    await this.command(`KEY ${name}`);
+    await this.command(holdMs != null ? `KEY ${name} ${holdMs}` : `KEY ${name}`);
     await this.waitDrawAfter(previous, timeoutMs);
   }
 

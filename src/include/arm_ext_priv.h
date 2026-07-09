@@ -193,6 +193,8 @@ void arm_ext_apply_short_pack_alias_for_private_child(ArmExtModule *m, uint32_t 
 void arm_ext_diag_fd_clear(ArmExtModule *m, int32_t handle);
 const char *arm_ext_diag_fd_name(ArmExtModule *m, int32_t handle);
 void arm_ext_diag_fd_set(ArmExtModule *m, int32_t handle, const char *name);
+/* VMRP_ARM_EXT_WATCH_PC: 模块相对文件偏移观察点,嵌套模块注册时安装(aex_diag.c) */
+void arm_ext_install_pc_watches(ArmExtModule *m, uint32_t base, uint32_t len);
 void arm_ext_drop_overlapping_stale_nested_modules(ArmExtModule *m, uint32_t file_addr, uint32_t file_len);
 int arm_ext_has_internal_loader_chunk(ArmExtModule *m, uint32_t file_addr, uint32_t file_len);
 const char *arm_ext_pack_to_host_path(ArmExtModule *m, const char *pack);

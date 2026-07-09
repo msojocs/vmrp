@@ -176,9 +176,17 @@ static void e2e_inject_click(int x, int y, int fd) {
     e2e_write_line(fd, resp);
 }
 
-static void e2e_inject_key(SDL_Keycode key, int fd) {
+/*
+ * hold_ms<=0 时使用全局默认（VMRP_E2E_HOLD_MS 或 500ms）。
+ * Mythroad 应用自身以定时器轮询按键状态实现长按/重复：按住时长直接决定
+ * 应用语义（短按=单步/激活，长按=按键重复或弹出长按菜单）。全局调大
+ * VMRP_E2E_HOLD_MS（如为剪贴板粘贴稳定性设 1500ms）会让所有按键都变成
+ * 长按，导致方向键连滚、确认键弹菜单。因此 KEY 命令支持按次覆盖时长。
+ */
+static void e2e_inject_key(SDL_Keycode key, int hold_ms, int fd) {
+    if (hold_ms <= 0) hold_ms = e2e_input_hold_ms();
     e2e_push_key(SDL_KEYDOWN, key, SDL_PRESSED);
-    SDL_Delay((Uint32)e2e_input_hold_ms());
+    SDL_Delay((Uint32)hold_ms);
     e2e_push_key(SDL_KEYUP, key, SDL_RELEASED);
     char resp[64];
     snprintf(resp, sizeof(resp), "OK key %d", (int)key);
@@ -282,7 +290,8 @@ static void e2e_handle_client(VmrpE2eControl *control, int fd) {
             e2e_write_line(fd, "ERR usage");
             return;
         }
-        e2e_inject_key(key, fd);
+        /* 可选第二参数 = 本次按住毫秒数（覆盖 VMRP_E2E_HOLD_MS） */
+        e2e_inject_key(key, b[0] ? atoi(b) : 0, fd);
     } else if (strcasecmp(op, "PASTE") == 0) {
         const char *text = line + strlen(op);
         while (*text == ' ' || *text == '\t') text++;

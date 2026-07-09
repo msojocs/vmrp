@@ -267,7 +267,7 @@ static int32 my_connectSync(SOCKET_T s, int32 ip, uint16 port) {
     clientService.sin_port = htons(port);
     clientService.sin_addr.s_addr = htonl(ip);  //inet_addr("127.0.0.1");
 
-    printf("my_connect('%s', %d)\n", inet_ntoa(clientService.sin_addr), port);
+    printf("my_connect(fd:%d, '%s', %d)\n", (int)s, inet_ntoa(clientService.sin_addr), port);
 
     if (connect(s, (struct sockaddr*)&clientService, sizeof(clientService)) != 0) {
         printf("my_connect(0x%X) fail\n", ip);
@@ -393,6 +393,8 @@ int32 my_socket(int32 type, int32 protocol) {
     obj->key = socketCounter;
     obj->data = (void*)data;
     uIntMap_insert(&sockets, obj);
+    // 打印宿主 fd: 排查 fd 复用/串线问题时必须能把 guest socket id 对应到宿主 fd
+    printf("my_socket(): s=%d fd=%d\n", socketCounter, (int)sock);
     return socketCounter;
 #else
     return MR_FAILED;
@@ -409,6 +411,7 @@ int32 my_closeSocket(int32 s) {
     SOCKET_T sock = data->s;
     free(data);
     free(obj);
+    printf("my_closeSocket(s:%d): fd=%d\n", s, (int)sock);
     shutdown(sock, SHUTDOWN_BIDIRECTIONAL);
     if (CLOSE_SOCKET(sock) != 0) {
         return MR_FAILED;
@@ -701,7 +704,7 @@ int32 my_send(int32 s, const char* buf, int len) {
         return 0;
     }
     ret = send(data->s, buf, len, 0);
-    printf("my_send(s:%d, len:%d): sent=%d, errno=%d\n", s, len, ret, errno);
+    printf("my_send(s:%d, fd:%d, len:%d): sent=%d, errno=%d\n", s, (int)data->s, len, ret, errno);
     printf("[my_send] data: %s\n", buf);
     if (ret == -1) {
         return MR_FAILED;
@@ -792,7 +795,7 @@ int32 my_recv(int32 s, char* buf, int len) {
     //     }
     // }
     int ret = checkReadable(data->s);
-    printf("my_recv(s:%d, len:%d): checkReadable=%d\n", s, len, ret);
+    printf("my_recv(s:%d, fd:%d, len:%d): checkReadable=%d\n", s, (int)data->s, len, ret);
     if (ret == -1) {
         return MR_FAILED;
     } else if (ret == 0) {
