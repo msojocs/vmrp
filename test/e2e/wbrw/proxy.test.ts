@@ -4,6 +4,10 @@ import fs from "fs";
 import { readFile } from "fs/promises";
 
 const targetUrl = Buffer.from("http://mrp.gddhy.net");
+// The requested trailing-slash URL canonicalizes to this link path on the site.
+const targetDetailPath = "/mrp/sky_SaiNes-v1010";
+const targetDownloadUrl = "http://mrp.gddhy.net/mrp-files/sky_SaiNes-v1010.mrp";
+const targetDownloadFilename = "sky_SaiNes-v1010.mrp";
 // WAP网关代理简化后的页面包含原始标题
 const targetTitle = Buffer.from("WAP下载站");
 // 首页自身的URL/标题;子链接页面 = 同站任意其他URL、标题同样以站点后缀结尾
@@ -77,7 +81,7 @@ function parseCachedPageHead(page: Buffer): { url: string; title: string } | nul
 // 从缓存的 .sky 页面解析第一个链接的 href(docs/wbrw-sky-format.md §4b-3):
 // 真机320个0x38锚点都以pool[captionIndex-1]保存目标URL;后置0x54是
 // companion/suffix,不是当前锚点的href。页头标题是0x54,故首个0x38即首链接。
-function parseFirstLinkHref(page: Buffer): string | null {
+function parseLinkHrefs(page: Buffer): string[] {
   const poolEnd = page.readUInt16BE(8) + 10;
   const pool: Buffer[] = [];
   for (let off = 10; off + 2 <= poolEnd;) {
@@ -86,6 +90,7 @@ function parseFirstLinkHref(page: Buffer): string | null {
     off += 2 + len;
   }
   // 跳过13字节DL信封和7字节0F状态节,记录流从poolEnd+20开始。
+  const hrefs: string[] = [];
   let off = poolEnd + 20;
   while (off + 6 <= page.length) {
     const flag = page.readUInt16BE(off + 2);
@@ -96,13 +101,18 @@ function parseFirstLinkHref(page: Buffer): string | null {
     const len = page[p + 1];
     if (op === 0x38 && len >= 2) {
       const captionIndex = page.readUInt16BE(p + 2);
-      return captionIndex > 0
-        ? pool[captionIndex - 1]?.toString("latin1") ?? null
-        : null;
+      if (captionIndex > 0) {
+        const href = pool[captionIndex - 1]?.toString("latin1");
+        if (href) hrefs.push(href);
+      }
     }
     off = p + 2 + len;
   }
-  return null;
+  return hrefs;
+}
+
+function parseFirstLinkHref(page: Buffer): string | null {
+  return parseLinkHrefs(page)[0] ?? null;
 }
 
 function readHomeCache(ws: VmrpWorkspace): Buffer | undefined {
@@ -142,6 +152,41 @@ function isTargetPageForeground(screen: PpmImage, home: PpmImage): boolean {
   return screen.diffPixelCount(home, { x: 0, y: 0, width: 240, height: 90 }) > 4_500
     && screen.pixel(41, 10).join(",") === "248,240,168"
     && screen.pixel(79, 10).join(",") === "96,100,96";
+}
+
+function countColor(screen: PpmImage, color: readonly [number, number, number]): number {
+  let count = 0;
+  for (let y = 0; y < screen.height; y++) {
+    for (let x = 0; x < screen.width; x++) {
+      if (screen.pixel(x, y).join(",") === color.join(",")) count++;
+    }
+  }
+  return count;
+}
+
+function listFiles(root: string): string[] {
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root, { withFileTypes: true }).flatMap(entry => {
+    const entryPath = `${root}/${entry.name}`;
+    return entry.isDirectory() ? listFiles(entryPath) : [entryPath];
+  });
+}
+
+function readCompleteMrp(path: string): Buffer | null {
+  const body = fs.readFileSync(path);
+  if (body.length < 12 || body.subarray(0, 4).toString("ascii") !== "MRPG") return null;
+  // MRP头offset 8保存完整文件长度；只认实际长度完全匹配的产物，避免把
+  // 下载器曾经误报成功的MRPG前缀/临时分段当成完成文件。
+  return body.readUInt32LE(8) === body.length ? body : null;
+}
+
+function findNewCompleteMrp(ws: VmrpWorkspace, existingFiles: ReadonlySet<string>): string | null {
+  const candidate = ws.path(`mythroad/${targetDownloadFilename}`);
+  // This regression must publish the requested basename, not merely any new
+  // structurally valid MRP that another background task happened to create.
+  return !existingFiles.has(candidate) && fs.existsSync(candidate) && readCompleteMrp(candidate) != null
+    ? candidate
+    : null;
 }
 
 async function waitForTargetPage(vmrp: VmrpE2e, ws: VmrpWorkspace, home: PpmImage): Promise<PpmImage> {
@@ -229,6 +274,7 @@ describe("wbrw ", () => {
         const firstHref = parseFirstLinkHref(homeCache!);
         expect(firstHref).toMatch(new RegExp(`^${targetUrl.toString()}`));
         expect(firstHref).not.toBe(homeUrl);
+        expect(new URL(firstHref!).pathname).toBe(targetDetailPath);
         await vmrp.key("DOWN", 2_000, 120);
         await vmrp.screen("focus");
         try {
@@ -243,6 +289,61 @@ describe("wbrw ", () => {
         // 正文区域也必须变化(排除只有进度标题"数据请求..."在变的卡住情形)
         expect(sub.diffPixelCount(loaded, { x: 0, y: 0, width: 240, height: 24 })).toBeGreaterThan(500);
         expect(sub.diffPixelCount(loaded, { x: 0, y: 30, width: 240, height: 250 })).toBeGreaterThan(3_000);
+
+        const subCache = readCachedPages(ws).find(page => parseCachedPageHead(page)?.url === firstHref);
+        expect(subCache).toBeDefined();
+        // The generated SKY page must retain the exact native-download
+        // arguments even though the visible anchor href becomes skyscript:.
+        expect(subCache!.includes(Buffer.from(targetDownloadUrl, "latin1"))).toBe(true);
+        expect(subCache!.includes(Buffer.from(targetDownloadFilename, "utf8"))).toBe(true);
+        expect(subCache!.includes(Buffer.from("application/sky-mrp", "latin1"))).toBe(true);
+        const subLinks = parseLinkHrefs(subCache!);
+        const downloadLinkIndex = subLinks.findIndex(href => href.startsWith("skyscript:download"));
+        expect(downloadLinkIndex).toBeGreaterThanOrEqual(0);
+
+        // 链接可能位于首屏下方；DOWN 会先滚动正文，再给首个可见锚点加焦点。
+        // 以浏览器实际焦点背景色作为门槛，避免把固定滚动次数当成链接序号。
+        let focused: PpmImage | undefined;
+        for (let attempt = 0; attempt < 12; attempt++) {
+          await vmrp.key("DOWN", 2_000, 120);
+          focused = await vmrp.screen(`download-focus-seek-${attempt}`);
+          if (countColor(focused, [208, 232, 240]) > 100) break;
+        }
+        expect(focused).toBeDefined();
+        expect(countColor(focused!, [208, 232, 240])).toBeGreaterThan(100);
+
+        // 首个焦点对应 subLinks[0]。目标锚点在当前视口下方时，第一次 DOWN
+        // 只滚动到下一行，第二次才切换焦点，因此包含目标序号这一拍。
+        for (let index = 0; index <= downloadLinkIndex; index++) {
+          await vmrp.key("DOWN", 2_000, 120);
+        }
+        const downloadFocus = await vmrp.screen("download-focus");
+        expect(countColor(downloadFocus, [208, 232, 240])).toBeGreaterThan(100);
+        const existingFiles = new Set(listFiles(ws.path("mythroad")));
+        try {
+          await vmrp.key("ENTER", 5_000, 120);
+        } catch (error) {
+          if (!String(error).includes("wait_draw_timeout")) throw error;
+        }
+
+        // 下载提示和进度页是定时器驱动的瞬态 UI；保留连续PPM，并等待真正
+        // 完整的MRP落盘。仅出现“下载成功”画面不足以证明数据没有被截断。
+        let downloadScreen = await vmrp.screen("download-activated-0");
+        let downloadedMrp: string | null = null;
+        const downloadDeadline = Date.now() + 90_000;
+        for (let frame = 1; Date.now() < downloadDeadline; frame++) {
+          await vmrp.delay(2_000);
+          downloadScreen = await vmrp.screen(`download-progress-${frame}`);
+          downloadedMrp = findNewCompleteMrp(ws, existingFiles);
+          if (downloadedMrp) break;
+        }
+        expect(downloadedMrp).not.toBeNull();
+        expect(downloadedMrp!.endsWith(`/${targetDownloadFilename}`)).toBe(true);
+        expect(readCompleteMrp(downloadedMrp!)?.subarray(0, 4).toString("ascii")).toBe("MRPG");
+        expect(fs.existsSync(ws.path("mythroad/brw/download/dllist1"))).toBe(true);
+        expect(fs.statSync(ws.path("mythroad/brw/download/dwnlist.dat")).size).toBe(4);
+        await vmrp.screen("download-complete");
+        expect(downloadScreen.diffPixelCount(sub)).toBeGreaterThan(1_000);
       }
     }
   });

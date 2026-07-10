@@ -467,14 +467,14 @@ if (!exists('path/to/file'))
 记得存储记忆数据。
 
 
-测试用例`pnpm vitest run test/e2e/wbrw/proxy.test.ts`执行最后，会访问代理服务器来进行网页加载。
+测试用例`pnpm vitest run test/e2e/wbrw/proxy.test.ts`执行最后，会访问代理服务器来进行网页加载，目前不能下载文件。
 
-预期结果：访问http://mrp.gddhy.net/，页面第一个子链接可以点击。
-实际结果：目前第一个子链接点击没有反应。
+预期结果：访问http://mrp.gddhy.net/mrp/sky_SaiNes-v1010/，点击`sky_SaiNes-v1010.mrp`，触发下载功能。
+实际结果：目前点击下载目标实际是加载二进制网页，没有触发下载。
 
 tool/server-http.js已启动，修改tool/proxy.js来实现代理服务器。
 
-测试用例只是用来复现流程的，你需要添加点击子链接的逻辑，它的通过不代表成功，要检查截图。
+测试用例只是用来复现流程的，你需要调整逻辑符合预期功能，它的通过不代表成功，要检查截图。
 真机参考数据：temp/brw/
 
 程序的现有代码不一定正确。

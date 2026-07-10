@@ -133,6 +133,22 @@ function proxy2U8(value) {
     return Buffer.from([Number(value) & 0xff]);
 }
 
+function proxy2U16(value) {
+    const buffer = Buffer.alloc(2);
+    buffer.writeUInt16BE(Number(value) & 0xffff);
+    return buffer;
+}
+
+function proxy2U32(value) {
+    const buffer = Buffer.alloc(4);
+    buffer.writeUInt32BE(Number(value) >>> 0);
+    return buffer;
+}
+
+function proxy2ContentRange(start, end, total) {
+    return Buffer.concat([proxy2U32(start), proxy2U32(end), proxy2U32(total)]);
+}
+
 function proxy2Page2Fields() {
     const fields = [];
     if (proxy2Page2Tag21 !== '' && !/^(?:false|none|off)$/iu.test(proxy2Page2Tag21)) {
@@ -297,11 +313,27 @@ function extractProxy2RequestUrl(body) {
     const packet = parseProxy2Packet(body);
     let urlPath = '';
     let host = '';
+    let rangeStart = 0;
+    let rangeFieldSeen = false;
+    let rangeError = packet.error
+        || (packet.truncatedLength > 0 ? `truncated proxy2 packet by ${packet.truncatedLength} bytes` : '');
     for (const field of packet.fields) {
         if (field.tag === 1) urlPath = field.ascii;
         if (field.tag === 2) host = field.ascii;
+        // /res续传请求用tag10的两个>II值表示起点和保留的终点；
+        // 首次请求没有tag10，后续请求的第一个值等于已落盘字节数。
+        if (field.tag === 10) {
+            if (rangeFieldSeen) {
+                rangeError = 'duplicate proxy2 range field';
+            } else if (field.length !== 8) {
+                rangeError = `invalid proxy2 range field length ${field.length}`;
+            } else {
+                rangeStart = body.readUInt32BE(field.offset + 4);
+            }
+            rangeFieldSeen = true;
+        }
     }
-    return { host, path: urlPath };
+    return { host, path: urlPath, rangeStart, rangeError };
 }
 
 function buildProxy2TargetUrl(host, urlPath, defaultProtocol = 'http:') {
@@ -317,9 +349,18 @@ function buildProxy2TargetUrl(host, urlPath, defaultProtocol = 'http:') {
 
 const proxy2FetchTimeoutMs = Number(process.env.PROXY2_FETCH_TIMEOUT_MS || 15000);
 const proxy2FetchMaxRedirects = Number(process.env.PROXY2_FETCH_MAX_REDIRECTS || 5);
+// 响应信封和HTTP头需与payload一起落在WBRW单次2048字节接收窗口内。
+const proxy2ResourceChunkBytes = 1800;
+const proxy2ResourceValidatorTtlMs = Number(process.env.PROXY2_RESOURCE_VALIDATOR_TTL_MS || 600000);
+const proxy2ResourceValidatorLimit = Number(process.env.PROXY2_RESOURCE_VALIDATOR_LIMIT || 256);
+// server-http.js按请求热加载本模块；校验器只保存小型HTTP元数据，放在进程全局
+// 才能让同一下载的后续范围带If-Range，同时用TTL和数量上限约束生命周期。
+const proxy2ResourceValidatorStoreKey = Symbol.for('vmrp.proxy2ResourceValidators');
+const proxy2ResourceValidators = globalThis[proxy2ResourceValidatorStoreKey] || new Map();
+globalThis[proxy2ResourceValidatorStoreKey] = proxy2ResourceValidators;
 
 // 发起HTTP GET请求，跟随重定向，返回响应body
-function fetchUrl(url, callback, redirectCount) {
+function fetchUrl(url, callback, redirectCount, requestOptions = {}) {
     redirectCount = redirectCount || 0;
     if (redirectCount > proxy2FetchMaxRedirects) {
         callback(new Error('too many redirects'));
@@ -346,34 +387,108 @@ function fetchUrl(url, callback, redirectCount) {
             'Accept': 'text/vnd.wap.wml,text/html,*/*',
             'Accept-Charset': 'utf-8',
             'Connection': 'close',
+            ...requestOptions.headers,
         },
         timeout: proxy2FetchTimeoutMs,
     };
 
     console.info('proxy2 fetch: %s', url);
+    let settled = false;
+    const finish = (...args) => {
+        if (settled) return;
+        settled = true;
+        callback(...args);
+    };
     const req = mod.request(options, (res) => {
         // 跟随3xx重定向; URL resolves absolute, root-relative, and
         // protocol-relative Location values consistently.
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            const redirectUrl = new URL(res.headers.location, parsed).toString();
+            let redirectUrl;
+            try {
+                redirectUrl = new URL(res.headers.location, parsed).toString();
+            } catch (error) {
+                res.resume();
+                finish(new Error(`invalid redirect location: ${error.message}`));
+                return;
+            }
             console.info('proxy2 redirect %d -> %s', res.statusCode, redirectUrl);
+            settled = true;
             res.resume();
-            fetchUrl(redirectUrl, callback, redirectCount + 1);
+            fetchUrl(redirectUrl, callback, redirectCount + 1, requestOptions);
             return;
         }
         const chunks = [];
-        res.on('data', chunk => chunks.push(chunk));
-        res.on('end', () => {
-            callback(null, Buffer.concat(chunks), res.statusCode, res.headers);
+        let receivedLength = 0;
+        res.on('data', chunk => {
+            receivedLength += chunk.length;
+            // Range fetches have a strict body budget. An origin that ignores
+            // Range must fail explicitly instead of buffering a large object.
+            if (requestOptions.maxBytes != null && receivedLength > requestOptions.maxBytes) {
+                res.destroy();
+                finish(new Error(`fetch response exceeds ${requestOptions.maxBytes} bytes`),
+                    null, res.statusCode, res.headers);
+                return;
+            }
+            chunks.push(chunk);
         });
+        res.on('end', () => {
+            finish(null, Buffer.concat(chunks), res.statusCode, res.headers);
+        });
+        res.on('error', error => finish(error));
     });
 
-    req.on('error', err => callback(err));
+    req.on('error', err => finish(err));
     req.on('timeout', () => {
         req.destroy();
-        callback(new Error('fetch timeout'));
+        finish(new Error('fetch timeout'));
     });
     req.end();
+}
+
+function parseHttpContentRange(value) {
+    const match = typeof value === 'string'
+        ? value.match(/^bytes (\d+)-(\d+)\/(\d+)$/u)
+        : null;
+    if (!match) return null;
+    const start = Number(match[1]);
+    const end = Number(match[2]);
+    const total = Number(match[3]);
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)
+        || !Number.isSafeInteger(total) || start > end || end >= total
+        || total > 0xffffffff) {
+        return null;
+    }
+    return { start, end, total };
+}
+
+function responseValidator(headers) {
+    const etag = typeof headers.etag === 'string' ? headers.etag : '';
+    if (etag && !etag.startsWith('W/')) return etag;
+    return typeof headers['last-modified'] === 'string' ? headers['last-modified'] : '';
+}
+
+function resourceValidator(url) {
+    const now = Date.now();
+    for (const [key, state] of proxy2ResourceValidators) {
+        if (state.expiresAt <= now) proxy2ResourceValidators.delete(key);
+    }
+    return proxy2ResourceValidators.get(url) || null;
+}
+
+function rememberResourceValidator(url, validator, total) {
+    // Remove the oldest abandoned transfer before admitting another one.
+    // Completed validators stay until TTL so concurrent downloads of one URL
+    // keep using the same immutable representation.
+    if (!proxy2ResourceValidators.has(url)
+        && proxy2ResourceValidators.size >= proxy2ResourceValidatorLimit) {
+        const oldest = proxy2ResourceValidators.keys().next().value;
+        if (oldest !== undefined) proxy2ResourceValidators.delete(oldest);
+    }
+    proxy2ResourceValidators.set(url, {
+        validator,
+        total,
+        expiresAt: Date.now() + proxy2ResourceValidatorTtlMs,
+    });
 }
 
 // WAP网关代理将桌面HTML转换为WBRW可渲染的精简页面;
@@ -439,12 +554,19 @@ function extractHtmlPageModel(htmlBuf, requestUrl) {
             // 解析失败就让异常冒出走 /page2 的 404 错误包路径;静默替换成当前页 URL
             // 会把解析 bug 变成"点击后原地不动"的隐蔽故障。
             href = new URL(linkMatch[1], requestUrl).toString();
+            const download = new URL(href).pathname.toLowerCase().endsWith('.mrp');
             text = linkMatch[2];
+            text = text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+            if (!text || seen.has(text)) continue;
+            seen.add(text);
+            items.push({ text, href, download });
+            if (items.length >= 64) break;
+            continue;
         }
         text = text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
         if (!text || seen.has(text)) continue;
         seen.add(text);
-        items.push({ text, href });
+        items.push({ text, href, download: false });
         // 行数只做失控保护;实际内容量由 generateSkyPage 按 payload 字节预算裁剪
         if (items.length >= 64) break;
     }
@@ -498,6 +620,38 @@ function skyU16(value) {
     const buffer = Buffer.alloc(2);
     buffer.writeUInt16BE(value, 0);
     return buffer;
+}
+
+function skyScriptRef(opcode, entryIndex, suffix = 0x0a) {
+    const reference = entryIndex + 1;
+    if (reference > 0xff) {
+        throw new RangeError(`SKY script pool reference exceeds u8: ${reference}`);
+    }
+    return Buffer.from([opcode[0], opcode[1], 0x0c, 0x00, reference, suffix]);
+}
+
+// 编译 WBRW 页面脚本函数: `name() { lib.download(url, file, mime, FALSE) }`。
+// 指令形状逐字节来自内置 mphome.sky 的两个下载函数;01+be32 是脚本段信封,
+// d597 定义函数,de9b 调平台函数,dfa8 依次压入字符串池参数。
+function generateSkyDownloadScripts(scripts) {
+    if (scripts.length === 0) return Buffer.alloc(0);
+    const functions = scripts.map(script => Buffer.concat([
+        skyScriptRef([0xd5, 0x97], script.nameIndex),
+        skyScriptRef([0xde, 0x9b], script.libraryIndex),
+        skyScriptRef([0xdf, 0xa8], script.urlIndex),
+        Buffer.from([0x0a]),
+        skyScriptRef([0xdf, 0xa8], script.filenameIndex),
+        Buffer.from([0x0a]),
+        skyScriptRef([0xdf, 0xa8], script.contentTypeIndex),
+        Buffer.from([0x0a]),
+        skyScriptRef([0xdf, 0xa8], script.backgroundIndex),
+        Buffer.from([0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0d]),
+    ]));
+    const body = Buffer.concat(functions);
+    const envelope = Buffer.alloc(5);
+    envelope[0] = 0x01;
+    envelope.writeUInt32BE(body.length, 1);
+    return Buffer.concat([envelope, body]);
 }
 
 // 显示列表: 外层 `03 <A:be32>` + 内层 `<1:be32><C=A-8:be32>` + 记录流(字节总和必须精确等于C)。
@@ -580,6 +734,7 @@ function generateSkyPage(htmlBuf, requestUrl) {
             encodeUcs2Be(model.title),
         ];
         const pairs = [];
+        const downloadScripts = [];
         for (const item of items) {
             const pair = {
                 captionIndex: null,
@@ -588,13 +743,21 @@ function generateSkyPage(htmlBuf, requestUrl) {
                 textOperand: null,
             };
             if (item.href) {
+                let href = item.href;
+                let script;
+                if (item.download) {
+                    const name = `download${downloadScripts.length}`;
+                    href = `skyscript:${name}`;
+                    script = { name, url: item.href };
+                }
                 // WBRW从0x38 caption的前一池槽取链接目标;按真机顺序先放href。
                 pair.hrefIndex = entries.length;
-                entries.push(Buffer.from(item.href, 'latin1'));
+                entries.push(Buffer.from(href, 'latin1'));
                 pair.captionIndex = entries.length;
                 entries.push(encodeUcs2Be(item.text));
                 pair.companionOperand = entries.length;
                 entries.push(encodeUcs2Be(' '));
+                if (script) downloadScripts.push(script);
             } else {
                 pair.captionIndex = entries.length;
                 entries.push(encodeUcs2Be(item.text));
@@ -605,16 +768,56 @@ function generateSkyPage(htmlBuf, requestUrl) {
             }
             pairs.push(pair);
         }
+        // Script operands use one-byte pool references. Return a size signal
+        // before compilation so the caller can trim tail items using the same
+        // deterministic policy as the page payload byte budget.
+        if (entries.length + downloadScripts.length * 6 > 0xff) return null;
+        const compiledScripts = downloadScripts.map(script => {
+            const target = new URL(script.url);
+            const encodedFilename = target.pathname.slice(target.pathname.lastIndexOf('/') + 1);
+            let filename;
+            try {
+                filename = decodeURIComponent(encodedFilename);
+            } catch (error) {
+                throw new URIError(`invalid URL-encoded download filename: ${error.message}`);
+            }
+            if (!filename || filename.includes('/') || filename.includes('\\')
+                || /[\x00-\x1f\x7f]/u.test(filename)) {
+                throw new TypeError('download URL must have a nonempty basename');
+            }
+            const indexes = {
+                nameIndex: entries.length,
+                libraryIndex: entries.length + 1,
+                urlIndex: entries.length + 2,
+                filenameIndex: entries.length + 3,
+                contentTypeIndex: entries.length + 4,
+                backgroundIndex: entries.length + 5,
+            };
+            entries.push(
+                Buffer.from(script.name, 'latin1'),
+                Buffer.from('lib.download', 'latin1'),
+                Buffer.from(script.url, 'latin1'),
+                Buffer.from(filename, 'utf8'),
+                Buffer.from('application/sky-mrp', 'latin1'),
+                Buffer.from('FALSE', 'latin1'),
+            );
+            return indexes;
+        });
         const header = Buffer.from([0x02, 0x02, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00]);
-        return emitSkyContainer(header, entries, generateSkyDisplayList(3, pairs));
+        const displayList = Buffer.concat([
+            generateSkyDownloadScripts(compiledScripts),
+            generateSkyDisplayList(3, pairs),
+        ]);
+        return emitSkyContainer(header, entries, displayList);
     };
 
     // 响应payload受WBRW接收缓冲限制,超限时从尾部裁剪内容行
     let page = build();
-    while (page.length > proxy2MaxPayloadBytes && items.length > 0) {
+    while ((page == null || page.length > proxy2MaxPayloadBytes) && items.length > 0) {
         items.pop();
         page = build();
     }
+    if (page == null) throw new RangeError('SKY string pool exceeds one-byte script references');
     return page;
 }
 
@@ -707,8 +910,17 @@ function handleProxy2(req, res, body) {
                     return;
                 }
                 console.info('proxy2 page2 fetched %d bytes, status=%d', pageBody.length, statusCode);
-                // WAP网关将抓取的HTML按 .sky 结构从零生成为WBRW可渲染页面
-                const page = generateSkyPage(pageBody, targetUrl);
+                let page;
+                try {
+                    // HTML来自不可信上游；编译错误必须转换为合法proxy2错误包，
+                    // 异步回调中的异常不会被外层HTTP请求try/catch捕获。
+                    page = generateSkyPage(pageBody, targetUrl);
+                } catch (error) {
+                    console.error('proxy2 page2 compile error:', error.message);
+                    sendBuffer(res, proxy2Page2ContentType,
+                        makeProxy2ResponsePacket(Buffer.alloc(0), [], 502));
+                    return;
+                }
                 console.info('proxy2 page2 sky payload %d bytes', page.length);
                 // PROXY2_PAGE2_WEB_TAG33 控制网页响应的tag33值(默认3=.sky格式)
                 const webTag33 = Number(process.env.PROXY2_PAGE2_WEB_TAG33 ?? 3);
@@ -735,6 +947,104 @@ function handleProxy2(req, res, body) {
             return true;
         }
         sendBuffer(res, 'text/plain; charset=utf-8', Buffer.from('retcode=0\n'));
+        return true;
+    }
+
+    // /res: lib.download 的原生下载器通过proxy2范围请求获取文件正文。资源响应
+    // 不使用网页的tag33=3，而以tag7/tag8/tag16描述类型、剩余长度和字节范围。
+    if (req.url === '/res') {
+        const { host, path: urlPath, rangeStart, rangeError } = extractProxy2RequestUrl(body);
+        if (!host || rangeError) {
+            if (rangeError) console.error('proxy2 res request error:', rangeError);
+            sendBuffer(res, proxy2Page2ContentType,
+                makeProxy2ResponsePacket(Buffer.alloc(0), [], 400));
+            return true;
+        }
+
+        const targetUrl = buildProxy2TargetUrl(host, urlPath);
+        const requestedEnd = Math.min(rangeStart + proxy2ResourceChunkBytes - 1, 0xffffffff);
+        const priorState = resourceValidator(targetUrl);
+        if (rangeStart > 0 && (!priorState || !priorState.validator)) {
+            // A continuation without the first range's validator could append
+            // bytes from a different upstream object after restart/eviction.
+            sendBuffer(res, proxy2Page2ContentType,
+                makeProxy2ResponsePacket(Buffer.alloc(0), [], 409));
+            return true;
+        }
+        const requestHeaders = {
+            Range: `bytes=${rangeStart}-${requestedEnd}`,
+            // Byte ranges and Content-Range offsets apply to the identity
+            // representation; transparent compression would invalidate them.
+            'Accept-Encoding': 'identity',
+        };
+        if (priorState?.validator) requestHeaders['If-Range'] = priorState.validator;
+        fetchUrl(targetUrl, (err, chunk, statusCode, headers) => {
+            if (err) {
+                if (statusCode === 200 && priorState) {
+                    proxy2ResourceValidators.delete(targetUrl);
+                }
+                console.error('proxy2 res fetch error:', err.message);
+                // 下载器同样依赖完整proxy2信封结束请求；纯文本错误响应无法
+                // 驱动其完成回调，会留下永久处于进行中的下载任务。
+                sendBuffer(res, proxy2Page2ContentType,
+                    makeProxy2ResponsePacket(Buffer.alloc(0), [], statusCode === 200 ? 502 : 404));
+                return;
+            }
+            if (statusCode !== 206) {
+                if (statusCode === 200 && priorState) {
+                    // If-Range returning 200 means the representation changed;
+                    // discard the old validator and require a clean retry.
+                    proxy2ResourceValidators.delete(targetUrl);
+                }
+                console.error('proxy2 res fetch status=%d', statusCode);
+                sendBuffer(res, proxy2Page2ContentType,
+                    makeProxy2ResponsePacket(Buffer.alloc(0), [], statusCode === 416 ? 416 : 502));
+                return;
+            }
+            const contentRange = parseHttpContentRange(headers['content-range']);
+            const validator = responseValidator(headers);
+            const invalidRange = !contentRange
+                || contentRange.start !== rangeStart
+                || contentRange.end > requestedEnd
+                || chunk.length !== contentRange.end - contentRange.start + 1;
+            const changedObject = priorState != null
+                && (priorState.total !== contentRange?.total
+                    || (priorState.validator && priorState.validator !== validator));
+            if (invalidRange || changedObject) {
+                proxy2ResourceValidators.delete(targetUrl);
+                console.error('proxy2 res invalid Content-Range or changed object');
+                sendBuffer(res, proxy2Page2ContentType,
+                    makeProxy2ResponsePacket(Buffer.alloc(0), [], 502));
+                return;
+            }
+            const chunkEnd = contentRange.end + 1;
+            const fileLength = contentRange.total;
+            if (chunkEnd < fileLength && !validator) {
+                // Multi-request assembly is only safe with an origin validator;
+                // a one-chunk object needs no cross-request identity check.
+                console.error('proxy2 res origin supplied no usable validator');
+                sendBuffer(res, proxy2Page2ContentType,
+                    makeProxy2ResponsePacket(Buffer.alloc(0), [], 502));
+                return;
+            }
+            rememberResourceValidator(targetUrl, validator, fileLength);
+            console.info('proxy2 res fetched %d bytes, sending range %d-%d, status=%d',
+                chunk.length, rangeStart, chunkEnd - 1, statusCode);
+            // WBRW把响应tag7作为Content-Type的u16枚举；22对应
+            // application/sky-mrp，缺少该字段时下载回调固定返回错误140。
+            // tag8是从本次起点算起的剩余响应长度，而不是对象总长；客户端每次
+            // 消耗payload后据此判断是否继续。tag16等价于HTTP Content-Range，
+            // 仍携带当前范围和完整对象长度。
+            const fields = [
+                { tag: 7, value: proxy2U16(22) },
+                { tag: 8, value: proxy2U32(fileLength - rangeStart) },
+                { tag: 16, value: proxy2ContentRange(rangeStart, chunkEnd - 1, fileLength) },
+            ];
+            sendBuffer(res, proxy2Page2ContentType,
+                makeProxy2ResponsePacket(chunk, fields,
+                    fileLength === chunk.length ? 200 : 206));
+            if (fileLength === chunk.length) proxy2ResourceValidators.delete(targetUrl);
+        }, 0, { headers: requestHeaders, maxBytes: proxy2ResourceChunkBytes });
         return true;
     }
 
