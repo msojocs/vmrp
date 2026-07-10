@@ -689,7 +689,10 @@ int32 my_send(int32 s, const char* buf, int len) {
                 }
                 data->realState = MR_SUCCESS;
             }
-            return 0;  // 还没连接上，因此返回0表示发送了0字节
+            /* The CMWAP bridge resolves the proxy target and connects with a
+             * blocking call above.  The socket is writable now, so send the
+             * original request in this mr_send call; returning zero would make
+             * one-shot HTTP downloaders wait for a retry that may never occur. */
         } else if (data->realState == MR_FAILED) {
             printf("[my_send] realState MR_FAILED\n");
             return MR_FAILED;
