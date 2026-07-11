@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 17 pages | Last updated: 2026-07-10T08:40:00.000Z
+> 18 pages | Last updated: 2026-07-11T11:28:02.847Z
 
 ## debugging
 
@@ -20,4 +20,5 @@
 - [Optwar exit plugin no-network investigation](optwar-exit-plugin-no-network-investigation.md) — # Optwar exit plugin no-network investigation
 - [RX4.5 ARM EXT 0x80000000 Platform IO Mapping](rx4-5-arm-ext-0x80000000-platform-io-mapping.md) — # RX4.5 ARM EXT 0x80000000 Platform IO Mapping
 - [wbrw input paste UCS2 table77 fix](wbrw-input-paste-ucs2-table77-fix.md) — # wbrw input paste UCS2 table77 fix
+- [WBRW proxy2 font MRP download](wbrw-proxy2-font-mrp-download.md) — # WBRW proxy2 font MRP download
 - [WBRW proxy2 web page rendering](wbrw-proxy2-web-page-rendering.md) — # WBRW proxy2 web page rendering

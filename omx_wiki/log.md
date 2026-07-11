@@ -196,3 +196,18 @@
 ## [2026-07-06T15:01:06.245Z] lint
 - **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-record-pack-slot-fix.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-input-paste-ucs2-table77-fix.md
 - **Summary:** Lint: 16 issues (15 orphan, 0 stale, 0 broken, 0 contradictions)
+## [2026-07-11T08:57:36.289Z] ingest
+- **Pages:** wbrw-proxy2-font-mrp-download.md
+- **Summary:** Created new page "WBRW proxy2 font MRP download"
+## [2026-07-11T09:13:36.888Z] ingest
+- **Pages:** wbrw-proxy2-font-mrp-download.md
+- **Summary:** Updated "WBRW proxy2 font MRP download" with new content
+## [2026-07-11T09:36:24.799Z] ingest
+- **Pages:** wbrw-proxy2-font-mrp-download.md
+- **Summary:** Updated "WBRW proxy2 font MRP download" with new content
+## [2026-07-11T11:28:02.844Z] ingest
+- **Pages:** wbrw-proxy2-font-mrp-download.md
+- **Summary:** Updated "WBRW proxy2 font MRP download" with new content
+## [2026-07-11T11:28:28.562Z] lint
+- **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-record-pack-slot-fix.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-proxy2-font-mrp-download.md, wbrw-proxy2-web-page-rendering.md
+- **Summary:** Lint: 18 issues (15 orphan, 0 stale, 1 broken, 0 contradictions)

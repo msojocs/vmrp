@@ -1234,6 +1234,23 @@ void arm_ext_repair_private_child_record_bridges(ArmExtModule *m,
     }
 }
 
+uint32_t arm_ext_read_file_table_context(ArmExtModule *m,
+                                         ArmExtNestedModule *owner) {
+    if (!owner) return EXT_TABLE_ADDR;
+    if (!m || !arm_ptr_span(m, owner->file_addr, 4u)) return 0;
+
+    uint32_t record = arm_ext_read_u32_or_zero_(m, owner->file_addr);
+    /*
+     * Private loaders store the child's module-record pointer in file_base[0].
+     * That record is the table context used by the child's BLX calls, so all
+     * package slots through table[105] must be present as one validated span.
+     * A malformed nested record is an ABI error; do not read the outer table.
+     */
+    return record && arm_ptr_span(m, record, 106u * 4u)
+               ? record
+               : 0;
+}
+
 static int arm_ext_private_child_has_safe_rw_bridge_layout(ArmExtModule *m,
                                                            uint32_t file_addr,
                                                            uint32_t file_len) {

@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const http = require('node:http');
 const https = require('node:https');
 const zlib = require('node:zlib');
@@ -19,6 +20,12 @@ const proxy2PacketStatus = Number(process.env.PROXY2_PACKET_STATUS || 200);
 // tag33值3表示首页内容类型，响应必须包含此字段才会被WBRW接受
 const proxy2Page2Tag33 = process.env.PROXY2_PAGE2_TAG33 ?? '3';
 const proxy2Page2Tag21 = process.env.PROXY2_PAGE2_TAG21 ?? '';
+// /mrp 按请求 appid 与 MRP 头部 appid 匹配本地资源，目录中未命中时明确报错。
+const proxy2MrpRoot = path.resolve(process.env.PROXY2_MRP_ROOT || 'temp');
+const proxy2MrpHost = (process.env.PROXY2_MRP_HOST || 'dmrp.wapproxy.sky-mobi.com').toLowerCase();
+const proxy2MrpSnapshotLimit = Number(process.env.PROXY2_MRP_SNAPSHOT_LIMIT || 256);
+const proxy2MrpSnapshotMaxBytes = Number(process.env.PROXY2_MRP_SNAPSHOT_MAX_BYTES || 64 * 1024 * 1024);
+const proxy2MrpSnapshotTotalBytes = Number(process.env.PROXY2_MRP_SNAPSHOT_TOTAL_BYTES || 256 * 1024 * 1024);
 const updateMode = process.env.WBRW_UPDATE_MODE || 'fixture';
 const updateFixturePath = process.env.WBRW_UPDATE_FIXTURE || '';
 const updateContentType = process.env.WBRW_UPDATE_CONTENT_TYPE || 'application/sky-mrp';
@@ -333,7 +340,7 @@ function extractProxy2RequestUrl(body) {
             rangeFieldSeen = true;
         }
     }
-    return { host, path: urlPath, rangeStart, rangeError };
+    return { code: packet.code, host, path: urlPath, rangeStart, rangeError };
 }
 
 function buildProxy2TargetUrl(host, urlPath, defaultProtocol = 'http:') {
@@ -358,6 +365,10 @@ const proxy2ResourceValidatorLimit = Number(process.env.PROXY2_RESOURCE_VALIDATO
 const proxy2ResourceValidatorStoreKey = Symbol.for('vmrp.proxy2ResourceValidators');
 const proxy2ResourceValidators = globalThis[proxy2ResourceValidatorStoreKey] || new Map();
 globalThis[proxy2ResourceValidatorStoreKey] = proxy2ResourceValidators;
+// server-http.js 会热加载此模块；本地 MRP 快照必须跨 require 保持同一代字节。
+const proxy2MrpSnapshotStoreKey = Symbol.for('vmrp.proxy2MrpSnapshots');
+const proxy2MrpSnapshots = globalThis[proxy2MrpSnapshotStoreKey] || new Map();
+globalThis[proxy2MrpSnapshotStoreKey] = proxy2MrpSnapshots;
 
 // 发起HTTP GET请求，跟随重定向，返回响应body
 function fetchUrl(url, callback, redirectCount, requestOptions = {}) {
@@ -489,6 +500,342 @@ function rememberResourceValidator(url, validator, total) {
         total,
         expiresAt: Date.now() + proxy2ResourceValidatorTtlMs,
     });
+}
+
+function proxy2ResourceStateKey(kind, url) {
+    // /mrp 本地快照和 /res 上游 HTTP 校验器不能为同一 URL 相互覆盖。
+    return `${kind}\0${url}`;
+}
+
+class MrpResourceError extends Error {
+    constructor(message, status) {
+        super(message);
+        this.status = status;
+    }
+}
+
+function requestedMrpAppId(targetUrl) {
+    const parsed = targetUrl instanceof URL ? targetUrl : new URL(targetUrl);
+    const values = parsed.searchParams.getAll('appid');
+    const value = values[0];
+    if (values.length !== 1 || !value || !/^\d+$/u.test(value)) {
+        throw new MrpResourceError('MRP request must have one numeric appid', 400);
+    }
+    const appId = Number(value);
+    if (!Number.isSafeInteger(appId) || appId <= 0 || appId > 0xffffffff) {
+        throw new MrpResourceError('MRP request appid is out of range', 400);
+    }
+    return appId;
+}
+
+function parseMrpDownloadUrl(targetUrl) {
+    const parsed = targetUrl instanceof URL ? targetUrl : new URL(targetUrl);
+    const types = parsed.searchParams.getAll('type');
+    if (parsed.hostname.toLowerCase() !== proxy2MrpHost
+        || parsed.pathname !== '/sd'
+        || types.length !== 1
+        || types[0] !== '2') {
+        throw new MrpResourceError('MRP request is outside the configured download service', 400);
+    }
+    return { parsed, appId: requestedMrpAppId(parsed) };
+}
+
+function readFdFully(fd, length) {
+    const data = Buffer.alloc(length);
+    let offset = 0;
+    while (offset < data.length) {
+        const bytesRead = fs.readSync(fd, data, offset, data.length - offset, offset);
+        if (bytesRead === 0) {
+            throw new MrpResourceError(`MRP fixture ended after ${offset}/${length} bytes`, 409);
+        }
+        offset += bytesRead;
+    }
+    return data;
+}
+
+function loadProxy2MrpSnapshot(requestedAppId) {
+    let entries;
+    try {
+        entries = fs.readdirSync(proxy2MrpRoot, { withFileTypes: true });
+    } catch (error) {
+        throw new MrpResourceError(`cannot read MRP fixture root: ${error.message}`, 500);
+    }
+    let match = null;
+    try {
+        for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+            if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== '.mrp') continue;
+            const fixturePath = path.join(proxy2MrpRoot, entry.name);
+            const fd = fs.openSync(fixturePath, 'r');
+            let retainFd = false;
+            try {
+                const header = Buffer.alloc(240);
+                const bytesRead = fs.readSync(fd, header, 0, header.length, 0);
+                if (bytesRead < header.length || header.subarray(0, 4).toString('latin1') !== 'MRPG') continue;
+                if (header.readUInt32LE(68) !== requestedAppId) continue;
+                if (match) {
+                    throw new MrpResourceError(
+                        `multiple MRP fixtures have appid ${requestedAppId}: ${match.path}, ${fixturePath}`, 409);
+                }
+                const stat = fs.fstatSync(fd);
+                const declaredLength = header.readUInt32LE(8);
+                if (declaredLength !== stat.size) {
+                    throw new MrpResourceError(
+                        `MRP fixture ${fixturePath} declares ${declaredLength} bytes but has ${stat.size}`, 500);
+                }
+                if (!Number.isSafeInteger(proxy2MrpSnapshotMaxBytes) || proxy2MrpSnapshotMaxBytes <= 0
+                    || stat.size > proxy2MrpSnapshotMaxBytes) {
+                    throw new MrpResourceError(
+                        `MRP fixture ${fixturePath} exceeds snapshot limit ${proxy2MrpSnapshotMaxBytes}`, 413);
+                }
+                match = {
+                    fd,
+                    path: fixturePath,
+                    length: stat.size,
+                    validator: `local:${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}`,
+                };
+                retainFd = true;
+            } finally {
+                if (!retainFd) fs.closeSync(fd);
+            }
+        }
+        if (!match) {
+            throw new MrpResourceError(
+                `no MRP fixture with appid ${requestedAppId} under ${proxy2MrpRoot}`, 404);
+        }
+
+        // 从同一已验证 header/appid 的 fd 建立不可变快照，避免重开路径的 TOCTOU。
+        const data = readFdFully(match.fd, match.length);
+        const afterRead = fs.fstatSync(match.fd);
+        const afterValidator = `local:${afterRead.dev}:${afterRead.ino}:${afterRead.size}:${afterRead.mtimeMs}`;
+        if (afterValidator !== match.validator
+            || data.subarray(0, 4).toString('latin1') !== 'MRPG'
+            || data.readUInt32LE(8) !== data.length
+            || data.readUInt32LE(68) !== requestedAppId) {
+            throw new MrpResourceError(`MRP fixture changed while reading: ${match.path}`, 409);
+        }
+        const digest = crypto.createHash('sha256').update(data).digest('hex');
+        return {
+            appId: requestedAppId,
+            path: match.path,
+            length: match.length,
+            data,
+            etag: `\"${digest}\"`,
+        };
+    } finally {
+        if (match) fs.closeSync(match.fd);
+    }
+}
+
+function getOrLoadMrpSnapshot(requestedAppId, allowLoad) {
+    let snapshot = proxy2MrpSnapshots.get(requestedAppId);
+    // server-http.js hot-reloads this module while the process-global snapshot
+    // survives. Upgrade snapshots created before the HTTP `/sd` ETag existed.
+    if (snapshot && !snapshot.etag) {
+        const digest = crypto.createHash('sha256').update(snapshot.data).digest('hex');
+        snapshot.etag = `\"${digest}\"`;
+    }
+    if (!snapshot) {
+        if (!allowLoad) {
+            throw new MrpResourceError('proxy2 mrp continuation has no initial snapshot', 409);
+        }
+        if (!Number.isSafeInteger(proxy2MrpSnapshotLimit) || proxy2MrpSnapshotLimit <= 0
+            || proxy2MrpSnapshots.size >= proxy2MrpSnapshotLimit) {
+            throw new MrpResourceError(`MRP snapshot count reached ${proxy2MrpSnapshotLimit}`, 503);
+        }
+        snapshot = loadProxy2MrpSnapshot(requestedAppId);
+        const storedBytes = [...proxy2MrpSnapshots.values()]
+            .reduce((sum, item) => sum + item.length, 0);
+        if (!Number.isSafeInteger(proxy2MrpSnapshotTotalBytes) || proxy2MrpSnapshotTotalBytes <= 0
+            || storedBytes + snapshot.length > proxy2MrpSnapshotTotalBytes) {
+            throw new MrpResourceError(
+                `MRP snapshots exceed total limit ${proxy2MrpSnapshotTotalBytes}`, 503);
+        }
+        proxy2MrpSnapshots.set(requestedAppId, snapshot);
+    }
+    return snapshot;
+}
+
+function readProxy2MrpFixture(targetUrl, rangeStart) {
+    const { appId } = parseMrpDownloadUrl(targetUrl);
+    const snapshot = getOrLoadMrpSnapshot(appId, rangeStart === 0);
+    if (rangeStart >= snapshot.length) {
+        throw new MrpResourceError(
+            `proxy2 mrp range starts beyond object: ${rangeStart}/${snapshot.length}`, 416);
+    }
+    const chunkEnd = Math.min(rangeStart + proxy2ResourceChunkBytes, snapshot.length);
+    return {
+        path: snapshot.path,
+        length: snapshot.length,
+        chunk: snapshot.data.subarray(rangeStart, chunkEnd),
+    };
+}
+
+function proxy2ResourceFields(rangeStart, rangeEnd, total) {
+    return [
+        { tag: 7, value: proxy2U16(22) },
+        { tag: 8, value: proxy2U32(total - rangeStart) },
+        { tag: 16, value: proxy2ContentRange(rangeStart, rangeEnd, total) },
+    ];
+}
+
+function sendProxy2ResourceChunk(res, chunk, rangeStart, total) {
+    const rangeEnd = rangeStart + chunk.length - 1;
+    sendBuffer(res, proxy2Page2ContentType,
+        makeProxy2ResponsePacket(chunk, proxy2ResourceFields(rangeStart, rangeEnd, total),
+            total === chunk.length ? 200 : 206));
+}
+
+function sendProxy2ResourceError(res, status) {
+    // 下载响应解析器在错误路径也会查询 tag7；缺失时只会折叠为错误 140。
+    sendBuffer(res, proxy2Page2ContentType,
+        makeProxy2ResponsePacket(Buffer.alloc(0), [{ tag: 7, value: proxy2U16(22) }], status));
+}
+
+function handleProxy2Mrp(res, body) {
+    const { code, host, path: urlPath, rangeStart, rangeError } = extractProxy2RequestUrl(body);
+    if (code !== 3 || !host || rangeError) {
+        if (rangeError) console.error('proxy2 mrp request error:', rangeError);
+        sendProxy2ResourceError(res, 400);
+        return;
+    }
+
+    try {
+        const targetUrl = buildProxy2TargetUrl(host, urlPath);
+        const fixture = readProxy2MrpFixture(targetUrl, rangeStart);
+
+        const chunkEnd = rangeStart + fixture.chunk.length;
+        console.info('proxy2 mrp fixture %s: sending range %d-%d/%d',
+            fixture.path, rangeStart, chunkEnd - 1, fixture.length);
+        sendProxy2ResourceChunk(res, fixture.chunk, rangeStart, fixture.length);
+    } catch (error) {
+        const status = error instanceof MrpResourceError ? error.status : 500;
+        console.error('proxy2 mrp fixture error:', error.message);
+        sendProxy2ResourceError(res, status);
+    }
+}
+
+function requestAuthority(req) {
+    const host = typeof req.headers.host === 'string' ? req.headers.host : '';
+    if (!host) return null;
+    try {
+        const parsed = new URL(`http://${host}`);
+        return {
+            hostname: parsed.hostname.toLowerCase(),
+            port: parsed.port || '80',
+            base: parsed,
+        };
+    } catch {
+        return null;
+    }
+}
+
+function parseSdRequestUrl(req, authority) {
+    let parsed;
+    try {
+        parsed = new URL(req.url, authority.base);
+    } catch {
+        throw new MrpResourceError('invalid HTTP request target', 400);
+    }
+    if (/^https?:\/\//iu.test(req.url)
+        && (parsed.hostname.toLowerCase() !== authority.hostname
+            || (parsed.port || (parsed.protocol === 'https:' ? '443' : '80')) !== authority.port)) {
+        throw new MrpResourceError('absolute request target does not match Host', 400);
+    }
+    if (parsed.pathname !== '/sd') {
+        throw new MrpResourceError('unknown MRP download path', 404);
+    }
+    return parseMrpDownloadUrl(parsed);
+}
+
+function parseSdRange(value, total) {
+    if (value == null) return null;
+    if (typeof value !== 'string' || value.includes(',')) {
+        throw new MrpResourceError('multiple or malformed HTTP ranges are not supported', 400);
+    }
+    const match = value.match(/^bytes=(\d*)-(\d*)$/u);
+    if (!match || (!match[1] && !match[2])) {
+        throw new MrpResourceError('malformed HTTP range', 400);
+    }
+
+    let start;
+    let end;
+    if (!match[1]) {
+        const suffixLength = Number(match[2]);
+        if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) {
+            const error = new MrpResourceError('HTTP range is not satisfiable', 416);
+            error.contentRange = `bytes */${total}`;
+            throw error;
+        }
+        start = Math.max(0, total - suffixLength);
+        end = total - 1;
+    } else {
+        start = Number(match[1]);
+        end = match[2] ? Number(match[2]) : total - 1;
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) {
+            throw new MrpResourceError('HTTP range values are out of range', 400);
+        }
+        if (start >= total || start > end) {
+            const error = new MrpResourceError('HTTP range is not satisfiable', 416);
+            error.contentRange = `bytes */${total}`;
+            throw error;
+        }
+        end = Math.min(end, total - 1);
+    }
+    return { start, end };
+}
+
+function sendSdError(req, res, status, extraHeaders = {}) {
+    const body = Buffer.from(`${status}\n`, 'ascii');
+    res.writeHead(status, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Length': body.length,
+        Connection: 'close',
+        ...extraHeaders,
+    });
+    res.end(req.method === 'HEAD' ? undefined : body);
+}
+
+function handleSdDownload(req, res, authority) {
+    if (!authority) {
+        sendSdError(req, res, 400);
+        return;
+    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+        sendSdError(req, res, 405, { Allow: 'GET, HEAD' });
+        return;
+    }
+
+    try {
+        const { appId } = parseSdRequestUrl(req, authority);
+        const snapshot = getOrLoadMrpSnapshot(appId, true);
+        let range = null;
+        if (req.method === 'GET'
+            && (!req.headers['if-range'] || req.headers['if-range'] === snapshot.etag)) {
+            range = parseSdRange(req.headers.range, snapshot.length);
+        }
+        const start = range ? range.start : 0;
+        const end = range ? range.end : snapshot.length - 1;
+        const body = snapshot.data.subarray(start, end + 1);
+        const status = range ? 206 : 200;
+        const headers = {
+            'Content-Type': 'application/sky-mrp',
+            'Content-Length': body.length,
+            'Accept-Ranges': 'bytes',
+            ETag: snapshot.etag,
+            'Cache-Control': 'no-transform',
+            Connection: 'close',
+        };
+        if (range) headers['Content-Range'] = `bytes ${start}-${end}/${snapshot.length}`;
+        console.info('sd appid=%d status=%d range=%d-%d/%d',
+            appId, status, start, end, snapshot.length);
+        res.writeHead(status, headers);
+        res.end(req.method === 'HEAD' ? undefined : body);
+    } catch (error) {
+        const status = error instanceof MrpResourceError ? error.status : 500;
+        console.error('sd download error:', error.message);
+        const headers = error.contentRange ? { 'Content-Range': error.contentRange } : {};
+        sendSdError(req, res, status, headers);
+    }
 }
 
 // WAP网关代理将桌面HTML转换为WBRW可渲染的精简页面;
@@ -822,7 +1169,10 @@ function generateSkyPage(htmlBuf, requestUrl) {
 }
 
 function logProxy2Packet(req, body) {
-    const tempDir = path.resolve(__dirname, './temp');
+    // Tests and parallel proxy instances can isolate captures without sharing
+    // the repository's historical packet directory.
+    const tempDir = path.resolve(
+        process.env.PROXY2_PACKET_LOG_DIR || path.resolve(__dirname, './temp'));
     fs.mkdirSync(tempDir, { recursive: true });
     fs.writeFileSync(path.resolve(tempDir, req.url.replace(/\//g, '_') + `_${Date.now()}.bin`), body);
     const packet = parseProxy2Packet(body);
@@ -950,25 +1300,30 @@ function handleProxy2(req, res, body) {
         return true;
     }
 
+    // /mrp: dmrp 资源下载器的固定端点；首包和续包均使用与 /res 相同的范围信封。
+    if (req.url === '/mrp') {
+        handleProxy2Mrp(res, body);
+        return true;
+    }
+
     // /res: lib.download 的原生下载器通过proxy2范围请求获取文件正文。资源响应
     // 不使用网页的tag33=3，而以tag7/tag8/tag16描述类型、剩余长度和字节范围。
     if (req.url === '/res') {
         const { host, path: urlPath, rangeStart, rangeError } = extractProxy2RequestUrl(body);
         if (!host || rangeError) {
             if (rangeError) console.error('proxy2 res request error:', rangeError);
-            sendBuffer(res, proxy2Page2ContentType,
-                makeProxy2ResponsePacket(Buffer.alloc(0), [], 400));
+            sendProxy2ResourceError(res, 400);
             return true;
         }
 
         const targetUrl = buildProxy2TargetUrl(host, urlPath);
+        const stateKey = proxy2ResourceStateKey('res', targetUrl);
         const requestedEnd = Math.min(rangeStart + proxy2ResourceChunkBytes - 1, 0xffffffff);
-        const priorState = resourceValidator(targetUrl);
+        const priorState = resourceValidator(stateKey);
         if (rangeStart > 0 && (!priorState || !priorState.validator)) {
             // A continuation without the first range's validator could append
             // bytes from a different upstream object after restart/eviction.
-            sendBuffer(res, proxy2Page2ContentType,
-                makeProxy2ResponsePacket(Buffer.alloc(0), [], 409));
+            sendProxy2ResourceError(res, 409);
             return true;
         }
         const requestHeaders = {
@@ -981,24 +1336,22 @@ function handleProxy2(req, res, body) {
         fetchUrl(targetUrl, (err, chunk, statusCode, headers) => {
             if (err) {
                 if (statusCode === 200 && priorState) {
-                    proxy2ResourceValidators.delete(targetUrl);
+                    proxy2ResourceValidators.delete(stateKey);
                 }
                 console.error('proxy2 res fetch error:', err.message);
                 // 下载器同样依赖完整proxy2信封结束请求；纯文本错误响应无法
                 // 驱动其完成回调，会留下永久处于进行中的下载任务。
-                sendBuffer(res, proxy2Page2ContentType,
-                    makeProxy2ResponsePacket(Buffer.alloc(0), [], statusCode === 200 ? 502 : 404));
+                sendProxy2ResourceError(res, statusCode === 200 ? 502 : 404);
                 return;
             }
             if (statusCode !== 206) {
                 if (statusCode === 200 && priorState) {
                     // If-Range returning 200 means the representation changed;
                     // discard the old validator and require a clean retry.
-                    proxy2ResourceValidators.delete(targetUrl);
+                    proxy2ResourceValidators.delete(stateKey);
                 }
                 console.error('proxy2 res fetch status=%d', statusCode);
-                sendBuffer(res, proxy2Page2ContentType,
-                    makeProxy2ResponsePacket(Buffer.alloc(0), [], statusCode === 416 ? 416 : 502));
+                sendProxy2ResourceError(res, statusCode === 416 ? 416 : 502);
                 return;
             }
             const contentRange = parseHttpContentRange(headers['content-range']);
@@ -1011,10 +1364,9 @@ function handleProxy2(req, res, body) {
                 && (priorState.total !== contentRange?.total
                     || (priorState.validator && priorState.validator !== validator));
             if (invalidRange || changedObject) {
-                proxy2ResourceValidators.delete(targetUrl);
+                proxy2ResourceValidators.delete(stateKey);
                 console.error('proxy2 res invalid Content-Range or changed object');
-                sendBuffer(res, proxy2Page2ContentType,
-                    makeProxy2ResponsePacket(Buffer.alloc(0), [], 502));
+                sendProxy2ResourceError(res, 502);
                 return;
             }
             const chunkEnd = contentRange.end + 1;
@@ -1023,11 +1375,10 @@ function handleProxy2(req, res, body) {
                 // Multi-request assembly is only safe with an origin validator;
                 // a one-chunk object needs no cross-request identity check.
                 console.error('proxy2 res origin supplied no usable validator');
-                sendBuffer(res, proxy2Page2ContentType,
-                    makeProxy2ResponsePacket(Buffer.alloc(0), [], 502));
+                sendProxy2ResourceError(res, 502);
                 return;
             }
-            rememberResourceValidator(targetUrl, validator, fileLength);
+            rememberResourceValidator(stateKey, validator, fileLength);
             console.info('proxy2 res fetched %d bytes, sending range %d-%d, status=%d',
                 chunk.length, rangeStart, chunkEnd - 1, statusCode);
             // WBRW把响应tag7作为Content-Type的u16枚举；22对应
@@ -1035,15 +1386,8 @@ function handleProxy2(req, res, body) {
             // tag8是从本次起点算起的剩余响应长度，而不是对象总长；客户端每次
             // 消耗payload后据此判断是否继续。tag16等价于HTTP Content-Range，
             // 仍携带当前范围和完整对象长度。
-            const fields = [
-                { tag: 7, value: proxy2U16(22) },
-                { tag: 8, value: proxy2U32(fileLength - rangeStart) },
-                { tag: 16, value: proxy2ContentRange(rangeStart, chunkEnd - 1, fileLength) },
-            ];
-            sendBuffer(res, proxy2Page2ContentType,
-                makeProxy2ResponsePacket(chunk, fields,
-                    fileLength === chunk.length ? 200 : 206));
-            if (fileLength === chunk.length) proxy2ResourceValidators.delete(targetUrl);
+            sendProxy2ResourceChunk(res, chunk, rangeStart, fileLength);
+            if (fileLength === chunk.length) proxy2ResourceValidators.delete(stateKey);
         }, 0, { headers: requestHeaders, maxBytes: proxy2ResourceChunkBytes });
         return true;
     }
@@ -1111,7 +1455,7 @@ function sendProxyError(res, error) {
 }
 
 function handleRequestBody(req, res, body) {
-    const host = (req.headers.host || '').split(':')[0];
+    const host = requestAuthority(req)?.hostname || '';
 
     if (host === 'proxy2.51mrp.com' && handleProxy2(req, res, body)) {
         return;
@@ -1132,6 +1476,18 @@ function handleRequestBody(req, res, body) {
 }
 
 function handleRequest(req, res) {
+    const authority = requestAuthority(req);
+    if (authority?.hostname === proxy2MrpHost) {
+        // `/sd` does not consume a request body. Dispatch before the generic
+        // collector so an untrusted GET cannot make the process buffer it.
+        req.on('error', error => {
+            if (!res.writableEnded) sendProxyError(res, error);
+        });
+        handleSdDownload(req, res, authority);
+        req.resume();
+        return;
+    }
+
     const chunks = [];
     console.info('req path:', req.url);
 
