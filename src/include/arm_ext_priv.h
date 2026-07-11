@@ -202,6 +202,8 @@ void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr, uint32_t 
 void arm_ext_record_timer_owner(ArmExtModule *m);
 void arm_ext_repair_private_child_record_bridges(ArmExtModule *m, uint32_t record, uint32_t file_addr, uint32_t file_len);
 ArmExtNestedModule *arm_ext_resource_owner_for_lr(ArmExtModule *m, uint32_t *owner_p, uint32_t *owner_helper);
+uint32_t arm_ext_read_file_table_context(ArmExtModule *m,
+                                         ArmExtNestedModule *owner);
 int arm_ext_sync_internal_nested_module(ArmExtModule *m, uint32_t file_addr, uint32_t file_len);
 void internal_slot_write(ArmExtModule *m, uint32_t slot, uint32_t value);
 void arm_ext_diag_owner_for_lr(ArmExtModule *m, uint32_t *owner_p, uint32_t *owner_h, uint32_t *owner_file, uint32_t *owner_len);

@@ -30,8 +30,140 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
 - [x] Phase 5: Verify focused and compatibility e2e tests (30/30 passed, 306s)
 - [x] Phase 6: Verify native MRP download, complete bytes, and download metadata
 - [x] Phase 7: Harden generic range transport and rerun exact-target visual acceptance
+- [x] Phase 8: Implement `/mrp` font transport and verify prompt/progress/success PPMs
+- [x] Phase 9: Implement direct `/sd`, share the immutable MRP catalog, and verify the full chain
+- [x] Phase 10: Fix nested table[125] package context and verify font installation/restart
 
 ## Progress Log
+
+### 2026-07-11: 字体安装失败根因、修复与重启验收完成
+- 深入反汇编 `brwgraphics.ext` 闭合了安装路径：`+0x7B8` 选择
+  `brw/wfnt16c.mrp`、包内 `1008.uni` 和目标 `system/1008.uni`；`+0x24C4`
+  把包名写到私有 module record 的 `table[100]`，再由同一 record 的
+  `table[125]` 读取。`+0x7D0` 只有该读取失败才返回 -1，因此“安装失败”明确指向
+  `_mr_readFile("1008.uni")` 失败，而不是目标文件 open/write 失败。
+- 宿主 `aex_t125` 原先固定从主 `EXT_TABLE_ADDR` 读取 `[100]/[104]/[105]`，丢失了
+  LR 所属嵌套模块的 ABI 表上下文，所以仍在外层 `wbrw.mrp` 查找 `1008.uni`。
+  现通过 `arm_ext_resource_owner_for_lr` 选择 owner，从 `owner->file_addr[0]` 取得
+  私有 record，并要求 `[0..105]` 是连续有效区间；存在 owner 但 record 损坏时明确
+  失败，不回退到外层包。主模块无 owner 时仍直接使用主表。私有 record 取出的显式
+  `brw/wfnt16c.mrp` 继续按现有优先级走 host-package 分支，不会被 child-resource 覆盖。
+- 单元测试覆盖主表、私有 record、损坏 record 不回退，以及 connect-map 合法、
+  重复 source、非法端口/主机、no-op 和清空配置；`vmrp-unit` 为 104 checks 全通过。
+- 系统端口 80 被不可见的系统监听占用，测试不再依赖它。新增通用
+  `--connect-map IPv4:port->IPv4:port`（及 `VMRP_CONNECT_MAP`），仅在 TCP connect
+  边界做一次数值端点改写；语法严格、配置事务化、重复 source 明确拒绝，并同时
+  覆盖同步/异步连接。E2E 以 Node `listen(0)` 获取独占高端口，同时验证 HTTP Host
+  仍为 `proxy2.51mrp.com`。代理抓包通过 `PROXY2_PACKET_LOG_DIR` 放进用例工作区，
+  不再依赖 root 所有的共享 `tool/temp`。
+- 最终命令 `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/wbrw/proxy.test.ts
+  --reporter=verbose` 在 41.08s 通过。首轮恰好 13 个 `/mrp` 偏移
+  `0,1800,...,21600`；落盘 MRP 为 22,302 字节，SHA-256
+  `98763f1c6bff5cdef6a3fd3c22e34168d0445359f9fdcb3c34bc381e85dbac3a`；安装产物
+  `system/1008.uni` 为 34,272 字节，SHA-256
+  `5e3515001810f6e25363a9152b4d449877aa24b38c17a9358b178af94c36e5e6`。
+- 保留证据为 `/tmp/vmrp-e2e-sqyAuE`（下载/安装）、`/tmp/vmrp-e2e-NTbM4h`
+  （同 workspace 重启）和 `/tmp/vmrp-ws-c4Dp1J`。人工检查 PPM：下载询问、
+  `wfnt16c.mrp 1K/21K`、下载成功/立即安装均正确；安装确认后无失败提示；重启后
+  `16号字体` 带选中圆点，设置中心显示 `字体: 16号字体`，且没有新增 `/mrp` 请求。
+  全程未使用 xvfb 或大 trace。
+
+### 2026-07-11: 安装失败复核重新开始
+- 当前 `proxy.test.ts` 在下载提示后只等待 60 秒，没有确认下载、安装、落盘或最终
+  PPM 断言；17:46 的成功文档早于 19:01 的测试改动，因此不能代表当前状态。
+- 从 VS Code 本地历史恢复了曾验证下载链的分段/哈希断言，并继续补上“立即安装”
+  确认。`wfnt16c.mrp` 索引和 `brwgraphics.ext` 字符串表共同证明该分支读取包内
+  `1008.uni` 并写入 `system/1008.uni`；解包产物应为 34,272 字节，SHA-256 为
+  `5e3515001810f6e25363a9152b4d449877aa24b38c17a9358b178af94c36e5e6`。
+- 新验收从不存在的 `brw/wfnt16c.mrp` 与 `system/1008.uni` 开始，要求真实 13 包
+  proxy2 下载、MRP 哈希、下载完成 PPM、安装结果 PPM和最终字体字节全部成立。
+
+### 2026-07-11: `/sd` 直连接口与跨层联调完成
+- 现有字体 E2E 已证明客户端的 proxy2 `/mrp` 分块契约，但 `/mrp` 直接读取本地
+  MRP 快照；`dmrp.wapproxy.sky-mobi.com/sd` 还会落入通用 `helloworld`，因此尚未
+  证明 `/sd` 接口本身。反汇编确认当前字体路径不会裸 GET `/sd`：URL 作为 tag1
+  经 `POST /mrp` 发送，raw HTTP Range 是下载器的并列能力，不能混同为客户端契约。
+- 实现范围确定为同一 appid 资源服务的两个入口：`/sd` 提供 GET/HEAD、单范围
+  Range、强 ETag/If-Range 与明确 4xx/5xx；`/mrp` 继续输出 tag7/tag8/tag16 信封，
+  两者共享进程内不可变 MRP 快照。联调已校验 `/sd` 全量/首中尾范围、`/mrp`
+  13 包重组和最终安装文件三方逐字节及 SHA-256 一致，并再次人工检查四张 PPM。
+- `/sd` 已在请求体聚合前按规范化 Host 精确分派，只接受 `/sd`、`type=2` 和唯一
+  uint32 appid；文件仍只由 MRP header appid 唯一解析，不按文件名或路径兜底。
+  GET 全量返回 200；单一 closed/open/suffix Range 返回 206；HEAD 返回完整元数据；
+  强 ETag 来自快照 SHA-256，If-Range 不匹配时按标准忽略 Range 返回完整 200。
+  非法参数/多范围、未知资源、非法方法和越界分别明确返回 400/404/405/416。
+- 运行中 `server-http.js` 热加载时发现旧 `/mrp` 快照没有 ETag 元数据；共享入口会
+  对这种已存在的同代 Buffer 补算哈希，避免不停服更新后写入 undefined 响应头。
+  冷启动加载仍通过同一 fd 完整读取、读后 fstat/header 复验和容量上限约束。
+- `server-http.js` 现在默认只绑定 `127.0.0.1`，避免仅凭可伪造 Host 从局域网读取
+  本地 MRP；确需外部访问时可显式设置 `HOST=0.0.0.0`。已用临时 18080 端口确认
+  监听地址和 `/sd` 全量响应，未中断用户现有的端口 80 进程。
+- 直连验收得到 full `200/22302`，Range `0-1799`、`1800-3599`、
+  `21600-22301` 分别为 `1800/1800/702` 字节，Content-Range 与 ETag 正确；
+  unknown appid=404，越界=416 且带 `bytes */22302`，多范围=400。三个切片均与
+  fixture 对应区间逐字节一致。
+- 独立构造 proxy2 请求后，`/mrp` 仍严格返回 13 包，偏移
+  `0,1800,...,21600`，每包 tag7=22、tag8=`22302-offset`、tag16 起止/总长
+  和 payload 一致；重组体与 `/sd` full 和 fixture 三方相等，SHA-256 均为
+  `98763f1c6bff5cdef6a3fd3c22e34168d0445359f9fdcb3c34bc381e85dbac3a`。
+- 最终加固后的 E2E 在 23.91s 内通过，目录为 `/tmp/vmrp-e2e-ikTR0a` 和
+  `/tmp/vmrp-ws-Ezi2zo`。测试先由浏览器完成 `/mrp`，避免 `/sd` 预热掩盖首包
+  加载问题；并核对本轮恰好 13 个偏移，再验证第二个有效 appid 和完整 HTTP
+  Range/错误矩阵。落盘 MRP 为 22302 字节且哈希准确；`dllist1` 为 1320
+  字节，包含目标名、MIME 和完整 `/sd` URL，完成/总长均为 22302；
+  `dwnlist.dat` 精确为 `010d0101` 且无 `.dt`。人工检查四张 PPM 确认 16 号字体焦点、
+  下载询问、`1K/21K` 进度以及下载成功/立即安装提示。
+
+### 2026-07-11: 字体 `/mrp` 协议反汇编、实现与 PPM 验收完成
+- 字体选择是独立于网页脚本的通用下载入口：`game.ext+0x3A768`
+  从表中取 URL、目标名和 MIME 后调用下载器。16 号中文字体表项为
+  `dmrp.wapproxy.sky-mobi.com/sd?...appid=422006`、`brw/wfnt16c.mrp`、
+  `application/sky-mrp`；12/16 号与中英文变体由同一表驱动。
+- `game.ext+0x21640` 的端点表是 type 0..4 对应
+  `/page2,/image,/mrp,/res,/sta`。`0x17AB8` 按目标主机选择下载类型：
+  `dmrp.wapproxy.sky-mobi.com` 始终用 `/mrp`，其他 `lib.download` 资源用
+  `/res`；两者在 `0x21474` 共用 tag10 续传请求。因此 `/mrp` 不是裸
+  HTTP 文件接口，也不是首包后切换 `/res`。
+- 现存 `tool/temp/_mrp_1783742320649.bin` 等 6 包全部为 343 字节，
+  约 6.2 秒一次重试。请求 code=3，tag1 含 `appid=422006`，tag2 是
+  `dmrp.wapproxy.sky-mobi.com`，首包无 tag10。旧代理没有 `/mrp` 分支，
+  落入 `helloworld` 纯文本响应，是重试后“获取页面错误”的直接原因。
+- 响应处理器 `game.ext+0x17488` 的普通路径在 `0x175B4` 强制要求 tag7，
+  并解析 tag16 范围三元组。这与已验证 `/res` 契约一致：tag7=u16 22、
+  tag8=`total-rangeStart`、tag16=`>III(start,end,total)`、payload 最多 1800 字节。
+- `temp/wfnt16c.mrp` 为 22302 字节 MRPG，header offset 8 声明长度一致，
+  offset 68 的 appid 为 422006，SHA-256 为
+  `98763f1c6bff5cdef6a3fd3c22e34168d0445359f9fdcb3c34bc381e85dbac3a`。
+  代理新实现按请求 query appid 扫描 `PROXY2_MRP_ROOT` 下的 MRP header，
+  唯一匹配后使用与 `/res` 共享的范围信封；缺失、重复、长度不符或续传期间
+  变更均返回明确错误，不回退到其他文件。
+- 最终审查后收紧了通用边界：首包从同一已验证 fd 读取整个包，读后再次
+  `fstat` 和校验 MRP header，然后按 appid 存为进程生命周期内的不可变内存快照。
+  这同时消除按路径重开的 TOCTOU、每分块整包重读和并发下载的跨版本混包。
+  请求没有 transfer id，所以同一进程不热切换同 appid fixture；更新资源需重启服务。
+  快照有数量、单包字节和总字节上限，超限明确报错，不驱逐旧代。所有资源错误
+  信封都带 tag7=22，避免客户端将明确错误折叠为 140。
+  `/mrp` 还校验 code=3、配置的 dmrp 服务主机、`/sd` 路径与 `type=2`，不允许任意
+  proxy2 目标按 appid 读取本地包。
+- 当前局限：用户指定的 `temp/brw/` 在工作树中不存在，无法比对真机成功包/
+  画面；已以当前客户端实际 `/mrp` 续包、PPM 和最终落盘文件完成验收。
+- 实现后已把现存真实首包直接 POST 到运行中的 `server-http.js`，再按
+  tag10 循环续传并独立解析每个响应。13 个偏移为
+  `0,1800,...,21600`，前 12 包各 1800 字节，末包 702 字节；每包
+  tag7=22，tag8=`22302-offset`，tag16 与 payload 起止严格一致。重组结果
+  22302 字节，与目标文件逐字节相等，SHA-256 一致。这一阶段只证明代理
+  协议层，后续再由客户端 E2E 和 PPM 完成验收。
+- 目标 E2E 在收紧按键时长、提示区域差异、下载列表和落盘哈希断言后多轮通过，
+  最终实现轮为 23.77s，保留目录 `/tmp/vmrp-e2e-Y4X8x9` 和
+  `/tmp/vmrp-ws-JIB10I`。真实客户端请求 `/mrp` 13 次，tag10 偏移为
+  `1800,3600,...,21600`；最终 `brw/wfnt16c.mrp` 是 22302 字节，
+  SHA-256 与指定目标一致，`dllist1` 为 1320 字节，`dwnlist.dat`
+  收敛为 4 字节。
+- 人工检查最终 PPM：`font-settings.ppm` 是“字体设置”且光标在“16号字体”；
+  `font-download-prompt.ppm` 明确显示“无该字体，是否下载？”；
+  `font-download-started.ppm` 是下载管理界面的 `wfnt16c.mrp 1K/21K`；
+  `font-download-complete.ppm` 明确显示下载成功并询问是否立即安装 16 号字体。
+  验收过程使用实际 X11 `DISPLAY=:0`，未使用 xvfb，也未启用大量 trace。
 
 ### 2026-07-11: 上游 Range/对象校验加固与当前工作树复验
 - 完成审查发现旧 `/res` 每收到一个 1800 字节客户端范围，都会从上游重新缓冲

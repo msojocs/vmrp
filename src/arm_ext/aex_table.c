@@ -2244,7 +2244,6 @@ aex_done:
 }
 
 static void aex_t125(ArmExtModule *m, AexTableCtx *c) {
-    (void)m;
     uint32_t r0 = c->r0;
     uint32_t r1 = c->r1;
     uint32_t r2 = c->r2;
@@ -2256,17 +2255,25 @@ static void aex_t125(ArmExtModule *m, AexTableCtx *c) {
             char read_pack_host_path[PATH_MAX];
             read_pack_host_path[0] = '\0';
             const char *read_name = arm_str(m, r0);
-            uc_mem_read(m->uc, EXT_TABLE_ADDR + 100 * 4, &packp, 4);
-            uc_mem_read(m->uc, EXT_TABLE_ADDR + 104 * 4, &ramp_slot, 4);
-            uc_mem_read(m->uc, EXT_TABLE_ADDR + 105 * 4, &raml_slot, 4);
+            ArmExtNestedModule *owner =
+                arm_ext_resource_owner_for_lr(m, NULL, NULL);
+            uint32_t table_addr = arm_ext_read_file_table_context(m, owner);
+            if (!table_addr) goto aex_done;
+            /*
+             * A private child invokes this host bridge through its own module
+             * record.  Its loader can replace package/RAM slots independently
+             * of the primary EXT table, so read all three from the LR-selected
+             * ABI context.
+             */
+            packp = arm_ext_read_u32_or_zero_(m, table_addr + 100u * 4u);
+            ramp_slot = arm_ext_read_u32_or_zero_(m, table_addr + 104u * 4u);
+            raml_slot = arm_ext_read_u32_or_zero_(m, table_addr + 105u * 4u);
             if (ramp_slot) uc_mem_read(m->uc, ramp_slot, &ramp, 4);
             if (raml_slot) uc_mem_read(m->uc, raml_slot, &raml, 4);
 
             void *hp = NULL;
             const char *pack = arm_str(m, packp);
             const char *host_pack = arm_ext_pack_to_host_path(m, pack);
-            ArmExtNestedModule *owner =
-                arm_ext_resource_owner_for_lr(m, NULL, NULL);
             uint32_t owner_p_diag = owner ? owner->p_addr : 0;
             uint32_t owner_h_diag = owner ? owner->helper_addr : 0;
             int pack_is_root =
