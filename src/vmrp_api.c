@@ -34,6 +34,8 @@ static int screen_dirty = 0;
 static int pending_timer_ms = 0;
 static int api_running = 0;
 static int image_processing_mode = VMRP_IMAGE_PROCESSING_NATIVE;
+static char api_dns_map[VMRP_DNS_MAP_LIMIT];
+static int api_dns_map_set = 0;
 
 static int edit_active = 0;
 static int32_t edit_max_size = 0;
@@ -565,6 +567,8 @@ VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h) {
     screen_dirty = 0;
     pending_timer_ms = 0;
     image_processing_mode = VMRP_IMAGE_PROCESSING_NATIVE;
+    api_dns_map[0] = '\0';
+    api_dns_map_set = 0;
     free_edit_text_snapshot();
     edit_active = 0;
     api_running = 0;
@@ -619,6 +623,9 @@ VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char
     snprintf(args.mrp_path, sizeof(args.mrp_path), "%s", mrp_path);
     snprintf(args.ext_name, sizeof(args.ext_name), "%s", ext);
     if (entry && *entry) snprintf(args.entry, sizeof(args.entry), "%s", entry);
+    if (api_dns_map_set) {
+        snprintf(args.dns_map, sizeof(args.dns_map), "%s", api_dns_map);
+    }
 
     VMRP_API_LOG("[vmrp_api] startVmrp...\n");
     int ret = startVmrp(&args);
@@ -644,13 +651,34 @@ VMRP_EXPORT void vmrp_api_destroy(void) {
     screen_dirty = 0;
     pending_timer_ms = 0;
     api_running = 0;
+    api_dns_map[0] = '\0';
+    api_dns_map_set = 0;
     free_hold_edit_text();
     free_edit_text_snapshot();
     edit_active = 0;
 }
 
 VMRP_EXPORT int vmrp_api_set_dns_map(const char *map) {
-    return configureVmrpDnsMap(map) == 0 ? 0 : -1;
+    char copy[VMRP_DNS_MAP_LIMIT];
+
+    if (!map || !*map) {
+        api_dns_map[0] = '\0';
+        api_dns_map_set = 0;
+        return configureVmrpDnsMap(map) == 0 ? 0 : -1;
+    }
+
+    int n = snprintf(copy, sizeof(copy), "%s", map);
+    if (n < 0 || (size_t)n >= sizeof(copy)) {
+        return -1;
+    }
+    if (configureVmrpDnsMap(copy) != 0) {
+        api_dns_map[0] = '\0';
+        api_dns_map_set = 0;
+        return -1;
+    }
+    snprintf(api_dns_map, sizeof(api_dns_map), "%s", copy);
+    api_dns_map_set = 1;
+    return 0;
 }
 
 VMRP_EXPORT int vmrp_api_event(int code, int p0, int p1) {
