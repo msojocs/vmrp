@@ -1,9 +1,9 @@
 const http = require('node:http');
 
-const port = Number(process.env.PORT || 80);
+const port = Number(process.env.PORT || 8090);
 // The proxy serves local MRP fixtures; opt in explicitly before exposing it
 // beyond the emulator host because HTTP Host is routing metadata, not auth.
-const host = process.env.HOST || '127.0.0.1';
+const host = process.env.HOST || '0.0.0.0';
 const keepAliveTimeoutMs = Number(process.env.KEEP_ALIVE_TIMEOUT_MS || 5000);
 
 function loadProxyHandler() {

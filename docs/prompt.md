@@ -533,11 +533,15 @@ tool/server-http.js已启动，修改tool/proxy.js来实现代理服务器。
 充分利用子Agent。
 记得存储记忆数据。
 
-测试用例`test/e2e/wbrw/temp.test.ts`执行会自动访问网页，但是跟实际有差别，分析并修复BUG。
+测试用例`test/e2e/wbrw/temp.test.ts`执行会自动访问网页，但是图片加载失败。
 
-预期结果：测试用例和实际能加载页面。
-实际结果：测试用例可以加载页面；
-手动操作在输入框使用ctrl+v输入网址后，页面无法正确加载，并且菜单退出选项无效，仿佛卡在某种状态。
+预期结果：测试用例实际能加载图片。
+实际结果：图片加载失败
+`/home/msojocs/github/mrp-store/backend/internal/service/mrp_proxy.go`中的`handleProxy2Image`实现可能有问题；
+真机似乎是把图片保存为gif后缀，二进制还是原始内容；看看s.handleProxy2Image(w, r, body)实现有什么问题
+直接修改go代码，服务会自动重启生效。
+至少：
+1. logo显示
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。
@@ -546,7 +550,6 @@ tool/server-http.js已启动，修改tool/proxy.js来实现代理服务器。
 深入反汇编检测代理机制。
 一定要截图检测PPM，来验证实现是否成功。
 不能写特定场景代码，如if(is_xxx_app()) {...}
-如果修改C代码，一定要使用环境变量`SDL_VIDEODRIVER=dummy`执行E2E测试用例。
 
 在分析与解决过程中，把进度定期保存至文档中。
 充分利用子Agent。

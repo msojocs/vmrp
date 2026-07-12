@@ -236,3 +236,82 @@
 ## [2026-07-12T04:06:31.247Z] lint
 - **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-record-pack-slot-fix.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-play-mr-ucs2gb-caller-owned-output-pointer-fix.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-proxy2-font-mrp-download.md, wbrw-proxy2-web-page-rendering.md
 - **Summary:** Lint: 19 issues (16 orphan, 0 stale, 1 broken, 0 contradictions)
+## [2026-07-12T10:37:19.291Z] ingest
+- **Pages:** wbrw-go-html2sky-rendering-progress-2026-07-12.md
+- **Summary:** Created new page "WBRW Go html2sky rendering progress 2026-07-12"
+
+## [2026-07-12T10:37:19.318Z] add
+- **Pages:** wbrw-go-html2sky-rendering-progress-2026-07-12.md
+- **Summary:** Created wiki page wbrw-go-html2sky-rendering-progress-2026-07-12.md
+
+## [2026-07-12T11:32:16.280Z] ingest
+- **Pages:** wbrw-go-html2sky-rendering-final-verification-2026-07-12.md
+- **Summary:** Created new page "WBRW Go html2sky rendering final verification 2026-07-12"
+
+## [2026-07-12T11:32:16.286Z] add
+- **Pages:** wbrw-go-html2sky-rendering-final-verification-2026-07-12.md
+- **Summary:** Created wiki page wbrw-go-html2sky-rendering-final-verification-2026-07-12.md
+
+## [2026-07-12T11:41:32.802Z] ingest
+- **Pages:** wbrw-html2sky-completion-audit-2026-07-12-latest.md
+- **Summary:** Created new page "WBRW html2sky completion audit 2026-07-12 latest"
+
+## [2026-07-12T11:41:32.809Z] add
+- **Pages:** wbrw-html2sky-completion-audit-2026-07-12-latest.md
+- **Summary:** Created wiki page wbrw-html2sky-completion-audit-2026-07-12-latest.md
+
+## [2026-07-12T11:46:39.491Z] ingest
+- **Pages:** wbrw-html2sky-post-cleanup-final-evidence-2026-07-12.md
+- **Summary:** Created new page "WBRW html2sky post-cleanup final evidence 2026-07-12"
+
+## [2026-07-12T11:46:39.500Z] add
+- **Pages:** wbrw-html2sky-post-cleanup-final-evidence-2026-07-12.md
+- **Summary:** Created wiki page wbrw-html2sky-post-cleanup-final-evidence-2026-07-12.md
+
+## [2026-07-12T12:38:25.071Z] ingest
+- **Pages:** wbrw-html2sky-native-elements-and-ppm-verification-2026-07-12.md
+- **Summary:** Created new page "WBRW html2sky native elements and PPM verification 2026-07-12"
+
+## [2026-07-12T12:49:59.988Z] ingest
+- **Pages:** wbrw-html2sky-native-elements-and-ppm-verification-2026-07-12.md
+- **Summary:** Updated "WBRW html2sky native elements and PPM verification 2026-07-12" with new content
+
+## [2026-07-12T12:50:00.319Z] lint
+- **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-record-pack-slot-fix.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-play-mr-ucs2gb-caller-owned-output-pointer-fix.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-go-html2sky-rendering-final-verification-2026-07-12.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md, wbrw-html2sky-completion-audit-2026-07-12-latest.md, wbrw-html2sky-native-elements-and-ppm-verification-2026-07-12.md, wbrw-html2sky-post-cleanup-final-evidence-2026-07-12.md, wbrw-proxy2-font-mrp-download.md, wbrw-proxy2-web-page-rendering.md
+- **Summary:** Lint: 25 issues (21 orphan, 0 stale, 1 broken, 1 contradictions)
+
+## [2026-07-12T13:06:43.621Z] ingest
+- **Pages:** wbrw-html2sky-native-elements-and-ppm-verification-2026-07-12.md
+- **Summary:** Updated "WBRW html2sky native elements and PPM verification 2026-07-12" with new content
+
+## [2026-07-13T03:47:00Z] ingest
+- **Pages:** wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md
+- **Summary:** Recorded the completed proxy2 bitmap-logo fix, selector-12 decoder evidence, generic PNG/JPEG-to-GIF adaptation, and final no-xvfb PPM proof.
+
+## [2026-07-13T03:55:50Z] verify
+- **Pages:** wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md
+- **Summary:** Re-ran the no-xvfb bitmap E2E after explicit image-request validation, retained and inspected the final PPM, and refreshed its pixel, cache, and hash evidence.
+
+## [2026-07-13T04:00:06Z] verify
+- **Pages:** wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md
+- **Summary:** Hardened GIF/BMP pass-through against malformed streams, re-ran backend checks and the no-xvfb E2E, and replaced the final retained PPM evidence.
+
+## [2026-07-13T04:23:29Z] complete
+- **Pages:** wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md
+- **Summary:** Closed the generic WBRW cache-publication gate, added strict image envelopes and resource limits, restored footer-band coverage, and retained the final no-xvfb bitmap PPM/GIF evidence.
+
+## [2026-07-13T04:35:35Z] complete
+- **Pages:** wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md
+- **Summary:** Completed the post-review GIF preallocation guard, RFC corrected-age handling, concrete image negotiation, quoted cache parsing, and final no-xvfb PPM/GIF verification.
+
+## [2026-07-13T05:38:00Z] verify
+- **Pages:** wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md
+- **Summary:** Replaced WBRW's exposed transparent-black GIF canvas with a source-derived opaque matte, added a white-background E2E assertion, and retained the final PPM/GIF evidence.
+
+## [2026-07-13T06:01:24Z] complete
+- **Pages:** wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md
+- **Summary:** Fitted proxy2 images to WBRW tag-31 layout bounds without upscaling or cropping, proved the complete 220x44 logo and rightmost glyph in a no-xvfb PPM, and recorded focused test/race/vet results.
+
+## [2026-07-13T06:35:53Z] complete
+- **Pages:** wbrw-go-html2sky-rendering-progress-2026-07-12.md
+- **Summary:** Preserved generic CSS background-container identity in html2sky, nested pagination rows and the jump form under one SKY parent, and proved the former white gap is continuously green in the final no-xvfb PPM.

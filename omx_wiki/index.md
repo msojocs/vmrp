@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 20 pages | Last updated: 2026-07-12T04:04:54.550Z
+> 26 pages | Last updated: 2026-07-13T06:35:53Z
 
 ## debugging
 
@@ -20,10 +20,16 @@
 - [Optwar exit plugin component update stall](optwar-exit-plugin-component-update-stall.md) — # Optwar exit plugin component update stall
 - [Optwar exit plugin no-network investigation](optwar-exit-plugin-no-network-investigation.md) — # Optwar exit plugin no-network investigation
 - [RX4.5 ARM EXT 0x80000000 Platform IO Mapping](rx4-5-arm-ext-0x80000000-platform-io-mapping.md) — # RX4.5 ARM EXT 0x80000000 Platform IO Mapping
+- [WBRW html2sky native elements and PPM verification 2026-07-12](wbrw-html2sky-native-elements-and-ppm-verification-2026-07-12.md) — # WBRW html2sky native elements and PPM verification 2026-07-12
 - [wbrw input paste UCS2 table77 fix](wbrw-input-paste-ucs2-table77-fix.md) — # wbrw input paste UCS2 table77 fix
+- [WBRW proxy2 bitmap logo GIF adaptation 2026-07-13](wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md) — # WBRW proxy2 bitmap logo GIF adaptation 2026-07-13
 - [WBRW proxy2 font MRP download](wbrw-proxy2-font-mrp-download.md) — # WBRW proxy2 font MRP download
 - [WBRW proxy2 web page rendering](wbrw-proxy2-web-page-rendering.md) — # WBRW proxy2 web page rendering
 
 ## session-log
 
+- [WBRW Go html2sky rendering final verification 2026-07-12](wbrw-go-html2sky-rendering-final-verification-2026-07-12.md) — # WBRW Go html2sky rendering final verification 2026-07-12
+- [WBRW Go html2sky rendering progress 2026-07-12](wbrw-go-html2sky-rendering-progress-2026-07-12.md) — # WBRW Go html2sky rendering progress 2026-07-12
+- [WBRW html2sky completion audit 2026-07-12 latest](wbrw-html2sky-completion-audit-2026-07-12-latest.md) — # WBRW html2sky completion audit 2026-07-12 latest
+- [WBRW html2sky post-cleanup final evidence 2026-07-12](wbrw-html2sky-post-cleanup-final-evidence-2026-07-12.md) — # WBRW html2sky post-cleanup final evidence 2026-07-12
 - [WBRW manual clipboard and menu exit verification](wbrw-manual-clipboard-and-menu-exit-verification.md) — # WBRW manual clipboard and menu exit verification
