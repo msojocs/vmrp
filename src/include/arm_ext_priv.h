@@ -58,6 +58,7 @@ int arm_ext_diag_on(void);
 int arm_ext_trace_on(void);
 int arm_ext_trace_pc_on(void);
 int arm_ext_timer_liveness_diag_on(void);
+int arm_ext_timer_owner_diag_on(void);
 int arm_ext_screen_diag_on(void);
 
 /* ---- arm_ext_executor.c 暂存主体中,被拆分单元调用的符号 ---- */
@@ -68,6 +69,7 @@ uint32_t read_game_timer_head(ArmExtModule *m, uint32_t grw);
 void write_game_timer_head(ArmExtModule *m, uint32_t grw, uint32_t val);
 int arm_ext_foreground_child_has_compact_timer_queue(ArmExtModule *m);
 int arm_ext_foreground_child_has_frame_timer_queue(ArmExtModule *m);
+int arm_ext_primary_has_compact_timer_queue(ArmExtModule *m);
 int arm_ext_wrapper_dispatch_is_busy(ArmExtModule *m);
 void capture_timer_dispatches(ArmExtModule *m);
 void sync_timer_state_from_arm(ArmExtModule *m);
@@ -75,6 +77,9 @@ int internal_slot_read(ArmExtModule *m, uint32_t slot, uint32_t *out);
 ArmExtNestedModule *arm_ext_find_nested_module_by_p(ArmExtModule *m,
                                                     uint32_t p_addr);
 int arm_ext_child_has_compact_timer_walker(const uint8_t *code, uint32_t len);
+int arm_ext_find_compact_timer_scheduler(const uint8_t *code, uint32_t len,
+                                         uint32_t *scheduler_off,
+                                         uint32_t *walker_file_off);
 uint32_t arm_ext_active_rw_base(ArmExtModule *m);
 int arm_ext_find_first_registered_code_overlap(ArmExtModule *m, uint32_t addr,
                                                uint32_t len,
@@ -155,6 +160,7 @@ uint16_t *arm_ext_snapshot_screen(ArmExtModule *m);
 void arm_ext_note_screen_damage_diff(ArmExtModule *m, const uint16_t *before);
 void arm_ext_free_row_spans(ArmExtRowSpans *spans);
 void arm_ext_diag_dump_wrapper_compact_timer_nodes(ArmExtModule *m, const char *tag);
+void arm_ext_diag_dump_primary_compact_timer_nodes(ArmExtModule *m, const char *tag);
 void arm_ext_claim_foreground_screen_diff(ArmExtModule *m, uint32_t owner_p_addr, uint32_t owner_helper_addr, const uint16_t *before);
 int arm_ext_should_accept_visible_present(ArmExtModule *m, uint32_t *claim_p_addr, uint32_t *claim_helper_addr);
 int arm_ext_screen_context_targets_primary(ArmExtModule *m, const ArmExtScreenContext *ctx);

@@ -44,7 +44,8 @@ int arm_ext_foreground_child_has_frame_timer_queue(ArmExtModule *m) {
 
 static int arm_ext_compact_timer_node_is_valid(ArmExtModule *m,
                                                uint32_t node) {
-    return m && node && arm_ptr(m, node) && arm_ptr(m, node + 0x1Cu);
+    return m && node && arm_ptr(m, node) && arm_ptr(m, node + 0x1Cu) &&
+           arm_ext_read_u32_or_zero_(m, node) == ARM_EXT_COMPACT_TIMER_MAGIC;
 }
 
 static int arm_ext_compact_timer_queue_at(ArmExtModule *m,
@@ -53,12 +54,9 @@ static int arm_ext_compact_timer_queue_at(ArmExtModule *m,
     if (!rw_base || !arm_ptr(m, rw_base + scheduler_off + 0x10u))
         return 0;
 
-    /*
-     * Disassembled compact helpers use an R9-relative scheduler header:
-     * [base+8] is the queued head and [base+12] is the active/current list.
-     * Two SDK layouts observed so far place that header at R9+0xC0 and
-     * R9+0x248; both share the same walker byte pattern above.
-     */
+    /* The matched walker supplies this module's R9-relative scheduler offset.
+     * Its header ABI keeps queued at +8 and active/current at +12 even when
+     * different SDK layouts place the header at widely different offsets. */
     uint32_t queued = arm_ext_read_u32_or_zero_(
         m, rw_base + scheduler_off + 0x08u);
     uint32_t current = arm_ext_read_u32_or_zero_(
@@ -72,8 +70,7 @@ int arm_ext_foreground_child_has_compact_timer_queue(ArmExtModule *m) {
     ArmExtNestedModule *mod = arm_ext_find_nested_module_by_p(
         m, m->active_p_addr);
     if (!mod || !mod->file_addr || !mod->file_len) return 0;
-    const uint8_t *code = (const uint8_t *)arm_ptr(m, mod->file_addr);
-    if (!arm_ext_child_has_compact_timer_walker(code, mod->file_len))
+    if (!mod->compact_timer_scheduler_off)
         return 0;
 
     /*
@@ -83,8 +80,17 @@ int arm_ext_foreground_child_has_compact_timer_queue(ArmExtModule *m) {
      * wrapper-owned host timer tick for the foreground child.
      */
     uint32_t rw_base = arm_ext_active_rw_base(m);
-    return arm_ext_compact_timer_queue_at(m, rw_base, AEX_COMPACT_SCHED_OFF_A) ||
-           arm_ext_compact_timer_queue_at(m, rw_base, AEX_COMPACT_SCHED_OFF_B);
+    return arm_ext_compact_timer_queue_at(
+        m, rw_base, mod->compact_timer_scheduler_off);
+}
+
+int arm_ext_primary_has_compact_timer_queue(ArmExtModule *m) {
+    if (!m || !m->primary_p_addr) return 0;
+    ArmExtNestedModule *mod = arm_ext_find_nested_module_by_p(
+        m, m->primary_p_addr);
+    if (!mod || !mod->compact_timer_scheduler_off) return 0;
+    return arm_ext_compact_timer_queue_at(
+        m, arm_ext_primary_rw_base_(m), mod->compact_timer_scheduler_off);
 }
 
 int arm_ext_wrapper_dispatch_is_busy(ArmExtModule *m) {
@@ -339,4 +345,3 @@ void capture_timer_dispatches(ArmExtModule *m) {
         }
     }
 }
-

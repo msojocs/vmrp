@@ -193,11 +193,14 @@ static void e2e_inject_key(SDL_Keycode key, int hold_ms, int fd) {
     e2e_write_line(fd, resp);
 }
 
-static void e2e_inject_paste(const char *text, int fd) {
+static int e2e_set_clipboard(const char *text) {
     if (SDL_SetClipboardText(text ? text : "") != 0) {
-        e2e_write_line(fd, "ERR clipboard");
-        return;
+        return 0;
     }
+    return 1;
+}
+
+static void e2e_inject_paste_shortcut(int fd) {
     /* Ctrl+V is a platform-edit action, not a Mythroad key.  Carry the Ctrl
      * modifier in the SDL event and mirror it into SDL's mod state so the main
      * edit-mode branch observes the same condition as a real keyboard paste. */
@@ -209,6 +212,14 @@ static void e2e_inject_paste(const char *text, int fd) {
     SDL_Delay(1);
     SDL_SetModState(old_mod);
     e2e_write_line(fd, "OK paste");
+}
+
+static void e2e_inject_paste(const char *text, int fd) {
+    if (!e2e_set_clipboard(text)) {
+        e2e_write_line(fd, "ERR clipboard");
+        return;
+    }
+    e2e_inject_paste_shortcut(fd);
 }
 
 static void e2e_handle_wait_draw(VmrpE2eControl *control, int draw_count, int timeout_ms, int fd) {
@@ -292,6 +303,13 @@ static void e2e_handle_client(VmrpE2eControl *control, int fd) {
         }
         /* 可选第二参数 = 本次按住毫秒数（覆盖 VMRP_E2E_HOLD_MS） */
         e2e_inject_key(key, b[0] ? atoi(b) : 0, fd);
+    } else if (strcasecmp(op, "SET_CLIPBOARD") == 0) {
+        const char *text = line + strlen(op);
+        while (*text == ' ' || *text == '\t') text++;
+        e2e_write_line(fd, e2e_set_clipboard(text)
+                               ? "OK clipboard" : "ERR clipboard");
+    } else if (strcasecmp(op, "PASTE_SHORTCUT") == 0) {
+        e2e_inject_paste_shortcut(fd);
     } else if (strcasecmp(op, "PASTE") == 0) {
         const char *text = line + strlen(op);
         while (*text == ' ' || *text == '\t') text++;

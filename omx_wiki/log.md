@@ -211,3 +211,22 @@
 ## [2026-07-11T11:28:28.562Z] lint
 - **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-record-pack-slot-fix.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-proxy2-font-mrp-download.md, wbrw-proxy2-web-page-rendering.md
 - **Summary:** Lint: 18 issues (15 orphan, 0 stale, 1 broken, 0 contradictions)
+## [2026-07-12T01:14:44.827Z] ingest
+- **Pages:** wbrw-manual-clipboard-and-menu-exit-verification.md
+- **Summary:** Created new page "WBRW manual clipboard and menu exit verification"
+
+## [2026-07-12T01:14:44.831Z] add
+- **Pages:** wbrw-manual-clipboard-and-menu-exit-verification.md
+- **Summary:** Created wiki page wbrw-manual-clipboard-and-menu-exit-verification.md
+
+## [2026-07-12T01:19:32.846Z] lint
+- **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-record-pack-slot-fix.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-manual-clipboard-and-menu-exit-verification.md, wbrw-proxy2-font-mrp-download.md, wbrw-proxy2-web-page-rendering.md
+- **Summary:** Lint: 19 issues (16 orphan, 0 stale, 1 broken, 0 contradictions)
+
+## [2026-07-12T01:21:38.745Z] lint
+- **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-record-pack-slot-fix.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-proxy2-font-mrp-download.md, wbrw-proxy2-web-page-rendering.md
+- **Summary:** Lint: 18 issues (15 orphan, 0 stale, 1 broken, 0 contradictions)
+
+## [2026-07-12T10:09:53+08:00] ingest
+- **Pages:** wbrw-manual-clipboard-and-menu-exit-verification.md
+- **Summary:** Corrected the premature zero-delay result; recorded the edit-mode one-shot timer loss, generic main-loop fix, no-SCREEN clean and persisted-state verification, PPM evidence, guest exit, and cross-application regressions.

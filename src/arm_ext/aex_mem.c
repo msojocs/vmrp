@@ -570,22 +570,18 @@ static void arm_ext_collect_primary_compact_timer_nodes(ArmExtModule *m,
     uint32_t rw = arm_ext_primary_rw_base_(m);
     if (!rw) return;
 
-    /*
-     * gzwdzjs game.ext proves the compact game scheduler at R9+0x84:
-     * +0x08 is the delta queue, +0x0c is the fired/current queue, and timer
-     * nodes carry 0x79ABBCCF at word 0.  Trying R9+0x80 as well preserves the
-     * older read_game_timer_head() offsets without naming a package.
-     */
-    static const uint32_t sched_offsets[] = { 0x84u, 0x80u };
-    for (uint32_t i = 0; i < sizeof(sched_offsets) / sizeof(sched_offsets[0]);
-         ++i) {
-        uint32_t off = sched_offsets[i];
-        if (!arm_ext_addr_range_mapped(m, rw + off, 0x14u))
-            continue;
-        arm_ext_collect_compact_timer_queue_pair(
-            m, ranges, count,
-            arm_ext_read_u32_or_zero_(m, rw + off + 0x08u),
-            arm_ext_read_u32_or_zero_(m, rw + off + 0x0Cu), 1);
+    ArmExtNestedModule *mod = arm_ext_find_nested_module_by_p(
+        m, m->primary_p_addr);
+    if (mod && mod->compact_timer_scheduler_off) {
+        uint32_t off = mod->compact_timer_scheduler_off;
+        if (arm_ext_addr_range_mapped(m, rw + off, 0x14u)) {
+            /* Protect the scheduler discovered from this module's own walker,
+             * including allocator headers used by primary game EXT nodes. */
+            arm_ext_collect_compact_timer_queue_pair(
+                m, ranges, count,
+                arm_ext_read_u32_or_zero_(m, rw + off + 0x08u),
+                arm_ext_read_u32_or_zero_(m, rw + off + 0x0Cu), 1);
+        }
     }
     arm_ext_collect_compact_timer_chain(m, ranges, count,
                                         read_game_timer_head(m, rw),
@@ -619,18 +615,12 @@ static void arm_ext_collect_active_compact_timer_nodes(ArmExtModule *m,
         m, m->active_p_addr);
     if (!mod || !mod->file_addr || !mod->file_len)
         return;
-    const uint8_t *code = (const uint8_t *)arm_ptr(m, mod->file_addr);
-    if (!arm_ext_child_has_compact_timer_walker(code, mod->file_len))
+    if (!mod->compact_timer_scheduler_off)
         return;
 
     uint32_t rw = arm_ext_active_rw_base(m);
-    static const uint32_t sched_offsets[] = { AEX_COMPACT_SCHED_OFF_A,
-                                              AEX_COMPACT_SCHED_OFF_B };
-    for (uint32_t i = 0; i < sizeof(sched_offsets) / sizeof(sched_offsets[0]);
-         ++i) {
-        uint32_t off = sched_offsets[i];
-        if (!arm_ext_addr_range_mapped(m, rw + off, 0x14u))
-            continue;
+    uint32_t off = mod->compact_timer_scheduler_off;
+    if (arm_ext_addr_range_mapped(m, rw + off, 0x14u)) {
         arm_ext_collect_compact_timer_queue_pair(
             m, ranges, count,
             arm_ext_read_u32_or_zero_(m, rw + off + 0x08u),
@@ -1079,5 +1069,4 @@ uint32_t arm_ext_meta_alloc(ArmExtModule *m, uint32_t len) {
     m->executor_meta_top += len;
     return ret;
 }
-
 
