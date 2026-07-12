@@ -1610,10 +1610,11 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     }
     /* arm_ext_call 后检查 game timer head (state[8]) 变化：wrapper 的
      * suspend 会清零 game_rw[0x8C]，保存旧值以便 resume 时恢复。 */
-    int primary_game_timer_live_post = 0;
+    int primary_game_timer_live_post =
+        arm_ext_primary_has_compact_timer_queue(m);
     if (_ac_grw && _ac_s8_pre) {
         uint32_t _ac_s8_post = read_game_timer_head(m, _ac_grw);
-        primary_game_timer_live_post = _ac_s8_post != 0;
+        primary_game_timer_live_post |= _ac_s8_post != 0;
         if (arm_ext_diag_on()) {
             printf("DIAG game_timer_head grw=0x%X pre=0x%X post=0x%X code=%d\n",
                    _ac_grw, _ac_s8_pre, _ac_s8_post, code);
@@ -1631,6 +1632,36 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         (arm_ext_foreground_child_has_frame_timer_queue(m) ||
          arm_ext_foreground_child_has_compact_timer_queue(m));
     int wrapper_dispatch_busy_post = arm_ext_wrapper_dispatch_is_busy(m);
+    if (code == 2 && m->wrapper_compact_timer_scheduler_off &&
+        m->timer_p_addr == m->p_addr &&
+        m->timer_helper_addr == m->helper_addr &&
+        !wrapper_timer_live_post && primary_game_timer_live_post &&
+        !foreground_child_timer_live_post) {
+        /* The compact wrapper bridge can drain while the primary module still
+         * has a structurally valid scheduler node.  Release the empty wrapper
+         * owner so one host tick reaches the primary walker and can rearm it. */
+        m->timer_p_addr = m->primary_p_addr;
+        m->timer_helper_addr = m->primary_helper_addr;
+        if (!m->host_timer_pending) {
+            arm_ext_keep_host_tick_alive(m);
+        }
+        if (arm_ext_diag_on()) {
+            printf("DIAG timer_owner_clear emptyWrapper primaryCompact=1\n");
+        }
+    }
+    if (code == 2 && m->wrapper_compact_timer_scheduler_off &&
+        call_p_addr == m->primary_p_addr && wrapper_timer_live_post &&
+        m->timer_p_addr == m->primary_p_addr &&
+        m->timer_helper_addr == m->primary_helper_addr) {
+        /* A primary compact callback rearms its outer extChunk node through the
+         * wrapper timerStart veneer.  Once that real wrapper queue reappears,
+         * its dispatcher owns the next tick again. */
+        m->timer_p_addr = m->p_addr;
+        m->timer_helper_addr = m->helper_addr;
+        if (arm_ext_diag_on()) {
+            printf("DIAG timer_owner_transfer primaryCompact->wrapper\n");
+        }
+    }
     if (arm_ext_timer_liveness_diag_on() && code == 2) {
         printf("DIAG timer_liveness suspended=%d fgChildPre=%d fgChildPost=%d childTimerPre=%d childTimerPost=%d wrapperBusy=%d wrapperTimer=%d primaryTimer=%d openSockets=%d hostTimer=%d mrTimer=%d activeP=0x%X activeH=0x%X timerP=0x%X timerH=0x%X callP=0x%X callH=0x%X\n",
                suspended_foreground_child, foreground_child_active,
@@ -1895,6 +1926,16 @@ uint32 arm_ext_primary_helper(ArmExtModule *m) {
     uint32_t ext_chunk = 0, dispatch = 0;
     if (m->timer_p_addr && m->timer_helper_addr &&
         !(m->timer_p_addr == m->p_addr && m->timer_helper_addr == m->helper_addr)) {
+        ArmExtNestedModule *primary_mod = arm_ext_find_nested_module_by_p(
+            m, m->primary_p_addr);
+        if (m->timer_p_addr == m->primary_p_addr &&
+            m->timer_helper_addr == m->primary_helper_addr &&
+            primary_mod && primary_mod->compact_timer_walker_addr) {
+            /* mr_timer only tests this return value for truth.  Report the
+             * byte-proven direct walker so call_dispatch can preserve primary
+             * R9 instead of re-entering the helper's wrapper routing path. */
+            ret = primary_mod->compact_timer_walker_addr;
+        }
         /* gxdzc/netpay 的“请稍后...”路径由 wrapper 自己在 0xE83A69
          * 启动 10ms timer；该 owner 不能屏蔽宿主侧 wrapper timer 路由。
          * 只有 timer 属于后加载子插件时，才跳过 wrapper timer，避免把
@@ -1902,6 +1943,15 @@ uint32 arm_ext_primary_helper(ArmExtModule *m) {
         goto out;
     }
     if (!(m->primary_helper_addr && m->primary_helper_addr != m->helper_addr)) {
+        goto out;
+    }
+    if (m->wrapper_compact_timer_scheduler_off &&
+        m->timer_p_addr == m->p_addr &&
+        m->timer_helper_addr == m->helper_addr) {
+        /* The compact wrapper's public code=2 branch calls its discovered
+         * walker and then runs wrapper state post-processing.  Directly
+         * entering only the walker can leave a primary due node detached from
+         * the scheduler current head when the outer bridge drains. */
         goto out;
     }
     if (m->primary_child_reopen_timer_needed) {
@@ -1987,6 +2037,81 @@ out:
     return ret;
 }
 
+static int arm_ext_call_primary_compact_dispatch(
+    ArmExtModule *m, ArmExtNestedModule *primary_mod, uint32_t timer_interval) {
+    if (!m || !primary_mod || !primary_mod->compact_timer_walker_addr)
+        return MR_FAILED;
+    uint32_t rw = arm_ext_primary_rw_base_(m);
+    if (!rw) return MR_FAILED;
+
+    uint32_t sp = EXT_STACK_ADDR + EXT_STACK_SIZE - 32u;
+    uint32_t stack_args[8] = {0};
+    uc_mem_write(m->uc, sp, stack_args, sizeof(stack_args));
+    reg_write32(m->uc, UC_ARM_REG_R9, rw);
+    reg_write32(m->uc, UC_ARM_REG_R0, 0);
+    reg_write32(m->uc, UC_ARM_REG_R1, 0);
+    reg_write32(m->uc, UC_ARM_REG_R2, 0);
+    reg_write32(m->uc, UC_ARM_REG_R3, 0);
+    reg_write32(m->uc, UC_ARM_REG_SP, sp);
+
+    uint16 *saved_screen_buf = NULL;
+    uint32_t present_depth_before = 0;
+    enter_screen_context(m, &saved_screen_buf, &present_depth_before);
+    /* The host event has been consumed.  A guest table[31] call below records
+     * the exact next interval and sets this flag again. */
+    m->host_timer_pending = 0;
+    sync_internal_state_to_arm(m);
+    arm_ext_diag_dump_primary_compact_timer_nodes(m, "primary_dispatch_pre");
+    arm_ext_sanitize_compact_timer_heaps(m);
+
+    m->current_p_addr = m->primary_p_addr;
+    m->current_helper_addr = primary_mod->compact_timer_walker_addr;
+    int previous_in_dispatch = m->in_dispatch;
+    m->in_dispatch = 1;
+    int ret = run_arm_with_sp(m, primary_mod->compact_timer_walker_addr, sp);
+    m->in_dispatch = previous_in_dispatch;
+    m->current_p_addr = 0;
+    m->current_helper_addr = 0;
+
+    sync_timer_state_from_arm(m);
+    leave_screen_context(m, saved_screen_buf, present_depth_before);
+    capture_timer_dispatches(m);
+    arm_ext_sanitize_compact_timer_heaps(m);
+    arm_ext_diag_dump_primary_compact_timer_nodes(m, "primary_dispatch_post");
+
+    int wrapper_live = arm_ext_wrapper_has_timer_queue(m);
+    int primary_live = arm_ext_primary_has_compact_timer_queue(m);
+    int third_party_owner =
+        m->timer_p_addr && m->timer_helper_addr &&
+        !(m->timer_p_addr == m->p_addr &&
+          m->timer_helper_addr == m->helper_addr) &&
+        !(m->timer_p_addr == m->primary_p_addr &&
+          m->timer_helper_addr == m->primary_helper_addr);
+    /* A due callback may start a timer for a newly loaded child.  Its
+     * table[31] owner is newer than the compact queues sampled here. */
+    if (!third_party_owner && wrapper_live) {
+        /* The primary walker rearmed its outer bridge through the wrapper
+         * timer veneer, so the next guest-scheduled tick belongs there. */
+        m->timer_p_addr = m->p_addr;
+        m->timer_helper_addr = m->helper_addr;
+    } else if (!third_party_owner && primary_live) {
+        m->timer_p_addr = m->primary_p_addr;
+        m->timer_helper_addr = m->primary_helper_addr;
+    } else if (!third_party_owner) {
+        m->timer_p_addr = 0;
+        m->timer_helper_addr = 0;
+    }
+    if (arm_ext_diag_on() || arm_ext_timer_owner_diag_on()) {
+        printf("DIAG primary_compact_dispatch walker=0x%X wrapperLive=%d primaryLive=%d thirdParty=%d hostTimer=%d interval=%u nextP=0x%X nextH=0x%X\n",
+               primary_mod->compact_timer_walker_addr, wrapper_live,
+               primary_live, third_party_owner, m->host_timer_pending,
+               timer_interval,
+               m->timer_p_addr, m->timer_helper_addr);
+    }
+    arm_ext_dispatch_pending_sms_result(m);
+    return ret;
+}
+
 int arm_ext_consume_primary_host_init(ArmExtModule *m) {
     if (!m || !m->primary_host_init_pending) return 0;
     m->primary_host_init_pending = 0;
@@ -2027,6 +2152,17 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     if (!m || !m->p_addr) return MR_FAILED;
     /* 不变量入口检查(P0.3),同 arm_ext_call */
     arm_ext_verify_invariants(m, "dispatch-entry");
+    ArmExtNestedModule *primary_mod = arm_ext_find_nested_module_by_p(
+        m, m->primary_p_addr);
+    if (m->timer_p_addr == m->primary_p_addr &&
+        m->timer_helper_addr == m->primary_helper_addr &&
+        primary_mod && primary_mod->compact_timer_walker_addr) {
+        /* A primary compact owner must enter the discovered walker directly.
+         * Calling code=2 on its public helper can route back through the outer
+         * wrapper and strand a due-list node outside the scheduler head. */
+        return arm_ext_call_primary_compact_dispatch(
+            m, primary_mod, timer_interval);
+    }
     uint32_t nested_p = m->primary_p_addr ? m->primary_p_addr : 0;
     if (!nested_p && m->last_file_addr) {
         void *p4 = arm_ptr(m, m->last_file_addr + 4);
@@ -2114,9 +2250,13 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     uint16 *saved_screenBuf = NULL;
     uint32_t present_depth_before = 0;
     enter_screen_context(m, &saved_screenBuf, &present_depth_before);
+    /* This entry consumes the pending host tick.  A guest table[31] call below
+     * will set the flag again with the scheduler's calculated next interval. */
+    m->host_timer_pending = 0;
     sync_internal_state_to_arm(m);
     if (compact_wrapper_timer_owner) {
         arm_ext_diag_dump_wrapper_compact_timer_nodes(m, "dispatch_pre");
+        arm_ext_diag_dump_primary_compact_timer_nodes(m, "dispatch_pre");
     }
     arm_ext_sanitize_compact_timer_heaps(m);
     /* 19KB cfunction.ext 的 timer dispatcher 是 chain walker；它从
@@ -2162,6 +2302,7 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     m->current_helper_addr = 0;
     if (compact_wrapper_timer_owner) {
         arm_ext_diag_dump_wrapper_compact_timer_nodes(m, "dispatch_post");
+        arm_ext_diag_dump_primary_compact_timer_nodes(m, "dispatch_post");
     }
     arm_ext_sanitize_compact_timer_heaps(m);
     /* D1:旧版 depth_patched 恢复块已删——该标志在函数内从未被置位,恢复
@@ -2196,22 +2337,34 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
             uint32_t tc_after = arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x190u + active_index * 8u);
             queue_live = queue_head || tc_after;
         }
-        if (queue_live) {
+        if (queue_live && !m->host_timer_pending) {
+            /* The guest normally rearms table[31] itself.  Supply a short host
+             * tick only when it left runnable nodes without scheduling one. */
             mr_timer_state = 1;
             m->host_timer_pending = 1;
             internal_slot_write(m, m->mr_timer_state_slot, 1);
-            /* ARM 侧可能未调用 table[31] timerStart 重新注册 SDL 定时器，
-             * 需要宿主主动启动一次以保证下一个 tick 到达 */
             mr_timerStart((uint16)timer_interval);
-            /*
-             * 0xE83A80 可能只消费到期节点并留下后续节点；若 ARM 侧没有
-             * 再次调用 table[31]，宿主仍要保持 timer running，下一 tick
-             * 才能继续推进 wrapper 队列。验证：gxdzc pay.sh 不再停在
-             * 标题/“请稍后”，同时 gghjt pay-normal-back.sh 仍能返回。
-             */
-            if (q && queue_base_ms == 0 && arm_ptr(m, q + 20)) {
-                uint32_t now = mr_getTime();
-                memcpy(arm_ptr(m, q + 20), &now, 4);
+        }
+        if (queue_live && q && queue_base_ms == 0 && arm_ptr(m, q + 20)) {
+            uint32_t now = mr_getTime();
+            memcpy(arm_ptr(m, q + 20), &now, 4);
+        }
+        if (!queue_live && compact_wrapper_timer_owner &&
+            arm_ext_primary_has_compact_timer_queue(m)) {
+            /* Direct compact dispatch can consume the outer bridge node while
+             * the primary module still has a valid inner scheduler node.  The
+             * next tick must enter the primary helper once so it can rearm the
+             * wrapper bridge; an empty wrapper queue alone is not global idle. */
+            m->timer_p_addr = m->primary_p_addr;
+            m->timer_helper_addr = m->primary_helper_addr;
+            if (!m->host_timer_pending) {
+                mr_timer_state = 1;
+                m->host_timer_pending = 1;
+                internal_slot_write(m, m->mr_timer_state_slot, 1);
+                mr_timerStart((uint16)timer_interval);
+            }
+            if (arm_ext_diag_on() || arm_ext_timer_owner_diag_on()) {
+                printf("DIAG dispatch_owner_clear emptyWrapper primaryCompact=1\n");
             }
         }
     }
@@ -2219,7 +2372,7 @@ int arm_ext_call_dispatch(ArmExtModule *m, int is_stop, uint32_t timer_interval)
     if (chain_walker_owner) {
         uint32_t active_index = arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x18u);
         uint32_t tc_after = arm_ext_read_u32_or_zero_(m, wrapper_rw + 0x190u + active_index * 8u);
-        if (tc_after) {
+        if (tc_after && !m->host_timer_pending) {
             mr_timer_state = 1;
             m->host_timer_pending = 1;
             internal_slot_write(m, m->mr_timer_state_slot, 1);

@@ -17,6 +17,19 @@ export interface VmrpE2eOptions {
   screen?: `${number}x${number}`;
   /** 应用可见内存(--memory),档位 1M/2M/4M/6M/8M/16M。默认由 vmrp 决定(1M)。 */
   memory?: "1M" | "2M" | "4M" | "6M" | "8M" | "16M";
+  /** 每次绘图后更新 defaultScreenPath，不向 SDL 事件队列注入 SCREEN。 */
+  captureLatestFrame?: boolean;
+}
+
+export interface VmrpKeyOptions {
+  timeoutMs?: number;
+  holdMs?: number;
+  waitForDraw?: boolean;
+}
+
+export interface VmrpPasteOptions {
+  timeoutMs?: number;
+  waitForDraw?: boolean;
 }
 
 export interface PpmImage {
@@ -51,6 +64,7 @@ export class VmrpE2e {
   /** 命名避免与 screen() 方法冲突:实例字段会遮蔽原型方法。 */
   private readonly screenSize?: string;
   private readonly memorySize?: string;
+  private readonly captureLatestFrame: boolean;
   private process?: ChildProcessByStdio<null, Readable, Readable>;
 
   private constructor(tmpDir: string, options: VmrpE2eOptions = {}) {
@@ -64,6 +78,7 @@ export class VmrpE2e {
     this.timeoutMs = options.timeoutMs ?? Number(process.env.VMRP_TIMEOUT_MS ?? 30_000);
     this.screenSize = options.screen;
     this.memorySize = options.memory;
+    this.captureLatestFrame = options.captureLatestFrame ?? false;
   }
 
   static async start(mrpPath: string, options: VmrpE2eOptions = {}): Promise<VmrpE2e> {
@@ -140,16 +155,37 @@ export class VmrpE2e {
    * 轮询按键状态,按住时长决定语义(短按=激活/单步移动,长按=按键重复或长按菜单)。
    * 全局 HOLD_MS 为粘贴稳定性调大后,需要单步语义的按键应显式传短时长。
    */
-  async key(name: KeyName, timeoutMs = 2_000, holdMs?: number): Promise<void> {
-    const previous = await this.drawCount();
-    await this.command(holdMs != null ? `KEY ${name} ${holdMs}` : `KEY ${name}`);
-    await this.waitDrawAfter(previous, timeoutMs);
+  async key(
+    name: KeyName,
+    optionsOrTimeout: VmrpKeyOptions | number = 2_000,
+    legacyHoldMs?: number
+  ): Promise<void> {
+    const options = typeof optionsOrTimeout === "number"
+      ? { timeoutMs: optionsOrTimeout, holdMs: legacyHoldMs, waitForDraw: true }
+      : { timeoutMs: 2_000, waitForDraw: true, ...optionsOrTimeout };
+    const previous = options.waitForDraw ? await this.drawCount() : undefined;
+    await this.command(options.holdMs != null ? `KEY ${name} ${options.holdMs}` : `KEY ${name}`);
+    // editCreate and other valid state-only actions do not submit a bitmap.  Let
+    // callers express that contract instead of accepting an unrelated timer draw.
+    if (previous != null) await this.waitDrawAfter(previous, options.timeoutMs);
   }
 
   async paste(text: string, timeoutMs = 5_000): Promise<void> {
-    const previous = await this.drawCount();
-    await this.command(`PASTE ${text}`);
-    await this.waitDrawAfter(previous, timeoutMs);
+    await this.setClipboard(text);
+    await this.pasteShortcut(timeoutMs);
+  }
+
+  async setClipboard(text: string): Promise<void> {
+    await this.command(`SET_CLIPBOARD ${text}`);
+  }
+
+  async pasteShortcut(optionsOrTimeout: VmrpPasteOptions | number = 5_000): Promise<void> {
+    const options = typeof optionsOrTimeout === "number"
+      ? { timeoutMs: optionsOrTimeout, waitForDraw: true }
+      : { timeoutMs: 5_000, waitForDraw: true, ...optionsOrTimeout };
+    const previous = options.waitForDraw ? await this.drawCount() : undefined;
+    await this.command("PASTE_SHORTCUT");
+    if (previous != null) await this.waitDrawAfter(previous, options.timeoutMs);
   }
 
   async screen(name = "screen"): Promise<PpmImage> {
@@ -221,7 +257,8 @@ export class VmrpE2e {
         SDL_VIDEODRIVER: process.env.SDL_VIDEODRIVER ?? "dummy",
         SDL_AUDIODRIVER: process.env.SDL_AUDIODRIVER ?? "dummy",
         VMRP_E2E_SOCKET: this.socketPath,
-        VMRP_PPM_PATH: this.defaultScreenPath
+        VMRP_PPM_PATH: this.defaultScreenPath,
+        ...(this.captureLatestFrame ? { VMRP_PPM: "1" } : {})
       },
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -255,7 +292,7 @@ export class VmrpE2e {
     await this.command(`WAIT_DRAW ${previous} ${timeoutMs}`);
   }
 
-  private async waitForExit(timeoutMs: number): Promise<boolean> {
+  async waitForExit(timeoutMs: number): Promise<boolean> {
     const proc = this.process;
     if (!proc || proc.exitCode !== null) return true;
     return new Promise(resolve => {

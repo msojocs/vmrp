@@ -142,11 +142,9 @@ int32_t editCreate(const char *title, const char *text, int32_t type, int32_t ma
     isEditMode = true;
     editMaxSize = max_size;
     SDL_Log("title: '%s', text: '%s', type: %d, max_size: %d", title, text, type, max_size);
-    if (SDL_SetClipboardText(text) == 0) {
-        SDL_Log("编辑内容已复制到剪贴板，按ctrl+v输入内容，按ctrl+z取消");
-    } else {
-        SDL_Log("无法使用剪贴板");
-    }
+    /* Opening an editor must not replace text that the user copied before
+     * entering it; Ctrl+V reads the existing platform clipboard below. */
+    SDL_Log("按ctrl+v输入内容，按ctrl+z取消");
     return 1234;
 }
 
@@ -522,8 +520,30 @@ void loop(void) {
                 vmrp_e2e_control_execute(e2eControl, &ev);
                 continue;
             }
+            if (ev.type == timerEventType) {
+                /* The SDL timer is one-shot and timer() rearms the guest's
+                 * next tick.  Process it even while the platform editor owns
+                 * keyboard input; dropping it there stops the guest scheduler
+                 * permanently after a normal pause before Ctrl+V. */
+                timer();
+                if (vmrp_is_exited()) {
+                    isLoop = false;
+                    break;
+                }
+                continue;
+            }
             if (isEditMode) {
                 switch (ev.type) {
+                    case SDL_KEYUP:
+                        /* A key can open the editor from its KEYDOWN handler.
+                         * Its matching KEYUP then arrives while edit mode owns
+                         * input, so consume it without sending a Mythroad key
+                         * release but clear the host key latch.  Otherwise the
+                         * next physical keydown is rejected as a duplicate. */
+                        if (isKeyDown == ev.key.keysym.sym) {
+                            isKeyDown = SDLK_UNKNOWN;
+                        }
+                        continue;
                     case SDL_KEYDOWN: {
                         SDL_Keymod key_mod = (SDL_Keymod)(ev.key.keysym.mod | SDL_GetModState());
                         /* SDL_KEYDOWN carries the modifier state observed with
@@ -552,10 +572,7 @@ void loop(void) {
                 }
                 continue;
             }
-            if (ev.type == timerEventType) {
-                /* 由 timerCb 推送到主线程的定时器事件 */
-                timer();
-            } else switch (ev.type) {
+            switch (ev.type) {
                 case SDL_KEYDOWN:
                     dispatch_key_down(ev.key.keysym.sym);
                     break;

@@ -149,6 +149,11 @@ typedef struct ArmExtNestedModule {
     uint32_t package_ram_addr;
     uint32_t package_ram_len;
     uint32_t pack_name_addr;
+    /* R9-relative compact timer scheduler decoded from this module's walker.
+     * Zero means that no matching scheduler ABI was found in the module. */
+    uint32_t compact_timer_scheduler_off;
+    /* Thumb entry of that same byte-proven walker in guest address space. */
+    uint32_t compact_timer_walker_addr;
     /* 观测到的该模块 GOT 桥块中 memcpy(table[3]=EXT_TABLE_ADDR+0xC) 桥所在的
      * R9 相对偏移（ARM 重定位写入该桥时记录，0=未观测）。该值仅描述本模块
      * 自己的重定位结果；private-loader RW 镜像还必须由当前 child 的 bridge-copy

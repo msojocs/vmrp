@@ -881,12 +881,24 @@ void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
     uint32_t package_ram_len = 0;
     const char *package_host_path = arm_ext_child_package_context(
         m, file_addr, file_len, &package_ram_addr, &package_ram_len);
+    uint32_t compact_timer_scheduler_off = 0;
+    uint32_t compact_timer_walker_file_off = 0;
+    int has_compact_timer_walker = 0;
+    const uint8_t *code = (const uint8_t *)arm_ptr(m, file_addr);
+    if (code) {
+        has_compact_timer_walker = arm_ext_find_compact_timer_scheduler(
+            code, file_len, &compact_timer_scheduler_off,
+            &compact_timer_walker_file_off);
+    }
 
     for (int i = 0; i < m->nested_module_count; ++i) {
         ArmExtNestedModule *mod = &m->nested_modules[i];
         if (mod->file_addr == file_addr && mod->file_len == file_len) {
             mod->p_addr = p_addr;
             mod->helper_addr = helper_addr;
+            mod->compact_timer_scheduler_off = compact_timer_scheduler_off;
+            mod->compact_timer_walker_addr = has_compact_timer_walker
+                ? file_addr + compact_timer_walker_file_off + 1u : 0;
             if (package_host_path[0]) {
                 snprintf(mod->package_host_path, sizeof(mod->package_host_path),
                          "%s", package_host_path);
@@ -923,6 +935,9 @@ void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr,
     slot->package_ram_len = package_host_path[0] ? 0 : package_ram_len;
     slot->got_memcpy_off = 0;
     slot->pack_name_addr = 0;
+    slot->compact_timer_scheduler_off = compact_timer_scheduler_off;
+    slot->compact_timer_walker_addr = has_compact_timer_walker
+        ? file_addr + compact_timer_walker_file_off + 1u : 0;
     arm_ext_protect_registered_module_storage(m, file_addr, file_len);
     // 新嵌套模块注册后安装 PC 观察点(VMRP_ARM_EXT_WATCH_PC,诊断用)
     arm_ext_install_pc_watches(m, file_addr, file_len);
@@ -1390,8 +1405,12 @@ static int arm_ext_child_has_compact_r9_state_list(const uint8_t *code,
     return 0;
 }
 
-int arm_ext_child_has_compact_timer_walker(const uint8_t *code,
-                                                  uint32_t file_len) {
+int arm_ext_find_compact_timer_scheduler(const uint8_t *code,
+                                         uint32_t file_len,
+                                         uint32_t *scheduler_off,
+                                         uint32_t *walker_file_off) {
+    if (scheduler_off) *scheduler_off = 0;
+    if (walker_file_off) *walker_file_off = 0;
     if (!code || file_len < 64u) return 0;
     static const uint8_t pat[] = {
         0x00, 0x48, 0xF8, 0xB5, 0x78, 0x44, 0x80, 0x6B,
@@ -1414,9 +1433,29 @@ int arm_ext_child_has_compact_timer_walker(const uint8_t *code,
                 break;
             }
         }
-        if (match) return 1;
+        if (match) {
+            uint32_t off_value = 0;
+            /* The second literal is added to R9 immediately before the walker
+             * reads queued/current/last-tick at +8/+12/+16.  Decode it instead
+             * of assuming one SDK's fixed RW layout. */
+            if (arm_ext_thumb_ldr_literal_u32(code, file_len, off + 16u,
+                                              &off_value) &&
+                off_value && (off_value & 3u) == 0) {
+                if (scheduler_off) *scheduler_off = off_value;
+                /* The matched instruction is the Thumb function entry, not
+                 * merely a signature near it, so callers can run the walker
+                 * with the owning module's R9 when helper routing is indirect. */
+                if (walker_file_off) *walker_file_off = off;
+                return 1;
+            }
+        }
     }
     return 0;
+}
+
+int arm_ext_child_has_compact_timer_walker(const uint8_t *code,
+                                           uint32_t file_len) {
+    return arm_ext_find_compact_timer_scheduler(code, file_len, NULL, NULL);
 }
 
 uint32_t find_wrapper_compact_heap_free_return(const uint8_t *code,

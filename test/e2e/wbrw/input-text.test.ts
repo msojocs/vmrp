@@ -30,13 +30,16 @@ describe("wbrw 输入文字", () => {
     }
     {
       // 移动光标到输入框
-      await vmrp.key('UP', 1_000);
+      await vmrp.key('UP', { timeoutMs: 1_000, holdMs: 120 });
       // 进入输入框界面
-      await vmrp.key('ENTER', 1_000);
+      await vmrp.key('ENTER', { timeoutMs: 1_000, holdMs: 120 });
+      // 模拟真实操作：用户先复制文本，再打开系统编辑器。
+      await vmrp.setClipboard("http://wap.baidu.com");
       // 打开输入界面
-      await vmrp.key('ENTER', 1_000);
+      // editCreate只切换宿主编辑状态，不提交位图，不能等待无关的后台重绘。
+      await vmrp.key('ENTER', { holdMs: 120, waitForDraw: false });
       const beforePaste = await vmrp.screen("before-paste");
-      await vmrp.paste("http://wap.baidu.com");
+      await vmrp.pasteShortcut();
       const afterPaste = await vmrp.screen("after-paste");
       const stderr = await readFile(vmrp.stderrPath, "utf8");
 

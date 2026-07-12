@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 18 pages | Last updated: 2026-07-11T11:28:02.847Z
+> 19 pages | Last updated: 2026-07-12T10:09:53+08:00
 
 ## debugging
 
@@ -22,3 +22,7 @@
 - [wbrw input paste UCS2 table77 fix](wbrw-input-paste-ucs2-table77-fix.md) — # wbrw input paste UCS2 table77 fix
 - [WBRW proxy2 font MRP download](wbrw-proxy2-font-mrp-download.md) — # WBRW proxy2 font MRP download
 - [WBRW proxy2 web page rendering](wbrw-proxy2-web-page-rendering.md) — # WBRW proxy2 web page rendering
+
+## session-log
+
+- [WBRW manual clipboard and menu exit verification](wbrw-manual-clipboard-and-menu-exit-verification.md) — # WBRW manual clipboard and menu exit verification

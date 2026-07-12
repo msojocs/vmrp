@@ -11,7 +11,8 @@ static void arm_ext_diag_dump_timer_node(ArmExtModule *m,
                                          const char *tag,
                                          const char *name,
                                          uint32_t node) {
-    if (!m || !arm_ext_diag_on() || !node) return;
+    if (!m || !(arm_ext_diag_on() || arm_ext_timer_owner_diag_on()) || !node)
+        return;
     if (!arm_ptr(m, node) || !arm_ptr(m, node + 0x1Cu)) {
         printf("DIAG timer_node %s %s=0x%X unmapped\n",
                tag ? tag : "?", name ? name : "?", node);
@@ -330,6 +331,46 @@ void arm_ext_diag_dump_wrapper_compact_timer_nodes(ArmExtModule *m,
                tag ? tag : "?", i, node, marker, delay, cb, data, cleanup,
                next, due_next, cb_owner_p, cb_owner_h);
         node = due_next;
+    }
+}
+
+void arm_ext_diag_dump_primary_compact_timer_nodes(ArmExtModule *m,
+                                                   const char *tag) {
+    if (!m ||
+        !(arm_ext_timer_liveness_diag_on() || arm_ext_timer_owner_diag_on()) ||
+        !m->primary_p_addr)
+        return;
+
+    ArmExtNestedModule *mod = arm_ext_find_nested_module_by_p(
+        m, m->primary_p_addr);
+    uint32_t rw = arm_ext_primary_rw_base_(m);
+    if (!mod || !mod->compact_timer_scheduler_off || !rw) return;
+
+    uint32_t off = mod->compact_timer_scheduler_off;
+    if (!arm_ptr(m, rw + off + 0x10u)) return;
+
+    uint32_t queued = arm_ext_read_u32_or_zero_(m, rw + off + 0x08u);
+    uint32_t current = arm_ext_read_u32_or_zero_(m, rw + off + 0x0Cu);
+    uint32_t last_tick = arm_ext_read_u32_or_zero_(m, rw + off + 0x10u);
+    printf("DIAG primary_compact_nodes %s rw=0x%X off=0x%X queued=0x%X current=0x%X lastTick=0x%X\n",
+           tag ? tag : "?", rw, off, queued, current, last_tick);
+
+    /* Primary and wrapper compact nodes share the same eight-word ABI. Walk
+     * enough of both chains to show whether a non-head callback was retained
+     * when ownership crossed between the two schedulers. */
+    uint32_t node = queued;
+    for (uint32_t i = 0; i < 8 && node; ++i) {
+        char name[32];
+        snprintf(name, sizeof(name), "primaryQueued[%u]", i);
+        arm_ext_diag_dump_timer_node(m, tag, name, node);
+        node = arm_ext_read_u32_or_zero_(m, node + 0x18u);
+    }
+    node = current;
+    for (uint32_t i = 0; i < 8 && node; ++i) {
+        char name[32];
+        snprintf(name, sizeof(name), "primaryCurrent[%u]", i);
+        arm_ext_diag_dump_timer_node(m, tag, name, node);
+        node = arm_ext_read_u32_or_zero_(m, node + 0x1Cu);
     }
 }
 

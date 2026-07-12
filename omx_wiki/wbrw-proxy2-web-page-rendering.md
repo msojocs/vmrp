@@ -2,9 +2,9 @@
 title: "WBRW proxy2 web page rendering"
 tags: ["wbrw", "proxy2", "network", "e2e", "ppm", "sky-format"]
 created: 2026-07-09T10:26:13+08:00
-updated: 2026-07-10T16:40:00+08:00
+updated: 2026-07-11T21:20:00+08:00
 sources: []
-links: ["wbrw-input-paste-ucs2-table77-fix.md", "wbrw-startup-stall.md"]
+links: ["wbrw-input-paste-ucs2-table77-fix.md", "wbrw-startup-stall.md", "wbrw-manual-clipboard-and-menu-exit-verification.md"]
 category: debugging
 confidence: high
 schemaVersion: 1
@@ -178,3 +178,99 @@ caption 前面是 filler、第二个 caption 前面才是第一个 href。
 `/page2` 请求为 `/mrp/sky_SaiNes-v1010`，子页缓存标题是
 `mynes - WAP下载站`。PPM `/tmp/vmrp-e2e-0f6UxK/sublink.ppm` 人工检查为完整
 应用详情页，无模板残留、无“数据请求”或图片加载提示；相对首页正文差异 8793 像素。
+
+## 2026-07-11: 5 秒成功、10 秒失败排查进度
+
+原样运行 `temp.test.ts` 在约 18.8 秒稳定报
+`ERR wait_draw_timeout current=29 target>29`，不是 Vitest 超时、进程退出或 socket
+空闲断开。失败前 stderr 已记录 `editCreate(title='网址')`，说明第二次 ENTER 已经
+成功进入宿主编辑模式；`editCreate` 只修改 `isEditMode`，本身不提交位图。
+
+当前证据把 5/10 秒差异解释为 E2E 同步误判：
+
+- `VmrpE2e.key()` 在发出 KEY 后无条件等待全局 `guiDrawBitmapCount` 增长，但有效的
+  编辑模式切换不要求绘图。等待期间若恰好有后台图片重绘，这个无关 draw 会让动作
+  看似成功；图片加载结束后同一动作则报超时。
+- 用例把 `VMRP_E2E_HOLD_MS` 提高到 1500ms，却把 `key(name, timeoutMs, holdMs)` 的
+  第二参数误当按住时间，所有按键实际仍是 1500ms 长按。既有 game.ext 行为证据已
+  证明长按 ENTER/DOWN 会改变 WBRW 语义。
+- 启动约 8--10 秒还会发送后台更新 `/page2`：350 字节请求的 tag1 是
+  `/update/?pageid=0...`、tag2 是 `help.proxy.51mrp.com`，不是用户输入地址请求。
+  它会贡献后台重绘，因此扩大上述同步误判的时间窗口。
+
+代理路由还存在独立的确定性问题：guest 固定连接解析地址的 port 80，而当前
+`tool/server-http.js` 监听 `127.0.0.1:18080`。当前默认 DNS 只改变地址，不改变端口；
+请求实际落到本机另一个 nginx，收到的 `text/plain retcode=0` 不是合法 proxy2 信封。
+后续验证必须明确使用 guest 实际连接的 port 80，不能把监听 18080 的服务误认为
+已经接管请求，也不能依赖机器上碰巧存在的另一个 80 端口服务。
+
+尚未完成：需要给 E2E 输入 API 增加显式的“不等待 draw”契约，改用短按；用例必须
+等待目标页缓存和前台正文同时变化，保存 `loaded.ppm` 并检查像素，不能以固定 60 秒
+delay 或仅观察 `/page2` 日志作为成功证据。
+
+## 2026-07-11: 当前验证边界
+
+E2E 输入 API 已增加 `{ timeoutMs, holdMs, waitForDraw }`，编辑器切换使用
+`waitForDraw:false`，按键改为 120ms 短按。用例同时检查目标 URL/标题缓存、标题区和
+正文区 PPM 差异，并保留 `loaded.ppm`。5 秒路径通过，目标缓存为 2697 字节；人工
+检查 `/tmp/vmrp-e2e-k27O6m/loaded.ppm` 为“第1页 - WAP下载站”，相对首页全屏差异
+67230 像素、标题区 3841、正文区 59424，共 114 色。
+
+服务端 `/image` 还修正了独立协议错误：上游非 2xx 不再作为 status=200 的图片
+payload 返回，而是返回合法 proxy2 错误信封；定向 Go 测试通过。该修复没有消除
+10 秒失败。
+
+10 秒路径在 60 秒页面等待后仍失败，`loaded.ppm` 保持首页且没有目标缓存。窄诊断
+证明失败发生在目标 `/page2` 前：后台更新在图片响应后创建 socket 5，但 WBRW 的
+任务链随后只处理统计下载，未继续 `getSocketState(5)`/`send(5)`，因此真正的 179
+字节目标页请求从未产生。wrapper/primary/active-child owner、open-socket keepalive、
+真实 elapsed 和图片短超时实验均未通过 10 秒验证，已全部撤销，不保留未经验证的
+C 或服务端时序改动。仓库不增加端点重映射参数。
+
+## 2026-07-11: 5/10 秒空闲分界已解决
+
+最终根因是两层 compact scheduler 的宿主建模不完整，而不是服务端页面处理或 socket
+保活。WBRW wrapper walker 位于 `0xE845BC`，scheduler 为 `wrapper_rw+0x2A8`；primary
+`game.ext` 还有同形 walker `0x26A1C4`，其 Thumb literal 解出 scheduler 为
+`game_rw+0x44AC`。旧代码只探测 primary/child 的固定 `0x80/0x84/0xC0/0x248`，所以把
+WBRW primary queue 报成 `primaryTimer=0`，也没有把该队列中的 live timer node 从
+compact free-list 中保护出来。
+
+通用修复在模块注册时从 walker 指令形状动态解出 R9-relative scheduler offset，并记录到
+模块元数据。primary/child 判活和 timer-node 保护统一读取该模块自己的 queued/current
+head，并校验 `0x79ABBCCF` magic；没有 app 名称、MRP 名称、host 或 socket 条件。wrapper
+队列为空但 primary 真实队列仍活时，宿主只补一次 primary tick；primary 经 wrapper veneer
+重新挂回外层节点后，owner 再归 wrapper。
+
+另一个确定错误在 `arm_ext_call_dispatch()`：guest walker 会先 timerStop，再按队列计算并
+调用 `table[31]`，但宿主此前无条件用固定 50ms 再次 `mr_timerStart`，覆盖了 guest 请求的
+200/2000/23980ms 等间隔。现在 dispatch 入口先消费当前 host tick；仅当 guest 留下真实
+live queue 却没有重启 timer 时，宿主才补 50ms tick。
+
+验证：`SDL_VIDEODRIVER=dummy ./build/vmrp-unit` 为 98 checks/0 failures；10 秒定向用例
+16.92s 通过，完整 10s/5s 矩阵 29.09s 全绿，`input-text.test.ts` 通过；替换固定 scheduler
+偏移后，`gzwdzjs/game-start.test.ts` 两个用例也通过。保留的 10 秒与 5 秒 PPM 分别是
+`/tmp/vmrp-e2e-m9aJxn/loaded.ppm`、`/tmp/vmrp-e2e-ZTIR6z/loaded.ppm`；人工检查均完整显示
+“第1页 - WAP下载站”、软件列表、滚动条和底部菜单。服务端图片非 2xx 信封测试仍通过。
+仓库与运行命令均未加入端点重映射参数。
+
+## 2026-07-11: 重复验证后的最终修正
+
+上节的 owner handoff 单轮结论不完整，重复矩阵仍能复现 10 秒失败。最终日志显示 host
+只直调 `0xE845BC` wrapper walker 时跳过了公开 `code=2` 路径随后执行的 `0xE841F4`。
+在 wrapper bridge 排空的那轮，primary socket 扫描节点 `callback=0x2562FD` 从 queued
+摘出后没有留在 scheduler current head，后续 socket 5 虽连接成功却永远不再执行
+`getSocketState(5)`。
+
+通用最终修复是：动态识别到 compact scheduler 的 wrapper owner 走完整 public helper
+`code=2`，不再只直调 walker；非 compact direct-dispatch ABI 保持原路径。动态扫描同时
+记录 compact walker 入口，确需 primary owner 时以 primary R9 直接进入其 walker。判断
+只依赖模块自身指令形状、P/helper owner 和真实队列，不含应用名、包名或网络端点条件。
+
+E2E 也改为解析 cache3/percache pool head：偏移 10 的大端 u16 URL 长度、URL、随后大端
+u16 标题长度和 UTF-8 标题，严格要求 `http://mrp.gddhy.net/` 与
+`第1页 - WAP下载站`；并等待黄色完成态标题，避免把蓝色“接收数据”阶段当成功。
+
+最终验证为 100 checks/0 failures，完整 10s/5s 矩阵连续三轮通过，WBRW 输入回归 1/1、
+gzwdzjs 教程/花屏 2/2。人工检查 `/tmp/vmrp-e2e-UoQ1Ww/loaded.ppm` 与
+`/tmp/vmrp-e2e-WjvyKe/loaded.ppm` 均为完整目标页。没有增加或使用任何端点重映射参数。

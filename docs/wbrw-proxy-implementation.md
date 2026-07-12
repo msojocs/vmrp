@@ -48,14 +48,10 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   私有 record，并要求 `[0..105]` 是连续有效区间；存在 owner 但 record 损坏时明确
   失败，不回退到外层包。主模块无 owner 时仍直接使用主表。私有 record 取出的显式
   `brw/wfnt16c.mrp` 继续按现有优先级走 host-package 分支，不会被 child-resource 覆盖。
-- 单元测试覆盖主表、私有 record、损坏 record 不回退，以及 connect-map 合法、
-  重复 source、非法端口/主机、no-op 和清空配置；`vmrp-unit` 为 104 checks 全通过。
-- 系统端口 80 被不可见的系统监听占用，测试不再依赖它。新增通用
-  `--connect-map IPv4:port->IPv4:port`（及 `VMRP_CONNECT_MAP`），仅在 TCP connect
-  边界做一次数值端点改写；语法严格、配置事务化、重复 source 明确拒绝，并同时
-  覆盖同步/异步连接。E2E 以 Node `listen(0)` 获取独占高端口，同时验证 HTTP Host
-  仍为 `proxy2.51mrp.com`。代理抓包通过 `PROXY2_PACKET_LOG_DIR` 放进用例工作区，
-  不再依赖 root 所有的共享 `tool/temp`。
+- 单元测试覆盖主表、私有 record 和损坏 record 不回退；`vmrp-unit` 为 104 checks
+  全通过。
+- E2E 使用 guest 固定连接的 `127.0.0.1:80` 服务，并保持 HTTP Host 为
+  `proxy2.51mrp.com`；不增加端点改写参数。
 - 最终命令 `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/wbrw/proxy.test.ts
   --reporter=verbose` 在 41.08s 通过。首轮恰好 13 个 `/mrp` 偏移
   `0,1800,...,21600`；落盘 MRP 为 22,302 字节，SHA-256
@@ -562,3 +558,122 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
 - Proxy needed no URL-handling changes for sub-links; the only proxy change is
   the fetch-error hardening (valid proxy2 status=404 envelope instead of
   text/plain), which prevents genuine stalls when the upstream fetch fails.
+
+### 2026-07-11: idle 5s/10s navigation timer fix
+
+- The 10s failure occurred before `/page2`: WBRW created a socket but its
+  primary `game.ext` compact scheduler stopped reaching the socket poll/send
+  callback.  The primary walker at runtime `0x26A1C4` decodes an R9-relative
+  scheduler at `RW+0x44AC`; the host only recognized fixed offsets near
+  `RW+0x80`, so primary liveness and live-node heap protection were false.
+- Module registration now decodes each compact walker's scheduler literal and
+  records the offset on the module.  Liveness checks and compact free-list
+  protection use the discovered queued/current heads and require the timer
+  node magic, with no package-name or endpoint condition.
+- The compact wrapper walker already calls `table[31]` with its calculated next
+  interval.  `arm_ext_call_dispatch()` now marks the current host tick consumed
+  before dispatch and supplies a 50ms tick only if guest code leaves a live
+  queue without rearming the timer; it no longer overwrites intervals such as
+  2000ms or 23980ms.
+- Verification: 98 C checks passed; the 10s focused run passed in 16.92s and the
+  full 10s/5s matrix passed in 29.09s.  WBRW input and both gzwdzjs scheduler
+  regressions passed.  Retained `loaded.ppm` files are
+  `/tmp/vmrp-e2e-m9aJxn/loaded.ppm` (10s) and
+  `/tmp/vmrp-e2e-ZTIR6z/loaded.ppm` (5s); visual inspection confirms the same
+  complete `第1页 - WAP下载站` title, software list, scrollbar, and menu bar.
+  No endpoint-remapping option is present or used.
+
+### 2026-07-11 (final correction): preserve the compact wrapper helper tail
+
+- Repeated matrices disproved the first owner-handoff result.  At the failing
+  boundary the host entered only the wrapper walker at `0xE845BC`; the real
+  public `code=2` path continues with a call to `0xE841F4`.  Skipping that tail
+  detached the primary socket-poll node (`callback=0x2562FD`) from both the
+  queued and current heads after it became due.
+- A byte-proven compact wrapper owner now uses its public helper for the whole
+  `code=2` path.  Older non-compact direct-dispatch wrappers keep their existing
+  host dispatch.  Compact walker discovery also records the walker entry so a
+  genuine primary owner can be invoked with the primary module's R9; there are
+  no app, package, host, socket, or endpoint conditions.
+- The E2E cache oracle now parses the cache pool header exactly and requires
+  URL `http://mrp.gddhy.net/` plus title `第1页 - WAP下载站`.  It also waits for
+  the settled yellow page title instead of accepting the blue receive-progress
+  title.
+- Final verification: 100 C checks passed; three complete 10s/5s matrices
+  passed, followed by WBRW input and both gzwdzjs regressions.  Final retained
+  PPMs `/tmp/vmrp-e2e-UoQ1Ww/loaded.ppm` and
+  `/tmp/vmrp-e2e-WjvyKe/loaded.ppm` were visually checked and both show the
+  complete target page.
+
+### 2026-07-12: physical Ctrl+V ordering and browser-menu exit
+
+- The remaining automated/manual difference was outside proxy2: `editCreate()`
+  copied the edit field's old value into SDL's clipboard.  A user who copied a
+  URL before opening the editor therefore lost it, while the old E2E `PASTE`
+  command set the clipboard only after `editCreate()` and could never expose
+  the defect.  The host editor now leaves the platform clipboard unchanged.
+- E2E input separates `SET_CLIPBOARD` from `PASTE_SHORTCUT`.  The WBRW test now
+  copies the URL before opening the editor, injects only Ctrl+V afterward, and
+  requires the exact `editGetText()` URL, cache URL/title, and foreground PPM.
+- The same test opens WBRW's own menu, selects its displayed `7.退出` command,
+  captures the confirmation dialog, confirms with the left soft key, and waits
+  for the vmrp child process to exit.  Test cleanup's SDL `QUIT` is not accepted
+  as evidence.  Both successful runs end with guest `mythroad exit.` logs.
+- Narrow PC watches prove that exit is another consumer of the same primary
+  scheduler, not an unrelated menu bug.  The `game.ext` walker at file
+  `+0x440CC` (scheduler `R9+0x44AC`) reaches its due-node callback branch at
+  `+0x44170/+0x4418A/+0x44190` and invokes guest pointer `0x2562FD`
+  (`game.ext+0x30205`) immediately before the observed exit.  `lib.exitbrw`
+  watches did not fire.  The final host `mr_exit()` may be reached through table
+  slot 54, callback cleanup observing shared `mr_state >= 3`, or both; the two
+  exit logs do not distinguish those entry points and sibling `ptrace` is not
+  permitted in this environment.  This uncertainty does not affect the proven
+  scheduler dependency: losing the primary tick prevents the exit callback and
+  explains both the stalled page request and ineffective exit confirmation.
+- Compact walker registration was also tightened: file offset zero is a valid
+  Thumb entry, not a not-found sentinel, and a matching shape with an invalid
+  scheduler literal no longer masks a later valid walker.  The focused unit
+  test covers both cases.
+- Two independent dummy-driver matrices passed for both 10s and 5s idle paths,
+  plus `input-text.test.ts`.  Retained second-round artifacts are
+  `/tmp/vmrp-e2e-Wr3KSB`, `/tmp/vmrp-e2e-zNuZbZ`, and
+  `/tmp/vmrp-e2e-UTJvhc`.  The two target-page images are byte-identical and
+  have 114 colors; home-to-loaded differences are 3,841 title pixels, 59,424
+  body pixels, and 67,230 full-screen pixels.  Menu and confirmation ROI
+  differences are 13,515 and 18,242 pixels.  Visual inspection confirms the
+  full target page, the menu containing `7.退出`, and the exit confirmation.
+- Cross-application scheduler regressions passed under the dummy driver:
+  `gzwdzjs/game-start.test.ts` 2/2 and `gghjt/game-start.test.ts` 2/2.  The C
+  unit suite reports 103 checks and zero failures.
+
+### 2026-07-12 (final correction): preserve one-shot timers in edit mode
+
+- The preceding completion was premature.  Its E2E commands opened the editor
+  and injected Ctrl+V back-to-back, while a physical user necessarily pauses.
+  Adding only 500ms between those operations reproduced the reported stop at
+  `editGetText()` in both clean and persisted `brw` state.
+- The host SDL timer is one-shot: `timerCb()` clears `timeId`, posts
+  `timerEventType`, and relies on guest `timer()` to schedule the next tick.
+  The main loop handled edit mode before `timerEventType`, so any tick arriving
+  while the editor was open was consumed by the edit-input branch.  The guest
+  scheduler then had no timer with which to submit or poll the page request.
+- `timerEventType` is now dispatched before edit-mode keyboard filtering.  This
+  restores the pre-serialization behavior in which platform editing does not
+  stop guest timers.  The existing KEYUP latch fix remains necessary because
+  the ENTER that opens the editor has its matching release delivered while the
+  editor owns keyboard input.  Both fixes are platform-generic and contain no
+  package, URL, endpoint, or fallback condition.
+- The regression now waits 500ms inside the editor and contains no successful
+  `SCREEN` or `WAIT_DRAW` command.  PPM verification reads the frame written by
+  normal rendering, so screenshots cannot act as hidden SDL heartbeats.
+- Two clean dummy-driver 10s/5s matrices passed, including exact cache
+  URL/title, target-page pixels, and guest menu exit.  Retained artifacts are
+  `/tmp/vmrp-e2e-tcWtRh`, `/tmp/vmrp-e2e-7RmxsP`,
+  `/tmp/vmrp-e2e-7QXMqO`, and `/tmp/vmrp-e2e-zAI4IE`.
+- A full persisted-state run also passed on the final binary without screen
+  events: `/tmp/vmrp-persistent-final-v2`.  It exercised `/simpleDownload`, paused
+  500ms before Ctrl+V, sent `/page2`, matched the exact page cache, then exited
+  through `菜单 -> 7.退出 -> 确定` with code 0.  `final.ppm` is 240x320 with
+  113 colors and visually shows the complete target page.  TypeScript checks,
+  the 103-check C unit suite, `input-text.test.ts`, and the four gzwdzjs/gghjt
+  game-start scheduler regressions also pass.
