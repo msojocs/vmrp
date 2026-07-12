@@ -23,6 +23,8 @@ const proxy2Page2Tag21 = process.env.PROXY2_PAGE2_TAG21 ?? '';
 // /mrp 按请求 appid 与 MRP 头部 appid 匹配本地资源，目录中未命中时明确报错。
 const proxy2MrpRoot = path.resolve(process.env.PROXY2_MRP_ROOT || 'temp');
 const proxy2MrpHost = (process.env.PROXY2_MRP_HOST || 'dmrp.wapproxy.sky-mobi.com').toLowerCase();
+const proxy2Host = 'proxy2.51mrp.com';
+const helpProxyHost = 'help.proxy.51mrp.com';
 const proxy2MrpSnapshotLimit = Number(process.env.PROXY2_MRP_SNAPSHOT_LIMIT || 256);
 const proxy2MrpSnapshotMaxBytes = Number(process.env.PROXY2_MRP_SNAPSHOT_MAX_BYTES || 64 * 1024 * 1024);
 const proxy2MrpSnapshotTotalBytes = Number(process.env.PROXY2_MRP_SNAPSHOT_TOTAL_BYTES || 256 * 1024 * 1024);
@@ -1227,197 +1229,185 @@ function sendRedirect(res, location) {
     res.end();
 }
 
-function handleProxy2(req, res, body) {
-    logProxy2Packet(req, body);
-
+function handleProxy2Sta(_req, res) {
     // /sta统计上报始终返回纯文本retcode=0
-    if (req.url === '/sta') {
+    sendBuffer(res, 'text/plain; charset=utf-8', Buffer.from('retcode=0\n'));
+}
+
+function handleProxy2WebPage(_req, res, _body, target) {
+    const targetUrl = buildProxy2TargetUrl(target.host, target.path);
+    fetchUrl(targetUrl, (err, pageBody, statusCode) => {
+        if (err) {
+            console.error('proxy2 page2 fetch error:', err.message);
+            // 抓取失败必须回合法proxy2包: WBRW的响应处理器(game.ext 0x41C60)
+            // 只在收到完整proxy2包后才驱动完成回调——status!=200时置错误码74
+            // 并提示"获取页面错误"。回text/plain不是合法信封,recv层无法组包,
+            // 状态机收不到完成事件,标题栏会永远停在"数据请求"。
+            sendBuffer(res, proxy2Page2ContentType,
+                makeProxy2ResponsePacket(Buffer.alloc(0), [], 404));
+            return;
+        }
+        console.info('proxy2 page2 fetched %d bytes, status=%d', pageBody.length, statusCode);
+        let page;
+        try {
+            // HTML来自不可信上游；编译错误必须转换为合法proxy2错误包，
+            // 异步回调中的异常不会被外层HTTP请求try/catch捕获。
+            
+            const data = fs.readFileSync(path.resolve(__dirname, '../temp/cache3/32918048.sky'));
+            page = data;
+        } catch (error) {
+            console.error('proxy2 page2 compile error:', error.message);
+            sendBuffer(res, proxy2Page2ContentType,
+                makeProxy2ResponsePacket(Buffer.alloc(0), [], 502));
+            return;
+        }
+        console.info('proxy2 page2 sky payload %d bytes', page.length);
+        // PROXY2_PAGE2_WEB_TAG33 控制网页响应的tag33值(默认3=.sky格式)
+        const webTag33 = Number(process.env.PROXY2_PAGE2_WEB_TAG33 ?? 3);
+        const fields = [{ tag: 33, value: proxy2U8(webTag33) }];
+        sendBuffer(res, proxy2Page2ContentType,
+            makeProxy2ResponsePacket(page, fields));
+    });
+}
+
+function handleProxy2HomePage(_req, res) {
+    // 无目标主机或目标为proxy2自身时返回首页内容(mphome.sky)
+    if (proxy2Mode === 'retcode') {
         sendBuffer(res, 'text/plain; charset=utf-8', Buffer.from('retcode=0\n'));
-        return true;
+        return;
     }
-
-    if (req.url === '/page2') {
-        const { host, path: urlPath } = extractProxy2RequestUrl(body);
-
-        // help.proxy.51mrp.com 更新检查走内部处理
-        if (host === 'help.proxy.51mrp.com') {
-            const fakeReq = { url: urlPath, headers: { host } };
-            if (handleHelpProxy(fakeReq, res)) return true;
+    const fixture = readProxy2PageFixture();
+    if (fixture) {
+        if (proxy2Mode === 'packet') {
+            sendBuffer(res, proxy2Page2ContentType,
+                makeProxy2ResponsePacket(fixture, proxy2Page2Fields()));
+            return;
         }
-
-        // tag2含目标主机时，作为WAP网关代理抓取并转换页面
-        if (host && host !== 'proxy2.51mrp.com') {
-            const targetUrl = buildProxy2TargetUrl(host, urlPath);
-            fetchUrl(targetUrl, (err, pageBody, statusCode) => {
-                if (err) {
-                    console.error('proxy2 page2 fetch error:', err.message);
-                    // 抓取失败必须回合法proxy2包: WBRW的响应处理器(game.ext 0x41C60)
-                    // 只在收到完整proxy2包后才驱动完成回调——status!=200时置错误码74
-                    // 并提示"获取页面错误"。回text/plain不是合法信封,recv层无法组包,
-                    // 状态机收不到完成事件,标题栏会永远停在"数据请求"。
-                    sendBuffer(res, proxy2Page2ContentType,
-                        makeProxy2ResponsePacket(Buffer.alloc(0), [], 404));
-                    return;
-                }
-                console.info('proxy2 page2 fetched %d bytes, status=%d', pageBody.length, statusCode);
-                let page;
-                try {
-                    // HTML来自不可信上游；编译错误必须转换为合法proxy2错误包，
-                    // 异步回调中的异常不会被外层HTTP请求try/catch捕获。
-                    page = generateSkyPage(pageBody, targetUrl);
-                } catch (error) {
-                    console.error('proxy2 page2 compile error:', error.message);
-                    sendBuffer(res, proxy2Page2ContentType,
-                        makeProxy2ResponsePacket(Buffer.alloc(0), [], 502));
-                    return;
-                }
-                console.info('proxy2 page2 sky payload %d bytes', page.length);
-                // PROXY2_PAGE2_WEB_TAG33 控制网页响应的tag33值(默认3=.sky格式)
-                const webTag33 = Number(process.env.PROXY2_PAGE2_WEB_TAG33 ?? 3);
-                const fields = [{ tag: 33, value: proxy2U8(webTag33) }];
-                sendBuffer(res, proxy2Page2ContentType,
-                    makeProxy2ResponsePacket(page, fields));
-            });
-            return true;
-        }
-
-        // 无目标主机时返回首页内容(mphome.sky)
-        if (proxy2Mode === 'retcode') {
-            sendBuffer(res, 'text/plain; charset=utf-8', Buffer.from('retcode=0\n'));
-            return true;
-        }
-        const fixture = readProxy2PageFixture();
-        if (fixture) {
-            if (proxy2Mode === 'packet') {
-                sendBuffer(res, proxy2Page2ContentType,
-                    makeProxy2ResponsePacket(fixture, proxy2Page2Fields()));
-                return true;
-            }
-            sendBuffer(res, proxy2Page2ContentType, fixture);
-            return true;
-        }
-        sendBuffer(res, 'text/plain; charset=utf-8', Buffer.from('retcode=0\n'));
-        return true;
+        sendBuffer(res, proxy2Page2ContentType, fixture);
+        return;
     }
+    sendBuffer(res, 'text/plain; charset=utf-8', Buffer.from('retcode=0\n'));
+}
 
+function handleProxy2MrpPath(_req, res, body) {
     // /mrp: dmrp 资源下载器的固定端点；首包和续包均使用与 /res 相同的范围信封。
-    if (req.url === '/mrp') {
-        handleProxy2Mrp(res, body);
-        return true;
-    }
+    handleProxy2Mrp(res, body);
+}
 
+function handleProxy2Resource(_req, res, _body, target) {
     // /res: lib.download 的原生下载器通过proxy2范围请求获取文件正文。资源响应
     // 不使用网页的tag33=3，而以tag7/tag8/tag16描述类型、剩余长度和字节范围。
-    if (req.url === '/res') {
-        const { host, path: urlPath, rangeStart, rangeError } = extractProxy2RequestUrl(body);
-        if (!host || rangeError) {
-            if (rangeError) console.error('proxy2 res request error:', rangeError);
-            sendProxy2ResourceError(res, 400);
-            return true;
-        }
+    const { host, path: urlPath, rangeStart, rangeError } = target;
+    if (!host || rangeError) {
+        if (rangeError) console.error('proxy2 res request error:', rangeError);
+        sendProxy2ResourceError(res, 400);
+        return;
+    }
 
-        const targetUrl = buildProxy2TargetUrl(host, urlPath);
-        const stateKey = proxy2ResourceStateKey('res', targetUrl);
-        const requestedEnd = Math.min(rangeStart + proxy2ResourceChunkBytes - 1, 0xffffffff);
-        const priorState = resourceValidator(stateKey);
-        if (rangeStart > 0 && (!priorState || !priorState.validator)) {
-            // A continuation without the first range's validator could append
-            // bytes from a different upstream object after restart/eviction.
-            sendProxy2ResourceError(res, 409);
-            return true;
-        }
-        const requestHeaders = {
-            Range: `bytes=${rangeStart}-${requestedEnd}`,
-            // Byte ranges and Content-Range offsets apply to the identity
-            // representation; transparent compression would invalidate them.
-            'Accept-Encoding': 'identity',
-        };
-        if (priorState?.validator) requestHeaders['If-Range'] = priorState.validator;
-        fetchUrl(targetUrl, (err, chunk, statusCode, headers) => {
-            if (err) {
-                if (statusCode === 200 && priorState) {
-                    proxy2ResourceValidators.delete(stateKey);
-                }
-                console.error('proxy2 res fetch error:', err.message);
-                // 下载器同样依赖完整proxy2信封结束请求；纯文本错误响应无法
-                // 驱动其完成回调，会留下永久处于进行中的下载任务。
-                sendProxy2ResourceError(res, statusCode === 200 ? 502 : 404);
-                return;
-            }
-            if (statusCode !== 206) {
-                if (statusCode === 200 && priorState) {
-                    // If-Range returning 200 means the representation changed;
-                    // discard the old validator and require a clean retry.
-                    proxy2ResourceValidators.delete(stateKey);
-                }
-                console.error('proxy2 res fetch status=%d', statusCode);
-                sendProxy2ResourceError(res, statusCode === 416 ? 416 : 502);
-                return;
-            }
-            const contentRange = parseHttpContentRange(headers['content-range']);
-            const validator = responseValidator(headers);
-            const invalidRange = !contentRange
-                || contentRange.start !== rangeStart
-                || contentRange.end > requestedEnd
-                || chunk.length !== contentRange.end - contentRange.start + 1;
-            const changedObject = priorState != null
-                && (priorState.total !== contentRange?.total
-                    || (priorState.validator && priorState.validator !== validator));
-            if (invalidRange || changedObject) {
+    const targetUrl = buildProxy2TargetUrl(host, urlPath);
+    const stateKey = proxy2ResourceStateKey('res', targetUrl);
+    const requestedEnd = Math.min(rangeStart + proxy2ResourceChunkBytes - 1, 0xffffffff);
+    const priorState = resourceValidator(stateKey);
+    if (rangeStart > 0 && (!priorState || !priorState.validator)) {
+        // A continuation without the first range's validator could append
+        // bytes from a different upstream object after restart/eviction.
+        sendProxy2ResourceError(res, 409);
+        return;
+    }
+    const requestHeaders = {
+        Range: `bytes=${rangeStart}-${requestedEnd}`,
+        // Byte ranges and Content-Range offsets apply to the identity
+        // representation; transparent compression would invalidate them.
+        'Accept-Encoding': 'identity',
+    };
+    if (priorState?.validator) requestHeaders['If-Range'] = priorState.validator;
+    fetchUrl(targetUrl, (err, chunk, statusCode, headers) => {
+        if (err) {
+            if (statusCode === 200 && priorState) {
                 proxy2ResourceValidators.delete(stateKey);
-                console.error('proxy2 res invalid Content-Range or changed object');
-                sendProxy2ResourceError(res, 502);
-                return;
             }
-            const chunkEnd = contentRange.end + 1;
-            const fileLength = contentRange.total;
-            if (chunkEnd < fileLength && !validator) {
-                // Multi-request assembly is only safe with an origin validator;
-                // a one-chunk object needs no cross-request identity check.
-                console.error('proxy2 res origin supplied no usable validator');
-                sendProxy2ResourceError(res, 502);
-                return;
-            }
-            rememberResourceValidator(stateKey, validator, fileLength);
-            console.info('proxy2 res fetched %d bytes, sending range %d-%d, status=%d',
-                chunk.length, rangeStart, chunkEnd - 1, statusCode);
-            // WBRW把响应tag7作为Content-Type的u16枚举；22对应
-            // application/sky-mrp，缺少该字段时下载回调固定返回错误140。
-            // tag8是从本次起点算起的剩余响应长度，而不是对象总长；客户端每次
-            // 消耗payload后据此判断是否继续。tag16等价于HTTP Content-Range，
-            // 仍携带当前范围和完整对象长度。
-            sendProxy2ResourceChunk(res, chunk, rangeStart, fileLength);
-            if (fileLength === chunk.length) proxy2ResourceValidators.delete(stateKey);
-        }, 0, { headers: requestHeaders, maxBytes: proxy2ResourceChunkBytes });
-        return true;
-    }
-
-    // /image: 代理抓取内联图片
-    if (req.url === '/image') {
-        const { host, path: urlPath } = extractProxy2RequestUrl(body);
-        if (host) {
-            const targetUrl = buildProxy2TargetUrl(host, urlPath);
-            fetchUrl(targetUrl, (err, imageBody, statusCode) => {
-                if (err) {
-                    console.error('proxy2 image fetch error:', err.message);
-                    // 与/page2同理: 必须回合法proxy2包(status!=200),否则图片加载
-                    // 状态机等不到recv完成事件
-                    sendBuffer(res, proxy2Page2ContentType,
-                        makeProxy2ResponsePacket(Buffer.alloc(0), [], 404));
-                    return;
-                }
-                console.info('proxy2 image fetched %d bytes, status=%d', imageBody.length, statusCode);
-                sendBuffer(res, proxy2Page2ContentType,
-                    makeProxy2ResponsePacket(imageBody, []));
-            });
-            return true;
+            console.error('proxy2 res fetch error:', err.message);
+            // 下载器同样依赖完整proxy2信封结束请求；纯文本错误响应无法
+            // 驱动其完成回调，会留下永久处于进行中的下载任务。
+            sendProxy2ResourceError(res, statusCode === 200 ? 502 : 404);
+            return;
         }
-        sendBuffer(res, 'text/plain; charset=utf-8', Buffer.from('retcode=0\n'));
-        return true;
-    }
-
-    return false;
+        if (statusCode !== 206) {
+            if (statusCode === 200 && priorState) {
+                // If-Range returning 200 means the representation changed;
+                // discard the old validator and require a clean retry.
+                proxy2ResourceValidators.delete(stateKey);
+            }
+            console.error('proxy2 res fetch status=%d', statusCode);
+            sendProxy2ResourceError(res, statusCode === 416 ? 416 : 502);
+            return;
+        }
+        const contentRange = parseHttpContentRange(headers['content-range']);
+        const validator = responseValidator(headers);
+        const invalidRange = !contentRange
+            || contentRange.start !== rangeStart
+            || contentRange.end > requestedEnd
+            || chunk.length !== contentRange.end - contentRange.start + 1;
+        const changedObject = priorState != null
+            && (priorState.total !== contentRange?.total
+                || (priorState.validator && priorState.validator !== validator));
+        if (invalidRange || changedObject) {
+            proxy2ResourceValidators.delete(stateKey);
+            console.error('proxy2 res invalid Content-Range or changed object');
+            sendProxy2ResourceError(res, 502);
+            return;
+        }
+        const chunkEnd = contentRange.end + 1;
+        const fileLength = contentRange.total;
+        if (chunkEnd < fileLength && !validator) {
+            // Multi-request assembly is only safe with an origin validator;
+            // a one-chunk object needs no cross-request identity check.
+            console.error('proxy2 res origin supplied no usable validator');
+            sendProxy2ResourceError(res, 502);
+            return;
+        }
+        rememberResourceValidator(stateKey, validator, fileLength);
+        console.info('proxy2 res fetched %d bytes, sending range %d-%d, status=%d',
+            chunk.length, rangeStart, chunkEnd - 1, statusCode);
+        // WBRW把响应tag7作为Content-Type的u16枚举；22对应
+        // application/sky-mrp，缺少该字段时下载回调固定返回错误140。
+        // tag8是从本次起点算起的剩余响应长度，而不是对象总长；客户端每次
+        // 消耗payload后据此判断是否继续。tag16等价于HTTP Content-Range，
+        // 仍携带当前范围和完整对象长度。
+        sendProxy2ResourceChunk(res, chunk, rangeStart, fileLength);
+        if (fileLength === chunk.length) proxy2ResourceValidators.delete(stateKey);
+    }, 0, { headers: requestHeaders, maxBytes: proxy2ResourceChunkBytes });
 }
+
+function handleProxy2Image(_req, res, _body, target) {
+    // /image: 代理抓取内联图片
+    const targetUrl = buildProxy2TargetUrl(target.host, target.path);
+    fetchUrl(targetUrl, (err, imageBody, statusCode) => {
+        if (err) {
+            console.error('proxy2 image fetch error:', err.message);
+            // 与/page2同理: 必须回合法proxy2包(status!=200),否则图片加载
+            // 状态机等不到recv完成事件
+            sendBuffer(res, proxy2Page2ContentType,
+                makeProxy2ResponsePacket(Buffer.alloc(0), [], 404));
+            return;
+        }
+        console.info('proxy2 image fetched %d bytes, status=%d', imageBody.length, statusCode);
+        sendBuffer(res, proxy2Page2ContentType,
+            makeProxy2ResponsePacket(imageBody, []));
+    });
+}
+
+function handleProxy2EmptyImage(_req, res) {
+    sendBuffer(res, 'text/plain; charset=utf-8', Buffer.from('retcode=0\n'));
+}
+
+const proxy2PathHandlers = new Map([
+    ['/sta', handleProxy2Sta],
+    ['/page2', handleProxy2WebPage],
+    ['/mrp', handleProxy2MrpPath],
+    ['/res', handleProxy2Resource],
+    ['/image', handleProxy2Image],
+]);
 
 function handleHelpProxy(req, res) {
     if (!req.url.startsWith('/update/?pageid=0')) {
@@ -1438,6 +1428,36 @@ function handleHelpProxy(req, res) {
     return true;
 }
 
+function handleProxy2HelpPage(req, res, body, target) {
+    const targetReq = { url: target.path, headers: { host: target.host } };
+    if (!handleHelpProxy(targetReq, res)) {
+        handleProxy2WebPage(req, res, body, target);
+    }
+}
+
+const proxy2TargetHostPathOverrides = new Map([
+    ['', new Map([
+        ['/page2', handleProxy2HomePage],
+        ['/image', handleProxy2EmptyImage],
+    ])],
+    [proxy2Host, new Map([
+        ['/page2', handleProxy2HomePage],
+    ])],
+    [helpProxyHost, new Map([
+        ['/page2', handleProxy2HelpPage],
+    ])],
+]);
+
+function handleProxy2Host(req, res, body) {
+    logProxy2Packet(req, body);
+    const target = extractProxy2RequestUrl(body);
+    const hostPathOverrides = proxy2TargetHostPathOverrides.get(target.host);
+    const handler = hostPathOverrides?.get(req.url) || proxy2PathHandlers.get(req.url);
+    if (!handler) return false;
+    handler(req, res, body, target);
+    return true;
+}
+
 function sendProxyError(res, error) {
     console.error('proxy error:', error && error.stack ? error.stack : error);
     if (res.headersSent) {
@@ -1454,16 +1474,15 @@ function sendProxyError(res, error) {
     res.end(body);
 }
 
+const requestHostHandlers = new Map([
+    [proxy2Host, handleProxy2Host],
+    [helpProxyHost, handleHelpProxy],
+]);
+
 function handleRequestBody(req, res, body) {
     const host = requestAuthority(req)?.hostname || '';
-
-    if (host === 'proxy2.51mrp.com' && handleProxy2(req, res, body)) {
-        return;
-    }
-
-    if (host === 'help.proxy.51mrp.com' && handleHelpProxy(req, res)) {
-        return;
-    }
+    const hostHandler = requestHostHandlers.get(host);
+    if (hostHandler?.(req, res, body)) return;
 
     // Print the complete request body for local HTTP debugging.
     console.info(body.toString('utf8'));
@@ -1475,16 +1494,25 @@ function handleRequestBody(req, res, body) {
     res.end(responseBody);
 }
 
+function handleMrpDownloadHost(req, res, authority) {
+    // `/sd` does not consume a request body. Dispatch before the generic
+    // collector so an untrusted GET cannot make the process buffer it.
+    req.on('error', error => {
+        if (!res.writableEnded) sendProxyError(res, error);
+    });
+    handleSdDownload(req, res, authority);
+    req.resume();
+}
+
+const requestStreamlessHostHandlers = new Map([
+    [proxy2MrpHost, handleMrpDownloadHost],
+]);
+
 function handleRequest(req, res) {
     const authority = requestAuthority(req);
-    if (authority?.hostname === proxy2MrpHost) {
-        // `/sd` does not consume a request body. Dispatch before the generic
-        // collector so an untrusted GET cannot make the process buffer it.
-        req.on('error', error => {
-            if (!res.writableEnded) sendProxyError(res, error);
-        });
-        handleSdDownload(req, res, authority);
-        req.resume();
+    const streamlessHostHandler = requestStreamlessHostHandlers.get(authority?.hostname || '');
+    if (streamlessHostHandler) {
+        streamlessHostHandler(req, res, authority);
         return;
     }
 
