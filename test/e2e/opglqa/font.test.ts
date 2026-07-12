@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { VmrpE2e, VmrpWorkspace } from "../vmrp-e2e.js";
 import fs from "fs";
 
@@ -18,6 +18,7 @@ describe("opglqa 进入主菜单", () => {
       await vmrp!.delay(500);
     }
     const screen = await vmrp!.screen(name);
+    // rgb(144, 212, 248)
     expect(screen.pixel(9, 188)).toEqual([144, 212, 248]);
   };
 
@@ -55,10 +56,14 @@ describe("opglqa 进入主菜单", () => {
     {
       // 开始下载字体资源，下载完成后显示下载完成结果。
       await vmrp.key('LEFT_SOFT', 1_000)
-      await vmrp.delay(6_000);
-      const screen = await vmrp.screen("confirm-result");
-      // rgb(0, 0, 0)
-      expect(screen.pixel(155, 153)).toEqual([0, 0, 0]);
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const screen = await vmrp.screen("confirm-result");
+        // rgb(0, 0, 0)
+        expect(screen.pixel(155, 153)).toEqual([0, 0, 0]);
+        // rgb(248, 252, 248)
+        expect(screen.pixel(30, 301)).toEqual([248, 252, 248]);
+      }, { timeout: 20_000, interval: 1_000 });
     }
     {
       // 确认下载结果，进入主界面。

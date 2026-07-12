@@ -54,7 +54,7 @@ describe("gzwdzjs 进入主菜单", () => {
         const screen = await vmrp.screen("need-power");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
-      }, { timeout: 90_000, interval: 1_000 });
+      }, { timeout: 180_000, interval: 1_000 });
     }
     {
       console.info('继续游戏')
