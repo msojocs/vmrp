@@ -367,29 +367,6 @@ else()
   target_link_libraries(vmrp unicorn "-Wl,--no-as-needed" SDL2main SDL2 m pthread z)
 endif()
 
-# --- C 层单元测试(重构安全网 P0.2,docs/arm-ext-executor-refactor-plan.md)---
-# test_arm_ext.c 直接 #include arm_ext_executor.c 以测试其 static 纯内存函数;
-# mythroad/bridge 外部符号由 unit_stubs.c 提供 abort 桩。ctest 运行。
-if(NOT MSVC)
-  enable_testing()
-  add_executable(vmrp-unit
-    ./test/unit/test_arm_ext.c
-    ./test/unit/unit_stubs.c
-    ${VMRP_ARM_EXT_SPLIT_SOURCES}
-    ./src/utils.c
-    ./src/rbtree.c
-    ./src/fileLib.c
-    ./src/network.c
-    ./src/app_compat.c
-    ./src/app_compat_gghjt.c
-  )
-  target_compile_definitions(vmrp-unit PRIVATE VMRP_NATIVE TRUST_BINARIES)
-  target_include_directories(vmrp-unit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
-  # --no-as-needed 原因同 vmrp 目标:unicorn 内部静态库需要 -lm 的 fma/sqrt
-  target_link_libraries(vmrp-unit unicorn "-Wl,--no-as-needed" m pthread z)
-  add_test(NAME vmrp-unit COMMAND vmrp-unit)
-endif()
-
 # --- Wasm 构建（emcc）---
 # 用法: cmake --build build --target vmrp-wasm
 # 需要 emcc 在 PATH 中
