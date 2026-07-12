@@ -230,3 +230,9 @@
 ## [2026-07-12T10:09:53+08:00] ingest
 - **Pages:** wbrw-manual-clipboard-and-menu-exit-verification.md
 - **Summary:** Corrected the premature zero-delay result; recorded the edit-mode one-shot timer loss, generic main-loop fix, no-SCREEN clean and persisted-state verification, PPM evidence, guest exit, and cross-application regressions.
+## [2026-07-12T04:04:54.545Z] ingest
+- **Pages:** gzwdzjs-play-mr-ucs2gb-caller-owned-output-pointer-fix.md
+- **Summary:** Created new page "gzwdzjs play MR_UCS2GB caller-owned output pointer fix"
+## [2026-07-12T04:06:31.247Z] lint
+- **Pages:** dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-record-pack-slot-fix.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-play-mr-ucs2gb-caller-owned-output-pointer-fix.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-proxy2-font-mrp-download.md, wbrw-proxy2-web-page-rendering.md
+- **Summary:** Lint: 19 issues (16 orphan, 0 stale, 1 broken, 0 contradictions)
