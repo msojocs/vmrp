@@ -104,7 +104,7 @@ describe("gzwdzjs 游戏", () => {
         await vmrp.key('ENTER', 1_000);
         await vmrp.delay(1_000);
       }
-      // 等待游戏结束，出现“获得新植物”弹窗
+      // 等待关卡结束提示
       await vi.waitFor(async () => {
         if (!vmrp) throw new Error("vmrp is undefined");
         const screen = await vmrp.screen("study-end");
@@ -114,12 +114,12 @@ describe("gzwdzjs 游戏", () => {
       // 确定
       await vmrp.key('ENTER', 1_000);
       await vmrp.delay(1_000);
-      // 等待下个画面
+      // 关卡结束提示确认后，20 秒内应显示“获得新植物”界面。
       await vi.waitFor(async () => {
         if (!vmrp) throw new Error("vmrp is undefined");
-        const screen = await vmrp.screen("study-end");
-        // rgb(232, 196, 72)
-        expect(screen.pixel(80, 163)).not.toEqual([232, 196, 72]);
+        const screen = await vmrp.screen("new-plant");
+        expect(screen.pixel(1, 1)).toEqual([184, 252, 0]);
+        expect(screen.pixel(10, 10)).toEqual([208, 244, 200]);
       }, { timeout: 20_000, interval: 1_000 });
     }
   });

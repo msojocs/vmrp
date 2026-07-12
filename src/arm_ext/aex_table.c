@@ -2113,14 +2113,21 @@ static void aex_t038(ArmExtModule *m, AexTableCtx *c) {
 
             if (outputp_addr) {
                 uint32_t new_arm_output = arm_output;
-                if (host_output && host_output_len > 0) {
-                    void *old_arm_ptr = arm_output ? arm_ptr(m, arm_output) : NULL;
-                    if (host_output != old_arm_ptr) {
+                void *old_arm_ptr = arm_output ? arm_ptr(m, arm_output) : NULL;
+                if (host_output) {
+                    /* mr_platEx can write into a caller-owned buffer without
+                     * updating output_len (MR_UCS2GB is one documented ABI).
+                     * Pointer identity proves that no host-to-guest copy is
+                     * needed, so retain the original ARM address even when the
+                     * reported length is zero. */
+                    if (host_output != old_arm_ptr && host_output_len > 0) {
                         new_arm_output = arm_alloc(m, (uint32_t)host_output_len + 1);
                         if (new_arm_output) {
                             memcpy(arm_ptr(m, new_arm_output), host_output, (uint32_t)host_output_len);
                             ((uint8 *)arm_ptr(m, new_arm_output))[host_output_len] = '\0';
                         }
+                    } else if (host_output != old_arm_ptr) {
+                        new_arm_output = 0;
                     }
                 } else {
                     new_arm_output = 0;

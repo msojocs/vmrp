@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 19 pages | Last updated: 2026-07-12T10:09:53+08:00
+> 20 pages | Last updated: 2026-07-12T04:04:54.550Z
 
 ## debugging
 
@@ -13,6 +13,7 @@
 - [gghjt modal timer and cold extraction regressions](gghjt-modal-timer-and-cold-extraction-regressions.md) — # gghjt modal timer and cold extraction regressions
 - [gms payment latency analysis](gms-payment-latency-analysis.md) — # gms payment latency analysis
 - [gzwdzjs ARM EXT DrawBitmap source overrun](gzwdzjs-arm-ext-drawbitmap-source-overrun.md) — # gzwdzjs ARM EXT DrawBitmap source overrun
+- [gzwdzjs play MR_UCS2GB caller-owned output pointer fix](gzwdzjs-play-mr-ucs2gb-caller-owned-output-pointer-fix.md) — # gzwdzjs play MR_UCS2GB caller-owned output pointer fix
 - [gzwdzjs primary black clear damage synthesis](gzwdzjs-primary-black-clear-damage-synthesis.md) — # gzwdzjs primary black clear damage synthesis
 - [gzwdzjs table bridge stale epilogue guard](gzwdzjs-table-bridge-stale-epilogue-guard.md) — # gzwdzjs table bridge stale epilogue guard
 - [opglqa font download repeat investigation](opglqa-font-download-repeat-investigation.md) — # opglqa font download repeat investigation
