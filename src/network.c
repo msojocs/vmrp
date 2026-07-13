@@ -63,6 +63,50 @@ typedef struct {
 static DnsMapEntry dnsMap[VMRP_DNS_MAP_MAX];
 static int dnsMapCount = 0;
 
+#define VMRP_NET_LOG_ENABLED() (getenv("VMRP_NETWORK_LOG") != NULL || getenv("VMRP_LOG") != NULL)
+#define VMRP_NET_LOG(...)                       \
+    do {                                       \
+        if (VMRP_NET_LOG_ENABLED()) {          \
+            fprintf(stderr, "[vmrp-net] ");    \
+            fprintf(stderr, __VA_ARGS__);      \
+            fflush(stderr);                    \
+        }                                      \
+    } while (0)
+
+#ifdef _MSC_VER
+typedef HANDLE VmrpThread;
+typedef DWORD(WINAPI *VmrpThreadStart)(void *);
+#define VMRP_THREAD_RET DWORD WINAPI
+#define VMRP_THREAD_DONE 0
+#else
+typedef pthread_t VmrpThread;
+typedef void *(*VmrpThreadStart)(void *);
+#define VMRP_THREAD_RET void *
+#define VMRP_THREAD_DONE NULL
+#endif
+
+static int startDetachedThread(VmrpThread *thread, VmrpThreadStart start, void *arg) {
+#ifdef _MSC_VER
+    DWORD threadId = 0;
+    HANDLE handle = CreateThread(NULL, 0, start, arg, 0, &threadId);
+    if (!handle) {
+        return MR_FAILED;
+    }
+    /*
+     * Network callbacks already own their heap payload.  The emulator never
+     * joins these short-lived workers, so close the Windows handle immediately
+     * while leaving the thread running, matching the existing POSIX fire-and-
+     * forget behavior without leaking kernel handles.
+     */
+    if (thread) *thread = handle;
+    CloseHandle(handle);
+    if (thread) *thread = NULL;
+    return MR_SUCCESS;
+#else
+    return pthread_create(thread, NULL, start, arg) == 0 ? MR_SUCCESS : MR_FAILED;
+#endif
+}
+
 static char* trimSpaces(char* s) {
     char* end;
     while (*s && isspace((unsigned char)*s)) s++;
@@ -120,6 +164,7 @@ static int parseDnsMapEntry(char* entry) {
 
     strcpy(dnsMap[dnsMapCount].original, originalNorm);
     strcpy(dnsMap[dnsMapCount].fake, fakeNorm);
+    VMRP_NET_LOG("dns_map[%d]: %s -> %s\n", dnsMapCount, originalNorm, fakeNorm);
     dnsMapCount++;
     return MR_SUCCESS;
 }
@@ -130,7 +175,11 @@ int32 my_configureDnsMap(const char* map) {
     char* next;
 
     dnsMapCount = 0;
-    if (!map || !*map) return MR_SUCCESS;
+    VMRP_NET_LOG("configure_dns_map raw='%s'\n", map ? map : "(null)");
+    if (!map || !*map) {
+        VMRP_NET_LOG("configure_dns_map cleared\n");
+        return MR_SUCCESS;
+    }
 
     buf = malloc(strlen(map) + 1);
     if (!buf) return MR_FAILED;
@@ -151,27 +200,32 @@ int32 my_configureDnsMap(const char* map) {
         if (parseDnsMapEntry(entry) != MR_SUCCESS) {
             free(buf);
             dnsMapCount = 0;
+            VMRP_NET_LOG("configure_dns_map failed at entry='%s'\n", entry);
             return MR_FAILED;
         }
         entry = next;
     }
 
     free(buf);
+    VMRP_NET_LOG("configure_dns_map count=%d\n", dnsMapCount);
     return MR_SUCCESS;
 }
 
 static const char* getDnsLookupName(const char* name, char* mappedName, size_t mappedNameSize) {
     char normalized[VMRP_DNS_NAME_MAX + 1];
     if (copyNormalizedDomain(normalized, sizeof(normalized), name) != MR_SUCCESS) {
+        VMRP_NET_LOG("dns_lookup invalid name='%s'\n", name ? name : "(null)");
         return name;
     }
     for (int i = dnsMapCount - 1; i >= 0; i--) {
         if (strcmp(dnsMap[i].original, normalized) == 0) {
             snprintf(mappedName, mappedNameSize, "%s", dnsMap[i].fake);
             printf("dns map: %s -> %s\n", name, mappedName);
+            VMRP_NET_LOG("dns_lookup hit: %s -> %s\n", normalized, mappedName);
             return mappedName;
         }
     }
+    VMRP_NET_LOG("dns_lookup miss: %s (entries=%d)\n", normalized, dnsMapCount);
     return name;
 }
 
@@ -253,14 +307,12 @@ static int parseHostPort(const char* buf, int bufLen, char* outHost, int outHost
     return -1;
 }
 
-#ifndef _MSC_VER
 typedef struct {
-    pthread_t th;
+    VmrpThread th;
     mSocket* s;
     uint32_t ip;
     uint16_t port;
 } connectData_t;
-#endif
 
 static int32 my_connectSync(SOCKET_T s, int32 ip, uint16 port) {
     struct sockaddr_in clientService;
@@ -269,17 +321,21 @@ static int32 my_connectSync(SOCKET_T s, int32 ip, uint16 port) {
     clientService.sin_addr.s_addr = htonl(ip);  //inet_addr("127.0.0.1");
 
     printf("my_connect(fd:%d, '%s', %d)\n", (int)s, inet_ntoa(clientService.sin_addr), port);
+    VMRP_NET_LOG("connect fd=%d target=%s:%u ip=0x%X\n",
+                 (int)s, inet_ntoa(clientService.sin_addr), (unsigned)port, (unsigned)ip);
 
     if (connect(s, (struct sockaddr*)&clientService, sizeof(clientService)) != 0) {
         printf("my_connect(0x%X) fail\n", ip);
+        VMRP_NET_LOG("connect failed ip=0x%X socket_error=%d errno=%d\n",
+                     (unsigned)ip, GET_SOCKET_ERROR(), errno);
         return MR_FAILED;
     }
     printf("my_connect(0x%X) suc\n", ip);
+    VMRP_NET_LOG("connect success ip=0x%X\n", (unsigned)ip);
     return MR_SUCCESS;
 }
 
-#ifndef _MSC_VER
-static void* my_connectAsync(void* arg) {
+static VMRP_THREAD_RET my_connectAsync(void* arg) {
     connectData_t* data = (connectData_t*)arg;
     int32_t r = my_connectSync(data->s->s, data->ip, data->port);
     data->s->realState = r;
@@ -289,9 +345,8 @@ static void* my_connectAsync(void* arg) {
         data->s->cmwapProxyAck = 1;  // 触发伪造的代理200响应
     }
     free(data);
-    return NULL;
+    return VMRP_THREAD_DONE;
 }
-#endif
 /*
    MR_SUCCESS 成功
    MR_FAILED 失败
@@ -311,13 +366,16 @@ int32 my_connect(int32 s, int32 ip, uint16 port, int32 type) {
         return MR_SUCCESS;
     }
     printf("my_connect() type: %s\n", type == MR_SOCKET_BLOCK ? "block" : "async");
+    VMRP_NET_LOG("my_connect guest_socket=%d host_fd=%d ip=0x%X port=%u type=%s cmwap=%d\n",
+                 s, (int)data->s, (unsigned)ip, (unsigned)port,
+                 type == MR_SOCKET_BLOCK ? "block" : "async", data->cmwapMode);
     if (type == MR_SOCKET_NONBLOCK) {
         connectData_t* d = malloc(sizeof(connectData_t));
         d->s = data;
         d->ip = ip;
         d->port = port;
-        int ret = pthread_create(&d->th, NULL, my_connectAsync, d);
-        if (ret != 0) {
+        if (startDetachedThread(&d->th, my_connectAsync, d) != MR_SUCCESS) {
+            free(d);
             data->state = MR_FAILED;
             data->realState = MR_FAILED;
             return MR_FAILED;
@@ -439,14 +497,12 @@ int32 my_closeNetwork(void) {
 #endif
 }
 
-#ifndef _MSC_VER
 typedef struct {
     MR_INIT_NETWORK_CB cb;
     void* userData;
     uc_engine* uc;
-    pthread_t th;
+    VmrpThread th;
 } initNetworkAsyncData_t;
-#endif
 
 static int32 my_initNetworkSync(void) {
 #ifdef WIN_PLAT
@@ -474,8 +530,7 @@ static int32 my_initNetworkSync(void) {
     return MR_SUCCESS;
 }
 
-#ifndef _MSC_VER
-static void* my_initNetworkAsync(void* arg) {
+static VMRP_THREAD_RET my_initNetworkAsync(void* arg) {
     initNetworkAsyncData_t* data = (initNetworkAsyncData_t*)arg;
     int32 r = my_initNetworkSync();
     printf("my_initNetworkAsync(): %d\n", r);
@@ -484,9 +539,8 @@ static void* my_initNetworkAsync(void* arg) {
     bridge_dsm_network_cb(data->uc, (uint32_t)(uintptr_t)data->cb, r,
                           (uint32_t)(uintptr_t)data->userData);
     free(data);
-    return NULL;
+    return VMRP_THREAD_DONE;
 }
-#endif
 
 /*  
    MR_SUCCESS 同步模式，初始化成功，不再调用cb
@@ -496,6 +550,7 @@ static void* my_initNetworkAsync(void* arg) {
 int32 my_initNetwork(uc_engine* uc, MR_INIT_NETWORK_CB cb, const char* mode, void* userData) {
 #ifdef NETWORK_SUPPORT
     printf("my_initNetwork(0x%p, '%s')\n", cb, mode);
+    VMRP_NET_LOG("init_network mode='%s' cb=%p\n", mode ? mode : "(null)", (void*)cb);
     /* Mythroad apps can reinitialize the network with CMNET after a CMWAP
      * download.  The active mode must therefore be replaced, not only ever
      * promoted to CMWAP, otherwise later async connects stay visibly WAITING. */
@@ -505,7 +560,8 @@ int32 my_initNetwork(uc_engine* uc, MR_INIT_NETWORK_CB cb, const char* mode, voi
         data->cb = cb;
         data->userData = userData;
         data->uc = uc;
-        if (pthread_create(&data->th, NULL, my_initNetworkAsync, data) != 0) {
+        if (startDetachedThread(&data->th, my_initNetworkAsync, data) != MR_SUCCESS) {
+            free(data);
             return MR_FAILED;
         }
         return MR_WAITING;
@@ -516,15 +572,13 @@ int32 my_initNetwork(uc_engine* uc, MR_INIT_NETWORK_CB cb, const char* mode, voi
 #endif
 }
 
-#ifndef _MSC_VER
 typedef struct {
     char* name;
     MR_GET_HOST_CB cb;
     void* userData;
     uc_engine* uc;
-    pthread_t th;
+    VmrpThread th;
 } getHostByNameAsyncData_t;
-#endif
 
 static int32 my_getHostByNameSync(const char* name) {
     int32 ret = MR_FAILED;
@@ -534,8 +588,12 @@ static int32 my_getHostByNameSync(const char* name) {
 #if 1
     struct addrinfo *result, *res;
     printf("getaddrinfo of %s\n", lookupName);
-    if (getaddrinfo(lookupName, NULL, NULL, &result) != 0) {
+    VMRP_NET_LOG("get_host name='%s' lookup='%s'\n", name ? name : "(null)", lookupName ? lookupName : "(null)");
+    int gai = getaddrinfo(lookupName, NULL, NULL, &result);
+    if (gai != 0) {
         printf("getaddrinfo failed!\n");
+        VMRP_NET_LOG("getaddrinfo failed name='%s' lookup='%s' code=%d\n",
+                     name ? name : "(null)", lookupName ? lookupName : "(null)", gai);
         return ret;
     }
     for (res = result; res; res = res->ai_next) {
@@ -545,6 +603,8 @@ static int32 my_getHostByNameSync(const char* name) {
             // printf("--- IPv4 address: %s\n", inet_ntop(res->ai_family, addr, addrstr, sizeof(addrstr)));
             printf("--- IPv4 address: %s\n", inet_ntoa(*addr));
             ret = ntohl((*addr).s_addr);
+            VMRP_NET_LOG("get_host result name='%s' ip=%s/0x%X\n",
+                         name ? name : "(null)", inet_ntoa(*addr), (unsigned)ret);
             break;
         }
     }
@@ -565,8 +625,7 @@ static int32 my_getHostByNameSync(const char* name) {
     return ret;
 }
 
-#ifndef _MSC_VER
-static void* my_getHostByNameAsync(void* arg) {
+static VMRP_THREAD_RET my_getHostByNameAsync(void* arg) {
     getHostByNameAsyncData_t* data = (getHostByNameAsyncData_t*)arg;
     int32 r = my_getHostByNameSync(data->name);
     printf("my_getHostByNameAsync(): 0x%X\n", r);
@@ -575,9 +634,8 @@ static void* my_getHostByNameAsync(void* arg) {
                           (uint32_t)(uintptr_t)data->userData);
     free(data->name);
     free(data);
-    return NULL;
+    return VMRP_THREAD_DONE;
 }
-#endif
 
 /*
    MR_FAILED （立即感知的）失败，不再调用cb
@@ -588,6 +646,7 @@ int32 my_getHostByName(uc_engine* uc, const char* name, MR_GET_HOST_CB cb, void*
     printf("my_getHostByName\n");
 #ifdef NETWORK_SUPPORT
     printf("my_getHostByName('%s', 0x%p)\n", name, cb);
+    VMRP_NET_LOG("my_get_host name='%s' cb=%p\n", name ? name : "(null)", (void*)cb);
     if (cb != NULL) {
         getHostByNameAsyncData_t* data = malloc(sizeof(getHostByNameAsyncData_t));
         int len = strlen(name);
@@ -597,8 +656,9 @@ int32 my_getHostByName(uc_engine* uc, const char* name, MR_GET_HOST_CB cb, void*
         data->cb = cb;
         data->userData = userData;
         data->uc = uc;
-        int ret = pthread_create(&data->th, NULL, my_getHostByNameAsync, data);
-        if (ret != 0) {
+        if (startDetachedThread(&data->th, my_getHostByNameAsync, data) != MR_SUCCESS) {
+            free(data->name);
+            free(data);
             return MR_FAILED;
         }
         return MR_WAITING;

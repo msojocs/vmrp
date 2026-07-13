@@ -608,6 +608,10 @@ VMRP_EXPORT int vmrp_api_set_work_dir(const char *work_dir) {
 VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char *entry) {
     VMRP_API_LOG("[vmrp_api] start('%s','%s','%s')\n", mrp_path ? mrp_path : "(null)",
                  ext ? ext : "(null)", entry ? entry : "(null)");
+    VMRP_API_LOG("[vmrp_api] work_dir='%s' dns_map_set=%d dns_map='%s'\n",
+                 vmrp_config.work_dir[0] ? vmrp_config.work_dir : "(unset)",
+                 api_dns_map_set,
+                 api_dns_map_set ? api_dns_map : "(default)");
     if (!mrp_path || !*mrp_path) return -1;
     if (!ext || !*ext) ext = "start.mr";
 
@@ -661,23 +665,29 @@ VMRP_EXPORT void vmrp_api_destroy(void) {
 VMRP_EXPORT int vmrp_api_set_dns_map(const char *map) {
     char copy[VMRP_DNS_MAP_LIMIT];
 
+    VMRP_API_LOG("[vmrp_api] set_dns_map('%s')\n", map ? map : "(null)");
     if (!map || !*map) {
         api_dns_map[0] = '\0';
         api_dns_map_set = 0;
-        return configureVmrpDnsMap(map) == 0 ? 0 : -1;
+        int ret = configureVmrpDnsMap(map) == 0 ? 0 : -1;
+        VMRP_API_LOG("[vmrp_api] set_dns_map cleared ret=%d\n", ret);
+        return ret;
     }
 
     int n = snprintf(copy, sizeof(copy), "%s", map);
     if (n < 0 || (size_t)n >= sizeof(copy)) {
+        VMRP_API_LOG("[vmrp_api] set_dns_map too long\n");
         return -1;
     }
     if (configureVmrpDnsMap(copy) != 0) {
         api_dns_map[0] = '\0';
         api_dns_map_set = 0;
+        VMRP_API_LOG("[vmrp_api] set_dns_map invalid\n");
         return -1;
     }
     snprintf(api_dns_map, sizeof(api_dns_map), "%s", copy);
     api_dns_map_set = 1;
+    VMRP_API_LOG("[vmrp_api] set_dns_map stored entries='%s'\n", api_dns_map);
     return 0;
 }
 

@@ -345,7 +345,7 @@ add_executable(vmrp
   ./src/app_compat_gghjt.c
   ${VMRP_MYTHROAD_SOURCES}
 )
-target_compile_definitions(vmrp PRIVATE VMRP_NATIVE VMRP_SDL_AUDIO TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
+target_compile_definitions(vmrp PRIVATE NETWORK_SUPPORT VMRP_NATIVE VMRP_SDL_AUDIO TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
 target_include_directories(vmrp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
 if(MSVC)
   vmrp_add_link_flags(vmrp "/FORCE:MULTIPLE")
@@ -435,7 +435,7 @@ if(VMRP_BUILD_SHARED)
     ./src/app_compat_gghjt.c
     ${VMRP_MYTHROAD_SOURCES}
   )
-  target_compile_definitions(vmrp-shared PRIVATE VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
+  target_compile_definitions(vmrp-shared PRIVATE NETWORK_SUPPORT VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
   target_include_directories(vmrp-shared PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
   if(MSVC)
     target_compile_options(vmrp-shared PRIVATE $<$<NOT:$<CONFIG:Debug>>:/O2>)
