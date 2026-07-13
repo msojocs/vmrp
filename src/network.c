@@ -8,6 +8,7 @@
 #include <string.h>
 #include <errno.h>
 
+#include "./include/compat_msvc.h"
 #include "./include/network.h"
 #include "./include/posix_sockets.h"
 #include "include/types.h"

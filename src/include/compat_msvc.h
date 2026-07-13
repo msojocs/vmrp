@@ -33,6 +33,18 @@
 #define O_RAW _O_BINARY
 #endif
 
+#ifndef getcwd
+#define getcwd _getcwd
+#endif
+
+#ifndef strncasecmp
+#define strncasecmp _strnicmp
+#endif
+
+#ifndef strtok_r
+#define strtok_r(str, delim, saveptr) strtok_s((str), (delim), (saveptr))
+#endif
+
 #ifndef CLOCK_MONOTONIC
 #define CLOCK_MONOTONIC 1
 #endif

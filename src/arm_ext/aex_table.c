@@ -12,7 +12,9 @@
 #include "../include/utils.h"
 
 #include <ctype.h>
+#ifndef _MSC_VER
 #include <unistd.h>
+#endif
 
 static void aex_t001(ArmExtModule *m, AexTableCtx *c) {
     (void)m;

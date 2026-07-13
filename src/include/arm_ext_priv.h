@@ -13,6 +13,7 @@
 
 #include "arm_ext_internal.h"
 #include "arm_ext_host.h"
+#include "compat_msvc.h"
 
 /* ---- 微工具(拆分期间上收,多个单元共用) ---- */
 static inline uint32_t align4(uint32_t v) { return (v + 3u) & ~3u; }
