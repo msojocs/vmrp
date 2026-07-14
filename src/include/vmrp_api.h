@@ -58,6 +58,9 @@ VMRP_EXPORT int vmrp_api_set_work_dir(const char *work_dir);
 VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char *entry);
 VMRP_EXPORT void vmrp_api_destroy(void);
 VMRP_EXPORT int vmrp_api_is_running(void);
+/* Pauses/resumes the native VM worker without destroying emulator state. */
+VMRP_EXPORT int vmrp_api_pause(void);
+VMRP_EXPORT int vmrp_api_resume(void);
 
 /*
  * DNS mapping: when MRP resolves original_domain, VMRP resolves fake_domain
