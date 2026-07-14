@@ -466,10 +466,10 @@ if (!exists('path/to/file'))
 充分利用子Agent。
 记得存储记忆数据。
 
-测试用例`test/e2e/gzwdzjs/repro.sh`执行后，十分卡顿。
+测试用例`test/e2e/cookie/run-mrp.test.ts`执行后，第一次左键一直不通过。
 
-预期结果：运行流畅。
-实际结果：十分卡顿。
+预期结果：第一次左键能通过。
+实际结果：总是卡在else reject(new Error(line || `Empty response to ${command}`));
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。
