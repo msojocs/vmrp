@@ -1,177 +1,357 @@
-<a href="https://996.icu"><img src="https://img.shields.io/badge/link-996.icu-red.svg" alt="996.icu" /></a>
+# SkyEngine
 
-# PC版本下载地址
+SkyEngine 是一个面向 Mythroad/MRP 应用的开源运行时与模拟器。项目使用本机 C 代码实现外层 Mythroad/DSM 运行环境，并通过 [Unicorn Engine](https://www.unicorn-engine.org/) 执行 MRP 包内的 ARM EXT 代码，因此不要求宿主 CPU 本身是 ARM 架构。
 
-https://github.com/vmrp/vmrp/releases/download/1.0.0/vmrp_win32_20220102.zip
+项目当前以 Linux 桌面版和真实 MRP 样本的自动化回归为主要开发基线，同时保留 Windows 桌面、WebAssembly，以及供 Android/Flutter 通过 FFI 集成的共享库构建路径。
 
-此版本已经实现完整的联网功能，可以运行支持网络通信的mrp了
+> SkyEngine 仍是兼容性研究项目，不是完整复刻所有型号手机和厂商服务的通用 MRP 平台。不同 MRP 对屏幕尺寸、内存、字体、插件、网络服务和平台私有接口的依赖差异很大；仓库内回归样本覆盖的流程不代表所有 MRP 都能正常运行。
 
-# web网页版体验地址
+## 项目来源
 
-https://vmrp.github.io/
+SkyEngine 基于 [VMRP](https://github.com/vmrp/vmrp) 二次开发。感谢 VMRP 原作者及后续贡献者完成的 MRP 格式研究、Mythroad 运行时移植、ARM EXT 执行和跨平台模拟器基础工作。
 
-https://vmrp.github.io/vmrp_v1.0/main.html
+当前代码仍保留上游的兼容标识：CMake 目标与桌面可执行文件名为 `vmrp`，共享库名为 `libvmrp`，公共 C API 使用 `vmrp_api_*` 前缀，环境变量使用 `VMRP_*` 前缀。这些名称属于现有构建和 ABI 接口，不代表对外项目名称；在完成兼容迁移前不会仅为品牌改名而破坏已有集成。
 
-## 捐赠硬件
+## 当前能力
 
-模拟器的开发需要在真实的手机上测试，如果您有支持mrp的手机愿意捐赠出来用作研究，欢迎联系我
+- 使用本机版 Mythroad/DSM 层加载 MRP、运行 MR/Lua 代码并管理平台生命周期。
+- 使用 vendored Unicorn 模拟 ARM，执行 MRP 内的 `cfunction.ext`、`game.ext` 及嵌套插件 EXT。
+- 通过 SDL2 提供桌面窗口、RGB565 画面、鼠标/触摸、功能键、文本输入和音频输出。
+- 支持 MIDI 合成，以及 WAV、PCM、MP3 的解码或转换播放。
+- 提供文件系统、TCP socket、DNS 映射和部分 CMWAP 兼容行为；浏览器、下载器等样本可以配合 `tool/` 下的本地服务调试。
+- 支持 `240x320` 之外的自定义屏幕尺寸，以及 `1/2/4/6/8/16 MB` 应用可见内存档位。
+- 提供无 SDL 的 `libvmrp` 共享库，导出生命周期、输入、RGB565/RGBA 画面、文本编辑和 PCM 音频接口。
+- 提供 Emscripten WebAssembly 目标和浏览器运行资源。
+- 使用 Vitest 驱动真实 MRP 样本，支持输入注入、逐帧等待、PPM 截图和像素断言。
 
-# 实现原理
+## 架构
 
-由于mrpoid模拟器受限于安卓系统，于是决定开发一款真正的模拟器
-
-mrpoid是安卓上的mrp模拟器，c语言开发的mrp是编译后的arm架构机器码，因此在arm芯片上直接加载运行就可以，安卓手机大多都是采用arm架构的cpu，mrpoid就是加载mrp代码到内存中，修改mrp内部的函数表然后运行，因此mrpoid无法在其它架构的设备上运行。
-
-vmrp实现原理与mrpoid基本相同，参考了mrpoid早期的实现原理，不同的地方是vmrp借助unicorn engine实现真正的模拟器，不再依赖arm架构cpu。
-
-以下是工作流程图，经过改进后自身实现的mythroad只用于加载ext，因此多余的部分目前已经被删除，自身实现的mythroad层已经没有运行简单mrp的能力
-
-![工作流程](/doc/images/2.0.jpg)
-
-## 自身实现的mythroad层：
-
-最早的模拟器实现的功能非常有限，于是将整个mythroad层交给arm代码去实现，尝试了ELF加载器的方式加载mythroad层发现有潜在的bug（gcc编译时在mythroad层主要问题是elfloader没有实现对GOT的处理，在gcc编译mrp的功能上主要是r9和r10寄存器的问题，因此放弃ELF加载器，仍然采用ext加载方式。
-
-完整版模拟器将借助mythroad层代码实现，代码在vmrp_arm项目中(vmrp_arm已经停止开发，代码已经复制到本项目的mythroad文件夹中)。
-
-# R9寄存器导致的BUG
-
-因为ext中的mr_c_function_load()函数是第一个函数，在mythroad层调用此函数其实相当于仍然在mythroad层调用mythroad层的东西，它会回调_mr_c_function_new()将mr_extHelper()或mr_helper()函数的地址传回mythroad，所有的事件传递都是通过这个helper函数，helper函数进去的第一件事就是备份r9寄存到r10，然后设置r9寄存器的值，在ext内的所有全局变量的读写都是基于这个寄存器提供的基地址，而在ext内调用mythroad层的函数时，r9和r10寄存器的值并没有恢复，这可能导致严重的问题，这可能就是安卓上mrpoid运行不稳定的原因，从反编译的结果来看，插件化mrp内的ext之间是有恢复r9寄存器的功能，但是没有恢复r10寄存器的功能，在目前能获得的mythroad层代码中没有看到任何恢复r9和r10的操作。
-
-注意，如果想采用elf加载器来实现gcc编译mrp仍然需要解决r9和r10寄存器的问题，因为斯凯使用armcc编译的elf与gcc编译的elf是不同的，虽然都是静态PIE，但是gcc编译的结果仍然保留了GOT表
-
-# 编译方法
-
-目前使用到的工具和支持库：
-
-https://nchc.dl.sourceforge.net/project/mingw-w64/Toolchains%20targetting%20Win32/Personal%20Builds/mingw-builds/8.1.0/threads-posix/sjlj/i686-8.1.0-release-posix-sjlj-rt_v6-rev0.7z
-
-https://github.com/aquynh/capstone/releases/download/4.0.1/capstone-4.0.1-win32.zip  （只有编译带DEBUG功能时才需要）
-
-https://github.com/unicorn-engine/unicorn/releases/download/1.0.2/unicorn-1.0.2-win32.zip
-
-https://www.libsdl.org/release/SDL2-devel-2.0.10-mingw.tar.gz
-
-可能需要安装zlib，我是直接从官网下载源码安装的
-
-将capstone、SDL2、unicorn解压到./windows文件夹内，在windows下用mingw32-make.exe编译，我的是i686-8.1.0-release-posix-sjlj-rt_v6-rev0版本)
-```
-$ ls ./windows/ -l
-drwxr-xr-x 1 zengming 197121       0  2月 29  2020 capstone-4.0.1-win32
-drwxr-xr-x 1 zengming 197121       0  2月 11  2020 SDL2-2.0.10
-drwxr-xr-x 1 zengming 197121       0  2月 11  2020 unicorn-1.0.1-win32
+```text
+MRP 包
+  |
+  +-- MR/Lua、资源 ----------> 原生 Mythroad/DSM 运行时
+  |
+  +-- ARM EXT ---------------> ARM EXT 执行器 ---> Unicorn ARM
+                                      |
+                                      +-- Mythroad/DSM 函数表桥接
+                                                   |
+                         +-------------------------+-------------------------+
+                         |                         |                         |
+                      文件/网络                 图形/输入                  音频
+                         |                         |                         |
+                    宿主操作系统             SDL2 或 FFI             SDL2 或 PCM FFI
 ```
 
-SDL2在linux可以通过下面的命令安装：
-```
-sudo apt install libsdl2-dev
-```
+外层 Mythroad 已直接从 `src/mythroad/` 编译为本机代码；Unicorn 只负责运行 MRP 包内仍为 ARM 机器码的 EXT。ARM EXT 的 R9/R10、GOT、guest 内存、函数表和嵌套模块状态由 `src/arm_ext_executor.c` 与 `src/arm_ext/` 共同维护。
 
-直接`mingw32-make`即可编译，使用`mingw32-make DEBUG=1`可以编译出带调试功能的版本
+## 平台与构建目标
 
-默认构建已将 `src/mythroad/` 中的 Mythroad/DSM 层作为本机代码编入程序，不再要求用斯凯 SDK/ARMCC 单独生成并提取外层 `cfunction.ext`。如需对照旧实现，可显式关闭原生路径：
+| 使用场景 | CMake 目标 | 当前说明 |
+| --- | --- | --- |
+| Linux 桌面 | `vmrp` | 主要开发与 CI 回归环境，使用 SDL2 |
+| Windows 桌面 | `vmrp` | 支持 MSVC 构建，CMake 获取 zlib 和 SDL2 |
+| Android/Flutter | `vmrp-shared` | 无 SDL 共享库，通过 C API/FFI 集成 |
+| Web 浏览器 | `vmrp-wasm` | 检测到 `emcc` 时才创建该目标 |
+
+## 快速开始
+
+### 1. 获取源码
+
+Unicorn 是仓库子模块，必须一并初始化：
 
 ```bash
-cmake -S . -B build-armext -DVMRP_USE_NATIVE_MYTHROAD=OFF
-cmake --build build-armext
+git clone --recurse-submodules https://github.com/msojocs/vmrp.git skyengine
+cd skyengine
 ```
 
-默认原生构建：
+已经克隆过仓库时执行：
 
 ```bash
-cmake -S . -B build-native -DVMRP_USE_NATIVE_MYTHROAD=ON
-cmake --build build-native
+git submodule update --init --recursive
 ```
 
-运行时默认启动 `dsm_gm.mrp` / `start.mr`；也可以直接传入要执行的 MRP：
+### 2. Linux 构建
+
+Ubuntu/Debian 可安装以下依赖：
 
 ```bash
-./build-native/vmrp /path/to/xxx.mrp
-./build-native/vmrp /path/to/xxx.mrp start.mr _dsm
+sudo apt-get update
+sudo apt-get install -y build-essential cmake git libsdl2-dev pkg-config zlib1g-dev
 ```
 
-DNS 解析可按域名映射覆盖：当 MRP 请求解析 `original_domain` 时，模拟器实际解析 `fake_domain`，并把 `fake_domain` 的 IPv4 结果返回给应用。可用 `--dns-map` 或 `VMRP_DNS_MAP` 配置，多条用逗号、分号或换行分隔：
+配置并构建：
 
 ```bash
-./build-native/vmrp --dns-map "old.example->new.example" /path/to/xxx.mrp
-VMRP_DNS_MAP="old.example->new.example;api.old.example=api.new.example" ./build-native/vmrp /path/to/xxx.mrp
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target vmrp --parallel
 ```
 
-调试时仍可用环境变量覆盖：
+从源码目录运行一个 MRP：
 
 ```bash
-VMRP_MRP=dsm_gm.mrp VMRP_EXT=start.mr VMRP_ENTRY=_dsm ./build-native/vmrp
-VMRP_ARM_EXT_SMOKE=mrc/asm/asm.mrp ./build-native/vmrp
+./build/vmrp --work-dir . /path/to/app.mrp
 ```
 
-第二条命令直接从 `mrc/asm/asm.mrp` 提取示例 ARM EXT，并用内置 `arm_ext_executor` 检查 `mrc_init()` 路径。
+不传 MRP 路径时，模拟器默认启动 `dsm_gm.mrp`：
 
-编译成功后还需要补充 bin 文件夹里面的文件才能运行：
-
-1. mythroad 文件夹: 与真实手机上的文件相同，主要是一些基本的 mrp 和字体等文件，在 `./wasm/dist/fs` 文件夹中能获得
-2. capstone.dll: 反编译引擎，只有用 DEBUG 功能编译的 main.exe 才会依赖这个文件，在 `./windows/capstone-4.0.1-win32/capstone.dll`
-3. SDL2.dll: 用于图形界面，在 `./windows/SDL2-2.0.10/i686-w64-mingw32/bin/SDL2.dll`
-4. unicorn.dll: 仍用于执行 MRP 包内 ARM EXT，在 `./windows/unicorn-1.0.2-win32/unicorn.dll`
-
-历史说明：旧 ARM 外层 `cfunction.ext` 路径仍保留为显式回退模式；只有该模式才需要旧的斯凯 SDK/ARMCC 产物。
-
-在改代码的时候严格注意将`./mythroad/`文件夹中的代码看成是另一个项目，不要与其它地方的源码混在一起，这么做的原因是`./mythroad/`是直接复制的vmrp_arm项目，考虑到将来移植到嵌入式系统中的便利性因此要求将`./mythroad/`完全独立开发。
-
-# 参考资料
-
-mrp编辑器:  [Mrpeditor.exe](tool/Mrpeditor.exe)
-
-十六进制方式查看文件:
-```shell
-hd mythroad/arm.mrp -n 100
+```bash
+./build/vmrp --work-dir .
 ```
 
-https://github.com/Yichou/mrpoid2018
+### 3. Windows 构建
 
-https://github.com/alphaSeclab/awesome-reverse-engineering
+使用 Visual Studio 的 x64 Native Tools 终端或已配置 MSVC 的 PowerShell：
 
-https://github.com/nationalsecurityagency/ghidra
-
-反汇编: 
+```powershell
+git submodule update --init --recursive
+cmake -S . -B build -A x64
+cmake --build build --config Release --target vmrp --parallel
 ```
-arm-linux-gnueabi-objdump -b binary --start-address=0x8 -m arm -D game.ext
-# 或者用radare2
-r2 -a arm -b 32 -s 8 game.ext
+
+CMake 配置阶段会获取 zlib 和 SDL2，构建后会把 `SDL2.dll` 复制到可执行文件目录。Visual Studio 生成器的程序通常位于 `build\Release\vmrp.exe`：
+
+```powershell
+.\build\Release\vmrp.exe --work-dir . C:\path\to\app.mrp
 ```
-（推荐）这是我自己写的反汇编工具：[de.c](tool/de.c)
 
+## 运行目录与资源
 
-arm汇编学习工具:
+`--work-dir` 不只是进程的当前目录，也是模拟器映射 MRP 文件系统时使用的根目录。桌面程序默认使用可执行文件所在目录；从源码树运行时建议显式传入 `--work-dir .`。
 
-https://github.com/linouxis9/ARMStrong
+仓库根目录的 `mythroad` 符号链接指向 `wasm/dist/fs/mythroad`。其中包含默认入口、字体和部分系统插件，例如：
 
-https://github.com/unicorn-engine/unicorn
+```text
+mythroad/
+├── dsm_gm.mrp
+├── plugins/
+│   ├── netpay.mrp
+│   ├── flaengine.mrp
+│   └── ose/brwcore.mrp
+└── system/
+    ├── gb12.uc2
+    └── gb16.uc2
+```
 
-https://bbs.pediy.com/thread-253868.htm
+MRP 自己下载或生成的文件也会写入该工作目录下的 `mythroad/`。若应用提示字体、插件或资源不存在，首先检查工作目录是否正确，以及所需文件是否确实存在。项目不会随源码提供所有历史 MRP 应用和厂商在线服务。
 
+命令行传入的 MRP 会先解析为绝对路径，再切换到工作目录。受旧 Mythroad ABI 限制，最终 MRP 路径必须短于 128 字节；路径过长时请把文件移到更短的位置。
 
-arm平台函数传递参数，反汇编实例分析:
+## 命令行
 
-https://blog.csdn.net/ayu_ag/article/details/50734282
+```text
+vmrp [OPTIONS] [MRP_PATH] [EXT_NAME] [ENTRY]
+```
 
-https://blog.csdn.net/gooogleman/article/details/3538033
+位置参数：
 
-# mrp中ext的实现原理
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `MRP_PATH` | `VMRP_MRP` 或 `dsm_gm.mrp` | 要启动的 MRP 文件 |
+| `EXT_NAME` | `VMRP_EXT` 或 `start.mr` | 包内启动文件/EXT 名称 |
+| `ENTRY` | `VMRP_ENTRY` 或空 | 可选入口名，例如 `_dsm` |
 
-最早的mrp实际是由mr文件组成的，mr文件其实就是编译后的lua，后来的mrp则用c语言开发，于是会至少一有个ext文件。
+选项：
 
-因为mrp标准开发环境是xp系统+ads+vs2005+skysdk，我用的虚拟机都有8G那么大，在了解mrp实现原理后我原本想用TCC编译器做一个可以精简到几M的开发环境，可惜TCC编译器并不支持arm版本的位置无关代码的生成（TCC正式发布的版本目前不支持，可能开发版已经有支持）
+| 选项 | 说明 |
+| --- | --- |
+| `--screen WxH` | 设置屏幕分辨率，默认 `240x320` |
+| `--memory SIZE` | 设置应用可见内存，只接受 `1M`、`2M`、`4M`、`6M`、`8M`、`16M` |
+| `--work-dir DIR` | 设置运行和 MRP 文件系统的工作目录 |
+| `--dns-map MAP` | 设置域名替换规则 |
+| `-h`, `--help` | 显示帮助 |
 
-# 历史
+示例：
 
-20200202 第一次成功执行到了mrc_init函数
+```bash
+# 普通启动
+./build/vmrp --work-dir . /path/to/app.mrp
 
-20200208 成功运行了带图像显示和触屏事件的helloworld
+# 横屏应用及更大的应用内存
+./build/vmrp --work-dir . --screen 480x320 --memory 4M /path/to/app.mrp
 
-20201013 成功运行了推箱子游戏，实现了mr层的支持
+# 显式指定包内启动文件和入口
+./build/vmrp --work-dir . /path/to/app.mrp start.mr _dsm
+```
 
-20201224 wasm版本成功
+等价的常用环境变量如下。命令行选项优先级高于环境变量：
 
-# License
+| 环境变量 | 说明 |
+| --- | --- |
+| `VMRP_MRP` | 默认 MRP 路径 |
+| `VMRP_EXT` | 默认包内启动文件，通常为 `start.mr` |
+| `VMRP_ENTRY` | 默认入口名 |
+| `VMRP_SCREEN_WIDTH` / `VMRP_SCREEN_HEIGHT` | 屏幕宽高 |
+| `VMRP_MEMORY` | 应用可见内存档位 |
+| `VMRP_WORK_DIR` | 工作目录 |
+| `VMRP_DNS_MAP` | DNS 替换规则 |
+| `VMRP_LOG` | 启用较详细的运行日志 |
+| `VMRP_PPM_PATH` | PPM 截图输出路径，默认 `/tmp/vmrp_screen.ppm` |
 
-GNU General Public License v3.0
+### DNS 映射
+
+域名映射让应用请求解析旧域名时，实际解析另一个域名或 IPv4 地址，并把结果返回给应用：
+
+```bash
+./build/vmrp --work-dir . \
+  --dns-map "old.example->new.example;api.old.example=192.0.2.10" \
+  /path/to/app.mrp
+```
+
+多条规则可用逗号、分号或换行分隔，`->` 和 `=` 都可作为映射符。当前运行时带有一组面向历史服务的默认映射；需要完全禁用时可显式传入空环境变量：
+
+```bash
+VMRP_DNS_MAP="" ./build/vmrp --work-dir . /path/to/app.mrp
+```
+
+## 桌面版操作
+
+| MRP 按键 | 键盘 |
+| --- | --- |
+| 方向键 | 方向键或 `W/A/S/D` |
+| 确认/选择 | `Enter` |
+| 左功能键 | `Q`、`[` 或 `=` |
+| 右功能键 | `E`、`]` 或 `-` |
+| 数字键 | `0` 到 `9` 或数字小键盘 |
+| `*` / `#` | `*` / `#` |
+| 接听键 | `Tab` |
+| 挂机/返回键 | `Esc` |
+
+SDL 窗口中的鼠标按下、移动和抬起会转换为 MRP 触摸事件。应用打开文本编辑框后，使用 `Ctrl+V` 粘贴并确认当前剪贴板内容，使用 `Ctrl+Z` 取消输入。
+
+## 共享库与 Flutter
+
+同时构建桌面程序和共享库：
+
+```bash
+cmake -S . -B build-shared \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DVMRP_BUILD_SHARED=ON
+cmake --build build-shared --target vmrp-shared --parallel
+```
+
+只构建共享库，不配置 SDL 桌面目标和 Wasm 目标：
+
+```bash
+cmake -S . -B build-shared-only \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DVMRP_BUILD_SHARED_ONLY=ON
+cmake --build build-shared-only --target vmrp-shared --parallel
+```
+
+产物名称为 `libvmrp.so` 或 `vmrp.dll`。公共 ABI 位于 [`src/include/vmrp_api.h`](src/include/vmrp_api.h)，主要包括：
+
+- 初始化、内存/工作目录/DNS 配置、启动与销毁；
+- 输入事件和运行状态；
+- RGB565 原始屏幕与 RGBA8888 转换缓冲；
+- 文本编辑状态和提交/取消；
+- 44.1 kHz、S16LE、双声道 PCM 音频输出。
+
+Android NDK 交叉编译、Gradle 配置和 Dart FFI 示例见 [`docs/flutter-integration.md`](docs/flutter-integration.md)。共享库内部串行调度 VM 事件和定时器；宿主仍应把一次运行实例视为不可并发访问的状态机，并完整管理 `init -> start -> destroy` 生命周期。
+
+## WebAssembly
+
+`emcc` 在 `PATH` 中时，CMake 会创建 `vmrp-wasm` 目标：
+
+```bash
+source /path/to/emsdk/emsdk_env.sh
+cmake -S . -B build-wasm
+cmake --build build-wasm --target vmrp-wasm --parallel
+```
+
+生成文件位于 `build-wasm/wasm/vmrp.js` 和同目录的 `vmrp.wasm`。`wasm/dist/main.html` 使用 `vmrp.js`、`vmrp.wasm`、`fs.js` 以及 `fs/` 下的运行资源，可按下面的方式组织本地预览：
+
+```bash
+cp build-wasm/wasm/vmrp.js build-wasm/wasm/vmrp.wasm wasm/dist/
+python3 -m http.server 8000 --directory wasm/dist
+```
+
+然后访问 `http://127.0.0.1:8000/main.html`。Wasm 和预加载资源需要通过 HTTP 提供，不能只用 `file://` 打开 HTML。当前 Wasm 路径使用 `wasm/unicorn/libunicorn.a` 中预构建的 unicorn.js 静态库。
+
+## 测试
+
+CI 使用 Node.js 24、pnpm 10 和 Vitest。先构建桌面程序，再安装并运行测试：
+
+```bash
+cmake -S . -B build
+cmake --build build --target vmrp --parallel
+
+corepack enable
+pnpm install --frozen-lockfile
+pnpm test:e2e
+```
+
+运行单个场景：
+
+```bash
+pnpm vitest run test/e2e/gxdzc/gxdzc-pixel.test.ts
+pnpm vitest run test/e2e/gghjt/game-start.test.ts
+```
+
+E2E 驱动默认使用 SDL 的 `dummy` 视频和音频驱动，不需要 Xvfb。每个测试用例创建独立临时工作目录，通过 Unix socket 向 SDL 主线程发送点击、按键、粘贴、截屏和退出命令，并对 PPM 像素或运行日志做断言。
+
+常用测试环境变量：
+
+| 环境变量 | 说明 |
+| --- | --- |
+| `VMRP_BIN` | 被测程序路径，默认 `build/vmrp` |
+| `VMRP_TIMEOUT_MS` | E2E socket 启动和命令超时 |
+| `VMRP_E2E_KEEP_TMP=1` | 测试结束后保留临时目录、截图和日志 |
+
+测试框架与 socket 命令详见 [`docs/TESTING.md`](docs/TESTING.md)。
+
+### Sanitizer 与严格警告
+
+```bash
+cmake -S . -B build-san -DSANITIZE=address,undefined
+cmake --build build-san --target vmrp --parallel
+```
+
+第一方源码默认启用额外警告；可以使用 `-DVMRP_WERROR=ON` 将其提升为错误，或用 `-DVMRP_STRICT_WARNINGS=OFF` 临时关闭。vendored Unicorn 和独立维护的 Mythroad 子项目不受这组严格警告选项影响。
+
+## 已知边界
+
+- 当前兼容性由仓库内真实样本和回归流程逐步扩展，不保证任意 MRP、任意 EXT 编译器产物或任意设备私有 ABI 都可运行。
+- 网络 socket 和 DNS 已实现，但依赖已经下线的厂商服务器、WAP 网关、支付平台或特定代理协议的应用仍需要本地替代服务或额外适配。
+- 短信、通话、震动、计费和部分原生菜单/对话框接口只做模拟或兼容返回，不会触发真实手机服务。
+- 默认屏幕为 `240x320`、应用可见内存为 `1 MB`。一些应用必须使用其原始设备对应的分辨率和内存档位。
+- WebAssembly 仍沿用预构建的 unicorn.js 静态库，其更新方式不同于桌面版的 `third_party/unicorn` 子模块。
+
+## 目录结构
+
+| 路径 | 内容 |
+| --- | --- |
+| `src/` | 模拟器核心、SDL 平台、网络/文件/音频、共享库 API |
+| `src/arm_ext/` | 从 ARM EXT 执行器拆出的内存、模块、函数表、屏幕、定时器和诊断单元 |
+| `src/mythroad/` | 独立维护的 Mythroad/DSM 运行时源码 |
+| `third_party/unicorn/` | Unicorn/QEMU 子模块，桌面版和共享库只构建 ARM 后端 |
+| `third_party/minimp3/` | MP3 解码器 |
+| `test/e2e/` | Vitest 真实应用回归测试 |
+| `test/fixtures/` | 测试 MRP、字体、插件与黄金 PPM 资源 |
+| `wasm/` | Emscripten 运行页面、预加载文件和 unicorn.js 静态库 |
+| `tool/` | MRP 分析、编辑和本地 HTTP/socket/代理服务工具 |
+| `mrc/` | MRP/EXT 格式、函数表和汇编研究资料，不参与主程序构建 |
+| `docs/` | 架构、ABI、测试、Flutter 和兼容性分析文档 |
+
+`src/mythroad/` 按可独立移植的子项目维护，不应直接混入外层模拟器的 SDL 或宿主实现。除非在修复明确的上游问题，也应避免直接修改 `third_party/unicorn/`。
+
+## 进一步阅读
+
+- [`docs/arm-ext-executor/`](docs/arm-ext-executor/)：ARM EXT 执行器架构、内存、模块、桥接与调试手册。
+- [`docs/arm-ext-abi.md`](docs/arm-ext-abi.md)：ARM EXT ABI、guest 内存和模块状态参考。
+- [`docs/mythroad-platform-reference.md`](docs/mythroad-platform-reference.md)：真机 Mythroad 平台行为与模拟器设计依据。
+- [`docs/flutter-integration.md`](docs/flutter-integration.md)：共享库和 Flutter FFI 集成。
+- [`docs/TESTING.md`](docs/TESTING.md)：E2E 驱动、截图和像素测试。
+- [`CHANGELOG.MD`](CHANGELOG.MD)：版本变更记录。
+
+## 相关项目与工具
+
+- [mrpoid2018](https://github.com/Yichou/mrpoid2018)：Android/ARM 上的 MRP 运行实现参考。
+- [VMRP](https://github.com/vmrp/vmrp)：SkyEngine 二次开发所基于的上游项目。
+- [Unicorn Engine](https://github.com/unicorn-engine/unicorn)：SkyEngine 使用的 CPU 模拟引擎。
+- [Ghidra](https://github.com/NationalSecurityAgency/ghidra)：分析 ARM EXT 的常用逆向工具。
+- [`tool/Mrpeditor.exe`](tool/Mrpeditor.exe)：仓库内保留的 MRP 编辑器。
+- [`tool/de.c`](tool/de.c)：项目早期使用的反汇编辅助工具。
+
+## 许可证
+
+SkyEngine 延续上游许可，使用 [GNU General Public License v3.0](LICENSE) 发布。`third_party/` 中的组件分别遵循其上游许可证；分发二进制时请同时检查对应组件的许可要求。
