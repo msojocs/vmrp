@@ -62,24 +62,42 @@ describe("talkcat 进入游戏", () => {
       // 点击确定开始下载
       await vmrp.click(78, 280, 1_000)
       await vmrp.delay(5_000)
-      // rgb(32, 212, 0)
-      const screen = await vmrp.screen("downloading");
-      expect(screen.pixel(79, 257)).toEqual([32, 212, 0]);
-      await vmrp.delay(20_000)
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const screen = await vmrp.screen("downloading");
+        // rgb(32, 212, 0)
+        expect(screen.pixel(79, 257)).toEqual([32, 212, 0]);
+      }, {
+        timeout: 20_000,
+        interval: 1_000
+      })
     }
     {
-      // 检查是否显示安装提示
-      // rgb(32, 64, 120)
-      const screen = await vmrp.screen("install-confirm");
-      expect(screen.pixel(77, 279)).toEqual([32, 64, 120]);
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        // 检查是否显示安装提示
+        // rgb(32, 64, 120)
+        const screen = await vmrp.screen("install-confirm");
+        expect(screen.pixel(77, 279)).toEqual([32, 64, 120]);
+      }, {
+        timeout: 30_000,
+        interval: 1_000
+      })
+    }
+    {
       // 点击确定开始安装
       await vmrp.click(77, 279, 1_000)
-      await vmrp.delay(5_000)
-    }
-    {
-      // rgb(32, 212, 0)
-      const screen = await vmrp.screen("installing");
-      expect(screen.pixel(54, 257)).toEqual([32, 212, 0]);
+      
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        // rgb(32, 212, 0)
+        const screen = await vmrp.screen("installing");
+        expect(screen.pixel(54, 257)).toEqual([32, 212, 0]);
+      }, {
+        timeout: 30_000,
+        interval: 1_000
+      })
+
       await vmrp.delay(80_000)
       const stdout = fs.readFileSync(vmrp.stdoutPath, 'utf-8')
       expect(stdout).not.contain('Invalid memory read')
