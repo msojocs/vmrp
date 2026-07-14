@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { VmrpE2e, VmrpWorkspace } from "../vmrp-e2e.js";
 import fs from "fs";
 
@@ -29,12 +29,18 @@ describe("gghjt pixel flow", () => {
       await vmrp.delay(1_000);
       await vmrp.key('LEFT_SOFT', 1_000);
       await vmrp.delay(1_000);
-
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const boot = await vmrp.screen("bgm-select");
+        // rgb(0, 0, 0)
+        expect(boot.pixel(227, 308)).toEqual([0, 0, 0]);
+        // rgb(248, 252, 248)
+        expect(boot.pixel(84, 79)).toEqual([248, 252, 248]);
+      }, {
+        timeout: 30_000,
+        interval: 1_000
+      })
     }
-    await vmrp.delay(memCheckTime);
-    const boot = await vmrp.screen("bgm-select");
-    // rgb(0, 0, 0)
-    expect(boot.pixel(227, 308)).toEqual([0, 0, 0]);
 
     // 是否开启音乐？-> 否
     await vmrp.click(230, 308, 1_000);
@@ -49,18 +55,32 @@ describe("gghjt pixel flow", () => {
     await vmrp.delay(1_000);
     await vmrp.click(227, 308, 1_000);
     await vmrp.delay(1_000);
-
-    // 进入主菜单
-    const wake = await vmrp.screen("menu");
-    // rgb(152, 112, 32)
-    expect(wake.pixel(110, 27)).toEqual([152, 112, 32]);
-
-    // 切换菜单
-    await vmrp.click(162, 291, 3_000);
-    await vmrp.delay(1_000);
-    // rgb(232, 196, 104)
-    expect(wake.pixel(162, 291)).toEqual([232, 196, 104 ]);
-
+    {
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        // 进入主菜单
+        const screen = await vmrp.screen("menu");
+        // rgb(152, 112, 32)
+        expect(screen.pixel(110, 27)).toEqual([152, 112, 32]);
+      }, {
+        timeout: 30_000,
+        interval: 1_000
+      })
+    }
+    {
+        // 切换菜单
+        await vmrp.click(162, 291, 3_000);
+        await vmrp.delay(1_000);
+        await vi.waitFor(async () => {
+          if (!vmrp) throw new Error("vmrp is undefined");
+          const screen = await vmrp.screen("continueMenu");
+          // rgb(232, 196, 104)
+          expect(screen.pixel(162, 291)).toEqual([232, 196, 104 ]);
+        }, {
+          timeout: 30_000,
+          interval: 1_000
+        })
+    }
     // 点击继续游戏，进入插件下载界面
     await vmrp.click(116, 291, 3_000);
     await vmrp.delay(1_000);

@@ -43,11 +43,37 @@ describe("gzwdzjs 游戏", () => {
     }
     {
       console.info('开始游戏')
-      // 7下回车
-      for (let i = 0; i < 7; i++) {
+      // 回车
+      for (let i = 0; i < 3; i++) {
         await vmrp.key('ENTER', 1_000);
         await vmrp.delay(1_000);
       }
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const screen = await vmrp.screen("need-power");
+        // rgb(208, 244, 200)
+        expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
+      }, { timeout: 30_000, interval: 1_000 });
+    }
+    {
+      console.info('开始游戏')
+      // 回车
+      for (let i = 0; i < 3; i++) {
+        await vmrp.key('ENTER', 1_000);
+        await vmrp.delay(1_000);
+      }
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const screen = await vmrp.screen("need-power");
+        // rgb(200, 204, 248)
+        expect(screen.pixel(94, 145)).toEqual([200, 204, 248]);
+      }, { timeout: 30_000, interval: 1_000 });
+    }
+    {
+      // 反抗是没用的
+      await vmrp.key('ENTER', 1_000);
+      await vmrp.delay(1_000);
+      // 跳过
       await vmrp.key('LEFT_SOFT', 1_000);
       console.info('等待演示动画')
       await vi.waitFor(async () => {
@@ -73,17 +99,16 @@ describe("gzwdzjs 游戏", () => {
     {
       console.info('左软键确定开始教程')
       await vmrp.key('LEFT_SOFT', 1_000);
-      await vmrp.delay(5_000);
-      const screen = await vmrp.screen("start-confirm");
-      expect(screen.pixel(75, 75)).not.toEqual([0, 0, 0]);
-    }
-    {
       await vi.waitFor(async () => {
         if (!vmrp) throw new Error("vmrp is undefined");
         const screen = await vmrp.screen("introduce");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
       }, { timeout: 90_000, interval: 1_000 });
+    }
+    {
+      // 移动光标到你想种的植物
+      // 按2/4/6/8或方向键
       for (let i = 0; i < 2; i++) {
         await vmrp.key('ENTER', 1_000);
         await vmrp.delay(1_000);
@@ -100,7 +125,67 @@ describe("gzwdzjs 游戏", () => {
       await vmrp.delay(1_000);
       await vmrp.key('LEFT', 1_000);
       await vmrp.delay(1_000);
-      for (let i = 0; i < 7; i++) {
+      // 现在只有豌豆
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const screen = await vmrp.screen("only-pea");
+        // rgb(208, 244, 200)
+        expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
+      }, { timeout: 90_000, interval: 1_000 });
+    }
+    {
+      for (let i = 0; i < 2; i++) {
+        await vmrp.key('ENTER', 1_000);
+        await vmrp.delay(1_000);
+      }
+      // 提示完，开始选植物
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const screen = await vmrp.screen("select-plant");
+        // rgb(208, 244, 200)
+        expect(screen.pixel(94, 145)).not.toEqual([208, 244, 200]);
+        // rgb(232, 184, 40)
+        expect(screen.pixel(77, 147)).toEqual([232, 184, 40]);
+      }, { timeout: 90_000, interval: 1_000 });
+    }
+    {
+      await vmrp.key('ENTER', 1_000);
+      await vmrp.delay(1_000);
+      // 种在草地上，推荐种左边
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const screen = await vmrp.screen("plant-on-grass");
+        // rgb(208, 244, 200)
+        expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
+      }, { timeout: 90_000, interval: 1_000 });
+    }
+    {
+      await vmrp.key('ENTER', 1_000);
+      await vmrp.delay(5_000);
+      // 提示完，开始选植物
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const screen = await vmrp.screen("select-plant");
+        // rgb(208, 244, 200)
+        expect(screen.pixel(94, 145)).not.toEqual([208, 244, 200]);
+        // rgb(232, 184, 40)
+        expect(screen.pixel(77, 147)).toEqual([232, 184, 40]);
+      }, { timeout: 90_000, interval: 1_000 });
+    }
+    {
+      await vmrp.key('ENTER', 1_000);
+      await vmrp.delay(1_000);
+      // 种在草地上，推荐种左边
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const screen = await vmrp.screen("plant-on-grass");
+        // rgb(208, 244, 200)
+        expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
+      }, { timeout: 90_000, interval: 1_000 });
+    }
+    {
+      for (let i = 0; i < 3; i++) {
+        // 根据阳光的数量不同会有不同的提示，可能需要多次回车才能结束。保守3次。
         await vmrp.key('ENTER', 1_000);
         await vmrp.delay(1_000);
       }

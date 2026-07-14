@@ -43,11 +43,36 @@ describe("gzwdzjs 进入主菜单", () => {
     }
     {
       console.info('开始游戏')
-      // 7下回车
-      for (let i = 0; i < 7; i++) {
+      // 回车
+      for (let i = 0; i < 3; i++) {
         await vmrp.key('ENTER', 1_000);
         await vmrp.delay(1_000);
       }
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const screen = await vmrp.screen("need-power");
+        // rgb(208, 244, 200)
+        expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
+      }, { timeout: 30_000, interval: 1_000 });
+    }
+    {
+      console.info('开始游戏')
+      // 回车
+      for (let i = 0; i < 3; i++) {
+        await vmrp.key('ENTER', 1_000);
+        await vmrp.delay(1_000);
+      }
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const screen = await vmrp.screen("need-power");
+        // rgb(200, 204, 248)
+        expect(screen.pixel(94, 145)).toEqual([200, 204, 248]);
+      }, { timeout: 30_000, interval: 1_000 });
+    }
+    {
+      // 反抗是没用的
+      await vmrp.key('ENTER', 1_000);
+      await vmrp.delay(1_000);
       console.info('等待演示动画')
       await vi.waitFor(async () => {
         if (!vmrp) throw new Error("vmrp is undefined");

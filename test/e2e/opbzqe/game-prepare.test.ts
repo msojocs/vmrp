@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { VmrpE2e, VmrpWorkspace } from "../vmrp-e2e.js";
 import fs from "fs";
 
@@ -47,10 +47,16 @@ describe("opbzqe 进入主菜单", () => {
       // 按一下右方向键，广告条消失
       await vmrp.key('RIGHT', 1_000)
       await vmrp.delay(1_000);
-      const afterRight = await vmrp.screen("after-right");
-      // 消失检查
-      expect(afterRight.pixel(110, 27)).not.toEqual([128, 48, 40]);
-      expect(afterRight.pixel(10, 41)).not.toEqual(wake.pixel(10, 41));
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error("vmrp is undefined");
+        const afterRight = await vmrp.screen("after-right");
+        // 消失检查
+        expect(afterRight.pixel(110, 27)).not.toEqual([128, 48, 40]);
+        expect(afterRight.pixel(10, 41)).not.toEqual(wake.pixel(10, 41));
+      }, {
+        timeout: 5_000,
+        interval: 1_000
+      })
     }
   });
 });
