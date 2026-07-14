@@ -85,6 +85,8 @@ export class VmrpE2e {
     const tmpDir = await mkdtemp(path.join(tmpdir(), "vmrp-e2e-"));
     const vmrp = new VmrpE2e(tmpDir, options);
     await vmrp.spawn(await vmrp.prepareMrp(mrpPath));
+    // 同时输出 CI 收集的截图目录和模拟器工作目录，便于从用例日志定位产物。
+    console.info(`[vmrp-e2e] artifact-dir: ${tmpDir}; work-dir: ${path.resolve(vmrp.workDir)}`);
     return vmrp;
   }
 

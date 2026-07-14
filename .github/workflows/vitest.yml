@@ -42,4 +42,17 @@ jobs:
         run: cmake --build build --target vmrp --parallel
 
       - name: Run Vitest
+        id: vitest
+        env:
+          # Keep each emulator's latest rendered frame for failure diagnostics.
+          VMRP_PPM: "1"
+          VMRP_E2E_KEEP_TMP: "1"
         run: pnpm test:e2e
+
+      - name: Upload last frames
+        if: ${{ failure() && steps.vitest.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-last-frames-${{ github.run_attempt }}
+          path: /tmp/vmrp-e2e-*/screen.ppm
+          if-no-files-found: warn
