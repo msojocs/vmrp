@@ -13,6 +13,10 @@
 #include "./include/posix_sockets.h"
 #include "include/types.h"
 
+#ifndef WIN_PLAT
+#include <fcntl.h>
+#endif
+
 // #define NETWORK_SUPPORT
 
 #if defined(__EMSCRIPTEN__) && defined(NETWORK_SUPPORT)
@@ -314,8 +318,26 @@ typedef struct {
     uint16_t port;
 } connectData_t;
 
+#define VMRP_CONNECT_TIMEOUT_MS 2000
+
+static int isConnectPendingError(int error) {
+#ifdef WIN_PLAT
+    return error == WSAEWOULDBLOCK || error == WSAEINPROGRESS || error == WSAEALREADY;
+#else
+    return error == EINPROGRESS || error == EWOULDBLOCK || error == EALREADY;
+#endif
+}
+
 static int32 my_connectSync(SOCKET_T s, int32 ip, uint16 port) {
     struct sockaddr_in clientService;
+    int32 result = MR_FAILED;
+    int connectError = 0;
+#ifdef WIN_PLAT
+    u_long nonblocking = 1;
+#else
+    int originalFlags;
+#endif
+
     clientService.sin_family = AF_INET;
     clientService.sin_port = htons(port);
     clientService.sin_addr.s_addr = htonl(ip);  //inet_addr("127.0.0.1");
@@ -324,15 +346,87 @@ static int32 my_connectSync(SOCKET_T s, int32 ip, uint16 port) {
     VMRP_NET_LOG("connect fd=%d target=%s:%u ip=0x%X\n",
                  (int)s, inet_ntoa(clientService.sin_addr), (unsigned)port, (unsigned)ip);
 
-    if (connect(s, (struct sockaddr*)&clientService, sizeof(clientService)) != 0) {
-        printf("my_connect(0x%X) fail\n", ip);
-        VMRP_NET_LOG("connect failed ip=0x%X socket_error=%d errno=%d\n",
-                     (unsigned)ip, GET_SOCKET_ERROR(), errno);
-        return MR_FAILED;
+#ifdef WIN_PLAT
+    if (ioctlsocket(s, FIONBIO, &nonblocking) != 0) {
+        connectError = GET_SOCKET_ERROR();
+        goto done;
     }
-    printf("my_connect(0x%X) suc\n", ip);
-    VMRP_NET_LOG("connect success ip=0x%X\n", (unsigned)ip);
-    return MR_SUCCESS;
+#else
+    originalFlags = fcntl(s, F_GETFL, 0);
+    if (originalFlags == -1 || fcntl(s, F_SETFL, originalFlags | O_NONBLOCK) == -1) {
+        connectError = GET_SOCKET_ERROR();
+        goto done;
+    }
+#endif
+
+    if (connect(s, (struct sockaddr*)&clientService, sizeof(clientService)) == 0) {
+        result = MR_SUCCESS;
+    } else {
+        connectError = GET_SOCKET_ERROR();
+        if (isConnectPendingError(connectError)) {
+            fd_set writefds;
+            struct timeval timeout = {
+                .tv_sec = VMRP_CONNECT_TIMEOUT_MS / 1000,
+                .tv_usec = (VMRP_CONNECT_TIMEOUT_MS % 1000) * 1000
+            };
+            FD_ZERO(&writefds);
+            FD_SET(s, &writefds);
+#ifdef WIN_PLAT
+            int selected = select(0, NULL, &writefds, NULL, &timeout);
+#else
+            int selected = select(s + 1, NULL, &writefds, NULL, &timeout);
+#endif
+            if (selected > 0 && FD_ISSET(s, &writefds)) {
+                int socketError = 0;
+#ifdef WIN_PLAT
+                int socketErrorLen = sizeof(socketError);
+                int getErrorResult = getsockopt(s, SOL_SOCKET, SO_ERROR,
+                                                (char*)&socketError, &socketErrorLen);
+#else
+                socklen_t socketErrorLen = sizeof(socketError);
+                int getErrorResult = getsockopt(s, SOL_SOCKET, SO_ERROR,
+                                                &socketError, &socketErrorLen);
+#endif
+                if (getErrorResult == 0 && socketError == 0) {
+                    result = MR_SUCCESS;
+                } else {
+                    connectError = getErrorResult == 0 ? socketError : GET_SOCKET_ERROR();
+                }
+            } else if (selected == 0) {
+#ifdef WIN_PLAT
+                connectError = WSAETIMEDOUT;
+#else
+                connectError = ETIMEDOUT;
+#endif
+            } else {
+                connectError = GET_SOCKET_ERROR();
+            }
+        }
+    }
+
+#ifdef WIN_PLAT
+    nonblocking = 0;
+    if (ioctlsocket(s, FIONBIO, &nonblocking) != 0 && result == MR_SUCCESS) {
+        result = MR_FAILED;
+        connectError = GET_SOCKET_ERROR();
+    }
+#else
+    if (fcntl(s, F_SETFL, originalFlags) == -1 && result == MR_SUCCESS) {
+        result = MR_FAILED;
+        connectError = GET_SOCKET_ERROR();
+    }
+#endif
+
+done:
+    if (result == MR_SUCCESS) {
+        printf("my_connect(0x%X) suc\n", ip);
+        VMRP_NET_LOG("connect success ip=0x%X\n", (unsigned)ip);
+    } else {
+        printf("my_connect(0x%X) fail\n", ip);
+        VMRP_NET_LOG("connect failed ip=0x%X socket_error=%d\n",
+                     (unsigned)ip, connectError);
+    }
+    return result;
 }
 
 static VMRP_THREAD_RET my_connectAsync(void* arg) {
