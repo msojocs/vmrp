@@ -17,7 +17,7 @@ describe("istore 进入主界面", () => {
     // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
     ws = await VmrpWorkspace.create();
     
-    // istore 是横屏(480x320)构建,按其原生分辨率运行以显示完整画面。
+    // istore
     vmrp = await VmrpE2e.start("test/fixtures/sky_istore.mrp", { workDir: ws.dir, memory: '2M' });
 
     {
