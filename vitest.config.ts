@@ -1,12 +1,12 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig(() => {
-  const isTargetingTemp = process.argv.some(arg => arg.includes('test/e2e/wbrw/temp.test.ts'))
+  const isTargetingTemp = process.argv.some(arg => arg.includes('temp.test.ts'))
   return {
     test: {
       include: ["test/e2e/**/*.test.ts"],
       exclude: [
-        ...(isTargetingTemp ? [] : ['test/e2e/wbrw/temp.test.ts'])
+        ...(isTargetingTemp ? [] : ['test/e2e/**/temp.test.ts'])
       ],
       testTimeout: 600_000,
       hookTimeout: 30_000,
