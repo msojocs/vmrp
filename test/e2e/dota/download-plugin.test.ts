@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { VmrpE2e, VmrpWorkspace } from "../vmrp-e2e.js";
 import fs from "fs";
 
@@ -168,10 +168,15 @@ describe("dota pixel flow", () => {
     {
       // 点击确定，下载浏览器插件，进入下载结果界面
       await vmrp.key('LEFT_SOFT', 1_000);
-      await vmrp.delay(6_000);
-      const screen = await vmrp.screen("download-result");
-      // rgb(0, 252, 0)
-      expect(screen.pixel(152, 146)).toEqual([0, 252, 0]);
+      await vi.waitFor(async () => {
+        if (!vmrp) throw new Error('vmrp not defined')
+        const screen = await vmrp.screen("download-result");
+        // rgb(0, 252, 0)
+        expect(screen.pixel(152, 146)).toEqual([0, 252, 0]);
+      }, {
+        timeout: 20_000,
+        interval: 1_000
+      })
     }
     {
       // 点击确定，确认下载结果，开始加载浏览器
