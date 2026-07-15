@@ -1,10 +1,11 @@
 # Wiki Index
 
-> 27 pages | Last updated: 2026-07-15T02:48:06Z
+> 28 pages | Last updated: 2026-07-15T05:09:32Z
 
 ## debugging
 
 - [Cookie E2E key timer-generation boundary](cookie-e2e-key-timer-generation-boundary.md) — # Cookie E2E key timer-generation boundary
+- [Cookie MRP restart and FULL runtime version contract](cookie-mrp-restart-and-full-runtime-version-contract.md) — # Cookie MRP restart and FULL runtime version contract
 - [DOTA browser plugin DSM package provenance](dota-browser-plugin-dsm-package-provenance.md) — # DOTA browser plugin DSM package provenance
 - [DOTA browser plugin network state investigation](dota-browser-plugin-network-state-investigation.md) — # DOTA browser plugin network state investigation
 - [DOTA Browser Plugin Record Pack Slot Fix](dota-browser-plugin-record-pack-slot-fix.md) — # DOTA Browser Plugin Record Pack Slot Fix

@@ -23,7 +23,9 @@
 #include "./luadec/luadec.h"
 #include "../include/arm_ext_executor.h"
 
-#define MR_VERSION 2011
+/* FULL Mythroad exposes the Lua-runtime startup ABI.  MINI uses version 2011;
+ * some launchers use the >=2000 flavor contract to select a native entry. */
+#define MR_VERSION 1968
 
 const unsigned char* mr_m0_files[50];
 
@@ -80,18 +82,29 @@ const char* mr_get_old_start_filename(void) {
     return old_start_filename;
 }
 
-void mr_set_old_pack_filename(const char* name) {
-    MEMSET(old_pack_filename, 0, sizeof(old_pack_filename));
+static void mr_set_filename(char* target, const char* name) {
+    /* The C SDK exposes these as writable MR_MAX_FILENAME_SIZE arrays.  Bridge
+     * setters preserve the same zero-filled, always-terminated representation. */
+    MEMSET(target, 0, MR_MAX_FILENAME_SIZE);
     if (name && name[0]) {
-        STRNCPY(old_pack_filename, name, sizeof(old_pack_filename) - 1);
+        STRNCPY(target, name, MR_MAX_FILENAME_SIZE - 1);
     }
 }
 
+void mr_set_pack_filename(const char* name) {
+    mr_set_filename(pack_filename, name);
+}
+
+void mr_set_start_filename(const char* name) {
+    mr_set_filename(start_filename, name);
+}
+
+void mr_set_old_pack_filename(const char* name) {
+    mr_set_filename(old_pack_filename, name);
+}
+
 void mr_set_old_start_filename(const char* name) {
-    MEMSET(old_start_filename, 0, sizeof(old_start_filename));
-    if (name && name[0]) {
-        STRNCPY(old_start_filename, name, sizeof(old_start_filename) - 1);
-    }
+    mr_set_filename(old_start_filename, name);
 }
 
 int32 mr_restart_old_app(void) {
@@ -3383,7 +3396,13 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             mr_ram_file_len = len;
             break;
         case 3: {
-            uint8* start_filename = ((uint8*)mr_L_optstring(L, 3, MR_START_FILE));
+            /* ARM table[131] has no Lua stack or fourth argument.  Its standard
+             * old-app registration therefore uses the default start.mr entry,
+             * matching mythroad_mini; Lua callers can still override argument 3. */
+            uint8* start_filename = (uint8*)MR_START_FILE;
+            if (L) {
+                start_filename = (uint8*)mr_L_optstring(L, 3, MR_START_FILE);
+            }
             MEMSET(old_pack_filename, 0, sizeof(old_pack_filename));
             if (input1) {
                 STRNCPY(old_pack_filename, input1, sizeof(old_pack_filename) - 1);

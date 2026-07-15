@@ -7,7 +7,7 @@ typedef union SDL_Event SDL_Event;
 
 typedef struct VmrpE2eControl VmrpE2eControl;
 
-/* 合成 SDL_KeyboardEvent 的 windowID 标记；timestamp 字段携带唯一 token。 */
+/* 合成 SDL_KeyboardEvent 的 windowID 标记；未使用的 scancode 字段携带唯一 token。 */
 #define VMRP_E2E_KEY_WINDOW_ID 0xE2E00001u
 
 /* 输入由 e2e_control 注入 SDL 队列；这些只读 hook 让控制线程按主线程的

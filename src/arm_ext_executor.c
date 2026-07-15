@@ -49,6 +49,10 @@ extern const char *mr_get_start_filename(void);
 extern const char *mr_get_old_pack_filename(void);
 extern const char *mr_get_old_start_filename(void);
 extern const char *mr_get_start_fileparameter(void);
+extern void mr_set_pack_filename(const char *name);
+extern void mr_set_start_filename(const char *name);
+extern void mr_set_old_pack_filename(const char *name);
+extern void mr_set_old_start_filename(const char *name);
 extern int32 mr_platEx(int32 code, uint8 *input, int32 input_len,
                        uint8 **output, int32 *output_len, MR_PLAT_EX_CB *cb);
 extern int32 mr_ferrno(void);
@@ -324,6 +328,17 @@ static uint32_t alloc_string(ArmExtModule *m, const char *value) {
     size_t len = strlen(value) + 1;
     uint32_t slot = arm_alloc(m, (uint32_t)len);
     if (slot) memcpy(arm_ptr(m, slot), value, len);
+    return slot;
+}
+
+static uint32_t alloc_filename_table_slot(ArmExtModule *m, const char *value) {
+    uint32_t slot = arm_alloc(m, ARM_EXT_PACK_TABLE_SIZE);
+    char *dst = slot ? (char *)arm_ptr(m, slot) : NULL;
+    if (!dst) return 0;
+    /* table[100..103] are arrays in native Mythroad, not exact-length strings;
+     * guests legitimately clear/copy a fixed prefix when switching packages. */
+    memset(dst, 0, ARM_EXT_PACK_TABLE_SIZE);
+    snprintf(dst, ARM_EXT_PACK_TABLE_SIZE, "%s", value ? value : "");
     return slot;
 }
 
@@ -971,9 +986,12 @@ static void init_table(ArmExtModule *m) {
     arm_ext_set_pack_table_name(m, m->pack_alias[0] ?
                                    m->pack_alias :
                                    mr_get_pack_filename());
-    write_table_entry(m, 101, alloc_string(m, mr_get_start_filename()));
-    write_table_entry(m, 102, alloc_string(m, mr_get_old_pack_filename()));
-    write_table_entry(m, 103, alloc_string(m, mr_get_old_start_filename()));
+    m->start_table_addr = alloc_filename_table_slot(m, mr_get_start_filename());
+    m->old_pack_table_addr = alloc_filename_table_slot(m, mr_get_old_pack_filename());
+    m->old_start_table_addr = alloc_filename_table_slot(m, mr_get_old_start_filename());
+    write_table_entry(m, 101, m->start_table_addr);
+    write_table_entry(m, 102, m->old_pack_table_addr);
+    write_table_entry(m, 103, m->old_start_table_addr);
     write_table_entry(m, 138, alloc_string(m, mr_get_start_fileparameter()));
 
     /* 真机 MR 平台的应用堆一般为 512KB–1MB；origin_mem_len 过大会使
@@ -1231,6 +1249,28 @@ fail:
 }
 
 
+typedef void (*ArmExtFilenameSetter)(const char *name);
+
+static void arm_ext_sync_filename_slot(ArmExtModule *m, uint32_t slot,
+                                       ArmExtFilenameSetter setter) {
+    char value[ARM_EXT_PACK_TABLE_SIZE];
+    const void *src = slot ? arm_ptr(m, slot) : NULL;
+    if (!src || !setter) return;
+    memcpy(value, src, sizeof(value));
+    value[sizeof(value) - 1] = '\0';
+    setter(value);
+}
+
+static void arm_ext_sync_handoff_filenames(ArmExtModule *m) {
+    /* Native EXT code writes the same four host arrays directly.  Copying them
+     * only at a published lifecycle transition recreates that shared-memory ABI
+     * without treating ordinary transient package aliases as a handoff. */
+    arm_ext_sync_filename_slot(m, m->pack_table_addr, mr_set_pack_filename);
+    arm_ext_sync_filename_slot(m, m->start_table_addr, mr_set_start_filename);
+    arm_ext_sync_filename_slot(m, m->old_pack_table_addr, mr_set_old_pack_filename);
+    arm_ext_sync_filename_slot(m, m->old_start_table_addr, mr_set_old_start_filename);
+}
+
 static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk) {
     if (!m) return 0;
 
@@ -1238,9 +1278,21 @@ static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk) {
      * MR_STATE_RESTART(3) 或 MR_STATE_STOP(4)。真机上 ARM 代码与宿主共享
      * 同一全局变量；Unicorn 下 ARM 内存独立，所以回调结束后要同步一次。 */
     if (m->mr_state_slot) {
+        enum { ARM_MR_STATE_RESTART = 3, ARM_MR_STATE_STOP = 4 };
         uint32_t arm_state = 0;
         memcpy(&arm_state, arm_ptr(m, m->mr_state_slot), 4);
-        if (arm_state >= 3) {
+        if (arm_state == ARM_MR_STATE_RESTART) {
+            arm_ext_sync_handoff_filenames(m);
+            /* The guest has already armed the restart timer.  Publish RESTART
+             * to native Mythroad so mr_timer() performs its normal stop/start. */
+            mr_state = ARM_MR_STATE_RESTART;
+            return 1;
+        }
+        if (arm_state == ARM_MR_STATE_STOP) {
+            arm_ext_sync_handoff_filenames(m);
+            mr_state = ARM_MR_STATE_STOP;
+            /* STOP follows the platform exit contract; mr_exit() returns to a
+             * registered old app when present, otherwise it terminates VMRP. */
             mr_exit();
             return 1;
         }
