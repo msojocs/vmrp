@@ -153,9 +153,9 @@ export class VmrpE2e {
    * ENTER/SELECT, ESC/ESCAPE/POWER, SOFTLEFT/LEFT_SOFT, SOFTRIGHT/RIGHT_SOFT,
    * UP, DOWN, LEFT, RIGHT, SEND, STAR/*, POUND/HASH/#, digits 0-9, letters A-Z.
    *
-   * holdMs: 本次按住时长(毫秒),覆盖 VMRP_E2E_HOLD_MS。Mythroad 应用按定时器
-   * 轮询按键状态,按住时长决定语义(短按=激活/单步移动,长按=按键重复或长按菜单)。
-   * 全局 HOLD_MS 为粘贴稳定性调大后,需要单步语义的按键应显式传短时长。
+   * holdMs: 显式物理按住时长(毫秒),覆盖 VMRP_E2E_KEY_HOLD_MS。省略时由
+   * 主线程在首个后续 guest timer 返回时闭环 KEYUP；显式时长可表达重复键或
+   * 长按菜单。点击和粘贴使用独立的 VMRP_E2E_HOLD_MS。
    */
   async key(
     name: KeyName,
@@ -166,10 +166,14 @@ export class VmrpE2e {
       ? { timeoutMs: optionsOrTimeout, holdMs: legacyHoldMs, waitForDraw: true }
       : { timeoutMs: 2_000, waitForDraw: true, ...optionsOrTimeout };
     const previous = options.waitForDraw ? await this.drawCount() : undefined;
-    await this.command(options.holdMs != null ? `KEY ${name} ${options.holdMs}` : `KEY ${name}`);
+    const response = await this.command(options.holdMs != null ? `KEY ${name} ${options.holdMs}` : `KEY ${name}`);
     // editCreate and other valid state-only actions do not submit a bitmap.  Let
     // callers express that contract instead of accepting an unrelated timer draw.
-    if (previous != null) await this.waitDrawAfter(previous, options.timeoutMs);
+    // A key may also complete by intentionally terminating the runtime; the server
+    // reports that terminal state explicitly because no later draw can exist.
+    if (previous != null && !response.endsWith(" exited")) {
+      await this.waitDrawAfter(previous, options.timeoutMs);
+    }
   }
 
   async paste(text: string, timeoutMs = 5_000): Promise<void> {

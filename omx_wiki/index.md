@@ -1,9 +1,10 @@
 # Wiki Index
 
-> 26 pages | Last updated: 2026-07-13T06:35:53Z
+> 27 pages | Last updated: 2026-07-15T02:48:06Z
 
 ## debugging
 
+- [Cookie E2E key timer-generation boundary](cookie-e2e-key-timer-generation-boundary.md) — # Cookie E2E key timer-generation boundary
 - [DOTA browser plugin DSM package provenance](dota-browser-plugin-dsm-package-provenance.md) — # DOTA browser plugin DSM package provenance
 - [DOTA browser plugin network state investigation](dota-browser-plugin-network-state-investigation.md) — # DOTA browser plugin network state investigation
 - [DOTA Browser Plugin Record Pack Slot Fix](dota-browser-plugin-record-pack-slot-fix.md) — # DOTA Browser Plugin Record Pack Slot Fix

@@ -24,7 +24,7 @@ describe("cookie", () => {
     {
       await vi.waitFor(async () => {
         if (!vmrp) throw new Error("vmrp 未初始化");
-        // 主页面
+        // 从第一项向上循环到末项“文件管理”，直接验证末行高亮背景。
         const screen = await vmrp.screen("home");
         // rgb(32, 72, 112)
         expect(screen.pixel(75, 276)).toEqual([32, 72, 112]);
@@ -66,10 +66,10 @@ describe("cookie", () => {
       
       await vi.waitFor(async () => {
         if (!vmrp) throw new Error("vmrp 未初始化");
-        // 主页面
+        // 文件管理根目录加载完成后第一项高亮；目录可全部显示时右侧不会绘制滚动滑块。
         const screen = await vmrp.screen("file-manage-top");
-        // rgb(96, 112, 136)
-        expect(screen.pixel(235, 68)).toEqual([96, 112, 136]);
+        // rgb(248, 200, 24)
+        expect(screen.pixel(100, 48)).toEqual([248, 200, 24]);
       }, {
         timeout: 10_000,
         interval: 1000
@@ -80,10 +80,10 @@ describe("cookie", () => {
       
       await vi.waitFor(async () => {
         if (!vmrp) throw new Error("vmrp 未初始化");
-        // 主页面
+        // 从第一项向上循环到末项“应用列表”，直接验证末行高亮背景。
         const screen = await vmrp.screen("file-manage-bottom");
-        // rgb(96, 112, 136)
-        expect(screen.pixel(236, 249)).toEqual([96, 112, 136]);
+        // rgb(248, 200, 24)
+        expect(screen.pixel(100, 216)).toEqual([248, 200, 24]);
       }, {
         timeout: 10_000,
         interval: 1000
@@ -94,7 +94,7 @@ describe("cookie", () => {
       
       await vi.waitFor(async () => {
         if (!vmrp) throw new Error("vmrp 未初始化");
-        // 主页面
+        // 文件菜单第一项“进入”的高亮背景证明菜单已打开。
         const screen = await vmrp.screen("file-manage-menu");
         // rgb(248, 192, 32)
         expect(screen.pixel(86, 251)).toEqual([248, 192, 32]);
@@ -105,7 +105,7 @@ describe("cookie", () => {
     }
     {
       await vmrp.key('LEFT_SOFT', 1_000)
-      // 启动MRP
+      // TODO: 修复应用没有启动的BUG
       await vmrp.delay(10_000)
     }
   });
