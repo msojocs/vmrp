@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 28 pages | Last updated: 2026-07-15T05:09:32Z
+> 29 pages | Last updated: 2026-07-15T19:21:26+08:00
 
 ## debugging
 
@@ -12,6 +12,7 @@
 - [DOTA browser plugin second simpleDownload trigger](dota-browser-plugin-second-simpledownload-trigger.md) — # DOTA browser plugin second simpleDownload trigger
 - [DOTA download-browser-components transition frame fix](dota-download-browser-components-transition-frame-fix.md) — # DOTA download-browser-components transition frame fix
 - [DOTA download-browser-components waiting hypothesis invalidated](dota-download-browser-components-waiting-hypothesis-invalidated.md) — # DOTA download-browser-components waiting hypothesis invalidated
+- [gfhcq game stutter performance investigation](gfhcq-game-stutter-performance-investigation.md) — # gfhcq game stutter performance investigation
 - [gghjt modal timer and cold extraction regressions](gghjt-modal-timer-and-cold-extraction-regressions.md) — # gghjt modal timer and cold extraction regressions
 - [gms payment latency analysis](gms-payment-latency-analysis.md) — # gms payment latency analysis
 - [gzwdzjs ARM EXT DrawBitmap source overrun](gzwdzjs-arm-ext-drawbitmap-source-overrun.md) — # gzwdzjs ARM EXT DrawBitmap source overrun

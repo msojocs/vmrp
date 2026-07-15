@@ -1511,16 +1511,20 @@ static void aex_t120(ArmExtModule *m, AexTableCtx *c) {
                 }
                 ArmExtScreenContext screen_ctx;
                 if (arm_ext_push_draw_screen_context(m, &screen_ctx)) {
-                    uint16_t *before = arm_ext_snapshot_screen(m);
                     arm_ext_draw_bitmap_from_guest(
-                        m, r0, (int16)r1, (int16)r2,
+                        m, &screen_ctx, r0, (int16)r1, (int16)r2,
                         (uint16)r3, h, rop, trans, sx, sy, mw);
                     arm_ext_pop_draw_screen_context(&screen_ctx);
-                    arm_ext_note_screen_damage_diff(m, before);
-                    arm_ext_claim_foreground_screen_diff(m, claim_p,
-                                                         claim_helper,
-                                                         before);
-                    free(before);
+                    /* The draw helper records only primary-screen pixels whose
+                     * RGB565 value changed in its existing per-pixel loop. This
+                     * preserves the old diff semantics for off-screen targets,
+                     * transparency and rejected sources without an O(screen)
+                     * snapshot/scan per blit. Verify with the focused
+                     * performance/paired-PPM test, then off-screen and golden
+                     * E2E cases before the full suite. */
+                    arm_ext_claim_foreground_screen_rect(
+                        m, claim_p, claim_helper,
+                        (int16)r1, (int16)r2, (uint16)r3, h);
                     arm_ext_finish_screen_cache_write(m, &screen_ctx,
                                                       claim_p,
                                                       claim_helper);

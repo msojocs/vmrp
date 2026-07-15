@@ -1260,16 +1260,17 @@ static void arm_ext_bitmap_apply_rop(uint16_t *dst,
 }
 
 void arm_ext_draw_bitmap_from_guest(ArmExtModule *m,
-                                           uint32_t p_addr,
-                                           int16_t x,
-                                           int16_t y,
-                                           uint16_t w,
-                                           uint16_t h,
-                                           uint16_t rop,
-                                           uint16_t transcoler,
-                                           int16_t sx,
-                                           int16_t sy,
-                                           int16_t mw) {
+                                    const ArmExtScreenContext *screen_ctx,
+                                    uint32_t p_addr,
+                                    int16_t x,
+                                    int16_t y,
+                                    uint16_t w,
+                                    uint16_t h,
+                                    uint16_t rop,
+                                    uint16_t transcoler,
+                                    int16_t sx,
+                                    int16_t sy,
+                                    int16_t mw) {
     if (!m || !p_addr || !mr_screenBuf || mr_screen_w <= 0 ||
         mr_screen_h <= 0) {
         return;
@@ -1286,6 +1287,25 @@ void arm_ext_draw_bitmap_from_guest(ArmExtModule *m,
     uint32_t src_lo = 0;
     uint32_t src_hi = 0;
     int bounded = arm_ext_bitmap_source_bounds(m, p_addr, &src_lo, &src_hi);
+    int32_t primary_stride = arm_ext_screen_stride(m);
+    size_t primary_pixels = m->screen_w > 0 && m->screen_h > 0
+        ? (size_t)m->screen_w * (size_t)m->screen_h
+        : 0;
+    uint64_t primary_lo = m->screen_addr;
+    uint64_t primary_hi = primary_lo + primary_pixels * sizeof(uint16_t);
+    uint64_t draw_lo = screen_ctx && screen_ctx->active
+        ? (uint64_t)screen_ctx->target_addr +
+              ((uint64_t)(uint32_t)min_y * (uint32_t)mr_screen_w +
+               (uint32_t)min_x) * sizeof(uint16_t)
+        : 0;
+    uint64_t draw_hi = screen_ctx && screen_ctx->active
+        ? (uint64_t)screen_ctx->target_addr +
+              ((uint64_t)(uint32_t)(max_y - 1) * (uint32_t)mr_screen_w +
+               (uint32_t)max_x) * sizeof(uint16_t)
+        : 0;
+    int track_primary_damage = primary_stride > 0 && primary_pixels > 0 &&
+        draw_lo < primary_hi && draw_hi > primary_lo &&
+        arm_ext_ensure_screen_regions(m);
 
     /*
      * table[120] passes guest bitmap pointers into host C. The native helper
@@ -1350,7 +1370,36 @@ void arm_ext_draw_bitmap_from_guest(ArmExtModule *m,
                                                   src_lo, src_hi, &src)) {
                 continue;
             }
+            uint16_t before = track_primary_damage ? *dst : 0;
             arm_ext_bitmap_apply_rop(dst, src, draw_rop, transcoler);
+            if (track_primary_damage && *dst != before) {
+                /* The old full-screen diff used the primary framebuffer's
+                 * physical stride, not table[92]'s temporary draw stride. Map
+                 * the changed destination address the same way so off-screen
+                 * caches and transparent/no-op pixels remain damage-free. */
+                uint64_t dst_addr = (uint64_t)screen_ctx->target_addr +
+                    ((uint64_t)(uint32_t)dy * (uint32_t)mr_screen_w +
+                     (uint32_t)dx) * sizeof(uint16_t);
+                if (dst_addr >= primary_lo && dst_addr < primary_hi &&
+                    ((dst_addr - primary_lo) & 1u) == 0) {
+                    size_t pixel_offset =
+                        (size_t)((dst_addr - primary_lo) / sizeof(uint16_t));
+                    uint32_t damage_y =
+                        (uint32_t)(pixel_offset / (uint32_t)primary_stride);
+                    uint16_t damage_x =
+                        (uint16_t)(pixel_offset % (uint32_t)primary_stride);
+                    ArmExtRowSpans *damage = &m->screen_damage;
+                    if (damage_y < damage->rows) {
+                        if (damage_x < damage->min_x[damage_y])
+                            damage->min_x[damage_y] = damage_x;
+                        if ((uint16_t)(damage_x + 1u) >
+                            damage->max_x[damage_y]) {
+                            damage->max_x[damage_y] =
+                                (uint16_t)(damage_x + 1u);
+                        }
+                    }
+                }
+            }
         }
     }
 }

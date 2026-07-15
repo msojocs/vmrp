@@ -1,5 +1,21 @@
 # Wiki Log
 
+## [2026-07-15T19:21:26+08:00] complete
+- **Pages:** gfhcq-game-stutter-performance-investigation.md
+- **Summary:** Completed independent implementation/evidence/requirements audits, replaced rectangle over-damage with actual changed-pixel spans that preserve off-screen, subview, temporary-stride and transparent/no-op semantics, remeasured 5.49x steady throughput with explicit SDL dummy, matched the pre-fix PPM byte-for-byte, and passed the final dummy 31/31 E2E suite.
+
+## [2026-07-15T18:17:18+08:00] update
+- **Pages:** gfhcq-game-stutter-performance-investigation.md
+- **Summary:** Recorded the first table[120] rectangle-damage implementation and initial regressions; the final audit later replaced rectangle over-damage with actual changed-pixel tracking to preserve off-screen and transparent/no-op behavior.
+
+## [2026-07-15T16:35:00+08:00] update
+- **Pages:** gfhcq-game-stutter-performance-investigation.md
+- **Summary:** Recorded an intermediate 8 MiB reproduction and timer/pixel-loop disassembly; the completion entry corrects its game-phase baseline because those early artifacts predated the final three-second menu delay.
+
+## [2026-07-15T00:00:00+08:00] add
+- **Pages:** gfhcq-game-stutter-performance-investigation.md
+- **Summary:** Started the focused gfhcq game-stutter investigation; recorded the SDL dummy-driver constraint, 480x800 scaling factor, fixture identity, low-volume measurement plan, and disassembly requirement.
+
 ## [2026-07-10T16:40:00+08:00] update
 - **Pages:** wbrw-proxy2-web-page-rendering.md
 - **Summary:** Corrected WBRW link activation semantics from caption/href to href/caption/companion; recorded 320 real-device anchor samples, the first-link PPM proof, and the successful child-page request/cache evidence.
