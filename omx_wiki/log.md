@@ -315,3 +315,7 @@
 ## [2026-07-13T06:35:53Z] complete
 - **Pages:** wbrw-go-html2sky-rendering-progress-2026-07-12.md
 - **Summary:** Preserved generic CSS background-container identity in html2sky, nested pagination rows and the jump form under one SKY parent, and proved the former white gap is continuously green in the final no-xvfb PPM.
+
+## [2026-07-15T02:48:06Z] complete
+- **Pages:** cookie-e2e-key-timer-generation-boundary.md
+- **Summary:** Recorded the ARM event-chain evidence and replaced queue/draw/anonymous-timer completion guesses with main-thread short-key release plus timer-generation publication; the unfinished cookie scenario test remains unchanged.

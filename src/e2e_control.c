@@ -14,12 +14,13 @@
 #include <strings.h>
 
 #define VMRP_E2E_SOCKET_PATH_LIMIT 108
+#define VMRP_E2E_DEFAULT_HOLD_MS 500
+#define VMRP_E2E_DEFAULT_KEY_SYNC_TIMEOUT_MS 30000
 
 /*
- * SCREEN 是唯一需要回到主线程执行的命令——它读取 SDL window surface，必须与
- * event()/timer() 串行（见 main.c 中关于 Unicorn 引擎竞态的说明）。其余命令
- * （CLICK/KEY/WAIT_DRAW/DRAW_COUNT/QUIT）只做线程安全的 SDL_PushEvent 或对绘制
- * 计数的原子读取，可直接在控制线程上完成，无需 mutex/cond/事件往返。
+ * SCREEN 必须回主线程读取 SDL surface。KEY 由控制线程注入，但每个 DOWN/UP
+ * 都等待主线程确认，并按 timer generation 建立 guest 调度边界；两条路径都
+ * 不能只把 SDL_PushEvent 成功当成 guest 已经完成处理。
  */
 typedef struct {
     char path[1024];
@@ -36,6 +37,29 @@ struct VmrpE2eControl {
     SDL_atomic_t stop_requested;
     int listen_fd;
     char socket_path[VMRP_E2E_SOCKET_PATH_LIMIT];
+    /* 控制线程一次只处理一个客户端；这组状态将当前按键事件与主线程确认配对。 */
+    SDL_mutex *key_mutex;
+    SDL_cond *key_cond;
+    int key_event_waiting;
+    int key_event_consumed;
+    int key_event_delivered;
+    Uint32 key_event_type;
+    SDL_Keycode key_event_code;
+    uint32_t key_event_token;
+    uint32_t key_event_timer_arm_generation;
+    uint32_t key_event_timer_pending_generation;
+    /* 默认短按由主线程在首个后续 guest timer 后闭环 release。 */
+    int short_key_active;
+    int short_key_down_consumed;
+    int short_key_down_delivered;
+    int short_key_up_ready;
+    int short_key_up_consumed;
+    int short_key_up_delivered;
+    SDL_Keycode short_key_code;
+    uint32_t short_key_token;
+    uint32_t short_key_release_arm_generation;
+    uint32_t short_key_release_pending_generation;
+    uint32_t next_key_token;
 };
 
 static void e2e_finish_screen(E2eScreenRequest *req, const char *fmt, ...) {
@@ -54,6 +78,31 @@ static void e2e_finish_screen(E2eScreenRequest *req, const char *fmt, ...) {
 
 static int e2e_draw_count(VmrpE2eControl *control) {
     return control->hooks.draw_count ? control->hooks.draw_count(control->hooks.userdata) : 0;
+}
+
+static uint32_t e2e_timer_arm_generation(VmrpE2eControl *control) {
+    return control->hooks.timer_arm_generation
+        ? control->hooks.timer_arm_generation(control->hooks.userdata) : 0;
+}
+
+static uint32_t e2e_timer_dispatched_generation(VmrpE2eControl *control) {
+    return control->hooks.timer_dispatched_generation
+        ? control->hooks.timer_dispatched_generation(control->hooks.userdata) : 0;
+}
+
+static uint32_t e2e_timer_pending_generation(VmrpE2eControl *control) {
+    return control->hooks.timer_pending_generation
+        ? control->hooks.timer_pending_generation(control->hooks.userdata) : 0;
+}
+
+static int e2e_timer_dispatch_in_progress(VmrpE2eControl *control) {
+    return control->hooks.timer_dispatch_in_progress
+        ? control->hooks.timer_dispatch_in_progress(control->hooks.userdata) : 0;
+}
+
+static int e2e_runtime_exited(VmrpE2eControl *control) {
+    return control->hooks.runtime_exited
+        ? control->hooks.runtime_exited(control->hooks.userdata) : 0;
 }
 
 static const char *e2e_screen_dump_path(VmrpE2eControl *control) {
@@ -95,14 +144,24 @@ static void e2e_push_mouse_button(int type, int x, int y, Uint8 state) {
     SDL_PushEvent(&ev);
 }
 
-static void e2e_push_key(int type, SDL_Keycode key, Uint8 state) {
+static uint32_t e2e_next_key_token(VmrpE2eControl *control) {
+    control->next_key_token++;
+    if (!control->next_key_token) control->next_key_token++;
+    return control->next_key_token;
+}
+
+static int e2e_push_key(int type, SDL_Keycode key, Uint8 state,
+                        uint32_t token) {
     SDL_Event ev;
     memset(&ev, 0, sizeof(ev));
     ev.type = type;
     ev.key.type = type;
+    /* windowID 是 E2E 合成事件标记，timestamp 携带本次注入的唯一回执 token。 */
+    ev.key.windowID = VMRP_E2E_KEY_WINDOW_ID;
+    ev.key.timestamp = token;
     ev.key.state = state;
     ev.key.keysym.sym = key;
-    SDL_PushEvent(&ev);
+    return SDL_PushEvent(&ev);
 }
 
 static void e2e_push_key_with_mod(int type, SDL_Keycode key, Uint8 state, SDL_Keymod mod) {
@@ -147,12 +206,27 @@ static void e2e_write_line(int fd, const char *line) {
     send(fd, "\n", 1, 0);
 }
 
-static int e2e_input_hold_ms(void) {
+static int e2e_click_or_paste_hold_ms(void) {
     const char *env = getenv("VMRP_E2E_HOLD_MS");
     int ms = env ? atoi(env) : 0;
-    /* 默认按住 500ms，与 autoClickThread 一致：这是已验证可用的间隔。 */
-    if (ms <= 0) ms = 500;
+    /* 点击和平台粘贴沿用已验证的 500ms 默认值。 */
+    if (ms <= 0) ms = VMRP_E2E_DEFAULT_HOLD_MS;
     return ms;
+}
+
+static int e2e_configured_key_hold_ms(const char *command_value) {
+    if (command_value && *command_value) {
+        int ms = atoi(command_value);
+        /* 命令显式传 0 表示逻辑短按，不再回落到环境变量。 */
+        return ms > 0 ? ms : 0;
+    }
+    const char *env = getenv("VMRP_E2E_KEY_HOLD_MS");
+    if (env && *env) {
+        int ms = atoi(env);
+        if (ms > 0) return ms;
+    }
+    /* 0 表示由 guest timer generation 定义离散短按，不引入固定墙钟时长。 */
+    return 0;
 }
 
 /*
@@ -162,34 +236,219 @@ static int e2e_input_hold_ms(void) {
  * 观察到"按下"状态才会识别为一次输入。若 down/up 背靠背执行（中间没有定时器
  * tick），应用往往不会产生事件。
  *
- * 因此在控制线程上注入 down/延迟/up（与 autoClickThread 的做法一致）：
- * SDL_PushEvent 是线程安全的，主循环会在间隔期间继续处理定时器并重绘，
- * 实际的 event(MR_MOUSE_*)/event(MR_KEY_*) 仍然发生在主线程。编辑模式下的
- * 抑制也由主循环统一处理。
+ * 因此控制线程只负责注入，按键由 generation 边界分隔，点击沿用物理 hold；
+ * SDL_PushEvent 是线程安全的，实际的 event(MR_MOUSE_*)/event(MR_KEY_*) 仍然
+ * 发生在主线程，编辑模式下的抑制也由主循环统一处理。
  */
 static void e2e_inject_click(int x, int y, int fd) {
     e2e_push_mouse_button(SDL_MOUSEBUTTONDOWN, x, y, SDL_PRESSED);
-    SDL_Delay((Uint32)e2e_input_hold_ms());
+    SDL_Delay((Uint32)e2e_click_or_paste_hold_ms());
     e2e_push_mouse_button(SDL_MOUSEBUTTONUP, x, y, SDL_RELEASED);
     char resp[64];
     snprintf(resp, sizeof(resp), "OK click %d %d", x, y);
     e2e_write_line(fd, resp);
 }
 
+static int e2e_push_key_and_wait(VmrpE2eControl *control, Uint32 type,
+                                 SDL_Keycode key, Uint8 state,
+                                 uint32_t *timer_arm_generation,
+                                 uint32_t *timer_pending_generation) {
+    SDL_LockMutex(control->key_mutex);
+    if (SDL_AtomicGet(&control->stop_requested)) {
+        SDL_UnlockMutex(control->key_mutex);
+        return 0;
+    }
+    control->key_event_type = type;
+    control->key_event_code = key;
+    control->key_event_token = e2e_next_key_token(control);
+    control->key_event_waiting = 1;
+    control->key_event_consumed = 0;
+    control->key_event_delivered = 0;
+    if (e2e_push_key((int)type, key, state,
+                     control->key_event_token) != 1) {
+        control->key_event_waiting = 0;
+        SDL_UnlockMutex(control->key_mutex);
+        return 0;
+    }
+    while (!control->key_event_consumed &&
+           !e2e_runtime_exited(control) &&
+           !SDL_AtomicGet(&control->stop_requested)) {
+        SDL_CondWait(control->key_cond, control->key_mutex);
+    }
+    int delivered = control->key_event_consumed && control->key_event_delivered;
+    if (delivered) {
+        *timer_arm_generation = control->key_event_timer_arm_generation;
+        *timer_pending_generation = control->key_event_timer_pending_generation;
+    }
+    control->key_event_waiting = 0;
+    SDL_UnlockMutex(control->key_mutex);
+    return delivered;
+}
+
 /*
- * hold_ms<=0 时使用全局默认（VMRP_E2E_HOLD_MS 或 500ms）。
- * Mythroad 应用自身以定时器轮询按键状态实现长按/重复：按住时长直接决定
- * 应用语义（短按=单步/激活，长按=按键重复或弹出长按菜单）。全局调大
- * VMRP_E2E_HOLD_MS（如为剪贴板粘贴稳定性设 1500ms）会让所有按键都变成
- * 长按，导致方向键连滚、确认键弹菜单。因此 KEY 命令支持按次覆盖时长。
+ * 默认短按在 KEYDOWN 入队前登记。主线程不必等待控制线程醒来：它在首个
+ * 后续 timer dispatch 结束时取得 short_key_code 并同步执行 KEYUP。
  */
-static void e2e_inject_key(SDL_Keycode key, int hold_ms, int fd) {
-    if (hold_ms <= 0) hold_ms = e2e_input_hold_ms();
-    e2e_push_key(SDL_KEYDOWN, key, SDL_PRESSED);
-    SDL_Delay((Uint32)hold_ms);
-    e2e_push_key(SDL_KEYUP, key, SDL_RELEASED);
+static int e2e_inject_short_key(VmrpE2eControl *control, SDL_Keycode key,
+                                uint32_t *release_arm_generation,
+                                uint32_t *release_pending_generation) {
+    SDL_LockMutex(control->key_mutex);
+    if (SDL_AtomicGet(&control->stop_requested)) {
+        SDL_UnlockMutex(control->key_mutex);
+        return 0;
+    }
+    control->short_key_active = 1;
+    control->short_key_down_consumed = 0;
+    control->short_key_down_delivered = 0;
+    control->short_key_up_ready = 0;
+    control->short_key_up_consumed = 0;
+    control->short_key_up_delivered = 0;
+    control->short_key_code = key;
+    control->short_key_token = e2e_next_key_token(control);
+    if (e2e_push_key(SDL_KEYDOWN, key, SDL_PRESSED,
+                     control->short_key_token) != 1) {
+        control->short_key_active = 0;
+        SDL_UnlockMutex(control->key_mutex);
+        return 0;
+    }
+
+    while (!control->short_key_down_consumed &&
+           !SDL_AtomicGet(&control->stop_requested)) {
+        SDL_CondWait(control->key_cond, control->key_mutex);
+    }
+    if (!control->short_key_down_consumed ||
+        !control->short_key_down_delivered) {
+        control->short_key_active = 0;
+        SDL_UnlockMutex(control->key_mutex);
+        return 0;
+    }
+    if (e2e_runtime_exited(control)) {
+        control->short_key_active = 0;
+        SDL_UnlockMutex(control->key_mutex);
+        return 2;
+    }
+
+    while (!control->short_key_up_consumed &&
+           !e2e_runtime_exited(control) &&
+           !SDL_AtomicGet(&control->stop_requested)) {
+        SDL_CondWait(control->key_cond, control->key_mutex);
+    }
+
+    if (e2e_runtime_exited(control)) {
+        control->short_key_active = 0;
+        SDL_UnlockMutex(control->key_mutex);
+        return 2;
+    }
+
+    int delivered = control->short_key_up_consumed &&
+                    control->short_key_up_delivered;
+    if (delivered) {
+        *release_arm_generation = control->short_key_release_arm_generation;
+        *release_pending_generation = control->short_key_release_pending_generation;
+    }
+    control->short_key_active = 0;
+    SDL_UnlockMutex(control->key_mutex);
+    return delivered;
+}
+
+static int e2e_generation_after(uint32_t lhs, uint32_t rhs) {
+    return (int32_t)(lhs - rhs) > 0;
+}
+
+static int e2e_wait_timer_boundary(VmrpE2eControl *control,
+                                   uint32_t arm_generation,
+                                   uint32_t pending_generation,
+                                   int timeout_ms) {
+    if (!pending_generation || e2e_runtime_exited(control)) return 1;
+    Uint32 started_at = SDL_GetTicks();
+    while (!SDL_AtomicGet(&control->stop_requested) &&
+           !e2e_runtime_exited(control)) {
+        /*
+         * 必须严格晚于按键回执时的 arm generation。等于快照的 timer 可能早在
+         * 按键前就已排队；只有后续重新 arm 的一代完整返回，才能证明 guest
+         * 输入状态机跨过了一个属于该按键之后的完整周期。
+         */
+        if (e2e_generation_after(e2e_timer_dispatched_generation(control),
+                                 arm_generation)) {
+            return 1;
+        }
+        /*
+         * timer() 内部可能短暂 stop 后再 start。仅当两次采样都处于完整 dispatch
+         * 之外且 pending 仍为 0，才把它认作真实停止或 arm/push 失败。
+         */
+        if (!e2e_timer_dispatch_in_progress(control) &&
+            !e2e_timer_pending_generation(control) &&
+            !e2e_timer_dispatch_in_progress(control) &&
+            !e2e_timer_pending_generation(control)) {
+            return 1;
+        }
+        /* 超时是显式错误终态；按键已 release，不会以成功继续后续步骤。 */
+        if ((int)(SDL_GetTicks() - started_at) >= timeout_ms) return 0;
+        SDL_Delay(1);
+    }
+    return e2e_runtime_exited(control);
+}
+
+/*
+ * 未显式配置 hold 时，主线程在 KEYDOWN 后第一个完整 timer dispatch 的尾部
+ * 同步执行 KEYUP，确保短按只跨一个 guest tick。命令参数或环境变量指定的
+ * hold 仍表示物理长按时长；两条路径都保留 release 后的 generation 边界。
+ */
+static void e2e_inject_key(VmrpE2eControl *control, SDL_Keycode key,
+                           const char *hold_value, int sync_timeout_ms, int fd) {
+    uint32_t timer_arm_generation = 0;
+    uint32_t timer_pending_generation = 0;
+    int hold_ms = e2e_configured_key_hold_ms(hold_value);
+    int runtime_exited = 0;
+    if (hold_ms > 0) {
+        if (!e2e_push_key_and_wait(control, SDL_KEYDOWN, key, SDL_PRESSED,
+                                   &timer_arm_generation,
+                                   &timer_pending_generation)) {
+            if (e2e_runtime_exited(control)) goto respond;
+            e2e_write_line(fd, "ERR key_down_not_consumed");
+            return;
+        }
+        runtime_exited = e2e_runtime_exited(control);
+        if (!runtime_exited) {
+            SDL_Delay((Uint32)hold_ms);
+            runtime_exited = e2e_runtime_exited(control);
+        }
+        if (!runtime_exited &&
+            !e2e_push_key_and_wait(control, SDL_KEYUP, key, SDL_RELEASED,
+                                   &timer_arm_generation,
+                                   &timer_pending_generation)) {
+            if (e2e_runtime_exited(control)) goto respond;
+            e2e_write_line(fd, "ERR key_up_not_consumed");
+            return;
+        }
+    } else {
+        int short_result = e2e_inject_short_key(
+            control, key, &timer_arm_generation,
+            &timer_pending_generation);
+        if (!short_result) {
+            e2e_write_line(fd, "ERR short_key_not_consumed");
+            return;
+        }
+        runtime_exited = short_result == 2 || e2e_runtime_exited(control);
+    }
+
+    runtime_exited = runtime_exited || e2e_runtime_exited(control);
+    if (!runtime_exited &&
+        !e2e_wait_timer_boundary(control, timer_arm_generation,
+                                 timer_pending_generation,
+                                 sync_timeout_ms)) {
+        e2e_write_line(fd, "ERR key_up_sync_timeout");
+        return;
+    }
+respond:
+    runtime_exited = e2e_runtime_exited(control);
+    /*
+     * 响应只表示上述输入契约完成；画面变化仍由独立 WAIT_DRAW 验证，不能把
+     * timer generation 当成绘制成功。
+     */
     char resp[64];
-    snprintf(resp, sizeof(resp), "OK key %d", (int)key);
+    snprintf(resp, sizeof(resp), runtime_exited
+             ? "OK key %d exited" : "OK key %d", (int)key);
     e2e_write_line(fd, resp);
 }
 
@@ -207,7 +466,7 @@ static void e2e_inject_paste_shortcut(int fd) {
     SDL_Keymod old_mod = SDL_GetModState();
     SDL_SetModState((SDL_Keymod)(old_mod | KMOD_CTRL));
     e2e_push_key_with_mod(SDL_KEYDOWN, SDLK_v, SDL_PRESSED, KMOD_CTRL);
-    SDL_Delay((Uint32)e2e_input_hold_ms());
+    SDL_Delay((Uint32)e2e_click_or_paste_hold_ms());
     e2e_push_key_with_mod(SDL_KEYUP, SDLK_v, SDL_RELEASED, KMOD_CTRL);
     SDL_Delay(1);
     SDL_SetModState(old_mod);
@@ -283,7 +542,8 @@ static void e2e_handle_client(VmrpE2eControl *control, int fd) {
     char op[32] = {0};
     char a[1024] = {0};
     char b[64] = {0};
-    if (sscanf(line, "%31s %1023s %63s", op, a, b) < 1) {
+    char c[64] = {0};
+    if (sscanf(line, "%31s %1023s %63s %63s", op, a, b, c) < 1) {
         e2e_write_line(fd, "ERR bad_command");
         return;
     }
@@ -301,8 +561,10 @@ static void e2e_handle_client(VmrpE2eControl *control, int fd) {
             e2e_write_line(fd, "ERR usage");
             return;
         }
-        /* 可选第二参数 = 本次按住毫秒数（覆盖 VMRP_E2E_HOLD_MS） */
-        e2e_inject_key(key, b[0] ? atoi(b) : 0, fd);
+        int sync_timeout_ms = c[0] ? atoi(c) : VMRP_E2E_DEFAULT_KEY_SYNC_TIMEOUT_MS;
+        if (sync_timeout_ms <= 0) sync_timeout_ms = VMRP_E2E_DEFAULT_KEY_SYNC_TIMEOUT_MS;
+        /* 第二参数是物理 hold，第三参数只限制 release 后同步等待并在超时时报错。 */
+        e2e_inject_key(control, key, b, sync_timeout_ms, fd);
     } else if (strcasecmp(op, "SET_CLIPBOARD") == 0) {
         const char *text = line + strlen(op);
         while (*text == ' ' || *text == '\t') text++;
@@ -366,6 +628,14 @@ int vmrp_e2e_control_available(void) {
 VmrpE2eControl *vmrp_e2e_control_create(uint32_t event_type, const VmrpE2eHooks *hooks) {
     VmrpE2eControl *control = (VmrpE2eControl *)calloc(1, sizeof(VmrpE2eControl));
     if (!control) return NULL;
+    control->key_mutex = SDL_CreateMutex();
+    control->key_cond = SDL_CreateCond();
+    if (!control->key_mutex || !control->key_cond) {
+        if (control->key_cond) SDL_DestroyCond(control->key_cond);
+        if (control->key_mutex) SDL_DestroyMutex(control->key_mutex);
+        free(control);
+        return NULL;
+    }
     control->event_type = event_type;
     control->listen_fd = -1;
     if (hooks) control->hooks = *hooks;
@@ -436,10 +706,82 @@ void vmrp_e2e_control_execute(VmrpE2eControl *control, SDL_Event *event) {
     }
 }
 
+void vmrp_e2e_control_key_event_completed(VmrpE2eControl *control,
+                                          uint32_t event_type,
+                                          int32_t keycode,
+                                          uint32_t window_id,
+                                          uint32_t token,
+                                          int delivered) {
+    if (!control || window_id != VMRP_E2E_KEY_WINDOW_ID || !token) return;
+    SDL_LockMutex(control->key_mutex);
+    if (control->short_key_active &&
+        control->short_key_code == (SDL_Keycode)keycode &&
+        control->short_key_token == token) {
+        if (event_type == SDL_KEYDOWN && !control->short_key_down_consumed) {
+            control->short_key_down_consumed = 1;
+            control->short_key_down_delivered = delivered;
+            SDL_CondSignal(control->key_cond);
+        } else if (event_type == SDL_KEYUP &&
+                   control->short_key_up_ready &&
+                   !control->short_key_up_consumed) {
+            control->short_key_release_arm_generation =
+                e2e_timer_arm_generation(control);
+            control->short_key_release_pending_generation =
+                e2e_timer_pending_generation(control);
+            control->short_key_up_consumed = 1;
+            control->short_key_up_delivered = delivered;
+            SDL_CondSignal(control->key_cond);
+        }
+    }
+    if (control->key_event_waiting &&
+        control->key_event_type == (Uint32)event_type &&
+        control->key_event_code == (SDL_Keycode)keycode &&
+        control->key_event_token == token) {
+        /* main.c 在 guest event() 返回后调用，所以这里采样的是事件完成点。 */
+        control->key_event_timer_arm_generation = e2e_timer_arm_generation(control);
+        control->key_event_timer_pending_generation =
+            e2e_timer_pending_generation(control);
+        control->key_event_consumed = 1;
+        control->key_event_delivered = delivered;
+        SDL_CondSignal(control->key_cond);
+    }
+    SDL_UnlockMutex(control->key_mutex);
+}
+
+int vmrp_e2e_control_take_key_up(VmrpE2eControl *control,
+                                 int after_timer,
+                                 int32_t *keycode,
+                                 uint32_t *token) {
+    if (!control || !keycode || !token) return 0;
+    SDL_LockMutex(control->key_mutex);
+    int ready = control->short_key_active &&
+                control->short_key_down_consumed &&
+                control->short_key_down_delivered &&
+                !control->short_key_up_ready &&
+                !e2e_runtime_exited(control);
+    if (ready && !after_timer) {
+        /* KEYDOWN 回调已完整返回；只有稳定地没有 guest timer 时才立即 release。 */
+        ready = !e2e_timer_dispatch_in_progress(control) &&
+                !e2e_timer_pending_generation(control);
+    }
+    if (ready) {
+        /* main.c 会在当前主线程边界内同步 release，不再向 SDL 队列追加事件。 */
+        control->short_key_up_ready = 1;
+        *keycode = (int32_t)control->short_key_code;
+        *token = control->short_key_token;
+    }
+    SDL_UnlockMutex(control->key_mutex);
+    return ready;
+}
+
 void vmrp_e2e_control_destroy(VmrpE2eControl *control) {
     if (!control) return;
+    /* KEYDOWN 可能直接退出 guest；先唤醒等待 KEYUP 确认的控制线程再 join。 */
+    SDL_AtomicSet(&control->stop_requested, 1);
+    SDL_LockMutex(control->key_mutex);
+    SDL_CondBroadcast(control->key_cond);
+    SDL_UnlockMutex(control->key_mutex);
     if (control->listen_fd >= 0) {
-        SDL_AtomicSet(&control->stop_requested, 1);
         shutdown(control->listen_fd, SHUT_RDWR);
         close(control->listen_fd);
         control->listen_fd = -1;
@@ -452,6 +794,8 @@ void vmrp_e2e_control_destroy(VmrpE2eControl *control) {
         unlink(control->socket_path);
         control->socket_path[0] = '\0';
     }
+    SDL_DestroyCond(control->key_cond);
+    SDL_DestroyMutex(control->key_mutex);
     free(control);
 }
 
@@ -478,6 +822,31 @@ void vmrp_e2e_control_start_if_requested(VmrpE2eControl *control) {
 void vmrp_e2e_control_execute(VmrpE2eControl *control, SDL_Event *event) {
     (void)control;
     (void)event;
+}
+
+void vmrp_e2e_control_key_event_completed(VmrpE2eControl *control,
+                                          uint32_t event_type,
+                                          int32_t keycode,
+                                          uint32_t window_id,
+                                          uint32_t token,
+                                          int delivered) {
+    (void)control;
+    (void)event_type;
+    (void)keycode;
+    (void)window_id;
+    (void)token;
+    (void)delivered;
+}
+
+int vmrp_e2e_control_take_key_up(VmrpE2eControl *control,
+                                 int after_timer,
+                                 int32_t *keycode,
+                                 uint32_t *token) {
+    (void)control;
+    (void)after_timer;
+    (void)keycode;
+    (void)token;
+    return 0;
 }
 
 void vmrp_e2e_control_destroy(VmrpE2eControl *control) {

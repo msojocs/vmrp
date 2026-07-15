@@ -48,6 +48,16 @@ static bool isMouseDown = false;
 /* PPM 截屏：收到 SIGUSR1 时将当前 SDL surface 转储为 PPM 文件，
  * 用于在无显示器环境下验证画面是否正常渲染。 */
 static SDL_atomic_t guiDrawBitmapCount;
+/*
+ * E2E 输入同步把每次 timerStart 作为独立 generation。pending 标识仍可完成的
+ * 那一代 timer，dispatched 只在主线程完整执行 timer() 后发布；三者共同避免
+ * 把按键前已经排队的 timer 事件误认为按键后的 guest 调度边界。
+ */
+static SDL_atomic_t timerArmGeneration;
+static SDL_atomic_t timerDispatchedGeneration;
+static SDL_atomic_t timerPendingGeneration;
+static SDL_atomic_t timerDispatchInProgress;
+static SDL_atomic_t runtimeExited;
 
 static const char *screen_dump_path(void) {
     const char *path = getenv("VMRP_PPM_PATH");
@@ -98,6 +108,45 @@ static const char *e2e_screen_dump_path_hook(void *userdata) {
 static int e2e_draw_count_hook(void *userdata) {
     (void)userdata;
     return SDL_AtomicGet(&guiDrawBitmapCount);
+}
+
+static uint32_t e2e_timer_arm_generation_hook(void *userdata) {
+    (void)userdata;
+    return (uint32_t)SDL_AtomicGet(&timerArmGeneration);
+}
+
+static uint32_t e2e_timer_dispatched_generation_hook(void *userdata) {
+    (void)userdata;
+    return (uint32_t)SDL_AtomicGet(&timerDispatchedGeneration);
+}
+
+static uint32_t e2e_timer_pending_generation_hook(void *userdata) {
+    (void)userdata;
+    return (uint32_t)SDL_AtomicGet(&timerPendingGeneration);
+}
+
+static int e2e_timer_dispatch_in_progress_hook(void *userdata) {
+    (void)userdata;
+    return SDL_AtomicGet(&timerDispatchInProgress);
+}
+
+static int e2e_runtime_exited_hook(void *userdata) {
+    (void)userdata;
+    return SDL_AtomicGet(&runtimeExited);
+}
+
+static void e2e_publish_runtime_exit(void) {
+    if (vmrp_is_exited()) SDL_AtomicSet(&runtimeExited, 1);
+}
+
+static void e2e_publish_timer_dispatch(uint32_t generation) {
+    int current = SDL_AtomicGet(&timerDispatchedGeneration);
+    /* Removed timers can already have queued callbacks; never let a stale event
+     * move the published completion generation backwards. */
+    while ((int32_t)(generation - (uint32_t)current) > 0 &&
+           !SDL_AtomicCAS(&timerDispatchedGeneration, current, (int)generation)) {
+        current = SDL_AtomicGet(&timerDispatchedGeneration);
+    }
 }
 
 /* timerCb 在 SDL 定时器线程中触发，直接调用 timer() 会与主线程的 event()
@@ -231,24 +280,32 @@ void setEventEnable(int v) {
 
 uint32_t timerCb(uint32_t interval, void *param) {
     (void)interval; /* 签名由 SDL_AddTimer 回调 ABI 固定 */
-    (void)param;
-    SDL_RemoveTimer(timeId);
-    timeId = 0;
-    /* 不在定时器线程调用 timer()，改为推送事件到主线程 */
+    uint32_t generation = (uint32_t)(uintptr_t)param;
+    /* 回调返回 0 已使 SDL timer 成为 one-shot；不在 timer 线程改写 timeId，
+     * 否则一个刚被替换的旧 callback 可能清掉主线程保存的新 timer identity。 */
     SDL_Event ev;
     memset(&ev, 0, sizeof(ev));
     ev.type = timerEventType;
-    SDL_PushEvent(&ev);
+    ev.user.data1 = (void *)(uintptr_t)generation;
+    if (SDL_PushEvent(&ev) != 1) {
+        /* 只清除本代；较新的 timerStart 不能被较旧 callback 的失败覆盖。 */
+        SDL_AtomicCAS(&timerPendingGeneration, (int)generation, 0);
+    }
     return 0;
 }
 
 int32_t timerStart(uint16_t t) {
+    uint32_t generation = (uint32_t)SDL_AtomicAdd(&timerArmGeneration, 1) + 1;
+    /* 先发布身份，callback 即使立即运行也能针对同一 generation 清理失败状态。 */
+    SDL_AtomicSet(&timerPendingGeneration, (int)generation);
     if (!timeId) {
-        timeId = SDL_AddTimer(t, timerCb, NULL);
+        timeId = SDL_AddTimer(t, timerCb, (void *)(uintptr_t)generation);
     } else {
         SDL_RemoveTimer(timeId);
-        timeId = SDL_AddTimer(t, timerCb, NULL);
+        timeId = SDL_AddTimer(t, timerCb, (void *)(uintptr_t)generation);
     }
+    /* generation 即 timer 的身份；0 专门表示已停止或 arm 失败。 */
+    if (!timeId) SDL_AtomicCAS(&timerPendingGeneration, (int)generation, 0);
     return MR_SUCCESS;
 }
 
@@ -257,6 +314,7 @@ int32_t timerStop(void) {
         SDL_RemoveTimer(timeId);
         timeId = 0;
     }
+    SDL_AtomicSet(&timerPendingGeneration, 0);
     return MR_SUCCESS;
 }
 
@@ -361,6 +419,21 @@ static void dispatch_key_up(SDL_Keycode code) {
         isKeyDown = SDLK_UNKNOWN;
         keyEvent(MR_KEY_RELEASE, code);
     }
+}
+
+static void dispatch_e2e_key_up_after_timer(void) {
+    int32_t raw_code;
+    if (!vmrp_e2e_control_take_key_up_after_timer(e2eControl, &raw_code)) return;
+
+    SDL_Keycode code = (SDL_Keycode)raw_code;
+    if (isEditMode) {
+        /* 与 edit-mode SDL_KEYUP 分支一致：编辑器拥有输入，只清宿主按键锁。 */
+        if (isKeyDown == code) isKeyDown = SDLK_UNKNOWN;
+    } else {
+        dispatch_key_up(code);
+    }
+    e2e_publish_runtime_exit();
+    vmrp_e2e_control_key_event_consumed(e2eControl, SDL_KEYUP, code);
 }
 
 static void dispatch_mouse_down(int x, int y) {
@@ -521,11 +594,28 @@ void loop(void) {
                 continue;
             }
             if (ev.type == timerEventType) {
+                uint32_t generation = (uint32_t)(uintptr_t)ev.user.data1;
                 /* The SDL timer is one-shot and timer() rearms the guest's
                  * next tick.  Process it even while the platform editor owns
                  * keyboard input; dropping it there stops the guest scheduler
                  * permanently after a normal pause before Ctrl+V. */
+                /* guest timer() 可能在一次调用内部先 stop 再 start；对控制线程
+                 * 标记整个调用，避免把中途 pending=0 当成真正停止。 */
+                SDL_AtomicSet(&timerDispatchInProgress, 1);
                 timer();
+                /*
+                 * timer() 内可能已 arm 下一代。先发布本代完成，再仅在 pending
+                 * 仍指向本代时清零，控制线程便不会看到 dispatch 中途的假停止。
+                 * SDL 事件按入队顺序处理，generation 因而单调递增。
+                */
+                e2e_publish_timer_dispatch(generation);
+                SDL_AtomicCAS(&timerPendingGeneration, (int)generation, 0);
+                e2e_publish_runtime_exit();
+                /* runtimeExited 必须先于 in-progress 清除发布，避免控制线程在
+                 * 正常退出窗口中继续注入一个永远不会被主循环确认的按键。 */
+                SDL_AtomicSet(&timerDispatchInProgress, 0);
+                /* 默认 E2E 短按在这一拍结束时立即 release，不依赖控制线程调度。 */
+                dispatch_e2e_key_up_after_timer();
                 if (vmrp_is_exited()) {
                     isLoop = false;
                     break;
@@ -543,6 +633,10 @@ void loop(void) {
                         if (isKeyDown == ev.key.keysym.sym) {
                             isKeyDown = SDLK_UNKNOWN;
                         }
+                        /* 编辑模式也消费了 release；通知 E2E 避免 KEY 命令悬挂。 */
+                        e2e_publish_runtime_exit();
+                        vmrp_e2e_control_key_event_consumed(
+                            e2eControl, SDL_KEYUP, ev.key.keysym.sym);
                         continue;
                     case SDL_KEYDOWN: {
                         SDL_Keymod key_mod = (SDL_Keymod)(ev.key.keysym.mod | SDL_GetModState());
@@ -554,6 +648,9 @@ void loop(void) {
                                 // MR_DIALOG_KEY_CANCEL=1
                                 event(MR_DIALOG_EVENT, 1, 0);
                                 SDL_Log("取消输入");
+                                e2e_publish_runtime_exit();
+                                vmrp_e2e_control_key_event_consumed(
+                                    e2eControl, SDL_KEYDOWN, ev.key.keysym.sym);
                                 continue;
                             } else if (ev.key.keysym.sym == SDLK_v) {  // 编辑框输入
                                 char *str = SDL_GetClipboardText();
@@ -561,6 +658,9 @@ void loop(void) {
                                 SDL_free(str);
                                 // MR_DIALOG_KEY_OK=0
                                 event(MR_DIALOG_EVENT, 0, 0);
+                                e2e_publish_runtime_exit();
+                                vmrp_e2e_control_key_event_consumed(
+                                    e2eControl, SDL_KEYDOWN, ev.key.keysym.sym);
                                 continue;
                             }
                         }
@@ -570,14 +670,27 @@ void loop(void) {
                     case SDL_MOUSEBUTTONDOWN:
                         SDL_Log("ctrl+v输入内容，ctrl+z取消输入");
                 }
+                if (ev.type == SDL_KEYDOWN) {
+                    /* 非编辑快捷键也已由 edit-mode 分支完整消费。 */
+                    e2e_publish_runtime_exit();
+                    vmrp_e2e_control_key_event_consumed(
+                        e2eControl, SDL_KEYDOWN, ev.key.keysym.sym);
+                }
                 continue;
             }
             switch (ev.type) {
                 case SDL_KEYDOWN:
                     dispatch_key_down(ev.key.keysym.sym);
+                    e2e_publish_runtime_exit();
+                    vmrp_e2e_control_key_event_consumed(
+                        e2eControl, SDL_KEYDOWN, ev.key.keysym.sym);
                     break;
                 case SDL_KEYUP:
                     dispatch_key_up(ev.key.keysym.sym);
+                    /* dispatch 返回表示 guest release 回调已完成，可等待下一 timer epoch。 */
+                    e2e_publish_runtime_exit();
+                    vmrp_e2e_control_key_event_consumed(
+                        e2eControl, SDL_KEYUP, ev.key.keysym.sym);
                     break;
                 case SDL_MOUSEMOTION:
                     if (isMouseDown) {
@@ -690,9 +803,19 @@ int main(int argc, char *args[]) {
     }
     VmrpE2eHooks e2e_hooks;
     memset(&e2e_hooks, 0, sizeof(e2e_hooks));
+    SDL_AtomicSet(&timerArmGeneration, 0);
+    SDL_AtomicSet(&timerDispatchedGeneration, 0);
+    SDL_AtomicSet(&timerPendingGeneration, 0);
+    SDL_AtomicSet(&timerDispatchInProgress, 0);
+    SDL_AtomicSet(&runtimeExited, 0);
     e2e_hooks.dump_screen_ppm = e2e_dump_screen_ppm_hook;
     e2e_hooks.screen_dump_path = e2e_screen_dump_path_hook;
     e2e_hooks.draw_count = e2e_draw_count_hook;
+    e2e_hooks.timer_arm_generation = e2e_timer_arm_generation_hook;
+    e2e_hooks.timer_dispatched_generation = e2e_timer_dispatched_generation_hook;
+    e2e_hooks.timer_pending_generation = e2e_timer_pending_generation_hook;
+    e2e_hooks.timer_dispatch_in_progress = e2e_timer_dispatch_in_progress_hook;
+    e2e_hooks.runtime_exited = e2e_runtime_exited_hook;
     e2eControl = vmrp_e2e_control_create(e2eEventType, &e2e_hooks);
 
     if (startVmrp(&vmrp_args) != MR_SUCCESS) {

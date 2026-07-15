@@ -466,10 +466,10 @@ if (!exists('path/to/file'))
 充分利用子Agent。
 记得存储记忆数据。
 
-测试用例`test/e2e/cookie/run-mrp.test.ts`执行后，第一次左键一直不通过。
+测试用例`test/e2e/cookie/run-mrp.test.ts`执行后，结尾应该启动应用，但实际直接退出了。
 
-预期结果：第一次左键能通过。
-实际结果：总是卡在else reject(new Error(line || `Empty response to ${command}`));
+预期结果：启动应用后，下一个应用能成功启动。
+实际结果：应用退出了
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。
