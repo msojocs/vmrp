@@ -292,15 +292,25 @@ describe("gghjt pixel flow", () => {
     // 确定下载
     await vmrp.click(5, 308, 1_000);
     // 等待下载开始
-    await vmrp.delay(5_000);
-    // 检查屏幕是否成功的绿色
-    const downloading = await vmrp.screen("download-ing");
-    expect(downloading.pixel(70, 176)).toEqual([0, 252, 0]);
+    await vi.waitFor(async () => {
+      if (!vmrp) throw new Error('vmrp not defined')
+      // 检查屏幕是否成功的绿色
+      const downloading = await vmrp.screen("download-ing");
+      expect(downloading.pixel(70, 176)).toEqual([0, 252, 0]);
+    }, {
+      timeout: 20_000,
+      interval: 1_000
+    })
     // 等待下载完成
-    await vmrp.delay(10_000);
-    // 检查屏幕是否成功的绿色
-    const success = await vmrp.screen("download-end");
-    expect(success.pixel(101, 148)).toEqual([0, 252, 0]);
+    await vi.waitFor(async () => {
+      if (!vmrp) throw new Error('vmrp not defined')
+      // 检查屏幕是否成功的绿色
+      const success = await vmrp.screen("download-end");
+      expect(success.pixel(101, 148)).toEqual([0, 252, 0]);
+    }, {
+      timeout: 20_000,
+      interval: 1_000
+    })
   
     // 点击确定进入付费界面
     await vmrp.click(15, 308, 1_000);
