@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VmrpE2e, VmrpWorkspace } from "../vmrp-e2e.js";
-import fs from "fs";
 
 describe("cookie", () => {
   let vmrp: VmrpE2e | undefined;
@@ -105,8 +104,19 @@ describe("cookie", () => {
     }
     {
       await vmrp.key('LEFT_SOFT', 1_000)
-      // TODO: 修复应用没有启动的BUG
-      await vmrp.delay(10_000)
+
+      const secondApp = await vmrp.waitForPixel(
+        120,
+        180,
+        [24, 160, 200],
+        {
+          name: "second-app",
+          timeoutMs: 10_000,
+          intervalMs: 250,
+        },
+      );
+      // 同时验证应用列表标题栏，避免把旧应用的启动等待页误判为接力成功。
+      expect(secondApp.pixel(120, 10)).toEqual([24, 104, 136]);
     }
   });
   

@@ -319,3 +319,7 @@
 ## [2026-07-15T02:48:06Z] complete
 - **Pages:** cookie-e2e-key-timer-generation-boundary.md
 - **Summary:** Recorded the ARM event-chain evidence and replaced queue/draw/anonymous-timer completion guesses with main-thread short-key release plus timer-generation publication; the unfinished cookie scenario test remains unchanged.
+
+## [2026-07-15T05:09:32Z] complete
+- **Pages:** cookie-mrp-restart-and-full-runtime-version-contract.md
+- **Summary:** Recorded the four-slot shared-memory handoff repair, RESTART/STOP split, FULL 1968 versus MINI 2011 startup-version regression, rejected native-helper bootstrap, stable DSM PPM proof, and complete 31-test E2E regression.

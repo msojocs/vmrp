@@ -407,33 +407,50 @@ static void keyEvent(int16 type, SDL_Keycode code) {
     }
 }
 
-static void dispatch_key_down(SDL_Keycode code) {
+static int dispatch_key_down(SDL_Keycode code) {
     if (isKeyDown == SDLK_UNKNOWN) {
         isKeyDown = code;
         keyEvent(MR_KEY_PRESS, code);
+        return 1;
     }
+    return 0;
 }
 
-static void dispatch_key_up(SDL_Keycode code) {
+static int dispatch_key_up(SDL_Keycode code) {
     if (isKeyDown == code) {
         isKeyDown = SDLK_UNKNOWN;
         keyEvent(MR_KEY_RELEASE, code);
+        return 1;
     }
+    return 0;
 }
 
-static void dispatch_e2e_key_up_after_timer(void) {
+static void complete_e2e_key_event(const SDL_KeyboardEvent *key, int delivered) {
+    e2e_publish_runtime_exit();
+    vmrp_e2e_control_key_event_completed(
+        e2eControl, key->type, key->keysym.sym,
+        key->windowID, (uint32_t)key->keysym.scancode, delivered);
+}
+
+static void dispatch_e2e_key_up(int after_timer) {
     int32_t raw_code;
-    if (!vmrp_e2e_control_take_key_up_after_timer(e2eControl, &raw_code)) return;
+    uint32_t token;
+    if (!vmrp_e2e_control_take_key_up(
+            e2eControl, after_timer, &raw_code, &token)) return;
 
     SDL_Keycode code = (SDL_Keycode)raw_code;
+    int delivered;
     if (isEditMode) {
         /* 与 edit-mode SDL_KEYUP 分支一致：编辑器拥有输入，只清宿主按键锁。 */
-        if (isKeyDown == code) isKeyDown = SDLK_UNKNOWN;
+        delivered = isKeyDown == code;
+        if (delivered) isKeyDown = SDLK_UNKNOWN;
     } else {
-        dispatch_key_up(code);
+        delivered = dispatch_key_up(code);
     }
     e2e_publish_runtime_exit();
-    vmrp_e2e_control_key_event_consumed(e2eControl, SDL_KEYUP, code);
+    vmrp_e2e_control_key_event_completed(
+        e2eControl, SDL_KEYUP, code,
+        VMRP_E2E_KEY_WINDOW_ID, token, delivered);
 }
 
 static void dispatch_mouse_down(int x, int y) {
@@ -615,7 +632,7 @@ void loop(void) {
                  * 正常退出窗口中继续注入一个永远不会被主循环确认的按键。 */
                 SDL_AtomicSet(&timerDispatchInProgress, 0);
                 /* 默认 E2E 短按在这一拍结束时立即 release，不依赖控制线程调度。 */
-                dispatch_e2e_key_up_after_timer();
+                dispatch_e2e_key_up(1);
                 if (vmrp_is_exited()) {
                     isLoop = false;
                     break;
@@ -624,20 +641,20 @@ void loop(void) {
             }
             if (isEditMode) {
                 switch (ev.type) {
-                    case SDL_KEYUP:
+                    case SDL_KEYUP: {
                         /* A key can open the editor from its KEYDOWN handler.
                          * Its matching KEYUP then arrives while edit mode owns
                          * input, so consume it without sending a Mythroad key
                          * release but clear the host key latch.  Otherwise the
                          * next physical keydown is rejected as a duplicate. */
-                        if (isKeyDown == ev.key.keysym.sym) {
+                        int delivered = isKeyDown == ev.key.keysym.sym;
+                        if (delivered) {
                             isKeyDown = SDLK_UNKNOWN;
                         }
-                        /* 编辑模式也消费了 release；通知 E2E 避免 KEY 命令悬挂。 */
-                        e2e_publish_runtime_exit();
-                        vmrp_e2e_control_key_event_consumed(
-                            e2eControl, SDL_KEYUP, ev.key.keysym.sym);
+                        /* 编辑模式也完成了 release；按 token 通知对应的 E2E 命令。 */
+                        complete_e2e_key_event(&ev.key, delivered);
                         continue;
+                    }
                     case SDL_KEYDOWN: {
                         SDL_Keymod key_mod = (SDL_Keymod)(ev.key.keysym.mod | SDL_GetModState());
                         /* SDL_KEYDOWN carries the modifier state observed with
@@ -648,9 +665,8 @@ void loop(void) {
                                 // MR_DIALOG_KEY_CANCEL=1
                                 event(MR_DIALOG_EVENT, 1, 0);
                                 SDL_Log("取消输入");
-                                e2e_publish_runtime_exit();
-                                vmrp_e2e_control_key_event_consumed(
-                                    e2eControl, SDL_KEYDOWN, ev.key.keysym.sym);
+                                complete_e2e_key_event(&ev.key, 1);
+                                dispatch_e2e_key_up(0);
                                 continue;
                             } else if (ev.key.keysym.sym == SDLK_v) {  // 编辑框输入
                                 char *str = SDL_GetClipboardText();
@@ -658,9 +674,8 @@ void loop(void) {
                                 SDL_free(str);
                                 // MR_DIALOG_KEY_OK=0
                                 event(MR_DIALOG_EVENT, 0, 0);
-                                e2e_publish_runtime_exit();
-                                vmrp_e2e_control_key_event_consumed(
-                                    e2eControl, SDL_KEYDOWN, ev.key.keysym.sym);
+                                complete_e2e_key_event(&ev.key, 1);
+                                dispatch_e2e_key_up(0);
                                 continue;
                             }
                         }
@@ -672,26 +687,25 @@ void loop(void) {
                 }
                 if (ev.type == SDL_KEYDOWN) {
                     /* 非编辑快捷键也已由 edit-mode 分支完整消费。 */
-                    e2e_publish_runtime_exit();
-                    vmrp_e2e_control_key_event_consumed(
-                        e2eControl, SDL_KEYDOWN, ev.key.keysym.sym);
+                    complete_e2e_key_event(&ev.key, 1);
+                    dispatch_e2e_key_up(0);
                 }
                 continue;
             }
             switch (ev.type) {
                 case SDL_KEYDOWN:
-                    dispatch_key_down(ev.key.keysym.sym);
-                    e2e_publish_runtime_exit();
-                    vmrp_e2e_control_key_event_consumed(
-                        e2eControl, SDL_KEYDOWN, ev.key.keysym.sym);
+                    complete_e2e_key_event(
+                        &ev.key, dispatch_key_down(ev.key.keysym.sym));
+                    /* A guest with no pending timer still needs a deterministic
+                     * short-key release at this same main-thread boundary. */
+                    dispatch_e2e_key_up(0);
                     break;
-                case SDL_KEYUP:
-                    dispatch_key_up(ev.key.keysym.sym);
+                case SDL_KEYUP: {
+                    int delivered = dispatch_key_up(ev.key.keysym.sym);
                     /* dispatch 返回表示 guest release 回调已完成，可等待下一 timer epoch。 */
-                    e2e_publish_runtime_exit();
-                    vmrp_e2e_control_key_event_consumed(
-                        e2eControl, SDL_KEYUP, ev.key.keysym.sym);
+                    complete_e2e_key_event(&ev.key, delivered);
                     break;
+                }
                 case SDL_MOUSEMOTION:
                     if (isMouseDown) {
                         event(MR_MOUSE_MOVE, ev.motion.x, ev.motion.y);

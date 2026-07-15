@@ -156,9 +156,10 @@ static int e2e_push_key(int type, SDL_Keycode key, Uint8 state,
     memset(&ev, 0, sizeof(ev));
     ev.type = type;
     ev.key.type = type;
-    /* windowID 是 E2E 合成事件标记，timestamp 携带本次注入的唯一回执 token。 */
+    /* SDL_PushEvent 会用当前 tick 覆盖 timestamp。windowID 标记合成事件，
+     * 本项目不解释的 scancode 保存 token，主线程处理后可原样回执。 */
     ev.key.windowID = VMRP_E2E_KEY_WINDOW_ID;
-    ev.key.timestamp = token;
+    ev.key.keysym.scancode = (SDL_Scancode)token;
     ev.key.state = state;
     ev.key.keysym.sym = key;
     return SDL_PushEvent(&ev);

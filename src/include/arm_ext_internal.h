@@ -217,7 +217,13 @@ struct ArmExtModule {
     ArmExtShortPackAlias *short_pack_aliases;
     uint32_t short_pack_alias_count;
     uint32_t short_pack_alias_capacity;
+    /* Native table[100..103] exposes four writable filename arrays.  Keep a
+     * stable guest address for every array so lifecycle handoff writes can be
+     * copied back to Mythroad when the guest publishes RESTART/STOP. */
     uint32_t pack_table_addr;
+    uint32_t start_table_addr;
+    uint32_t old_pack_table_addr;
+    uint32_t old_start_table_addr;
     uint32_t helper_addr;
     uint32_t p_addr;
     uint32_t screen_addr;
