@@ -367,3 +367,27 @@
 ## [2026-07-16T14:20:00+08:00] fix
 - **Pages:** cookie-child-return-opening-folder-frame-replay.md
 - **Summary:** Replaced the rejected present-history/frame-replay approach with the real reload-protocol fix: table[138] start_fileparameter is a 128-byte binary "_RL" record; host now memcpy-copies it across the RESTART handoff instead of truncating as a C string, so Cookie's own cold-start path reloads fm.sav, redraws 正在打开, and restores the selection. Removed MrPausedAppSnapshot, present_screen_history, directory-open screenshot replay. Full parallel e2e 19 files/32 tests pass without xvfb.
+
+## [2026-07-16T18:38:00+08:00] ingest
+- **Pages:** wbrw-html2sky-line-wrap-progress-2026-07-16.md
+- **Summary:** Recorded the retained baseline PPM, visual line-crowding evidence, live HTML break structure, and the lost FlowID boundary in html2sky extraction.
+
+## [2026-07-16T18:40:00+08:00] complete
+- **Pages:** wbrw-html2sky-line-wrap-progress-2026-07-16.md
+- **Summary:** Advanced paragraph FlowID at explicit HTML breaks, passed all sky-engine-tool Go tests after hot reload, and retained a final PPM visibly proving `mynes [顶]` ends before the next link row.
+
+## [2026-07-16T18:53:00+08:00] investigate
+- **Pages:** wbrw-html2sky-line-wrap-progress-2026-07-16.md
+- **Summary:** Compared source CSS and retained PPMs for task.jysafe and gddhy, proving an unconditional element-9 form style leaks four green rectangles onto the unstyled page.
+
+## [2026-07-16T18:58:00+08:00] fix
+- **Pages:** wbrw-html2sky-line-wrap-progress-2026-07-16.md
+- **Summary:** Made form style follow extracted CSS container ownership, retained task's source-defined green/yellow regions, and reduced gddhy's erroneous green pixels from 3248 to zero without hiding either form.
+
+## [2026-07-16T19:10:00+08:00] ingest
+- **Pages:** wbrw-proxy2-white-matte-progress-2026-07-16.md
+- **Summary:** Recorded the black-canvas PPM/GIF baseline and traced it to transparent-black scaling before opaque GIF quantization; the source's dominant hidden transparent RGB is white.
+
+## [2026-07-16T19:15:00+08:00] fix
+- **Pages:** wbrw-proxy2-white-matte-progress-2026-07-16.md
+- **Summary:** Flattened alpha onto opaque white before resizing, retained logo colors, and replaced the black cached GIF canvas with an all-opaque white canvas proven by the final PPM and GIF.

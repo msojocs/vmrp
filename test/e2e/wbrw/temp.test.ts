@@ -15,7 +15,7 @@ describe("wbrw 输入文字", () => {
     ws = undefined;
   });
 
-  it("访问网址", async () => {
+  it("task.jysafe.cn/so1", async () => {
     // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
     ws = await VmrpWorkspace.create();
     fs.rmSync(ws.path('mythroad/brw'), { recursive: true, force: true })
@@ -92,6 +92,54 @@ describe("wbrw 输入文字", () => {
       // Retain coverage of the quantized footer background after the fitted
       // logo reflows the document upward.
       expect(loaded.pixel(20, 275)).toEqual([248, 252, 176]);
+    }
+  });
+  it("mrp.gddhy.net", async () => {
+    // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
+    ws = await VmrpWorkspace.create();
+    fs.rmSync(ws.path('mythroad/brw'), { recursive: true, force: true })
+
+    vmrp = await VmrpE2e.start("test/fixtures/wbrw.mrp", { workDir: ws.dir });
+    {
+      await vmrp.delay(2_000);
+      const boot = await vmrp.screen("home");
+      // rgb(248, 252, 248)
+      expect(boot.pixel(76, 252)).toEqual([248, 252, 248]);
+      // rgb(64, 144, 208)
+      expect(boot.pixel(57, 306)).toEqual([64, 144, 208]);
+    }
+    {
+      // 移动光标到输入框
+      await vmrp.key('UP', { timeoutMs: 1_000, holdMs: 120 });
+      // 进入输入框界面
+      await vmrp.key('ENTER', { timeoutMs: 1_000, holdMs: 120 });
+      // 模拟真实操作：用户先复制文本，再打开系统编辑器。
+      await vmrp.setClipboard('https://mrp.gddhy.net/');
+      // 打开输入界面
+      // editCreate只切换宿主编辑状态，不提交位图，不能等待无关的后台重绘。
+      await vmrp.key('ENTER', { holdMs: 120, waitForDraw: false });
+      const beforePaste = await vmrp.screen("before-paste");
+      await vmrp.pasteShortcut();
+      const afterPaste = await vmrp.screen("after-paste");
+      await vmrp.delay(200);
+      const stderr = await readFile(vmrp.stderrPath, "utf8");
+
+      expect(stderr).toContain(`editGetText(): 'https://mrp.gddhy.net/'`);
+      expect(afterPaste.diffPixelCount(beforePaste, { x: 0, y: 0, width: 240, height: 32 })).toBeGreaterThan(500);
+      await vmrp.delay(1_000);
+      // 回车访问
+      await vmrp.key('ENTER', { timeoutMs: 1_000, holdMs: 120 });
+      await vmrp.delay(10_000);
+      // 跳转到底部
+      await vmrp.key('6', { timeoutMs: 1_000, holdMs: 120 });
+      await vmrp.delay(10_000);
+      if (process.env.VMRP_WBRW_REDRAW_AFTER_IMAGE === "1") {
+        await vmrp.key('DOWN', { timeoutMs: 1_000, holdMs: 120 });
+        await vmrp.delay(1_000);
+      }
+      const loaded = await vmrp.screen("loaded");
+      // 保存图片视觉检测
+      expect(loaded.diffPixelCount(afterPaste)).toBeGreaterThan(30_000);
     }
   });
 });
