@@ -521,15 +521,6 @@ static void sync_internal_state_to_arm(ArmExtModule *m) {
     internal_slot_write(m, m->mr_timer_state_slot, (uint32_t)mr_timer_state);
 }
 
-void sync_origin_mem_slots(ArmExtModule *m) {
-    if (m->origin_mem_left_slot)
-        memcpy(arm_ptr(m, m->origin_mem_left_slot), &m->origin_mem_left, 4);
-    if (m->origin_mem_min_slot)
-        memcpy(arm_ptr(m, m->origin_mem_min_slot), &m->origin_mem_min, 4);
-    if (m->origin_mem_top_slot)
-        memcpy(arm_ptr(m, m->origin_mem_top_slot), &m->origin_mem_top, 4);
-}
-
 /*
  * Guest 侧 LG_mem first-fit 分配器,链表操作逐语句对应 src/mythroad/mem.c
  * 的 mr_malloc/mr_free。原生 ABI 中 table[0]/[1]/[2] 就是这三个函数,且
@@ -553,6 +544,11 @@ void sync_origin_mem_slots(ArmExtModule *m) {
  * - LG_mem_left/min/top 统计沿用 note_origin_mem_alloc/free 的既有账本
  *   (所有 table[0]/[1] 调用无论落在池内或 bump 都记账),与修复前的
  *   ARM 可见值一致,不影响依赖该预算的游戏(见 origin_mem_len 注释)。
+ * - 部分旧 wrapper 会临时把 0x40000000 映射带的 arena 接到 free-list,
+ *   并直接改 table[108]/[110]/[136] 和 table[146] 指向的链表。
+ *   table bridge 每次从这些 ARM 可见 slot 读取当前 base/end/head/统计,
+ *   不能继续使用 init_table 时的固定副本;
+ *   否则 host 与 guest 会遍历两个不同的链表边界并在 teardown 中成环。
  * 验证:talkcat.mrp 主界面 PPM 无花屏;e2e 全量回归与基线一致。
  */
 

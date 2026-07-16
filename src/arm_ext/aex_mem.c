@@ -24,41 +24,171 @@ static void arm_ext_guest_mem_write_u32(ArmExtModule *m,
     if (p) memcpy(p, &v, 4);
 }
 
+typedef struct ArmExtOriginArena {
+    uint32_t base;
+    uint32_t end;
+    uint32_t head;
+} ArmExtOriginArena;
+
+typedef struct ArmExtMappedBand {
+    uint32_t addr;
+    uint32_t len;
+} ArmExtMappedBand;
+
+static int arm_ext_current_origin_arena(ArmExtModule *m,
+                                        ArmExtOriginArena *arena) {
+    if (arena) memset(arena, 0, sizeof(*arena));
+    if (!m || !arena) return 0;
+
+    uint32_t base_slot = arm_ext_guest_mem_read_u32(
+        m, EXT_TABLE_ADDR + 108u * 4u);
+    uint32_t end_slot = arm_ext_guest_mem_read_u32(
+        m, EXT_TABLE_ADDR + 110u * 4u);
+    uint32_t head = arm_ext_guest_mem_read_u32(
+        m, EXT_TABLE_ADDR + 146u * 4u);
+    uint32_t base = arm_ext_guest_mem_read_u32(m, base_slot);
+    uint32_t end = arm_ext_guest_mem_read_u32(m, end_slot);
+
+    /*
+     * Legacy wrappers temporarily append a separately mapped arena by
+     * changing LG_mem_end while keeping offset links relative to LG_mem_base.
+     * Validate the endpoints and every node as it is visited; the numeric
+     * interval itself may contain an unmapped gap and therefore must not be
+     * required to form one host-contiguous span.
+     */
+    if (!base || end <= base || !head ||
+        !arm_ptr_span(m, base, 8u) ||
+        !arm_ptr_span(m, end - 1u, 1u) ||
+        !arm_ptr_span(m, head, 8u)) {
+        return 0;
+    }
+    arena->base = base;
+    arena->end = end;
+    arena->head = head;
+    return 1;
+}
+
+static uint32_t arm_ext_origin_node_limit(ArmExtModule *m,
+                                          const ArmExtOriginArena *arena) {
+    static const ArmExtMappedBand bands[] = {
+        {EXT_BASE_ADDR, EXT_MEM_SIZE},
+        {EXT_PLATFORM_MEM_ADDR, EXT_PLATFORM_MEM_SIZE},
+        {EXT_EXECUTOR_META_ADDR, EXT_EXECUTOR_META_SIZE},
+        {EXT_PLATFORM_IO_MEM_ADDR, EXT_PLATFORM_IO_MEM_SIZE},
+        {EXT_PLATFORM_ALT_MEM_ADDR, EXT_PLATFORM_ALT_MEM_SIZE},
+    };
+    uint64_t mapped_bytes = 0;
+    for (size_t i = 0; i < sizeof(bands) / sizeof(bands[0]); ++i) {
+        if (!arm_ptr(m, bands[i].addr)) continue;
+        uint64_t lo = arena->base > bands[i].addr
+                          ? arena->base
+                          : bands[i].addr;
+        uint64_t band_end = (uint64_t)bands[i].addr + bands[i].len;
+        uint64_t hi = arena->end < band_end ? arena->end : band_end;
+        if (lo < hi) mapped_bytes += hi - lo;
+    }
+    /* Every valid free-list node occupies at least eight mapped bytes. */
+    return (uint32_t)(mapped_bytes / 8u) + 2u;
+}
+
+static int arm_ext_origin_node_read(ArmExtModule *m,
+                                    const ArmExtOriginArena *arena,
+                                    uint32_t node,
+                                    uint32_t *next,
+                                    uint32_t *len) {
+    if (next) *next = arena->end;
+    if (len) *len = 0;
+    if (!arm_ptr_span(m, node, 8u)) return 0;
+
+    uint32_t next_off = arm_ext_guest_mem_read_u32(m, node);
+    if (next_off > arena->end - arena->base) return 0;
+    if (next) *next = arena->base + next_off;
+
+    if (node == arena->head) return 1;
+    uint32_t node_len = arm_ext_guest_mem_read_u32(m, node + 4u);
+    if (!node_len || node < arena->base || node >= arena->end ||
+        node_len > arena->end - node ||
+        !arm_ptr_span(m, node, node_len)) {
+        return 0;
+    }
+    if (len) *len = node_len;
+    return 1;
+}
+
+static uint32_t arm_ext_origin_stat_read(ArmExtModule *m,
+                                         uint32_t slot,
+                                         uint32_t fallback) {
+    return slot && arm_ptr_span(m, slot, 4u)
+               ? arm_ext_guest_mem_read_u32(m, slot)
+               : fallback;
+}
+
+static void arm_ext_origin_stat_write(ArmExtModule *m,
+                                      uint32_t slot,
+                                      uint32_t value) {
+    if (slot && arm_ptr_span(m, slot, 4u))
+        arm_ext_guest_mem_write_u32(m, slot, value);
+}
+
 void note_origin_mem_alloc(ArmExtModule *m, uint32_t len) {
     if (!m->origin_mem_addr) return;
     len = align4(len ? len : 1);
-    m->origin_mem_left = len < m->origin_mem_left ? m->origin_mem_left - len : 0;
-    if (m->origin_mem_left < m->origin_mem_min) {
-        m->origin_mem_min = m->origin_mem_left;
-        m->origin_mem_top = m->origin_mem_len - m->origin_mem_min;
+    uint32_t left = arm_ext_origin_stat_read(
+        m, m->origin_mem_left_slot, m->origin_mem_left);
+    uint32_t min = arm_ext_origin_stat_read(
+        m, m->origin_mem_min_slot, m->origin_mem_min);
+    uint32_t top = arm_ext_origin_stat_read(
+        m, m->origin_mem_top_slot, m->origin_mem_top);
+    left = len < left ? left - len : 0;
+    if (left < min) {
+        min = left;
+        /* A wrapper that attached an external arena owns LG_mem_top while its
+         * dynamic end is published.  The fixed host pool length cannot derive
+         * a meaningful cross-band offset and must not overwrite that value. */
+        ArmExtOriginArena arena;
+        if (!arm_ext_current_origin_arena(m, &arena) ||
+            (arena.base == m->origin_mem_addr &&
+             arena.end - arena.base == m->origin_mem_len)) {
+            top = m->origin_mem_len - min;
+        }
     }
-    sync_origin_mem_slots(m);
+    m->origin_mem_left = left;
+    m->origin_mem_min = min;
+    m->origin_mem_top = top;
+    arm_ext_origin_stat_write(m, m->origin_mem_left_slot, left);
+    arm_ext_origin_stat_write(m, m->origin_mem_min_slot, min);
+    arm_ext_origin_stat_write(m, m->origin_mem_top_slot, top);
 }
 
 void note_origin_mem_free(ArmExtModule *m, uint32_t len) {
     if (!m->origin_mem_addr) return;
-    m->origin_mem_left += align4(len);
-    if (m->origin_mem_left > m->origin_mem_len) m->origin_mem_left = m->origin_mem_len;
-    sync_origin_mem_slots(m);
+    uint32_t left = arm_ext_origin_stat_read(
+        m, m->origin_mem_left_slot, m->origin_mem_left);
+    uint32_t add = align4(len);
+    left = UINT32_MAX - left < add ? UINT32_MAX : left + add;
+    m->origin_mem_left = left;
+    arm_ext_origin_stat_write(m, m->origin_mem_left_slot, left);
 }
 
 static uint32_t arm_ext_guest_mem_malloc(ArmExtModule *m, uint32_t len) {
-    if (!m || !m->origin_mem_addr || !m->origin_mem_head_addr) return 0;
-    uint32_t base = m->origin_mem_addr;
-    uint32_t end = base + m->origin_mem_len;
+    ArmExtOriginArena arena;
+    if (!arm_ext_current_origin_arena(m, &arena)) return 0;
+    uint32_t base = arena.base;
+    uint32_t end = arena.end;
+    uint32_t head = arena.head;
     len = ARM_EXT_LG_MEM_ALIGN(len);
     if (!len) return 0; /* mem.c: invalid memory request */
-    if (base + arm_ext_guest_mem_read_u32(m, m->origin_mem_head_addr) > end) {
+    uint32_t nextfree = end;
+    if (!arm_ext_origin_node_read(m, &arena, head, &nextfree, NULL)) {
         return 0; /* mem.c: corrupted memory */
     }
     /* previous 为头节点或空闲节点地址,两者均为 {next@+0, len@+4} 布局 */
-    uint32_t previous = m->origin_mem_head_addr;
-    uint32_t nextfree = base + arm_ext_guest_mem_read_u32(m, previous);
-    /* 节点最小 8 字节,合法链表节点数不可能超过 pool_len/8;超过即链表
-     * 成环(guest 已破坏链表),按 mem.c 的 corrupted memory 处理返回 0,
-     * 避免宿主死循环。 */
-    uint32_t iter_limit = m->origin_mem_len / 8u + 2u;
-    while (nextfree < end && iter_limit--) {
+    uint32_t previous = head;
+    /* The cap is the structural maximum number of eight-byte nodes in all
+     * mapped bands covered by the current arena, including external bands. */
+    uint32_t iter_limit = arm_ext_origin_node_limit(m, &arena);
+    while (nextfree < end) {
+        if (!iter_limit--) return 0; /* mem.c: cyclic free list */
         uint32_t protected_lo = 0;
         uint32_t protected_hi = 0;
         if (arm_ext_find_first_registered_code_overlap(m, nextfree, 8u,
@@ -66,20 +196,21 @@ static uint32_t arm_ext_guest_mem_malloc(ArmExtModule *m, uint32_t len) {
                                                        &protected_hi)) {
             return 0; /* protected executable bytes cannot be free-list metadata */
         }
-        uint32_t node_next = arm_ext_guest_mem_read_u32(m, nextfree);
-        uint32_t node_len = arm_ext_guest_mem_read_u32(m, nextfree + 4);
-        if (!node_len || node_len > end - nextfree) {
+        uint32_t node_next = end;
+        uint32_t node_len = 0;
+        if (!arm_ext_origin_node_read(m, &arena, nextfree, &node_next,
+                                      &node_len)) {
             return 0; /* mem.c: corrupted memory */
         }
         uint32_t alloc_addr = 0;
         if (!arm_ext_first_unprotected_subrange(m, nextfree, node_len, len,
                                                 &alloc_addr)) {
             previous = nextfree;
-            nextfree = base + node_next;
+            nextfree = node_next;
             continue;
         }
         if (alloc_addr == nextfree && node_len == len) {
-            arm_ext_guest_mem_write_u32(m, previous, node_next);
+            arm_ext_guest_mem_write_u32(m, previous, node_next - base);
             return nextfree;
         }
         if (alloc_addr == nextfree) {
@@ -98,11 +229,11 @@ static uint32_t arm_ext_guest_mem_malloc(ArmExtModule *m, uint32_t len) {
                 right_len = l < node_end ? node_end - l : 0;
             }
             if (right_len) {
-                arm_ext_guest_mem_write_u32(m, l, node_next);
+                arm_ext_guest_mem_write_u32(m, l, node_next - base);
                 arm_ext_guest_mem_write_u32(m, l + 4, right_len);
                 arm_ext_guest_mem_write_u32(m, previous, l - base);
             } else {
-                arm_ext_guest_mem_write_u32(m, previous, node_next);
+                arm_ext_guest_mem_write_u32(m, previous, node_next - base);
             }
             return nextfree;
         }
@@ -125,11 +256,11 @@ static uint32_t arm_ext_guest_mem_malloc(ArmExtModule *m, uint32_t len) {
                 }
             }
             if (right_len) {
-                arm_ext_guest_mem_write_u32(m, alloc_end, node_next);
+                arm_ext_guest_mem_write_u32(m, alloc_end, node_next - base);
                 arm_ext_guest_mem_write_u32(m, alloc_end + 4, right_len);
                 arm_ext_guest_mem_write_u32(m, nextfree, alloc_end - base);
             } else {
-                arm_ext_guest_mem_write_u32(m, nextfree, node_next);
+                arm_ext_guest_mem_write_u32(m, nextfree, node_next - base);
             }
             return alloc_addr;
         }
@@ -141,19 +272,23 @@ static uint32_t arm_ext_guest_mem_malloc(ArmExtModule *m, uint32_t len) {
 
 static void arm_ext_guest_mem_free_unprotected(ArmExtModule *m, uint32_t p,
                                                uint32_t len) {
-    if (!m || !m->origin_mem_addr || !m->origin_mem_head_addr) return;
-    uint32_t base = m->origin_mem_addr;
-    uint32_t end = base + m->origin_mem_len;
+    ArmExtOriginArena arena;
+    if (!arm_ext_current_origin_arena(m, &arena)) return;
+    uint32_t base = arena.base;
+    uint32_t end = arena.end;
+    uint32_t head = arena.head;
     len = ARM_EXT_LG_MEM_ALIGN(len);
     if (!len || !p || p < base || p >= end || p + len > end ||
-        p + len <= base) {
+        p + len <= base || !arm_ptr_span(m, p, len)) {
         return; /* mem.c: mr_free invalid */
     }
     /* 按地址序找到插入位置:freep < p <= n */
-    uint32_t freep = m->origin_mem_head_addr;
-    uint32_t n = base + arm_ext_guest_mem_read_u32(m, freep);
-    uint32_t iter_limit = m->origin_mem_len / 8u + 2u;
-    while (n < end && n < p && iter_limit--) {
+    uint32_t freep = head;
+    uint32_t n = end;
+    if (!arm_ext_origin_node_read(m, &arena, freep, &n, NULL)) return;
+    uint32_t iter_limit = arm_ext_origin_node_limit(m, &arena);
+    while (n < end && n < p) {
+        if (!iter_limit--) return; /* mem.c: cyclic free list */
         uint32_t protected_lo = 0;
         uint32_t protected_hi = 0;
         if (arm_ext_find_first_registered_code_overlap(m, n, 8u,
@@ -161,10 +296,12 @@ static void arm_ext_guest_mem_free_unprotected(ArmExtModule *m, uint32_t p,
                                                        &protected_hi)) {
             return; /* existing list node overlaps executable storage */
         }
+        uint32_t next = end;
+        if (!arm_ext_origin_node_read(m, &arena, n, &next, NULL))
+            return;
         freep = n;
-        n = base + arm_ext_guest_mem_read_u32(m, n);
+        n = next;
     }
-    if (!(iter_limit + 1u)) return; /* 链表成环,同 malloc 的 corrupted 处理 */
     if (n < end) {
         uint32_t protected_lo = 0;
         uint32_t protected_hi = 0;
@@ -173,9 +310,10 @@ static void arm_ext_guest_mem_free_unprotected(ArmExtModule *m, uint32_t p,
                                                        &protected_hi)) {
             return;
         }
+        if (!arm_ext_origin_node_read(m, &arena, n, NULL, NULL)) return;
     }
     if (p == freep || p == n) return; /* mem.c: already free */
-    if (freep != m->origin_mem_head_addr &&
+    if (freep != head &&
         freep + arm_ext_guest_mem_read_u32(m, freep + 4) == p) {
         /* 与前一空闲块连续:并入 */
         arm_ext_guest_mem_write_u32(
@@ -201,12 +339,13 @@ static void arm_ext_guest_mem_free_unprotected(ArmExtModule *m, uint32_t p,
 }
 
 static void arm_ext_guest_mem_free(ArmExtModule *m, uint32_t p, uint32_t len) {
-    if (!m || !m->origin_mem_addr || !m->origin_mem_head_addr) return;
-    uint32_t base = m->origin_mem_addr;
-    uint32_t end = base + m->origin_mem_len;
+    ArmExtOriginArena arena;
+    if (!arm_ext_current_origin_arena(m, &arena)) return;
+    uint32_t base = arena.base;
+    uint32_t end = arena.end;
     len = ARM_EXT_LG_MEM_ALIGN(len);
     if (!len || !p || p < base || p >= end || p + len > end ||
-        p + len <= base) {
+        p + len <= base || !arm_ptr_span(m, p, len)) {
         return; /* mem.c: mr_free invalid */
     }
 
@@ -290,15 +429,16 @@ static void arm_ext_app_alloc_track(ArmExtModule *m,
     }
 }
 
-static void arm_ext_app_alloc_untrack(ArmExtModule *m, uint32_t addr) {
-    if (!m || !addr) return;
+static int arm_ext_app_alloc_untrack(ArmExtModule *m, uint32_t addr) {
+    if (!m || !addr) return 0;
     for (uint32_t i = 0; i < m->app_live_count; ++i) {
         if (m->app_live_blocks[i].addr == addr) {
             arm_ext_bump_block_remove(m->app_live_blocks,
                                       &m->app_live_count, i);
-            return;
+            return 1;
         }
     }
+    return 0;
 }
 
 static int arm_ext_bump_free_insert(ArmExtModule *m, uint32_t addr,
@@ -475,13 +615,27 @@ uint32_t arm_ext_app_mem_malloc(ArmExtModule *m, uint32_t len) {
 
 void arm_ext_app_mem_free(ArmExtModule *m, uint32_t p, uint32_t len) {
     if (!m || !p) return;
-    arm_ext_app_alloc_untrack(m, p);
-    if (m->origin_mem_addr && p >= m->origin_mem_addr &&
-        p < m->origin_mem_addr + m->origin_mem_len) {
+    /* A host bump block may lie numerically between a dynamically extended
+     * LG_mem base/end without belonging to that guest free list.  Ownership
+     * tracking therefore takes precedence over the ABI range test. */
+    if (arm_ext_bump_recycle(m, p)) {
+        arm_ext_app_alloc_untrack(m, p);
+        return;
+    }
+    int app_owned = arm_ext_app_alloc_untrack(m, p);
+    ArmExtOriginArena arena;
+    if (arm_ext_current_origin_arena(m, &arena) &&
+        p >= arena.base && p < arena.end &&
+        arm_ptr_span(m, p, ARM_EXT_LG_MEM_ALIGN(len))) {
+        /* The cross-band numeric interval also contains host-private mapped
+         * storage.  Only table allocations may be returned while it is live;
+         * registered module ranges are removed from app_live_blocks. */
+        int dynamic = arena.base != m->origin_mem_addr ||
+                      arena.end - arena.base != m->origin_mem_len;
+        if (dynamic && !app_owned) return;
         arm_ext_guest_mem_free(m, p, len);
         return;
     }
-    arm_ext_bump_recycle(m, p);
 }
 
 
@@ -1069,4 +1223,3 @@ uint32_t arm_ext_meta_alloc(ArmExtModule *m, uint32_t len) {
     m->executor_meta_top += len;
     return ret;
 }
-
