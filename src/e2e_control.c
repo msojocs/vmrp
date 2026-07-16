@@ -25,6 +25,7 @@
 typedef struct {
     char path[1024];
     char response[1200];
+    int draw_count;
     int done;
     SDL_mutex *mutex;
     SDL_cond *cond;
@@ -501,7 +502,8 @@ static void e2e_handle_wait_draw(VmrpE2eControl *control, int draw_count, int ti
 /* SCREEN 必须在主线程读取 surface：通过自定义事件把请求投递给主循环
  * （vmrp_e2e_control_execute），用条件变量等待完成后再回写响应。这是唯一仍需
  * mutex/cond 往返的命令。 */
-static void e2e_handle_screen(VmrpE2eControl *control, const char *path, int fd) {
+static void e2e_handle_screen(VmrpE2eControl *control, const char *path,
+                              int draw_count, int fd) {
     E2eScreenRequest req;
     memset(&req, 0, sizeof(req));
     req.mutex = SDL_CreateMutex();
@@ -513,6 +515,7 @@ static void e2e_handle_screen(VmrpE2eControl *control, const char *path, int fd)
         return;
     }
     snprintf(req.path, sizeof(req.path), "%s", path);
+    req.draw_count = draw_count;
 
     SDL_Event ev;
     memset(&ev, 0, sizeof(ev));
@@ -600,7 +603,15 @@ static void e2e_handle_client(VmrpE2eControl *control, int fd) {
         SDL_PushEvent(&ev);
         e2e_write_line(fd, "OK quit");
     } else if (strcasecmp(op, "SCREEN") == 0) {
-        e2e_handle_screen(control, a[0] ? a : e2e_screen_dump_path(control), fd);
+        e2e_handle_screen(control, a[0] ? a : e2e_screen_dump_path(control),
+                          0, fd);
+    } else if (strcasecmp(op, "SCREEN_DRAW") == 0) {
+        int draw_count = atoi(a);
+        if (draw_count <= 0 || !b[0]) {
+            e2e_write_line(fd, "ERR usage");
+            return;
+        }
+        e2e_handle_screen(control, b, draw_count, fd);
     } else {
         e2e_write_line(fd, "ERR usage");
     }
@@ -699,7 +710,17 @@ void vmrp_e2e_control_execute(VmrpE2eControl *control, SDL_Event *event) {
     E2eScreenRequest *req = (E2eScreenRequest *)event->user.data2;
     if (!req) return;
 
-    if (control->hooks.dump_screen_ppm &&
+    if (req->draw_count > 0) {
+        if (control->hooks.dump_draw_frame_ppm &&
+            control->hooks.dump_draw_frame_ppm(
+                req->draw_count, req->path, control->hooks.userdata) == 0) {
+            e2e_finish_screen(req, "OK screen_draw %d %s",
+                              req->draw_count, req->path);
+        } else {
+            e2e_finish_screen(req, "ERR screen_draw_failed %d %s",
+                              req->draw_count, req->path);
+        }
+    } else if (control->hooks.dump_screen_ppm &&
         control->hooks.dump_screen_ppm(req->path, control->hooks.userdata) == 0) {
         e2e_finish_screen(req, "OK screen %s", req->path);
     } else {

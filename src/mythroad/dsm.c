@@ -668,6 +668,21 @@ static void SetDsmWorkPath(const char *path) {
     LOGW("SetDsmWorkPath():'%s'", dsmWorkPath);
 }
 
+const char *mr_get_dsm_work_path(void) {
+    return dsmWorkPath;
+}
+
+void mr_set_dsm_work_path(const char *path) {
+    SetDsmWorkPath((path && path[0]) ? path : MYTHROAD_PATH);
+}
+
+void mr_reset_dsm_work_path(void) {
+    /* The DSM working directory is process-global platform state, while a
+     * RESTART creates a fresh VM inside the same process.  Real app starts
+     * begin from the Mythroad root, so handoff restarts must reset it too. */
+    SetDsmWorkPath(MYTHROAD_PATH);
+}
+
 static char dsmSwitchPathBuf[DSM_MAX_FILE_LEN + 10];
 static int32 dsmSwitchPath(uint8 *input, int32 input_len, uint8 **output, int32 *output_len) {
     LOGI("dsmSwitchPath '%s', %d, %p, %p", input, input_len, output, output_len);

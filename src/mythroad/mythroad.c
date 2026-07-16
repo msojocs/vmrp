@@ -66,6 +66,20 @@ static void* mr_timer_p;
 int32 mr_timer_state = MR_TIMER_STATE_IDLE;
 int32 mr_timer_run_without_pause = FALSE;
 
+static int mr_lifecycle_diag(void) {
+    static int cached = -1;
+    if (cached < 0) cached = getenv("VMRP_LIFECYCLE_DIAG") ? 1 : 0;
+    return cached;
+}
+
+static void mr_lifecycle_log(const char* stage) {
+    if (!mr_lifecycle_diag()) return;
+    printf("LIFE %s pack='%s' start='%s' old_pack='%s' old_start='%s' state=%d timer=%d\n",
+           stage ? stage : "",
+           pack_filename, start_filename, old_pack_filename, old_start_filename,
+           mr_state, mr_timer_state);
+}
+
 const char* mr_get_pack_filename(void) {
     return pack_filename;
 }
@@ -107,7 +121,16 @@ void mr_set_old_start_filename(const char* name) {
     mr_set_filename(old_start_filename, name);
 }
 
+void mr_set_start_fileparameter(const char* name) {
+    /* start_fileparameter 在真机上是共享的 128 字节数组，launcher（如 Cookie）
+     * 会在其中保存二进制续传记录："_RL\0" 前缀之后是全零填充，+0x6C 起为
+     * 大端 u32 的视图恢复字段。按 C 字符串复制会在第一个 NUL 截断并丢弃
+     * 这些字段，所以 handoff 同步必须整块复制；调用方须提供等长缓冲。 */
+    MEMCPY(start_fileparameter, name, sizeof(start_fileparameter));
+}
+
 int32 mr_restart_old_app(void) {
+    mr_lifecycle_log("restart_old_app:before");
     if (!old_pack_filename[0]) {
         return MR_IGNORE;
     }
@@ -121,6 +144,7 @@ int32 mr_restart_old_app(void) {
     mr_timer_p = (void*)"restart";
     MR_TIME_START(100);
     mr_state = MR_STATE_RESTART;
+    mr_lifecycle_log("restart_old_app:after");
     return MR_SUCCESS;
 }
 
@@ -2945,6 +2969,13 @@ static int MRF_RunFile(mrp_State* L) {
     char* runfilename = ((char*)to_mr_tostring(L, 2, 0));
     char* runfileparameter = ((char*)to_mr_tostring(L, 3, 0));
 
+    if (mr_lifecycle_diag()) {
+        printf("LIFE RunFile request file='%s' run='%s' param='%s'\n",
+               filename ? filename : "", runfilename ? runfilename : "",
+               runfileparameter ? runfileparameter : "");
+        mr_lifecycle_log("RunFile:before");
+    }
+
     memset2(pack_filename, 0, sizeof(pack_filename));
     // strcpy(pack_filename,"i/");//all installed appliation place under root_dir/i/
     // strncat(pack_filename,filename, sizeof(pack_filename) - 3);
@@ -2961,6 +2992,7 @@ static int MRF_RunFile(mrp_State* L) {
     MR_TIME_START(100);
     // mr_timer_state = MR_TIMER_STATE_RUNNING;
     mr_state = MR_STATE_RESTART;
+    mr_lifecycle_log("RunFile:after");
     return 0;
 }
 
@@ -3403,12 +3435,18 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             if (L) {
                 start_filename = (uint8*)mr_L_optstring(L, 3, MR_START_FILE);
             }
+            if (mr_lifecycle_diag()) {
+                printf("LIFE _strCom3 request old_pack='%s' old_start='%s' L=%p len=%d\n",
+                       input1 ? input1 : "", (char*)start_filename, (void*)L, len);
+                mr_lifecycle_log("_strCom3:before");
+            }
             MEMSET(old_pack_filename, 0, sizeof(old_pack_filename));
             if (input1) {
                 STRNCPY(old_pack_filename, input1, sizeof(old_pack_filename) - 1);
             }
             MEMSET(old_start_filename, 0, sizeof(old_start_filename));
             STRNCPY(old_start_filename, start_filename, sizeof(old_start_filename) - 1);
+            mr_lifecycle_log("_strCom3:after");
             break;
         }
         case 4: {
@@ -3602,6 +3640,10 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
         case 800: {
             int code = ((int)mr_L_optint(L, 3, 0));
             ArmExtModule *old_ext = native_ext;
+            if (mr_lifecycle_diag()) {
+                printf("LIFE _strCom800 load code=%d len=%d pack='%s' param='%s'\n",
+                       code, len, pack_filename, start_fileparameter);
+            }
             native_ext = NULL;
             native_event_function = 0;
             native_timer_function = 0;
@@ -3611,6 +3653,10 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             int32 ext_r0 = 0;
             ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code, &ext_r0);
             arm_ext_unload(old_ext);
+            if (mr_lifecycle_diag()) {
+                printf("LIFE _strCom800 ret=0x%X r0=0x%X native_ext=%p\n",
+                       ret, ext_r0, (void*)native_ext);
+            }
             mrp_pushnumber(L, ret == MR_SUCCESS ? ext_r0 : ret);
             return 1;
         } break;
@@ -3619,6 +3665,10 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             int code = ((int)to_mr_tonumber(L, 3, 0));
             uint8* output = NULL;
             output_len = 0;
+            if (mr_lifecycle_diag()) {
+                printf("LIFE _strCom801 call code=%d len=%d native_ext=%p pack='%s' param='%s'\n",
+                       code, len, (void*)native_ext, pack_filename, start_fileparameter);
+            }
             ret = arm_ext_call(native_ext, code, (uint8*)input1, (uint32)len, (uint8**)&output, &output_len);
             if (code == 0 && arm_ext_consume_primary_host_init(native_ext)) {
                 uint8* o2 = NULL; int32 ol2 = 0;
@@ -3627,6 +3677,9 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
                  * already initialized its child before the host sees primary
                  * metadata, so the executor leaves the flag clear there. */
                 arm_ext_call(native_ext, 0, (uint8*)input1, (uint32)len, &o2, &ol2);
+            }
+            if (mr_lifecycle_diag()) {
+                printf("LIFE _strCom801 ret=0x%X output_len=%d\n", ret, output_len);
             }
 
             if (output && output_len) {
@@ -3641,6 +3694,10 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             int32 ret;
             int code = ((int)mr_L_optint(L, 3, 0));
             ArmExtModule *old_ext = native_ext;
+            if (mr_lifecycle_diag()) {
+                printf("LIFE _strCom802 load code=%d len=%d pack='%s' param='%s'\n",
+                       code, len, pack_filename, start_fileparameter);
+            }
             native_ext = NULL;
             native_event_function = 0;
             native_timer_function = 0;
@@ -3650,6 +3707,10 @@ int _mr_TestCom1(mrp_State* L, int input0, char* input1, int32 len) {
             int32 ext_r0 = 0;
             ret = arm_ext_load(&native_ext, (const uint8*)input1, (uint32)len, code, &ext_r0);
             arm_ext_unload(old_ext);
+            if (mr_lifecycle_diag()) {
+                printf("LIFE _strCom802 ret=0x%X r0=0x%X native_ext=%p\n",
+                       ret, ext_r0, (void*)native_ext);
+            }
             mrp_pushnumber(L, ret == MR_SUCCESS ? ext_r0 : ret);
             return 1;
         } break;
@@ -3677,6 +3738,12 @@ static mr_L_reg phonelib[5];
 
 static int32 _mr_intra_start(char* appExName, const char* entry) {
     int i, ret;
+
+    mr_reset_dsm_work_path();
+    if (mr_lifecycle_diag()) {
+        printf("LIFE intra_start reset work_path='%s'\n",
+               mr_get_dsm_work_path());
+    }
 
     if (_mr_mem_init() != MR_SUCCESS) {
         return MR_FAILED;
@@ -3919,6 +3986,11 @@ static int32 _mr_intra_start(char* appExName, const char* entry) {
     }
 #endif
     ret = mrp_dofile(vm_state, appExName);
+    if (mr_lifecycle_diag()) {
+        printf("LIFE intra_start dofile_ret=%d app='%s' pack='%s' param='%s' state=%d timer=%d\n",
+               ret, appExName ? appExName : "", pack_filename, start_fileparameter,
+               mr_state, mr_timer_state);
+    }
 
     if (ret != 0) {
         /*
@@ -3926,6 +3998,9 @@ static int32 _mr_intra_start(char* appExName, const char* entry) {
         mr_mem_free(LG_mem_base, LG_mem_len);
         mr_state = MR_STATE_IDLE;
         */
+        if (mr_lifecycle_diag()) {
+            printf("LIFE intra_start error='%s'\n", mrp_tostring(vm_state, -1));
+        }
         MRDBGPRINTF(mrp_tostring(vm_state, -1));
         mrp_pop(vm_state, 1); /* remove error message*/
         mr_stop();
@@ -3991,6 +4066,7 @@ int32 mr_start_dsm(char* filename, char* ext, char* entry) {
 
     MEMSET(old_pack_filename, 0, sizeof(old_pack_filename));
     MEMSET(old_start_filename, 0, sizeof(old_start_filename));
+    mr_lifecycle_log("start_dsm:after-clear-old");
 
     MEMSET(start_fileparameter, 0, sizeof(start_fileparameter));
     if (!ext) {
@@ -4080,19 +4156,12 @@ int32 mr_pauseApp(void) {
         return MR_IGNORE;
     };
 
-    if (native_pauseApp_function) {
-        int32 status = native_ext_callback0(native_pauseApp_function);
-        if (status != MR_IGNORE)
-            return status;
-    }
-    if (native_ext) {
-        int32 status = native_ext_void_event(4);
-        if (status != MR_IGNORE)
-            return status;
-    }
-
     mrp_getglobal(vm_state, "suspend");
     if (mrp_isfunction(vm_state, -1)) {
+        /* FULL apps often load ARM EXT through start.mr and expose Lua
+         * suspend/resume wrappers that forward to _strCom(801).  Let that Lua
+         * lifecycle hook own the call when present; direct native EXT events
+         * remain the fallback for EXT-only apps. */
 #if 0
       int status;
       status = mrp_pcall(vm_state, 0, 0, 0);  /* call main */
@@ -4113,6 +4182,16 @@ int32 mr_pauseApp(void) {
         // mrp_pop(vm_state, 1);  /* remove error message*/
     } else {                  /* no suspend function */
         mrp_pop(vm_state, 1); /* remove suspend */
+        if (native_pauseApp_function) {
+            int32 status = native_ext_callback0(native_pauseApp_function);
+            if (status != MR_IGNORE)
+                return status;
+        }
+        if (native_ext) {
+            int32 status = native_ext_void_event(4);
+            if (status != MR_IGNORE)
+                return status;
+        }
     }
     if (!mr_timer_run_without_pause) {
         if (mr_timer_state == MR_TIMER_STATE_RUNNING) {
@@ -4136,19 +4215,11 @@ int32 mr_resumeApp(void) {
         return MR_IGNORE;
     };
 
-    if (native_resumeApp_function) {
-        int32 status = native_ext_callback0(native_resumeApp_function);
-        if (status != MR_IGNORE)
-            return status;
-    }
-    if (native_ext) {
-        int32 status = native_ext_void_event(5);
-        if (status != MR_IGNORE)
-            return status;
-    }
-
     mrp_getglobal(vm_state, "resume");
     if (mrp_isfunction(vm_state, -1)) {
+        /* FULL apps use Lua resume to reconcile return parameters and rebuild
+         * their foreground UI.  Calling the native EXT hook first makes that
+         * path unreachable because SDK callbacks usually return MR_SUCCESS. */
 #if 0
       int status;
       status = mrp_pcall(vm_state, 0, 0, 0);  /* call main */
@@ -4169,6 +4240,16 @@ int32 mr_resumeApp(void) {
         // mrp_pop(vm_state, 1);  /* remove error message*/
     } else {                  /* no resume function */
         mrp_pop(vm_state, 1); /* remove resume */
+        if (native_resumeApp_function) {
+            int32 status = native_ext_callback0(native_resumeApp_function);
+            if (status != MR_IGNORE)
+                return status;
+        }
+        if (native_ext) {
+            int32 status = native_ext_void_event(5);
+            if (status != MR_IGNORE)
+                return status;
+        }
     }
     if (mr_timer_state == MR_TIMER_STATE_SUSPENDED) {
         MR_TIME_START(300);
@@ -4239,8 +4320,10 @@ int32 mr_timer(void) {
 
     if ((mr_state == MR_STATE_RUN) || ((mr_timer_run_without_pause) && (mr_state == MR_STATE_PAUSE))) {
     } else if (mr_state == MR_STATE_RESTART) {
+        mr_lifecycle_log("timer:restart-before-stop");
         mr_stop();  // 1943 修改为mr_stop
         // mr_stop_ex(TRUE);      //1943
+        mr_lifecycle_log("timer:restart-before-start");
         _mr_intra_start(start_filename, NULL);
         return MR_SUCCESS;
     } else {

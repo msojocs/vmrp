@@ -439,8 +439,8 @@ const char *arm_ext_pack_to_host_path(ArmExtModule *m, const char *pack) {
     return pack;
 }
 
-static const char *arm_ext_register_short_pack_alias(ArmExtModule *m,
-                                                     const char *host_path) {
+const char *arm_ext_register_short_pack_alias(ArmExtModule *m,
+                                              const char *host_path) {
     if (!m || !host_path || !host_path[0]) return "";
     for (uint32_t i = 0; i < m->short_pack_alias_count; ++i) {
         if (strcmp(m->short_pack_aliases[i].host_path, host_path) == 0) {

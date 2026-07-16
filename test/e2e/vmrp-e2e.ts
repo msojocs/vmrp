@@ -200,6 +200,12 @@ export class VmrpE2e {
     return readPpm(ppmPath);
   }
 
+  async screenDraw(drawCount: number, name = `draw-${drawCount}`): Promise<PpmImage> {
+    const ppmPath = path.join(this.tmpDir, `${name}.ppm`);
+    await this.command(`SCREEN_DRAW ${drawCount} ${ppmPath}`);
+    return readPpm(ppmPath);
+  }
+
   /**
    * 轮询截屏直到 (x,y) 处像素等于 expected,返回命中时的截图供后续断言。
    * 适用于等待时长不确定的画面(如游戏结束结算),替代固定 delay + 单次断言。

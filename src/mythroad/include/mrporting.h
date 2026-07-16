@@ -370,6 +370,9 @@ extern int32 mr_start(mr_appSt* app);
 #endif
 
 int32 mr_start_dsm(char* filename, char* ext, char* entry);
+extern const char* mr_get_dsm_work_path(void);
+extern void mr_set_dsm_work_path(const char* path);
+extern void mr_reset_dsm_work_path(void);
 
 /*注册固化应用*/
 extern int32 mr_registerAPP(uint8* p, int32 len, int32 index);
