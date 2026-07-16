@@ -130,9 +130,6 @@ describe("wbrw 输入文字", () => {
       // 回车访问
       await vmrp.key('ENTER', { timeoutMs: 1_000, holdMs: 120 });
       await vmrp.delay(10_000);
-      // 跳转到底部
-      await vmrp.key('6', { timeoutMs: 1_000, holdMs: 120 });
-      await vmrp.delay(10_000);
       if (process.env.VMRP_WBRW_REDRAW_AFTER_IMAGE === "1") {
         await vmrp.key('DOWN', { timeoutMs: 1_000, holdMs: 120 });
         await vmrp.delay(1_000);
