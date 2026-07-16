@@ -65,7 +65,6 @@ int arm_ext_screen_diag_on(void);
 /* ---- arm_ext_executor.c 暂存主体中,被拆分单元调用的符号 ---- */
 
 uint32_t arm_alloc(ArmExtModule *m, uint32_t len);
-void sync_origin_mem_slots(ArmExtModule *m);
 uint32_t read_game_timer_head(ArmExtModule *m, uint32_t grw);
 void write_game_timer_head(ArmExtModule *m, uint32_t grw, uint32_t val);
 int arm_ext_foreground_child_has_compact_timer_queue(ArmExtModule *m);

@@ -270,8 +270,9 @@ struct ArmExtModule {
     struct ArmExtBumpBlock *app_live_blocks;
     uint32_t app_live_count;
     uint32_t app_live_cap;
-    /* ARM 侧 origin_mem 统计 slot 地址，用于在宿主 table[0]/table[1]
-     * 处理后同步 ARM 可见的剩余内存值，避免 ext 读到过期统计。 */
+    /* ARM 侧 origin_mem 统计 slot 地址。旧 wrapper 会在临时挂接外部 arena
+     * 时直接改这些全局量,所以 table bridge 必须先读 slot 当前值再更新,
+     * 不能用 init_table 时缓存的宿主统计覆盖 guest 的 arena 状态。 */
     uint32_t origin_mem_left_slot;
     uint32_t origin_mem_min_slot;
     uint32_t origin_mem_top_slot;

@@ -545,11 +545,11 @@ tool/server-http.js已启动，修改tool/proxy.js来实现代理服务器。
 充分利用子Agent。
 记得存储记忆数据。
 
+工作区中的修改是修复以下BUG产生的，分析实现方案是否合理：
+命令`build/vmrp build/mythroad/490111_240x320_sanguo.mrp`执行后，黑屏不能启动。
 
-测试用例`test/e2e/gfhcq/temp.test.ts`执行后，结尾会进入游戏，但是十分卡顿，帮我优化性能。
-
-预期结果：运行速度较快。
-实际结果：特别卡。
+预期结果：游戏正常启动。
+实际结果：黑屏卡死，只能pkill杀掉。
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。
@@ -564,7 +564,7 @@ tool/server-http.js已启动，修改tool/proxy.js来实现代理服务器。
 充分利用子Agent。
 记得存储记忆数据。
 
-工作区中的修改是修复以下BUG产生的，分析实现方案是否存在硬编码等问题，比如一堆present_screen_history真的符合真机逻辑吗。
+工作区中的修改是修复以下BUG产生的，虽然测试用例通过，但是直接执行`~/github/vmrp$ build/vmrp build/mythroad/490111_240x320_sanguo.mrp`，背景图加载不出来，分析原因。
 测试用例`pnpm vitest run test/e2e/cookie/run-mrp.test.ts -t 方式二`执行后，启动应用后，结尾退出子应用后，应该返回文件管理界面，重新加载文件列表。
 
 预期结果：返回文件管理器，文件管理器会显示“正在打开”，进入的状态是启动前的位置。
