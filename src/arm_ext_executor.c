@@ -53,6 +53,7 @@ extern void mr_set_pack_filename(const char *name);
 extern void mr_set_start_filename(const char *name);
 extern void mr_set_old_pack_filename(const char *name);
 extern void mr_set_old_start_filename(const char *name);
+extern void mr_set_start_fileparameter(const char *name);
 extern int32 mr_platEx(int32 code, uint8 *input, int32 input_len,
                        uint8 **output, int32 *output_len, MR_PLAT_EX_CB *cb);
 extern int32 mr_ferrno(void);
@@ -323,14 +324,6 @@ static uint32_t alloc_u32_slot(ArmExtModule *m, uint32_t value) {
     return slot;
 }
 
-static uint32_t alloc_string(ArmExtModule *m, const char *value) {
-    if (!value) value = "";
-    size_t len = strlen(value) + 1;
-    uint32_t slot = arm_alloc(m, (uint32_t)len);
-    if (slot) memcpy(arm_ptr(m, slot), value, len);
-    return slot;
-}
-
 static uint32_t alloc_filename_table_slot(ArmExtModule *m, const char *value) {
     uint32_t slot = arm_alloc(m, ARM_EXT_PACK_TABLE_SIZE);
     char *dst = slot ? (char *)arm_ptr(m, slot) : NULL;
@@ -340,6 +333,39 @@ static uint32_t alloc_filename_table_slot(ArmExtModule *m, const char *value) {
     memset(dst, 0, ARM_EXT_PACK_TABLE_SIZE);
     snprintf(dst, ARM_EXT_PACK_TABLE_SIZE, "%s", value ? value : "");
     return slot;
+}
+
+static uint32_t alloc_start_parameter_table_slot(ArmExtModule *m,
+                                                 const char *value) {
+    uint32_t slot = arm_alloc(m, ARM_EXT_PACK_TABLE_SIZE);
+    char *dst = slot ? (char *)arm_ptr(m, slot) : NULL;
+    if (!dst) return 0;
+    /* table[138] mirrors the host start_fileparameter[128] verbatim.  The
+     * buffer carries binary continuation records past the first NUL (Cookie's
+     * "_RL\0" + trailing big-endian view words), so seed the whole array. */
+    memcpy(dst, value, ARM_EXT_PACK_TABLE_SIZE);
+    return slot;
+}
+
+static int arm_ext_host_path_is_absolute(const char *path) {
+    if (!path || !path[0]) return 0;
+#ifdef _WIN32
+    if (isalpha((unsigned char)path[0]) && path[1] == ':') return 1;
+    return (path[0] == '\\' && path[1] == '\\');
+#else
+    return path[0] == '/';
+#endif
+}
+
+static const char *arm_ext_guest_pack_alias_for_handoff(ArmExtModule *m,
+                                                       const char *host_value) {
+    if (!host_value || !host_value[0]) return "";
+    if (!arm_ext_host_path_is_absolute(host_value)) return host_value;
+    /* Return packages are copied by legacy helpers through fixed 32-byte ARM
+     * buffers.  Keep the guest token short and retain the host path in the
+     * executor alias map for lifecycle synchronization and file bridges. */
+    const char *alias = arm_ext_register_short_pack_alias(m, host_value);
+    return (alias && alias[0]) ? alias : host_value;
 }
 
 uint32_t alloc_bytes(ArmExtModule *m, const void *value, uint32_t len) {
@@ -987,12 +1013,17 @@ static void init_table(ArmExtModule *m) {
                                    m->pack_alias :
                                    mr_get_pack_filename());
     m->start_table_addr = alloc_filename_table_slot(m, mr_get_start_filename());
-    m->old_pack_table_addr = alloc_filename_table_slot(m, mr_get_old_pack_filename());
+    m->old_pack_table_addr = alloc_filename_table_slot(
+        m, arm_ext_guest_pack_alias_for_handoff(m, mr_get_old_pack_filename()));
     m->old_start_table_addr = alloc_filename_table_slot(m, mr_get_old_start_filename());
+    m->start_parameter_table_addr =
+        alloc_start_parameter_table_slot(m, mr_get_start_fileparameter());
     write_table_entry(m, 101, m->start_table_addr);
     write_table_entry(m, 102, m->old_pack_table_addr);
     write_table_entry(m, 103, m->old_start_table_addr);
-    write_table_entry(m, 138, alloc_string(m, mr_get_start_fileparameter()));
+    /* table[138] is start_fileparameter[128] in native Mythroad.  Some launchers
+     * store return/continuation state there before publishing RESTART. */
+    write_table_entry(m, 138, m->start_parameter_table_addr);
 
     /* 真机 MR 平台的应用堆一般为 512KB–1MB；origin_mem_len 过大会使
      * 部分游戏的 exRam 预算计算（= 固定值 − origin_mem_len）溢出为负，
@@ -1261,14 +1292,58 @@ static void arm_ext_sync_filename_slot(ArmExtModule *m, uint32_t slot,
     setter(value);
 }
 
+static void arm_ext_sync_pack_filename_slot(ArmExtModule *m, uint32_t slot,
+                                            ArmExtFilenameSetter setter) {
+    char value[ARM_EXT_PACK_TABLE_SIZE];
+    const char *host_value;
+    const void *src = slot ? arm_ptr(m, slot) : NULL;
+    if (!src || !setter) return;
+    memcpy(value, src, sizeof(value));
+    value[sizeof(value) - 1] = '\0';
+    /* ARM-visible package names are often shortened to fit legacy fixed
+     * buffers.  Native restart needs the host-openable spelling, so resolve the
+     * token through the same alias map used by file bridges. */
+    host_value = arm_ext_pack_to_host_path(m, value);
+    setter(host_value ? host_value : value);
+}
+
+static void arm_ext_sync_start_parameter_slot(ArmExtModule *m, uint32_t slot) {
+    const void *src = slot ? arm_ptr(m, slot) : NULL;
+    char value[ARM_EXT_PACK_TABLE_SIZE];
+    if (!src) return;
+    /* table[138] 在真机上就是宿主的 start_fileparameter[128]。launcher 在这
+     * 128 字节里保存二进制续传记录（如 Cookie 的 "_RL\0"+尾部大端视图字段，
+     * 末字节 +0x7F 也是有效数据），因此不能按 C 字符串截断，也不能补 NUL。 */
+    memcpy(value, src, sizeof(value));
+    mr_set_start_fileparameter(value);
+}
+
+static const char *arm_ext_diag_filename_slot(ArmExtModule *m, uint32_t slot,
+                                              char *out, size_t out_len) {
+    const void *src = slot ? arm_ptr(m, slot) : NULL;
+    if (!out || !out_len) return "";
+    out[0] = '\0';
+    if (!src) return out;
+    memcpy(out, src, out_len - 1);
+    out[out_len - 1] = '\0';
+    return out;
+}
+
+static int arm_ext_lifecycle_diag(void) {
+    static int cached = -1;
+    if (cached < 0) cached = getenv("VMRP_LIFECYCLE_DIAG") ? 1 : 0;
+    return cached;
+}
+
 static void arm_ext_sync_handoff_filenames(ArmExtModule *m) {
-    /* Native EXT code writes the same four host arrays directly.  Copying them
-     * only at a published lifecycle transition recreates that shared-memory ABI
-     * without treating ordinary transient package aliases as a handoff. */
-    arm_ext_sync_filename_slot(m, m->pack_table_addr, mr_set_pack_filename);
+    /* Native EXT code writes these host arrays directly.  Copying them only at
+     * a published lifecycle transition recreates that shared-memory ABI without
+     * treating ordinary transient package aliases as a handoff. */
+    arm_ext_sync_pack_filename_slot(m, m->pack_table_addr, mr_set_pack_filename);
     arm_ext_sync_filename_slot(m, m->start_table_addr, mr_set_start_filename);
-    arm_ext_sync_filename_slot(m, m->old_pack_table_addr, mr_set_old_pack_filename);
+    arm_ext_sync_pack_filename_slot(m, m->old_pack_table_addr, mr_set_old_pack_filename);
     arm_ext_sync_filename_slot(m, m->old_start_table_addr, mr_set_old_start_filename);
+    arm_ext_sync_start_parameter_slot(m, m->start_parameter_table_addr);
 }
 
 static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk) {
@@ -1278,10 +1353,28 @@ static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk) {
      * MR_STATE_RESTART(3) 或 MR_STATE_STOP(4)。真机上 ARM 代码与宿主共享
      * 同一全局变量；Unicorn 下 ARM 内存独立，所以回调结束后要同步一次。 */
     if (m->mr_state_slot) {
-        enum { ARM_MR_STATE_RESTART = 3, ARM_MR_STATE_STOP = 4 };
+        enum {
+            ARM_MR_STATE_RUN = 1,
+            ARM_MR_STATE_RESTART = 3,
+            ARM_MR_STATE_STOP = 4,
+            ARM_MR_TIMER_RUNNING = 1
+        };
         uint32_t arm_state = 0;
         memcpy(&arm_state, arm_ptr(m, m->mr_state_slot), 4);
         if (arm_state == ARM_MR_STATE_RESTART) {
+            if (arm_ext_lifecycle_diag()) {
+                char pack[ARM_EXT_PACK_TABLE_SIZE];
+                char start[ARM_EXT_PACK_TABLE_SIZE];
+                char old_pack[ARM_EXT_PACK_TABLE_SIZE];
+                char old_start[ARM_EXT_PACK_TABLE_SIZE];
+                char param[ARM_EXT_PACK_TABLE_SIZE];
+                printf("LIFE arm state=RESTART pack='%s' start='%s' old_pack='%s' old_start='%s' param='%s'\n",
+                       arm_ext_diag_filename_slot(m, m->pack_table_addr, pack, sizeof(pack)),
+                       arm_ext_diag_filename_slot(m, m->start_table_addr, start, sizeof(start)),
+                       arm_ext_diag_filename_slot(m, m->old_pack_table_addr, old_pack, sizeof(old_pack)),
+                       arm_ext_diag_filename_slot(m, m->old_start_table_addr, old_start, sizeof(old_start)),
+                       arm_ext_diag_filename_slot(m, m->start_parameter_table_addr, param, sizeof(param)));
+            }
             arm_ext_sync_handoff_filenames(m);
             /* The guest has already armed the restart timer.  Publish RESTART
              * to native Mythroad so mr_timer() performs its normal stop/start. */
@@ -1289,6 +1382,19 @@ static int arm_ext_finish_callback_state(ArmExtModule *m, uint32_t ext_chunk) {
             return 1;
         }
         if (arm_state == ARM_MR_STATE_STOP) {
+            if (arm_ext_lifecycle_diag()) {
+                char pack[ARM_EXT_PACK_TABLE_SIZE];
+                char start[ARM_EXT_PACK_TABLE_SIZE];
+                char old_pack[ARM_EXT_PACK_TABLE_SIZE];
+                char old_start[ARM_EXT_PACK_TABLE_SIZE];
+                char param[ARM_EXT_PACK_TABLE_SIZE];
+                printf("LIFE arm state=STOP pack='%s' start='%s' old_pack='%s' old_start='%s' param='%s'\n",
+                       arm_ext_diag_filename_slot(m, m->pack_table_addr, pack, sizeof(pack)),
+                       arm_ext_diag_filename_slot(m, m->start_table_addr, start, sizeof(start)),
+                       arm_ext_diag_filename_slot(m, m->old_pack_table_addr, old_pack, sizeof(old_pack)),
+                       arm_ext_diag_filename_slot(m, m->old_start_table_addr, old_start, sizeof(old_start)),
+                       arm_ext_diag_filename_slot(m, m->start_parameter_table_addr, param, sizeof(param)));
+            }
             arm_ext_sync_handoff_filenames(m);
             mr_state = ARM_MR_STATE_STOP;
             /* STOP follows the platform exit contract; mr_exit() returns to a

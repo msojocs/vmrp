@@ -42,6 +42,7 @@ extern void mr_set_pack_filename(const char *name);
 extern void mr_set_start_filename(const char *name);
 extern void mr_set_old_pack_filename(const char *name);
 extern void mr_set_old_start_filename(const char *name);
+extern void mr_set_start_fileparameter(const char *name);
 extern int32 mr_platEx(int32 code, uint8 *input, int32 input_len,
                        uint8 **output, int32 *output_len, MR_PLAT_EX_CB *cb);
 extern int32 mr_ferrno(void);

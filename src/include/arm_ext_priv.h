@@ -210,6 +210,8 @@ void arm_ext_install_pc_watches(ArmExtModule *m, uint32_t base, uint32_t len);
 void arm_ext_drop_overlapping_stale_nested_modules(ArmExtModule *m, uint32_t file_addr, uint32_t file_len);
 int arm_ext_has_internal_loader_chunk(ArmExtModule *m, uint32_t file_addr, uint32_t file_len);
 const char *arm_ext_pack_to_host_path(ArmExtModule *m, const char *pack);
+const char *arm_ext_register_short_pack_alias(ArmExtModule *m,
+                                              const char *host_path);
 void arm_ext_record_nested_module(ArmExtModule *m, uint32_t file_addr, uint32_t file_len, uint32_t p_addr, uint32_t helper_addr);
 void arm_ext_record_timer_owner(ArmExtModule *m);
 void arm_ext_repair_private_child_record_bridges(ArmExtModule *m, uint32_t record, uint32_t file_addr, uint32_t file_len);

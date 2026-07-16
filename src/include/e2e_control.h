@@ -14,6 +14,7 @@ typedef struct VmrpE2eControl VmrpE2eControl;
  * 真实 timer 状态建立完成边界，而不是用固定延迟猜测 guest 是否已调度。 */
 typedef struct VmrpE2eHooks {
     int (*dump_screen_ppm)(const char *path, void *userdata);
+    int (*dump_draw_frame_ppm)(int draw_count, const char *path, void *userdata);
     const char *(*screen_dump_path)(void *userdata);
     int (*draw_count)(void *userdata);
     uint32_t (*timer_arm_generation)(void *userdata);

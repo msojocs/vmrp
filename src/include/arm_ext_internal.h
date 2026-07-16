@@ -224,6 +224,7 @@ struct ArmExtModule {
     uint32_t start_table_addr;
     uint32_t old_pack_table_addr;
     uint32_t old_start_table_addr;
+    uint32_t start_parameter_table_addr;
     uint32_t helper_addr;
     uint32_t p_addr;
     uint32_t screen_addr;

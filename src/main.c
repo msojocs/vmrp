@@ -90,6 +90,115 @@ static int dump_screen_ppm(const char *path) {
     return ret;
 }
 
+#define E2E_DRAW_FRAME_RING_CAP 64
+
+typedef struct {
+    int draw_count;
+    int width;
+    int height;
+    size_t rgb_len;
+    uint8_t *rgb;
+} E2eDrawFrame;
+
+static E2eDrawFrame e2eDrawFrames[E2E_DRAW_FRAME_RING_CAP];
+static SDL_mutex *e2eDrawFrameMutex = NULL;
+
+static int e2e_draw_frame_capture_enabled(void) {
+    static int cached = -1;
+    if (cached < 0) {
+        const char *socket = getenv("VMRP_E2E_SOCKET");
+        cached = (socket && *socket) ? 1 : 0;
+    }
+    return cached;
+}
+
+static int e2e_ensure_draw_frame_mutex(void) {
+    if (e2eDrawFrameMutex) return 1;
+    e2eDrawFrameMutex = SDL_CreateMutex();
+    return e2eDrawFrameMutex != NULL;
+}
+
+static int write_ppm_rgb(const char *path, int width, int height,
+                         const uint8_t *rgb, size_t rgb_len) {
+    if (!path || !rgb || width <= 0 || height <= 0) return -1;
+    size_t expected = (size_t)width * (size_t)height * 3u;
+    if (rgb_len < expected) return -1;
+    FILE *fp = fopen(path, "wb");
+    if (!fp) return -1;
+    fprintf(fp, "P6\n%d %d\n255\n", width, height);
+    fwrite(rgb, 1, expected, fp);
+    int ret = ferror(fp) ? -1 : 0;
+    fclose(fp);
+    return ret;
+}
+
+static void e2e_record_draw_frame(int draw_count, SDL_Surface *surface) {
+    if (!e2e_draw_frame_capture_enabled() || draw_count <= 0 || !surface)
+        return;
+    if (!e2e_ensure_draw_frame_mutex()) return;
+
+    int width = surface->w;
+    int height = surface->h;
+    if (width <= 0 || height <= 0) return;
+    size_t rgb_len = (size_t)width * (size_t)height * 3u;
+    uint8_t *rgb = (uint8_t *)malloc(rgb_len);
+    if (!rgb) return;
+
+    if (SDL_MUSTLOCK(surface) && SDL_LockSurface(surface) != 0) {
+        free(rgb);
+        return;
+    }
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            Uint32 px = *((Uint32 *)(((Uint8 *)surface->pixels) +
+                                      surface->pitch * y) + x);
+            Uint8 r, g, b;
+            size_t out = ((size_t)y * (size_t)width + (size_t)x) * 3u;
+            SDL_GetRGB(px, surface->format, &r, &g, &b);
+            rgb[out] = r;
+            rgb[out + 1] = g;
+            rgb[out + 2] = b;
+        }
+    }
+    if (SDL_MUSTLOCK(surface)) SDL_UnlockSurface(surface);
+
+    SDL_LockMutex(e2eDrawFrameMutex);
+    E2eDrawFrame *slot =
+        &e2eDrawFrames[(uint32_t)draw_count % E2E_DRAW_FRAME_RING_CAP];
+    free(slot->rgb);
+    slot->rgb = rgb;
+    slot->rgb_len = rgb_len;
+    slot->width = width;
+    slot->height = height;
+    slot->draw_count = draw_count;
+    SDL_UnlockMutex(e2eDrawFrameMutex);
+}
+
+static int dump_e2e_draw_frame_ppm(int draw_count, const char *path) {
+    if (!path || draw_count <= 0 || !e2eDrawFrameMutex) return -1;
+    uint8_t *rgb = NULL;
+    size_t rgb_len = 0;
+    int width = 0;
+    int height = 0;
+
+    SDL_LockMutex(e2eDrawFrameMutex);
+    E2eDrawFrame *slot =
+        &e2eDrawFrames[(uint32_t)draw_count % E2E_DRAW_FRAME_RING_CAP];
+    if (slot->draw_count == draw_count && slot->rgb && slot->rgb_len) {
+        width = slot->width;
+        height = slot->height;
+        rgb_len = slot->rgb_len;
+        rgb = (uint8_t *)malloc(rgb_len);
+        if (rgb) memcpy(rgb, slot->rgb, rgb_len);
+    }
+    SDL_UnlockMutex(e2eDrawFrameMutex);
+
+    if (!rgb) return -1;
+    int ret = write_ppm_rgb(path, width, height, rgb, rgb_len);
+    free(rgb);
+    return ret;
+}
+
 static void sigusr1_handler(int sig) {
     (void)sig;
     dump_screen_ppm(screen_dump_path());
@@ -98,6 +207,12 @@ static void sigusr1_handler(int sig) {
 static int e2e_dump_screen_ppm_hook(const char *path, void *userdata) {
     (void)userdata;
     return dump_screen_ppm(path);
+}
+
+static int e2e_dump_draw_frame_ppm_hook(int draw_count, const char *path,
+                                        void *userdata) {
+    (void)userdata;
+    return dump_e2e_draw_frame_ppm(draw_count, path);
 }
 
 static const char *e2e_screen_dump_path_hook(void *userdata) {
@@ -249,6 +364,7 @@ void guiDrawBitmapWithStride(uint16_t *bmp, int32_t x, int32_t y,
     if (SDL_MUSTLOCK(surface)) SDL_UnlockSurface(surface);
     if (SDL_UpdateWindowSurface(window) != 0)
         printf("SDL_UpdateWindowSurface err\n");
+    e2e_record_draw_frame(draw_count, surface);
     if (should_dump_ppm) {
         dump_screen_ppm(screen_dump_path());
     }
@@ -823,6 +939,7 @@ int main(int argc, char *args[]) {
     SDL_AtomicSet(&timerDispatchInProgress, 0);
     SDL_AtomicSet(&runtimeExited, 0);
     e2e_hooks.dump_screen_ppm = e2e_dump_screen_ppm_hook;
+    e2e_hooks.dump_draw_frame_ppm = e2e_dump_draw_frame_ppm_hook;
     e2e_hooks.screen_dump_path = e2e_screen_dump_path_hook;
     e2e_hooks.draw_count = e2e_draw_count_hook;
     e2e_hooks.timer_arm_generation = e2e_timer_arm_generation_hook;
