@@ -2,7 +2,7 @@
 title: "WBRW html2sky explicit line break progress 2026-07-16"
 tags: ["wbrw", "html2sky", "line-break", "sky-format", "ppm"]
 created: 2026-07-16T18:31:00+08:00
-updated: 2026-07-16T18:58:00+08:00
+updated: 2026-07-16T20:24:00+08:00
 sources: []
 links: ["wbrw-html2sky-native-elements-and-ppm-verification-2026-07-12.md"]
 category: session-log
@@ -72,3 +72,21 @@ schemaVersion: 1
 - Final task artifact: `/tmp/vmrp-e2e-1UrKUI/loaded.ppm`, SHA-256 `21eeca48c162fdafe311d1d79fd63b9e1e9aef04bac28ce03cc702702d567676`. It retains 32,394 exact green pixels and 3,208 exact yellow pixels; visual inspection shows both styled green sections, controls, and the yellow footer.
 - Final gddhy artifact after pressing `6`: `/tmp/vmrp-e2e-IyUwMO/loaded.ppm`, SHA-256 `a398a627982d047cf55f2340d639c483cd9a3e184bf44621585591c21cf885a0`. Exact green and yellow pixel counts are both zero; both forms, their controls, surrounding body background, and footer links remain visible.
 - The selected gddhy repro passes. The complete two-page script currently exits on task's pre-existing logo-matte assertion because `(100,43)` is black in the live image rather than framebuffer white; the retained loaded PPM proves this does not affect the background comparison or the preserved CSS green regions.
+
+## 2026-07-16 horizontal-rule acceptance correction
+
+- The original acceptance criterion is stricter than the earlier line-wrap result: a visible horizontal line must appear immediately below `软件列表`.
+- The live source is `<p>WAP下载站 - 第1页<br/><br/>软件列表</p><hr/><p>...`. The prior FlowID change correctly preserves `<br>` boundaries, but the shared `br`/`hr` branch still discards the `<hr>` itself.
+- Real SKY evidence identifies `0x60` with a one-byte zero payload as the horizontal separator operation. The current generator's static style table uses element 14 for the grey rule; a historical element-8 rule belongs to a different style table with an equivalent rule definition and must not be copied as an absolute index. The record remains a direct child of the current content/container parent so it stays in DOM order with surrounding rows.
+- Generated live-page record counts contain no `0x60`, directly proving the visible rule is absent before rendering. `/tmp/vmrp-e2e-dpBTag/loaded.ppm` shows the current top frame with `软件列表` followed immediately by `mynes [顶]` and no line.
+- A fresh pre-fix run completed at `/tmp/vmrp-e2e-M19GN0/loaded.ppm`, but the temporary script's later `6` key jumped to the footer before capture. That step is unrelated to the requested visual and will be removed so the retained final image covers the actual acceptance region.
+- Planned generic fix: preserve `<hr>` as a dedicated model item in DOM order and emit a real `0x60` record. Keep `<br>` as a flow boundary; do not approximate an `<hr>` with an empty text row.
+
+### Horizontal-rule implementation and PPM proof
+
+- `ItemKindHorizontalRule` now preserves each `<hr>` without fabricating display text. `buildPage` retains the structural pair, and display-list generation writes `op=0x60`, element 14, payload `00` directly under the current content or styled-container parent.
+- The focused binary regressions require the rule to remain between surrounding model items, verify the exact top-level record, and verify that a rule inside an element-7 background container uses that container as parent while retaining global separator element 14.
+- Live generated gddhy records are ordered as `软件列表` text (`0x54`), separator (`parent=0x4005, e2=14, op=0x60, payload=00`), first application row (`0x4e`), then the `mynes` anchor (`0x38`).
+- Air rebuilt and restarted the test service on port 8093. `go test -count=1 ./...` and `go vet ./...` pass, and `/health` returns `ok`.
+- The focused repro completed in 15.77 seconds after removing the unrelated footer jump. Final image: `/tmp/vmrp-e2e-yQ9666/loaded.ppm`, 240x320, SHA-256 `2dfee34fc01fe11f5cb1069466c79c7744a7415a52f4f10b677df82d0fd31331`; PNG inspection copy: `/tmp/vmrp-e2e-yQ9666/loaded.png`.
+- Visual result: a light-grey horizontal rule spans the content area directly below `软件列表`, and `mynes [顶]` begins beneath it. Pixel proof: rows `y=84` and `y=86` each contain 230 exact `[232,236,232]` rule pixels; the pre-fix image had only 2 such border pixels on each row.

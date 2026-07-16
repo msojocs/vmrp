@@ -392,14 +392,10 @@
 - **Pages:** wbrw-proxy2-white-matte-progress-2026-07-16.md
 - **Summary:** Flattened alpha onto opaque white before resizing, retained logo colors, and replaced the black cached GIF canvas with an all-opaque white canvas proven by the final PPM and GIF.
 
-## [2026-07-16T13:58:36.204Z] ingest
-- **Pages:** sanguo-black-screen-dynamic-lg-mem-arena-fix.md
-- **Summary:** Created new page "Sanguo black-screen dynamic LG_mem arena fix"
+## [2026-07-16T20:18:00+08:00] investigate
+- **Pages:** wbrw-html2sky-line-wrap-progress-2026-07-16.md
+- **Summary:** Re-audited the original acceptance criterion, proved the converter still drops the visible `<hr>` below 软件列表, identified reference SKY op 0x60/element 14, and restored the repro capture target to the page top.
 
-## [2026-07-16T13:59:05.540Z] ingest
-- **Pages:** sanguo-black-screen-dynamic-lg-mem-arena-fix.md
-- **Summary:** Updated "Sanguo black-screen dynamic LG_mem arena fix" with new content
-
-## [2026-07-16T14:16:42.458Z] lint
-- **Pages:** cookie-child-return-opening-folder-frame-replay.md, cookie-mrp-restart-and-full-runtime-version-contract.md, dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-record-pack-slot-fix.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gfhcq-game-stutter-performance-investigation.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-play-mr-ucs2gb-caller-owned-output-pointer-fix.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, sanguo-black-screen-dynamic-lg-mem-arena-fix.md, wbrw-go-html2sky-rendering-final-verification-2026-07-12.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md, wbrw-html2sky-completion-audit-2026-07-12-latest.md, wbrw-html2sky-line-wrap-progress-2026-07-16.md, wbrw-html2sky-post-cleanup-final-evidence-2026-07-12.md, wbrw-proxy2-font-mrp-download.md, wbrw-proxy2-web-page-rendering.md, wbrw-proxy2-white-matte-progress-2026-07-16.md, wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md
-- **Summary:** Lint: 32 issues (25 orphan, 0 stale, 2 broken, 2 contradictions)
+## [2026-07-16T20:24:00+08:00] fix
+- **Pages:** wbrw-html2sky-line-wrap-progress-2026-07-16.md
+- **Summary:** Preserved HTML hr as a structural item, emitted the native element-14/op-0x60 separator in DOM order, passed Go tests/vet after hot reload, and retained a PPM visibly proving the line below 软件列表.
