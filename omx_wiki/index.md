@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 30 pages | Last updated: 2026-07-15T14:13:48.940Z
+> 32 pages | Last updated: 2026-07-16T19:15:00+08:00
 
 ## debugging
 
@@ -32,6 +32,8 @@
 
 ## session-log
 
+- [WBRW proxy2 white image matte progress 2026-07-16](wbrw-proxy2-white-matte-progress-2026-07-16.md) — # WBRW proxy2 white image matte progress 2026-07-16
+- [WBRW html2sky explicit line break progress 2026-07-16](wbrw-html2sky-line-wrap-progress-2026-07-16.md) — # WBRW html2sky explicit line break progress 2026-07-16
 - [WBRW Go html2sky rendering final verification 2026-07-12](wbrw-go-html2sky-rendering-final-verification-2026-07-12.md) — # WBRW Go html2sky rendering final verification 2026-07-12
 - [WBRW Go html2sky rendering progress 2026-07-12](wbrw-go-html2sky-rendering-progress-2026-07-12.md) — # WBRW Go html2sky rendering progress 2026-07-12
 - [WBRW html2sky completion audit 2026-07-12 latest](wbrw-html2sky-completion-audit-2026-07-12-latest.md) — # WBRW html2sky completion audit 2026-07-12 latest

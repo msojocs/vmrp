@@ -533,23 +533,13 @@ tool/server-http.js已启动，修改tool/proxy.js来实现代理服务器。
 充分利用子Agent。
 记得存储记忆数据。
 
-测试用例`test/e2e/wbrw/temp.test.ts`执行会自动访问网页，但是图片加载失败。
+复现脚本`test/e2e/wbrw/temp.test.ts`执行会自动访问网页，但是页面没有换行，是否拥挤。
+注意：不是测试用例，只是复现脚本，只需要保存网页加载后的图像，检测是否符合预期即可。
 
-预期结果：测试用例实际能加载图片。
-实际结果：图片加载失败
-`/home/msojocs/github/mrp-store/backend/internal/service/mrp_proxy.go`中的`handleProxy2Image`实现可能有问题；
-真机似乎是把图片保存为gif后缀，二进制还是原始内容；看看s.handleProxy2Image(w, r, body)实现有什么问题
-直接修改go代码，服务会自动重启生效。
-至少：
-1. logo显示
+预期结果：`mynes [顶]`后面换行。
+实际结果：没有换行
 
-程序的现有代码不一定正确。
-注意trace日志量会特别大。
-不要使用xvfb。
-修改代码要加注释，不要有兜底代码逻辑。
-深入反汇编检测代理机制。
-一定要截图检测PPM，来验证实现是否成功。
-不能写特定场景代码，如if(is_xxx_app()) {...}
+项目源码：`~/github/sky-engine-tool`，修改源码会热重载。
 
 在分析与解决过程中，把进度定期保存至文档中。
 充分利用子Agent。
