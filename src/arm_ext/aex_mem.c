@@ -80,14 +80,13 @@ static uint32_t arm_ext_origin_node_limit(ArmExtModule *m,
     uint64_t mapped_bytes = 0;
     for (size_t i = 0; i < sizeof(bands) / sizeof(bands[0]); ++i) {
         if (!arm_ptr(m, bands[i].addr)) continue;
-        uint64_t lo = arena->base > bands[i].addr
-                          ? arena->base
-                          : bands[i].addr;
+        uint64_t lo = bands[i].addr;
         uint64_t band_end = (uint64_t)bands[i].addr + bands[i].len;
         uint64_t hi = arena->end < band_end ? arena->end : band_end;
         if (lo < hi) mapped_bytes += hi - lo;
     }
-    /* Every valid free-list node occupies at least eight mapped bytes. */
+    /* A wrapped link may decode below base, so the structural domain is every
+     * mapped byte below end.  Each valid free-list node occupies at least eight. */
     return (uint32_t)(mapped_bytes / 8u) + 2u;
 }
 
@@ -101,12 +100,17 @@ static int arm_ext_origin_node_read(ArmExtModule *m,
     if (!arm_ptr_span(m, node, 8u)) return 0;
 
     uint32_t next_off = arm_ext_guest_mem_read_u32(m, node);
-    if (next_off > arena->end - arena->base) return 0;
-    if (next) *next = arena->base + next_off;
+    /* mem.c decodes links with `LG_mem_base + previous->next` on a 32-bit
+     * target.  The subtraction used to create an offset may therefore wrap:
+     * base 0x225E5C + offset 0xFFFDA360 becomes address 0x2001BC.  Validate
+     * the decoded guest address, not the unsigned offset's magnitude. */
+    uint32_t next_addr = arena->base + next_off;
+    if (next_addr > arena->end) return 0;
+    if (next) *next = next_addr;
 
     if (node == arena->head) return 1;
     uint32_t node_len = arm_ext_guest_mem_read_u32(m, node + 4u);
-    if (!node_len || node < arena->base || node >= arena->end ||
+    if (!node_len || node >= arena->end ||
         node_len > arena->end - node ||
         !arm_ptr_span(m, node, node_len)) {
         return 0;
@@ -185,7 +189,7 @@ static uint32_t arm_ext_guest_mem_malloc(ArmExtModule *m, uint32_t len) {
     /* previous 为头节点或空闲节点地址,两者均为 {next@+0, len@+4} 布局 */
     uint32_t previous = head;
     /* The cap is the structural maximum number of eight-byte nodes in all
-     * mapped bands covered by the current arena, including external bands. */
+     * mapped bands addressable below the current end, including wrapped links. */
     uint32_t iter_limit = arm_ext_origin_node_limit(m, &arena);
     while (nextfree < end) {
         if (!iter_limit--) return 0; /* mem.c: cyclic free list */

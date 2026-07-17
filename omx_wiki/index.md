@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 34 pages | Last updated: 2026-07-17T03:10:52Z
+> 35 pages | Last updated: 2026-07-17T05:53:01Z
 
 ## debugging
 
@@ -25,6 +25,7 @@
 - [Optwar exit plugin no-network investigation](optwar-exit-plugin-no-network-investigation.md) — # Optwar exit plugin no-network investigation
 - [RX4.5 ARM EXT 0x80000000 Platform IO Mapping](rx4-5-arm-ext-0x80000000-platform-io-mapping.md) — # RX4.5 ARM EXT 0x80000000 Platform IO Mapping
 - [Sanguo black-screen dynamic LG_mem arena fix](sanguo-black-screen-dynamic-lg-mem-arena-fix.md) — # Sanguo black-screen dynamic LG_mem arena fix
+- [WXMDLD wrapped LG_mem first-fit and nested resource-owner fix](wxmdld-wrapped-lg-mem-first-fit-fix.md) — # WXMDLD wrapped LG_mem first-fit and nested resource-owner fix
 - [WBRW html2sky native elements and PPM verification 2026-07-12](wbrw-html2sky-native-elements-and-ppm-verification-2026-07-12.md) — # WBRW html2sky native elements and PPM verification 2026-07-12
 - [wbrw input paste UCS2 table77 fix](wbrw-input-paste-ucs2-table77-fix.md) — # wbrw input paste UCS2 table77 fix
 - [WBRW proxy2 bitmap logo GIF adaptation 2026-07-13](wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md) — # WBRW proxy2 bitmap logo GIF adaptation 2026-07-13

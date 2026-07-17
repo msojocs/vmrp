@@ -260,8 +260,47 @@ ArmExtNestedModule *arm_ext_resource_owner_for_lr(ArmExtModule *m,
     if (owner_helper) *owner_helper = 0;
     if (!m) return NULL;
 
-    p = arm_ext_p_for_code_addr(m, reg_read32(m->uc, UC_ARM_REG_LR), &helper);
+    uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
+    p = arm_ext_p_for_code_addr(m, lr, &helper);
     owner = arm_ext_find_nested_module_by_p(m, p);
+    if (!owner) {
+        uint32_t return_pc = lr & ~1u;
+        uint32_t sp = reg_read32(m->uc, UC_ARM_REG_SP);
+        /* Shared wrapper thunks hide the child caller from table bridges: LR
+         * names the thunk's instruction after BLX, while the thunk has saved
+         * the child's LR in its small stack frame.  Recover only a structurally
+         * valid Thumb call return into a registered child, and only when the
+         * direct return belongs to the wrapper.  The bounded scan avoids using
+         * unrelated active/foreground state as a resource-owner fallback. */
+        if (return_pc >= EXT_CODE_ADDR &&
+            return_pc < EXT_CODE_ADDR + m->code_len) {
+            for (uint32_t off = 0; off < 16u * 4u; off += 4u) {
+                uint32_t candidate = 0;
+                if (!arm_ptr_span(m, sp + off, 4u)) break;
+                memcpy(&candidate, arm_ptr(m, sp + off), 4u);
+                if (!(candidate & 1u) || (candidate & ~1u) < 2u) continue;
+
+                uint32_t caller_pc = candidate & ~1u;
+                uint32_t stack_helper = 0;
+                uint32_t stack_p = arm_ext_p_for_code_addr(
+                    m, candidate, &stack_helper);
+                ArmExtNestedModule *stack_owner =
+                    arm_ext_find_nested_module_by_p(m, stack_p);
+                if (!stack_owner) continue;
+                if (!arm_ptr_span(m, caller_pc - 2u, 2u)) continue;
+                uint16_t call = 0;
+                memcpy(&call, arm_ptr(m, caller_pc - 2u), 2u);
+                /* Private children enter wrapper bridges through BLX Rm.  A
+                 * matching return address proves this stack word is a call
+                 * frame, rather than data that happens to fall in code RAM. */
+                if ((call & 0xFF87u) != 0x4780u) continue;
+                p = stack_p;
+                helper = stack_helper;
+                owner = stack_owner;
+                break;
+            }
+        }
+    }
     if (owner_p) *owner_p = p;
     if (owner_helper) *owner_helper = helper;
     return owner;

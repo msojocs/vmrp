@@ -546,10 +546,10 @@ tool/server-http.js已启动，修改tool/proxy.js来实现代理服务器。
 记得存储记忆数据。
 
 工作区中的修改是修复以下BUG产生的，分析实现方案是否合理：
-命令`build/vmrp build/mythroad/gtxzj.mrp`执行后，黑屏不能启动。
+命令`build/vmrp build/mythroad/wxmdld.mrp`执行后，进度到99%会卡死。
 
 预期结果：游戏正常启动。
-实际结果：黑屏卡死，只能pkill杀掉。
+实际结果：进度到99%会卡死，报错Invalid memory read (UC_ERR_READ_UNMAPPED)。
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。
