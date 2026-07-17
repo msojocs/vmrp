@@ -798,7 +798,12 @@ static void aex_t043(ArmExtModule *m, AexTableCtx *c) {
     uint32_t r2 = c->r2;
     uint32_t ret = MR_SUCCESS;
  {
-            void *src = arm_ptr(m, r1);
+            /* mr_write consumes the complete guest range.  Validating only the
+             * first byte lets a wrapped/oversized length make the host write(2)
+             * read past the 16MB guest backing and report a misleading partial
+             * success.  Match table[44]/mr_read: an unmapped span is an ABI
+             * failure and must never be dereferenced by the host. */
+            void *src = arm_ptr_span(m, r1, r2 ? r2 : 1u);
             uint32_t len = r2;
             int substituted = 0;
             void *new_src = NULL;
@@ -810,7 +815,7 @@ static void aex_t043(ArmExtModule *m, AexTableCtx *c) {
                 len = new_len;
                 substituted = 1;
             }
-            ret = mr_write((int32)r0, src, len);
+            ret = src ? mr_write((int32)r0, src, len) : MR_FAILED;
             if (substituted) {
                 if (m->profile && m->profile->post_write_cleanup)
                     m->profile->post_write_cleanup(m->app_state);

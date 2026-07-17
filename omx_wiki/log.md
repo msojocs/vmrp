@@ -407,3 +407,11 @@
 ## [2026-07-17T11:10:52+08:00] verify
 - **Pages:** gtxzj-date-guard-and-default-runtime-assets.md
 - **Summary:** Added durable EXT hashes and extraction commands, shared-API date control with active-run rejection, recoverable/custom-output font deployment, focused date regressions, final build-id real WSLg transcript and PPMs, and the retained 22-file/43-test full-suite log.
+
+## [2026-07-17T13:27:48+08:00] complete
+- **Pages:** wxmdld-wrapped-lg-mem-first-fit-fix.md
+- **Summary:** Recorded the shared-wrapper nested resource-owner recovery, proved the cold-only missing `pet` was downstream of a rejected 32-bit wrapped LG_mem free-list link, implemented generic decoded-address validation, removed temporary probes, and retained clean cold/warm cache, PPM, draw-count and real-key evidence.
+
+## [2026-07-17T13:53:01+08:00] verify
+- **Pages:** wxmdld-wrapped-lg-mem-first-fit-fix.md
+- **Summary:** Reproduced the post-fix default-work-dir black frame as a same-length but mostly zero SKY left by the pre-fix crash, proved single-file removal invokes the application's normal rebuild without clearing other state, restored the exact user command and full-color title, and passed the final 22-file/43-test E2E suite.
