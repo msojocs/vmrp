@@ -119,7 +119,7 @@
 | `arm_ext_child_has_compact_r9_state_list`（1755） | 0xB5F0 起始 + 窗口内 4448/204C 等 | verdload.ext 0x2CBCFC… / brwmain 0x2CF5CA |
 | `arm_ext_child_has_compact_timer_walker`（1808） | 32 字节 Thumb 机器码，仅通配 2 字节 | — |
 | `find_wrapper_compact_heap_free_return`（1837） | 17 个固定偏移精确半字（整函数字节匹配） | Compact SDK mr_free |
-| `arm_ext_child_reads_record100_to_compact_r9_buffer`（1889） | 7 半字精确序列（含 movs r1,#100） | verdload.ext 0x2CA58A / 0x2CD810 |
+| ~~`arm_ext_child_reads_record100_to_compact_r9_buffer`~~（2026-07-17 已删除） | 原实现把 `movs r1,#100` 的 MPS selector 误解为 `record[100]` | `cfunction.ext` selector-100 分支实际写七 word API/state 结构；详见 `docs/修复记录/bird-long-mrp-name-black-screen-debug.md` |
 | `arm_ext_child_needs_short_pack_alias`（1934） | 4 组不同应用变体的精确指令序列 | frame.ext / DOTA A801 拼写 |
 | `arm_ext_mirror_read_file_to_adjacent_slot`（2474） | 返回地址 `0x00000B82` 门槛 | wrapper 0xE80B82 call site |
 | `find_wrapper_timer_dispatch`（8266） | pat/chain_thunk_pat/pat2 三组字节序列 | gxdzc/gghjt/gwkdl cfunction.ext（解压 19428 字节） |

@@ -419,3 +419,68 @@
 ## [2026-07-17T15:08:48+08:00] complete
 - **Pages:** op6120-independent-scrram-4m-startup-fix.md
 - **Summary:** Traced the 4M-only progress stall to a 10 MiB MR_MALLOC_SCRRAM request incorrectly sharing the main ARM bump heap, implemented an independent 0x50000000 guest mapping with explicit lifecycle semantics, proved the fixed 4M PPM matches successful 1M byte-for-byte, and passed the final 24-file/45-test E2E suite without Xvfb.
+## [2026-07-17T13:31:56.380Z] query
+- **Pages:** cookie-mrp-restart-and-full-runtime-version-contract.md, wbrw-proxy2-font-mrp-download.md, wxmdld-wrapped-lg-mem-first-fit-fix.md, opglqa-font-download-repeat-investigation.md, dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-record-pack-slot-fix.md, cookie-child-return-opening-folder-frame-replay.md, gtxzj-date-guard-and-default-runtime-assets.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, op6120-independent-scrram-4m-startup-fix.md, sanguo-black-screen-dynamic-lg-mem-arena-fix.md, gfhcq-game-stutter-performance-investigation.md, wbrw-input-paste-ucs2-table77-fix.md, gms-payment-latency-analysis.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gghjt-modal-timer-and-cold-extraction-regressions.md, optwar-exit-plugin-no-network-investigation.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-play-mr-ucs2gb-caller-owned-output-pointer-fix.md
+- **Summary:** Query "MRP filename alias fixed buffer table 100 header filename" → 20 results (of 36 total)
+
+## [2026-07-17T13:33:52.711Z] ingest
+- **Pages:** root-mrp-alias-must-preserve-filename-semantics.md
+- **Summary:** Created new page "Root MRP alias must preserve filename semantics"
+
+## [2026-07-17T13:33:52.716Z] add
+- **Pages:** root-mrp-alias-must-preserve-filename-semantics.md
+- **Summary:** Created wiki page root-mrp-alias-must-preserve-filename-semantics.md
+
+## [2026-07-17T13:43:47.681Z] ingest
+- **Pages:** root-mrp-alias-must-preserve-filename-semantics.md
+- **Summary:** Updated "Root MRP alias must preserve filename semantics" with new content
+
+## [2026-07-17T13:44:25.913Z] delete
+- **Pages:** root-mrp-alias-must-preserve-filename-semantics.md
+- **Summary:** Deleted wiki page root-mrp-alias-must-preserve-filename-semantics.md
+
+## [2026-07-17T13:44:38.547Z] ingest
+- **Pages:** root-mrp-alias-must-preserve-filename-semantics.md
+- **Summary:** Created new page "Root MRP alias must preserve filename semantics"
+
+## [2026-07-17T13:44:38.552Z] add
+- **Pages:** root-mrp-alias-must-preserve-filename-semantics.md
+- **Summary:** Created wiki page root-mrp-alias-must-preserve-filename-semantics.md
+
+## [2026-07-17T13:46:24.911Z] lint
+- **Pages:** cookie-child-return-opening-folder-frame-replay.md, cookie-mrp-restart-and-full-runtime-version-contract.md, dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gfhcq-game-stutter-performance-investigation.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gtxzj-date-guard-and-default-runtime-assets.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-play-mr-ucs2gb-caller-owned-output-pointer-fix.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, op6120-independent-scrram-4m-startup-fix.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, root-mrp-alias-must-preserve-filename-semantics.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-go-html2sky-rendering-final-verification-2026-07-12.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md, wbrw-html2sky-completion-audit-2026-07-12-latest.md, wbrw-html2sky-line-wrap-progress-2026-07-16.md, wbrw-html2sky-post-cleanup-final-evidence-2026-07-12.md, wbrw-proxy2-font-mrp-download.md, wbrw-proxy2-web-page-rendering.md, wbrw-proxy2-white-matte-progress-2026-07-16.md, wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md
+- **Summary:** Lint: 33 issues (26 orphan, 0 stale, 2 broken, 2 contradictions)
+## [2026-07-17T14:03:24.198Z] delete
+- **Pages:** root-mrp-alias-must-preserve-filename-semantics.md
+- **Summary:** Deleted wiki page root-mrp-alias-must-preserve-filename-semantics.md
+
+## [2026-07-17T14:03:40.390Z] ingest
+- **Pages:** mps-selector-100-is-not-record-100.md
+- **Summary:** Created new page "MPS selector 100 is not record 100"
+
+## [2026-07-17T14:03:40.394Z] add
+- **Pages:** mps-selector-100-is-not-record-100.md
+- **Summary:** Created wiki page mps-selector-100-is-not-record-100.md
+
+## [2026-07-17T14:05:11.283Z] lint
+- **Pages:** cookie-child-return-opening-folder-frame-replay.md, cookie-mrp-restart-and-full-runtime-version-contract.md, dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gfhcq-game-stutter-performance-investigation.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gtxzj-date-guard-and-default-runtime-assets.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-play-mr-ucs2gb-caller-owned-output-pointer-fix.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, mps-selector-100-is-not-record-100.md, op6120-independent-scrram-4m-startup-fix.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-go-html2sky-rendering-final-verification-2026-07-12.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md, wbrw-html2sky-completion-audit-2026-07-12-latest.md, wbrw-html2sky-line-wrap-progress-2026-07-16.md, wbrw-html2sky-post-cleanup-final-evidence-2026-07-12.md, wbrw-proxy2-font-mrp-download.md, wbrw-proxy2-web-page-rendering.md, wbrw-proxy2-white-matte-progress-2026-07-16.md, wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md
+- **Summary:** Lint: 33 issues (26 orphan, 0 stale, 2 broken, 2 contradictions)
+## [2026-07-17T14:11:53.579Z] ingest
+- **Pages:** mps-selector-100-is-not-record-100.md
+- **Summary:** Updated "MPS selector 100 is not record 100" with new content
+
+## [2026-07-17T14:12:12.605Z] lint
+- **Pages:** cookie-child-return-opening-folder-frame-replay.md, cookie-mrp-restart-and-full-runtime-version-contract.md, dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gfhcq-game-stutter-performance-investigation.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gtxzj-date-guard-and-default-runtime-assets.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-play-mr-ucs2gb-caller-owned-output-pointer-fix.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, mps-selector-100-is-not-record-100.md, op6120-independent-scrram-4m-startup-fix.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-go-html2sky-rendering-final-verification-2026-07-12.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md, wbrw-html2sky-completion-audit-2026-07-12-latest.md, wbrw-html2sky-line-wrap-progress-2026-07-16.md, wbrw-html2sky-post-cleanup-final-evidence-2026-07-12.md, wbrw-proxy2-font-mrp-download.md, wbrw-proxy2-web-page-rendering.md, wbrw-proxy2-white-matte-progress-2026-07-16.md, wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md
+- **Summary:** Lint: 33 issues (26 orphan, 0 stale, 2 broken, 2 contradictions)
+
+## [2026-07-17T14:12:25.595Z] delete
+- **Pages:** mps-selector-100-is-not-record-100.md
+- **Summary:** Deleted wiki page mps-selector-100-is-not-record-100.md
+
+## [2026-07-17T14:12:39.386Z] ingest
+- **Pages:** mps-selector-100-is-not-record-100.md
+- **Summary:** Created new page "MPS selector 100 is not record 100"
+
+## [2026-07-17T14:12:39.389Z] add
+- **Pages:** mps-selector-100-is-not-record-100.md
+- **Summary:** Created wiki page mps-selector-100-is-not-record-100.md
