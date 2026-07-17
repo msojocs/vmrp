@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 33 pages | Last updated: 2026-07-16T13:59:05.547Z
+> 34 pages | Last updated: 2026-07-17T03:10:52Z
 
 ## debugging
 
@@ -13,6 +13,7 @@
 - [DOTA download-browser-components transition frame fix](dota-download-browser-components-transition-frame-fix.md) — # DOTA download-browser-components transition frame fix
 - [DOTA download-browser-components waiting hypothesis invalidated](dota-download-browser-components-waiting-hypothesis-invalidated.md) — # DOTA download-browser-components waiting hypothesis invalidated
 - [gfhcq game stutter performance investigation](gfhcq-game-stutter-performance-investigation.md) — # gfhcq game stutter performance investigation
+- [GTXZJ date guard and default runtime assets](gtxzj-date-guard-and-default-runtime-assets.md) — # GTXZJ date guard and default runtime assets
 - [gghjt modal timer and cold extraction regressions](gghjt-modal-timer-and-cold-extraction-regressions.md) — # gghjt modal timer and cold extraction regressions
 - [gms payment latency analysis](gms-payment-latency-analysis.md) — # gms payment latency analysis
 - [gzwdzjs ARM EXT DrawBitmap source overrun](gzwdzjs-arm-ext-drawbitmap-source-overrun.md) — # gzwdzjs ARM EXT DrawBitmap source overrun

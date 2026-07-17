@@ -221,6 +221,9 @@ VmrpArgs vmrp_args_default(void) {
     args.screen_width = DEFAULT_SCREEN_WIDTH;
     args.screen_height = DEFAULT_SCREEN_HEIGHT;
     args.memory_mb = DEFAULT_MEMORY_MB;
+    args.device_year = DEFAULT_DEVICE_YEAR;
+    args.device_month = DEFAULT_DEVICE_MONTH;
+    args.device_day = DEFAULT_DEVICE_DAY;
     vmrp_args_set_default_dirs(&args, NULL);
     snprintf(args.ext_name, sizeof(args.ext_name), "start.mr");
     snprintf(args.dns_map, sizeof(args.dns_map), "%s", VMRP_DEFAULT_DNS_MAP);
@@ -235,6 +238,7 @@ void vmrp_args_print_usage(const char *program) {
     printf("Options:\n");
     printf("  --screen WxH        Set screen resolution (default: 240x320)\n");
     printf("  --memory SIZE       Set app-visible memory: 1M,2M,4M,6M,8M,16M (default: 1M)\n");
+    printf("  --device-date DATE  Set handset date (YYYY-MM-DD, or host; default: 2011-01-01)\n");
     printf("  --work-dir DIR      Set working directory (default: executable directory)\n");
     printf("  --dns-map MAP       Resolve original domains using fake domains\n");
     printf("\n");
@@ -242,6 +246,7 @@ void vmrp_args_print_usage(const char *program) {
     printf("  VMRP_SCREEN_WIDTH   Screen width  (overridden by --screen)\n");
     printf("  VMRP_SCREEN_HEIGHT  Screen height (overridden by --screen)\n");
     printf("  VMRP_MEMORY         App-visible memory (overridden by --memory)\n");
+    printf("  VMRP_DEVICE_DATE    Handset date (overridden by --device-date)\n");
     printf("  VMRP_WORK_DIR       Working directory (overridden by --work-dir)\n");
     printf("  VMRP_DNS_MAP        Domain map, e.g. old.example->new.example\n");
     printf("  VMRP_PPM_PATH       PPM screen dump path for SIGUSR1/verification\n");
@@ -252,6 +257,7 @@ void vmrp_args_print_usage(const char *program) {
     printf("  %s /path/to/app.mrp\n", name);
     printf("  %s --screen 176x220 /path/to/app.mrp\n", name);
     printf("  %s --memory 4M /path/to/app.mrp\n", name);
+    printf("  %s --device-date host /path/to/app.mrp\n", name);
     printf("  %s --dns-map old.example->new.example /path/to/app.mrp\n", name);
     printf("  %s /path/to/app.mrp start.mr _dsm\n", name);
 }
@@ -323,10 +329,47 @@ static int parse_memory_size(const char *str, int *mb) {
     return MR_SUCCESS;
 }
 
+int vmrp_args_parse_device_date(const char *str, int *year, int *month, int *day) {
+    static const int days_per_month[] = {
+        0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+    };
+    int y, m, d, max_day;
+    size_t i;
+
+    if (!str || !year || !month || !day) return MR_FAILED;
+    if (strcmp(str, "host") == 0) {
+        *year = 0;
+        *month = 0;
+        *day = 0;
+        return MR_SUCCESS;
+    }
+
+    /* Keep the public format unambiguous across libc sscanf variants. */
+    if (strlen(str) != 10 || str[4] != '-' || str[7] != '-') return MR_FAILED;
+    for (i = 0; i < 10; ++i) {
+        if (i == 4 || i == 7) continue;
+        if (str[i] < '0' || str[i] > '9') return MR_FAILED;
+    }
+    if (sscanf(str, "%d-%d-%d", &y, &m, &d) != 3 ||
+        y < 1 || y > 9999 || m < 1 || m > 12) {
+        return MR_FAILED;
+    }
+    max_day = days_per_month[m];
+    if (m == 2 && ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0)) {
+        max_day = 29;
+    }
+    if (d < 1 || d > max_day) return MR_FAILED;
+    *year = y;
+    *month = m;
+    *day = d;
+    return MR_SUCCESS;
+}
+
 static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
                                  const char **ext_arg, const char **entry_arg,
                                  const char **screen_arg, const char **work_dir_arg,
-                                 const char **dns_map_arg, const char **memory_arg) {
+                                 const char **dns_map_arg, const char **memory_arg,
+                                 const char **device_date_arg) {
     int positional = 0;
     int after_dashdash = 0;
     *mrp_arg = NULL;
@@ -336,6 +379,7 @@ static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
     *work_dir_arg = NULL;
     *dns_map_arg = NULL;
     *memory_arg = NULL;
+    *device_date_arg = NULL;
 
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
@@ -357,6 +401,14 @@ static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
                 return MR_FAILED;
             }
             *memory_arg = argv[++i];
+            continue;
+        }
+        if (!after_dashdash && strcmp(arg, "--device-date") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "vmrp: --device-date requires YYYY-MM-DD or host\n");
+                return MR_FAILED;
+            }
+            *device_date_arg = argv[++i];
             continue;
         }
         if (!after_dashdash && strcmp(arg, "--dns-map") == 0) {
@@ -405,13 +457,14 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
     const char *work_dir_arg = NULL;
     const char *dns_map_arg = NULL;
     const char *memory_arg = NULL;
+    const char *device_date_arg = NULL;
 
     *out = vmrp_args_default();
     vmrp_args_set_default_dirs(out, (argc > 0) ? argv[0] : NULL);
 
     if (parse_positional_args(argc, argv, &mrp_arg, &ext_arg, &entry_arg,
                               &screen_arg, &work_dir_arg, &dns_map_arg,
-                              &memory_arg) != MR_SUCCESS) {
+                              &memory_arg, &device_date_arg) != MR_SUCCESS) {
         return MR_FAILED;
     }
 
@@ -496,6 +549,21 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
             return MR_FAILED;
         }
         out->memory_mb = mb;
+    }
+
+    /* Device date: CLI --device-date > env var > deterministic legacy RTC. */
+    if (!device_date_arg) {
+        const char *env_device_date = getenv("VMRP_DEVICE_DATE");
+        if (env_device_date && *env_device_date) device_date_arg = env_device_date;
+    }
+    if (device_date_arg &&
+        vmrp_args_parse_device_date(device_date_arg, &out->device_year,
+                                    &out->device_month,
+                                    &out->device_day) != MR_SUCCESS) {
+        fprintf(stderr,
+                "vmrp: invalid device date '%s' (expected YYYY-MM-DD or host)\n",
+                device_date_arg);
+        return MR_FAILED;
     }
 
     /* DNS map: CLI --dns-map > env var > default */

@@ -367,6 +367,72 @@ else()
   target_link_libraries(vmrp unicorn "-Wl,--no-as-needed" SDL2main SDL2 m pthread z)
 endif()
 
+# The executable directory is the desktop default work-dir.  Deploy the base
+# fonts there so a freshly built CLI can render text without a source-tree cwd.
+set(_VMRP_SYSTEM_ASSET_DIR
+  "${CMAKE_CURRENT_SOURCE_DIR}/wasm/dist/fs/mythroad/system")
+# Avoid TARGET_FILE_DIR here: that generator expression adds an implicit edge
+# back to vmrp and would cycle with the explicit asset dependency below. Read
+# the initialized output properties instead, including caller overrides.
+get_property(_VMRP_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+get_target_property(_VMRP_RUNTIME_BASE vmrp RUNTIME_OUTPUT_DIRECTORY)
+if(NOT _VMRP_RUNTIME_BASE OR _VMRP_RUNTIME_BASE MATCHES "-NOTFOUND$")
+  set(_VMRP_RUNTIME_BASE "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+if(_VMRP_MULTI_CONFIG)
+  set(_VMRP_NATIVE_RUNTIME_DIR "")
+  foreach(_VMRP_CONFIG IN LISTS CMAKE_CONFIGURATION_TYPES)
+    string(TOUPPER "${_VMRP_CONFIG}" _VMRP_CONFIG_UPPER)
+    get_target_property(_VMRP_CONFIG_RUNTIME_DIR vmrp
+      "RUNTIME_OUTPUT_DIRECTORY_${_VMRP_CONFIG_UPPER}")
+    if(NOT _VMRP_CONFIG_RUNTIME_DIR OR
+       _VMRP_CONFIG_RUNTIME_DIR MATCHES "-NOTFOUND$")
+      set(_VMRP_CONFIG_RUNTIME_DIR "${_VMRP_RUNTIME_BASE}")
+      if(NOT _VMRP_CONFIG_RUNTIME_DIR MATCHES "\\$<")
+        string(APPEND _VMRP_CONFIG_RUNTIME_DIR "/${_VMRP_CONFIG}")
+      endif()
+    endif()
+    string(APPEND _VMRP_NATIVE_RUNTIME_DIR
+      "$<$<CONFIG:${_VMRP_CONFIG}>:${_VMRP_CONFIG_RUNTIME_DIR}>")
+  endforeach()
+else()
+  set(_VMRP_NATIVE_RUNTIME_DIR "${_VMRP_RUNTIME_BASE}")
+  if(CMAKE_BUILD_TYPE)
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" _VMRP_CONFIG_UPPER)
+    get_target_property(_VMRP_CONFIG_RUNTIME_DIR vmrp
+      "RUNTIME_OUTPUT_DIRECTORY_${_VMRP_CONFIG_UPPER}")
+    if(_VMRP_CONFIG_RUNTIME_DIR AND
+       NOT _VMRP_CONFIG_RUNTIME_DIR MATCHES "-NOTFOUND$")
+      set(_VMRP_NATIVE_RUNTIME_DIR "${_VMRP_CONFIG_RUNTIME_DIR}")
+    endif()
+  endif()
+endif()
+add_custom_target(vmrp-system-assets
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+    "${_VMRP_NATIVE_RUNTIME_DIR}/mythroad/system"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${_VMRP_SYSTEM_ASSET_DIR}/gb12.uc2"
+    "${_VMRP_NATIVE_RUNTIME_DIR}/mythroad/system/gb12.uc2"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${_VMRP_SYSTEM_ASSET_DIR}/gb16.uc2"
+    "${_VMRP_NATIVE_RUNTIME_DIR}/mythroad/system/gb16.uc2"
+  DEPENDS
+    "${_VMRP_SYSTEM_ASSET_DIR}/gb12.uc2"
+    "${_VMRP_SYSTEM_ASSET_DIR}/gb16.uc2"
+  COMMENT "Deploying Mythroad base fonts"
+  VERBATIM
+)
+# A custom dependency runs for every requested vmrp build; copy_if_different
+# keeps it cheap while restoring deleted assets without forcing a relink.
+add_dependencies(vmrp vmrp-system-assets)
+unset(_VMRP_CONFIG_RUNTIME_DIR)
+unset(_VMRP_CONFIG_UPPER)
+unset(_VMRP_CONFIG)
+unset(_VMRP_RUNTIME_BASE)
+unset(_VMRP_NATIVE_RUNTIME_DIR)
+unset(_VMRP_MULTI_CONFIG)
+unset(_VMRP_SYSTEM_ASSET_DIR)
+
 # --- Wasm 构建（emcc）---
 # 用法: cmake --build build --target vmrp-wasm
 # 需要 emcc 在 PATH 中

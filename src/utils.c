@@ -193,10 +193,20 @@ int32_t getDatetime(mr_datetime *datetime) {
 
     time(&now);
     t = localtime(&now);
+    if (!t)
+        return MR_FAILED;
 
-    datetime->year = t->tm_year + 1900;
-    datetime->month = t->tm_mon + 1;
-    datetime->day = t->tm_mday;
+    /* Emulate a configurable handset RTC date while retaining a live clock.
+     * device_year == 0 is the explicit host-wall-clock mode. */
+    if (vmrp_config.device_year > 0) {
+        datetime->year = vmrp_config.device_year;
+        datetime->month = vmrp_config.device_month;
+        datetime->day = vmrp_config.device_day;
+    } else {
+        datetime->year = t->tm_year + 1900;
+        datetime->month = t->tm_mon + 1;
+        datetime->day = t->tm_mday;
+    }
     datetime->hour = t->tm_hour;
     datetime->minute = t->tm_min;
     datetime->second = t->tm_sec;

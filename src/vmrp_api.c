@@ -610,6 +610,23 @@ VMRP_EXPORT int vmrp_api_set_memory(int memory_mb) {
     return 0;
 }
 
+VMRP_EXPORT int vmrp_api_set_device_date(const char *date) {
+    int year, month, day;
+
+    /* Runtime callbacks read vmrp_config on the worker thread, so date mode is
+     * an inter-run setting and must never change while a VM is active. */
+    if (vmrp_api_is_running()) return -1;
+    if (vmrp_args_parse_device_date(date, &year, &month, &day) != MR_SUCCESS) {
+        return -1;
+    }
+    /* Commit the mode only after full validation so a bad call preserves the
+     * embedding host's previously selected RTC configuration. */
+    vmrp_config.device_year = year;
+    vmrp_config.device_month = month;
+    vmrp_config.device_day = day;
+    return 0;
+}
+
 VMRP_EXPORT int vmrp_api_set_work_dir(const char *work_dir) {
     int n;
     if (!work_dir || !*work_dir) return -1;
@@ -634,6 +651,10 @@ VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char
     VmrpArgs args = vmrp_args_default();
     args.screen_width = vmrp_config.screen_width;
     args.screen_height = vmrp_config.screen_height;
+    /* Preserve the embedding host's explicit virtual-date or host-clock mode. */
+    args.device_year = vmrp_config.device_year;
+    args.device_month = vmrp_config.device_month;
+    args.device_day = vmrp_config.device_day;
     if (vmrp_config.memory_mb > 0) {
         args.memory_mb = vmrp_config.memory_mb;
     }
