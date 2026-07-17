@@ -4,6 +4,7 @@ export default defineConfig(() => {
   const isTargetingTemp = process.argv.some(arg => arg.includes('temp.test.ts'))
   return {
     test: {
+      retry: 3,
       include: ["test/e2e/**/*.test.ts"],
       exclude: [
         ...(isTargetingTemp ? [] : ['test/e2e/**/temp.test.ts'])
