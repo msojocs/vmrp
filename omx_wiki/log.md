@@ -399,3 +399,11 @@
 ## [2026-07-16T20:24:00+08:00] fix
 - **Pages:** wbrw-html2sky-line-wrap-progress-2026-07-16.md
 - **Summary:** Preserved HTML hr as a structural item, emitted the native element-14/op-0x60 separator in DOM order, passed Go tests/vet after hot reload, and retained a PPM visibly proving the line below 软件列表.
+
+## [2026-07-17T10:37:08+08:00] complete
+- **Pages:** gtxzj-date-guard-and-default-runtime-assets.md
+- **Summary:** Recorded the GTXZJ table[34] date-guard disassembly, rejected duplicate child initialization, deterministic virtual handset RTC, desktop base-font deployment, real DISPLAY=:0 interaction evidence, and clean 21-file/34-test regression.
+
+## [2026-07-17T11:10:52+08:00] verify
+- **Pages:** gtxzj-date-guard-and-default-runtime-assets.md
+- **Summary:** Added durable EXT hashes and extraction commands, shared-API date control with active-run rejection, recoverable/custom-output font deployment, focused date regressions, final build-id real WSLg transcript and PPMs, and the retained 22-file/43-test full-suite log.

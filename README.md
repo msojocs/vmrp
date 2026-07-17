@@ -134,6 +134,8 @@ mythroad/
 
 MRP 自己下载或生成的文件也会写入该工作目录下的 `mythroad/`。若应用提示字体、插件或资源不存在，首先检查工作目录是否正确，以及所需文件是否确实存在。项目不会随源码提供所有历史 MRP 应用和厂商在线服务。
 
+构建桌面版 `vmrp` 时，基础字库会自动复制到可执行文件目录下的 `mythroad/system/`，因此直接运行 `build/vmrp /path/to/app.mrp` 也能在默认工作目录中渲染中文文本。
+
 命令行传入的 MRP 会先解析为绝对路径，再切换到工作目录。受旧 Mythroad ABI 限制，最终 MRP 路径必须短于 128 字节；路径过长时请把文件移到更短的位置。
 
 ## 命令行
@@ -156,6 +158,7 @@ vmrp [OPTIONS] [MRP_PATH] [EXT_NAME] [ENTRY]
 | --- | --- |
 | `--screen WxH` | 设置屏幕分辨率，默认 `240x320` |
 | `--memory SIZE` | 设置应用可见内存，只接受 `1M`、`2M`、`4M`、`6M`、`8M`、`16M` |
+| `--device-date DATE` | 设置应用可见设备日期，接受 `YYYY-MM-DD` 或 `host`；默认 `2011-01-01` |
 | `--work-dir DIR` | 设置运行和 MRP 文件系统的工作目录 |
 | `--dns-map MAP` | 设置域名替换规则 |
 | `-h`, `--help` | 显示帮助 |
@@ -168,6 +171,9 @@ vmrp [OPTIONS] [MRP_PATH] [EXT_NAME] [ENTRY]
 
 # 横屏应用及更大的应用内存
 ./build/vmrp --work-dir . --screen 480x320 --memory 4M /path/to/app.mrp
+
+# 需要真实墙钟日期的应用显式使用宿主日期
+./build/vmrp --device-date host /path/to/app.mrp
 
 # 显式指定包内启动文件和入口
 ./build/vmrp --work-dir . /path/to/app.mrp start.mr _dsm
@@ -186,6 +192,7 @@ vmrp [OPTIONS] [MRP_PATH] [EXT_NAME] [ENTRY]
 | `VMRP_DNS_MAP` | DNS 替换规则 |
 | `VMRP_LOG` | 启用较详细的运行日志 |
 | `VMRP_PPM_PATH` | PPM 截图输出路径，默认 `/tmp/vmrp_screen.ppm` |
+| `VMRP_DEVICE_DATE` | 应用可见设备日期：`YYYY-MM-DD` 或 `host`；默认 `2011-01-01` |
 
 ### DNS 映射
 
@@ -240,13 +247,15 @@ cmake --build build-shared-only --target vmrp-shared --parallel
 
 产物名称为 `libvmrp.so` 或 `vmrp.dll`。公共 ABI 位于 [`src/include/vmrp_api.h`](src/include/vmrp_api.h)，主要包括：
 
-- 初始化、内存/工作目录/DNS 配置、启动与销毁；
+- 初始化、内存/工作目录/DNS/设备日期配置、启动与销毁；
 - 输入事件和运行状态；
 - RGB565 原始屏幕与 RGBA8888 转换缓冲；
 - 文本编辑状态和提交/取消；
 - 44.1 kHz、S16LE、双声道 PCM 音频输出。
 
 Android NDK 交叉编译、Gradle 配置和 Dart FFI 示例见 [`docs/flutter-integration.md`](docs/flutter-integration.md)。共享库内部串行调度 VM 事件和定时器；宿主仍应把一次运行实例视为不可并发访问的状态机，并完整管理 `init -> start -> destroy` 生命周期。
+
+共享库同样默认使用 `2011-01-01` 的设备日期。需要真实墙钟日期或其它合法日期时，在 `vmrp_api_start()` 前分别调用 `vmrp_api_set_device_date("host")` 或 `vmrp_api_set_device_date("YYYY-MM-DD")`；非法日期和活动运行期间的调用返回 `-1`，不会改变上一次有效配置。
 
 ## WebAssembly
 

@@ -54,6 +54,12 @@ VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h);
  * vmrp_api_start(); takes effect on the next start.
  */
 VMRP_EXPORT int vmrp_api_set_memory(int memory_mb);
+/*
+ * App-visible handset date. Accepts "YYYY-MM-DD" or "host" and uses the same
+ * calendar validation as the CLI. Must be called before vmrp_api_start(); an
+ * active run is rejected with -1.
+ */
+VMRP_EXPORT int vmrp_api_set_device_date(const char *date);
 VMRP_EXPORT int vmrp_api_set_work_dir(const char *work_dir);
 VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char *entry);
 VMRP_EXPORT void vmrp_api_destroy(void);

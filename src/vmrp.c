@@ -43,6 +43,9 @@
 VmrpConfig vmrp_config = {
     .screen_width = DEFAULT_SCREEN_WIDTH,
     .screen_height = DEFAULT_SCREEN_HEIGHT,
+    .device_year = DEFAULT_DEVICE_YEAR,
+    .device_month = DEFAULT_DEVICE_MONTH,
+    .device_day = DEFAULT_DEVICE_DAY,
 };
 
 static VmrpRuntime runtime;
@@ -231,6 +234,10 @@ int startVmrp(const VmrpArgs *args) {
     vmrp_config.screen_width = args->screen_width;
     vmrp_config.screen_height = args->screen_height;
     vmrp_config.memory_mb = args->memory_mb;
+    /* The DSM callback reads this virtual handset RTC through table[34]. */
+    vmrp_config.device_year = args->device_year;
+    vmrp_config.device_month = args->device_month;
+    vmrp_config.device_day = args->device_day;
     if (apply_config_paths(args) != MR_SUCCESS) {
         return MR_FAILED;
     }

@@ -17,6 +17,8 @@ export interface VmrpE2eOptions {
   screen?: `${number}x${number}`;
   /** 应用可见内存(--memory),档位 1M/2M/4M/6M/8M/16M。默认由 vmrp 决定(1M)。 */
   memory?: "1M" | "2M" | "4M" | "6M" | "8M" | "16M";
+  /** 应用可见设备日期；"host" 显式使用宿主墙钟日期。 */
+  deviceDate?: `${number}-${number}-${number}` | "host";
   /** 每次绘图后更新 defaultScreenPath，不向 SDL 事件队列注入 SCREEN。 */
   captureLatestFrame?: boolean;
 }
@@ -64,6 +66,7 @@ export class VmrpE2e {
   /** 命名避免与 screen() 方法冲突:实例字段会遮蔽原型方法。 */
   private readonly screenSize?: string;
   private readonly memorySize?: string;
+  private readonly deviceDate?: string;
   private readonly captureLatestFrame: boolean;
   private process?: ChildProcessByStdio<null, Readable, Readable>;
 
@@ -78,6 +81,7 @@ export class VmrpE2e {
     this.timeoutMs = options.timeoutMs ?? Number(process.env.VMRP_TIMEOUT_MS ?? 30_000);
     this.screenSize = options.screen;
     this.memorySize = options.memory;
+    this.deviceDate = options.deviceDate;
     this.captureLatestFrame = options.captureLatestFrame ?? false;
   }
 
@@ -262,6 +266,7 @@ export class VmrpE2e {
     const args = ["--work-dir", this.workDir];
     if (this.screenSize) args.push("--screen", this.screenSize);
     if (this.memorySize) args.push("--memory", this.memorySize);
+    if (this.deviceDate) args.push("--device-date", this.deviceDate);
     args.push(mrpPath);
     this.process = spawn(this.bin, args, {
       env: {

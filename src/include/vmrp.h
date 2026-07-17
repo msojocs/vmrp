@@ -14,6 +14,10 @@ typedef struct VmrpConfig {
     int screen_width;
     int screen_height;
     int memory_mb; /* 应用可见内存(MB):1/2/4/6/8/16,0 视为默认 */
+    /* 非零时覆盖应用可见的年月日；时分秒仍来自宿主时钟。 */
+    int device_year;
+    int device_month;
+    int device_day;
     char work_dir[PATH_MAX];
 } VmrpConfig;
 
