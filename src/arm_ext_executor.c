@@ -137,6 +137,9 @@ uint32_t arm_addr(ArmExtModule *m, const void *ptr) {
     if (m && m->platform_mem && p >= m->platform_mem &&
         p < m->platform_mem + EXT_PLATFORM_MEM_SIZE)
         return (uint32_t)(p - m->platform_mem) + EXT_PLATFORM_MEM_ADDR;
+    if (m && m->scrram_mem && p >= m->scrram_mem &&
+        p < m->scrram_mem + EXT_SCRRAM_SIZE)
+        return (uint32_t)(p - m->scrram_mem) + EXT_SCRRAM_ADDR;
     if (m && m->platform_io_mem && p >= m->platform_io_mem &&
         p < m->platform_io_mem + EXT_PLATFORM_IO_MEM_SIZE)
         return (uint32_t)(p - m->platform_io_mem) + EXT_PLATFORM_IO_MEM_ADDR;
@@ -2736,6 +2739,7 @@ void arm_ext_unload(ArmExtModule *m) {
     arm_ext_free_row_spans(&m->foreground_cover);
     free(m->low_table);
     free(m->platform_mem);
+    free(m->scrram_mem);
     free(m->platform_io_mem);
     free(m->platform_alt_mem);
     free(m->executor_meta_mem);

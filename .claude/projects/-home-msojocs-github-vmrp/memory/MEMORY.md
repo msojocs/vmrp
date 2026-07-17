@@ -8,3 +8,4 @@
 - [wbrw html2sky line wrap](wbrw-html2sky-line-wrap.md) — `<br>` 用新 FlowID/0x4E 行，`<hr>` 用 element-14/op-0x60 可见分隔线；普通表单按 CSS 容器选择 element 3/9
 - [wbrw proxy2 white matte](wbrw-proxy2-white-matte.md) — 图片 alpha 必须先合成到不透明白底，再缩放和量化为 WBRW GIF
 - [wxmdld wrapped LG_mem first-fit](wxmdld-wrapped-lg-mem-first-fit.md) — SOLVED 99% 崩溃双根因：wrapper thunk 隐藏 table[125] nested owner；LG_mem 32 位 offset 合法回绕到 base 以下节点，须先解码地址再验证
+- [op6120 independent SCRRAM](op6120-independent-scrram.md) — SOLVED 4M 启动卡死：table[38]/1014 的平台 SCRRAM 错放主 bump 堆；改为独立 0x50000000 guest band，并以冷启动 PPM/全量 E2E 验证
