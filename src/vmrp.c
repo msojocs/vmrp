@@ -9,10 +9,12 @@
 #include <string.h>
 #include <zlib.h>
 #ifdef _WIN32
+#include <windows.h>
 #ifndef PATH_MAX
 #define PATH_MAX 260
 #endif
 #else
+#include <stdatomic.h>
 #include <unistd.h>
 #endif
 
@@ -49,7 +51,27 @@ VmrpConfig vmrp_config = {
 };
 
 static VmrpRuntime runtime;
-static int vmrp_exit_requested = 0;
+#ifdef _WIN32
+static volatile LONG vmrp_exit_requested = 0;
+#else
+static atomic_int vmrp_exit_requested = 0;
+#endif
+
+static void vmrp_set_exit_requested(int requested) {
+#ifdef _WIN32
+    InterlockedExchange(&vmrp_exit_requested, requested);
+#else
+    atomic_store_explicit(&vmrp_exit_requested, requested, memory_order_release);
+#endif
+}
+
+static int vmrp_get_exit_requested(void) {
+#ifdef _WIN32
+    return (int)InterlockedCompareExchange(&vmrp_exit_requested, 0, 0);
+#else
+    return atomic_load_explicit(&vmrp_exit_requested, memory_order_acquire);
+#endif
+}
 
 static uint32_t rd32le(const uint8 *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
@@ -201,12 +223,12 @@ int32_t c_event(int32_t code, int32_t p1, int32_t p2) {
 #endif
 
 int32_t event(int32_t code, int32_t p1, int32_t p2) {
-    if (vmrp_exit_requested) return MR_FAILED;
+    if (vmrp_get_exit_requested()) return MR_FAILED;
     return vmrp_runtime_event(&runtime, code, p1, p2);
 }
 
 int32_t timer(void) {
-    if (vmrp_exit_requested) return MR_FAILED;
+    if (vmrp_get_exit_requested()) return MR_FAILED;
     return vmrp_runtime_timer(&runtime);
 }
 
@@ -230,7 +252,7 @@ static int apply_config_paths(const VmrpArgs *args) {
 }
 
 int startVmrp(const VmrpArgs *args) {
-    vmrp_exit_requested = 0;
+    vmrp_set_exit_requested(0);
     vmrp_config.screen_width = args->screen_width;
     vmrp_config.screen_height = args->screen_height;
     vmrp_config.memory_mb = args->memory_mb;
@@ -287,13 +309,13 @@ int startVmrp(const VmrpArgs *args) {
 
 void stopVmrp(void) {
     vmrp_runtime_destroy(&runtime);
-    vmrp_exit_requested = 0;
+    vmrp_set_exit_requested(0);
 }
 
 void vmrp_request_exit(void) {
-    vmrp_exit_requested = 1;
+    vmrp_set_exit_requested(1);
 }
 
 int vmrp_is_exited(void) {
-    return vmrp_exit_requested;
+    return vmrp_get_exit_requested();
 }

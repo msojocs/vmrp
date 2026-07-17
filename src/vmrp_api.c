@@ -805,14 +805,22 @@ VMRP_EXPORT int vmrp_api_get_image_processing_mode(void) {
 }
 
 VMRP_EXPORT int vmrp_api_is_running(void) {
-    if (api_running && vmrp_is_exited()) {
 #if VMRP_API_ASYNC_RUNNER
-        api_stop_worker();
-#endif
+    int running;
+    /* A status query is called synchronously from Flutter's UI isolate. It
+     * must publish the exit state without waiting for the worker to unwind. */
+    api_finish_if_exited();
+    api_lock();
+    running = api_running;
+    api_unlock();
+    return running;
+#else
+    if (api_running && vmrp_is_exited()) {
         api_running = 0;
         pending_timer_ms = 0;
     }
     return api_running;
+#endif
 }
 
 VMRP_EXPORT int vmrp_api_pause(void) {

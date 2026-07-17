@@ -2,6 +2,7 @@
 #include "./include/compat_msvc.h"
 #include "./include/arm_ext_internal.h"
 #include "./include/arm_ext_priv.h"
+#include "./include/vmrp.h"
 #include "./include/app_compat.h"
 #include "./include/bridge.h"
 #include "./include/network.h"
@@ -693,6 +694,12 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         AexTableCtx tc = { idx, r0, r1, r2, r3, MR_SUCCESS };
         h(m, &tc);
         cb_ret(m, tc.ret);
+        if (vmrp_is_exited()) {
+            /* table[54] may return into guest code after requesting a platform
+             * exit. Stop here so a guest-side exit loop cannot pin the worker. */
+            reg_write32(uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
+            uc_emu_stop(uc);
+        }
         return;
     }
     printf("arm_ext_executor: table[%u] not implemented (r0=0x%X r1=0x%X r2=0x%X r3=0x%X)\n", idx, r0, r1, r2, r3);
