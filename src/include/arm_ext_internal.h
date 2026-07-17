@@ -30,6 +30,11 @@
  * into the normal low heap; child loaders may keep the original address. */
 #define EXT_PLATFORM_MEM_ADDR 0x40000000u
 #define EXT_PLATFORM_MEM_SIZE (2u * 1024u * 1024u)
+/* mr_platEx(MR_MALLOC_SCRRAM) is a platform allocation outside LG_mem.
+ * Keep it in its own guest band so increasing --memory cannot consume the
+ * address space needed by large Flash/image scratch buffers. */
+#define EXT_SCRRAM_ADDR 0x50000000u
+#define EXT_SCRRAM_SIZE (16u * 1024u * 1024u)
 #define EXT_PLATFORM_IO_MEM_ADDR 0x80000000u
 #define EXT_PLATFORM_IO_MEM_SIZE (18u * 1024u * 1024u)
 #define EXT_PLATFORM_ALT_MEM_ADDR 0xA0000000u
@@ -205,6 +210,7 @@ struct ArmExtModule {
     uint8_t *mem;
     uint8_t *low_table;
     uint8_t *platform_mem;
+    uint8_t *scrram_mem;
     uint8_t *platform_io_mem;
     uint8_t *platform_alt_mem;
     uint8_t *executor_meta_mem;
@@ -276,9 +282,8 @@ struct ArmExtModule {
     uint32_t origin_mem_left_slot;
     uint32_t origin_mem_min_slot;
     uint32_t origin_mem_top_slot;
-    /* MR_MALLOC_SCRRAM/MR_FREE_SCRRAM return ARM-addressable scratch RAM.
-     * Native code uses that RAM as ordinary pixel/data storage, so the host
-     * must keep the allocation inside Unicorn's mapped address space. */
+    /* Active allocation inside the independent EXT_SCRRAM band.  The backing
+     * is mapped lazily by table[38]/MR_MALLOC_SCRRAM and is not LG_mem. */
     uint32_t exram_addr;
     uint32_t exram_len;
     uint32_t internal_table_addr;
@@ -420,6 +425,10 @@ static inline void *arm_ptr(ArmExtModule *m, uint32_t addr) {
         addr >= EXT_PLATFORM_MEM_ADDR &&
         addr - EXT_PLATFORM_MEM_ADDR < EXT_PLATFORM_MEM_SIZE)
         return m->platform_mem + (addr - EXT_PLATFORM_MEM_ADDR);
+    if (m->scrram_mem &&
+        addr >= EXT_SCRRAM_ADDR &&
+        addr - EXT_SCRRAM_ADDR < EXT_SCRRAM_SIZE)
+        return m->scrram_mem + (addr - EXT_SCRRAM_ADDR);
     if (m->platform_io_mem &&
         addr >= EXT_PLATFORM_IO_MEM_ADDR &&
         addr - EXT_PLATFORM_IO_MEM_ADDR < EXT_PLATFORM_IO_MEM_SIZE)

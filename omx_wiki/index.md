@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 35 pages | Last updated: 2026-07-17T05:53:01Z
+> 36 pages | Last updated: 2026-07-17T07:08:48Z
 
 ## debugging
 
@@ -21,6 +21,7 @@
 - [gzwdzjs primary black clear damage synthesis](gzwdzjs-primary-black-clear-damage-synthesis.md) — # gzwdzjs primary black clear damage synthesis
 - [gzwdzjs table bridge stale epilogue guard](gzwdzjs-table-bridge-stale-epilogue-guard.md) — # gzwdzjs table bridge stale epilogue guard
 - [opglqa font download repeat investigation](opglqa-font-download-repeat-investigation.md) — # opglqa font download repeat investigation
+- [OP6120 independent SCRRAM 4M startup fix](op6120-independent-scrram-4m-startup-fix.md) — # OP6120 independent SCRRAM 4M startup fix
 - [Optwar exit plugin component update stall](optwar-exit-plugin-component-update-stall.md) — # Optwar exit plugin component update stall
 - [Optwar exit plugin no-network investigation](optwar-exit-plugin-no-network-investigation.md) — # Optwar exit plugin no-network investigation
 - [RX4.5 ARM EXT 0x80000000 Platform IO Mapping](rx4-5-arm-ext-0x80000000-platform-io-mapping.md) — # RX4.5 ARM EXT 0x80000000 Platform IO Mapping

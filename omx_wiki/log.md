@@ -415,3 +415,7 @@
 ## [2026-07-17T13:53:01+08:00] verify
 - **Pages:** wxmdld-wrapped-lg-mem-first-fit-fix.md
 - **Summary:** Reproduced the post-fix default-work-dir black frame as a same-length but mostly zero SKY left by the pre-fix crash, proved single-file removal invokes the application's normal rebuild without clearing other state, restored the exact user command and full-color title, and passed the final 22-file/43-test E2E suite.
+
+## [2026-07-17T15:08:48+08:00] complete
+- **Pages:** op6120-independent-scrram-4m-startup-fix.md
+- **Summary:** Traced the 4M-only progress stall to a 10 MiB MR_MALLOC_SCRRAM request incorrectly sharing the main ARM bump heap, implemented an independent 0x50000000 guest mapping with explicit lifecycle semantics, proved the fixed 4M PPM matches successful 1M byte-for-byte, and passed the final 24-file/45-test E2E suite without Xvfb.

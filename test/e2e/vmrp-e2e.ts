@@ -13,6 +13,8 @@ export interface VmrpE2eOptions {
   bin?: string;
   workDir?: string;
   timeoutMs?: number;
+  /** 域名重映射(--dns-map),用于把依赖网络的用例约束到本地测试端点。 */
+  dnsMap?: string;
   /** 屏幕分辨率(--screen WxH),如 "480x320"。默认由 vmrp 决定(240x320)。 */
   screen?: `${number}x${number}`;
   /** 应用可见内存(--memory),档位 1M/2M/4M/6M/8M/16M。默认由 vmrp 决定(1M)。 */
@@ -63,6 +65,7 @@ export class VmrpE2e {
   private readonly bin: string;
   private readonly workDir: string;
   private readonly timeoutMs: number;
+  private readonly dnsMap?: string;
   /** 命名避免与 screen() 方法冲突:实例字段会遮蔽原型方法。 */
   private readonly screenSize?: string;
   private readonly memorySize?: string;
@@ -79,6 +82,7 @@ export class VmrpE2e {
     this.bin = options.bin ?? process.env.VMRP_BIN ?? "build/vmrp";
     this.workDir = options.workDir ?? process.env.VMRP_WORK_DIR ?? ".";
     this.timeoutMs = options.timeoutMs ?? Number(process.env.VMRP_TIMEOUT_MS ?? 30_000);
+    this.dnsMap = options.dnsMap;
     this.screenSize = options.screen;
     this.memorySize = options.memory;
     this.deviceDate = options.deviceDate;
@@ -264,6 +268,7 @@ export class VmrpE2e {
 
   private async spawn(mrpPath: string): Promise<void> {
     const args = ["--work-dir", this.workDir];
+    if (this.dnsMap !== undefined) args.push("--dns-map", this.dnsMap);
     if (this.screenSize) args.push("--screen", this.screenSize);
     if (this.memorySize) args.push("--memory", this.memorySize);
     if (this.deviceDate) args.push("--device-date", this.deviceDate);

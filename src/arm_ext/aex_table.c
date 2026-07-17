@@ -2031,6 +2031,50 @@ aex_done:
     c->ret = ret;
 }
 
+static uint32_t arm_ext_scrram_acquire(ArmExtModule *m, uint32_t want) {
+    if (!m || !want || want > EXT_SCRRAM_SIZE) return 0;
+    if (!m->scrram_mem) {
+        uint8_t *mem = (uint8_t *)calloc(1, EXT_SCRRAM_SIZE);
+        if (!mem) return 0;
+        /* Native MR_MALLOC_SCRRAM allocates outside LG_mem.  Mapping the
+         * platform scratch band lazily preserves that ownership boundary and
+         * avoids reserving 16 MiB for applications that never request it. */
+        uc_err err = uc_mem_map_ptr(m->uc, EXT_SCRRAM_ADDR,
+                                    EXT_SCRRAM_SIZE,
+                                    UC_PROT_READ | UC_PROT_WRITE, mem);
+        if (err != UC_ERR_OK) {
+            free(mem);
+            return 0;
+        }
+        m->scrram_mem = mem;
+    }
+    if (!m->exram_addr || want > m->exram_len) {
+        /* The platform keeps a stable allocation while callers probe larger
+         * sizes.  Preserve the live prefix and initialize only newly exposed
+         * bytes; clearing [0, want) would corrupt data retained by the guest. */
+        memset(m->scrram_mem + m->exram_len, 0, want - m->exram_len);
+        m->exram_addr = EXT_SCRRAM_ADDR;
+        m->exram_len = want;
+    }
+    return m->exram_addr;
+}
+
+static int32_t arm_ext_scrram_release(ArmExtModule *m, uint32_t addr) {
+    if (!m || !addr) return MR_SUCCESS; /* Native free(NULL) is a no-op. */
+    if (!m->exram_addr || addr != m->exram_addr || !m->scrram_mem)
+        return MR_FAILED;
+    /* SCRRAM is data-only and cannot contain the executing table bridge, so
+     * unmapping it here gives stale guest pointers the same invalid lifetime
+     * as the native free instead of retaining a hidden mapped fallback. */
+    if (uc_mem_unmap(m->uc, EXT_SCRRAM_ADDR, EXT_SCRRAM_SIZE) != UC_ERR_OK)
+        return MR_FAILED;
+    free(m->scrram_mem);
+    m->scrram_mem = NULL;
+    m->exram_addr = 0;
+    m->exram_len = 0;
+    return MR_SUCCESS;
+}
+
 static void aex_t038(ArmExtModule *m, AexTableCtx *c) {
     (void)m;
     uint32_t r0 = c->r0;
@@ -2053,29 +2097,14 @@ static void aex_t038(ArmExtModule *m, AexTableCtx *c) {
                                            diag_input_preview,
                                            sizeof(diag_input_preview));
             }
-            /*
-             * MR_MALLOC_SCRRAM/MR_FREE_SCRRAM provide scratch RAM that native
-             * code treats as ARM-visible storage, often for large off-screen
-             * framebuffers. Allocate it from the emulated ARM heap so later
-             * pointer arithmetic and blits can access the returned address.
-             */
+            /* SCRRAM is a separate platform allocation, not an LG_mem/bump
+             * block.  Sharing the 16 MiB main map made a 10 MiB request fit
+             * with a 1 MiB app heap but fail after --memory 2M/4M moved the
+             * bump top across the wrapper stack reservation. */
             if (r0 == 1014) {
                 uint32_t outp = r3, outlenp = arg_read(m, 4);
                 uint32_t want = (uint32_t)r2;
-                uint32_t a = 0;
-                if (want) {
-                    if (m->exram_addr && want <= m->exram_len) {
-                        a = m->exram_addr;          /* 复用已有 exRam（幂等） */
-                    } else {
-                        a = arm_alloc(m, want);
-                        if (a) {
-                            m->exram_addr = a;
-                            m->exram_len = want;
-                            void *ep = arm_ptr(m, a);
-                            if (ep) memset(ep, 0, want);
-                        }
-                    }
-                }
+                uint32_t a = arm_ext_scrram_acquire(m, want);
                 if (a) {
                     if (outp) uc_mem_write(m->uc, outp, &a, 4);
                     if (outlenp) uc_mem_write(m->uc, outlenp, &want, 4);
@@ -2092,7 +2121,9 @@ static void aex_t038(ArmExtModule *m, AexTableCtx *c) {
                 goto aex_done;
             }
             if (r0 == 1015) {
-                ret = MR_SUCCESS;
+                /* Native MR_FREE_SCRRAM frees the pointer supplied in input;
+                 * foreign and repeated non-NULL frees are explicit errors. */
+                ret = arm_ext_scrram_release(m, r1);
                 if (diag_enabled) {
                     printf("DIAG table38 code=%d input=0x%X inputLen=%u outputp=0x%X outputLenp=0x%X ret=0x%X out=0x0 outLen=0 inputPreview='%s' lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
                            (int32_t)r0, r1, r2, r3, arg_read(m, 4), ret,
