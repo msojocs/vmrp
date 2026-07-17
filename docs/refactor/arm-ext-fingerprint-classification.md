@@ -18,7 +18,10 @@
 
 ## 二、函数分级清单
 
-共 28 条记录。
+本表最初记录 28 条。2026-07-17 复核发现
+`arm_ext_child_reads_record100_to_compact_r9_buffer` 把 MPS selector 100
+误当成 `record[100]` 读取，已删除；对应代理层也已移除。下列删除线条目仅保留
+为历史审计证据，不再属于当前实现。
 
 | 函数名(当前文件) | 匹配对象 | 最终判据 | 失败行为 | 分级 | 处置建议 |
 |---|---|---|---|---|---|
@@ -28,12 +31,12 @@
 | `find_wrapper_compact_heap_free_return`<br>(arm_ext_executor.c:1730) | SDK compact mr_free() pop/return 指令;提取 R9 相对 ctrl_off | 17 个固定半字精确校验(`off+0x02` 至 `off+0x8E`)+ LDR literal 解码 ctrl_off(要求 `[0x80,0x1000)` 且对齐);无 magic 校验 | 静默跳过;`wrapper_compact_free_return_addr=0`,compact 堆 mr_free hook 整体不挂 | **单应用指纹** | 17 半字整段匹配脆弱性极高;建议改写:通过 compact heap ctrl 运行时结构(free-list 链表头有效性)定位返回点,消除逐字节比对;迁移前至少补 P0.2 单元测试资产 |
 | `patch_wrapper_stack_size`<br>(arm_ext_executor.c:4150) | Wrapper 启动代码中 `add rN,r0,#0x2000/0x3000`(ARM32 字,非 Thumb);4 个精确匹配词表 | 4 个 32 位 ARM 字零通配精确匹配,扫描前 min(code_len,0x200) 字节 | 静默跳过;stack size 不修正,潜在栈溢出 | **单应用指纹** | 4 个词表覆盖当前已知变体;建议在 P4.1 WrapperProfile 中记录"已找到 / 未找到"并补告警;长期可改为解析 ARM 立即数编码动态提取栈大小 |
 | `arm_ext_child_has_compact_timer_walker`<br>(arm_ext_executor.c:1701) | 子模块 compact 定时器 walker 函数形状;issues doc 明确评估为"单应用指纹" | 32 字节模式(i==0 和 i==16 通配),余 30 字节零通配;无运行时结构校验 | 静默返回 0;compact 定时器保护对该子模块全部失效 | **单应用指纹** | issues doc 已明确;迁往 app_compat;或改写:以运行时 compact 调度器偏移(已由 find_wrapper_timer_dispatch 提取)直接定位,跳过代码形状探测 |
-| `arm_ext_child_has_compact_r9_state_list`<br>(arm_ext_executor.c:1648) | compact 私有子模块 0x4C 字节节点状态链表解析器;注释点名 verdload.ext 0x2CBCFC、brwmain 0x2CF5CA | 0xB5F0 锚定 + 768 字节窗口内 5 项特征(含 `0x204C` 分配大小、`node+0x48` next 引用计数 ≥5);无 magic 校验 | 静默返回 0;short_pack_alias 第 4 级跳过 | **单应用指纹** | 注释已点名两个具体映像地址;建议迁往 app_compat,记录 verdload/brwmain 指纹;同时评估是否可通过 R9 状态列表运行时结构(节点 next 字段有效性)替代代码扫描【待核实:能否从运行时确认 0x4C 节点布局】 |
-| `arm_ext_child_reads_record100_to_compact_r9_buffer`<br>(arm_ext_executor.c:1782) | 子模块清零 7 字 R9 相对缓冲区后以 r1=100 调用 record-read shim;注释点名 verdload.ext 0x2CA58A/0x2CD810 | 双锚定(`0xB530 0xB083`)+ 96 字节窗口内两个固定指令序列,含 `0x2164`(movs r1,#100 即 record[100] 的直接证据) | 静默返回 0;short_pack_alias 第 3 级跳过 | **单应用指纹** | 注释直接引用两个具体地址;迁往 app_compat;或改写:在运行时拦截 record[100] 读调用时动态检测目标缓冲区大小 |
+| `arm_ext_child_has_compact_r9_state_list`<br>(arm_ext_executor.c:1648) | compact 私有子模块 0x4C 字节节点状态链表解析器;注释点名 verdload.ext 0x2CBCFC、brwmain 0x2CF5CA | 0xB5F0 锚定 + 768 字节窗口内 5 项特征(含 `0x204C` 分配大小、`node+0x48` next 引用计数 ≥5);无 magic 校验 | 静默返回 0;short_pack_alias 第 3 级跳过 | **单应用指纹** | 注释已点名两个具体映像地址;建议迁往 app_compat,记录 verdload/brwmain 指纹;同时评估是否可通过 R9 状态列表运行时结构(节点 next 字段有效性)替代代码扫描【待核实:能否从运行时确认 0x4C 节点布局】 |
+| ~~`arm_ext_child_reads_record100_to_compact_r9_buffer`~~（2026-07-17 已删除） | 七 word R9 区清零后发出 MPS selector 100 | `cfunction.ext` 目标分支证明输出为 API/state 结构，不是 `record[100]` 字符串 | 旧实现误装 short alias | **误判** | 已删除；不得从 selector 数值推断 record 槽位 |
 | `arm_ext_child_needs_short_pack_alias` — Level 1(栈帧模式)<br>(arm_ext_executor.c:1827) | 含 32 字节 pack 名缓冲区的子模块;注释点名 frame.ext、"older DOTA frame.ext A801 spelling" | `0xB5FF 0xB089` 锚定 + 96 字节窗口内 4 个子变体 + STR 输出校验;子变体间为 OR 关系 | 静默返回 0;short_pack_alias 不安装 | **灰区** | 多变体 OR 覆盖提升容错,但无运行时结构校验;建议在 Level 1 命中后补运行时检查(如验证目标栈地址在有效 RW 范围内);补告警日志 |
 | `arm_ext_child_needs_short_pack_alias` — Level 2(R9 全局拷贝模式)<br>(arm_ext_executor.c:1882) | 私有子模块将 table[100] 拷贝到 32 字节 R9 相对全局缓冲区 | `0xB5B0` 锚定 + 72 字节窗口内 3 项特征序列(clear32/pack_len_call/copy_len_call) | 静默返回 0;short_pack_alias 不安装 | **灰区** | 同 Level 1;建议补运行时 R9 缓冲区地址校验;补告警日志 |
-| `arm_ext_child_needs_short_pack_alias` — Level 3<br>(arm_ext_executor.c:1922) | 代理 `arm_ext_child_reads_record100_to_compact_r9_buffer` | 同 #6 | 静默返回 0 | **单应用指纹** | 同 #6 处置 |
-| `arm_ext_child_needs_short_pack_alias` — Level 4<br>(arm_ext_executor.c:1925) | 代理 `arm_ext_child_has_compact_r9_state_list` | 同 #5 | 静默返回 0 | **单应用指纹** | 同 #5 处置 |
+| ~~`arm_ext_child_needs_short_pack_alias` — 旧 Level 3~~（2026-07-17 已删除） | 代理上述 selector-100 误判 | 同上 | 旧实现误装 short alias | **误判** | 已删除 |
+| `arm_ext_child_needs_short_pack_alias` — Level 3 | 代理 `arm_ext_child_has_compact_r9_state_list` | 同 #5 | 静默返回 0 | **单应用指纹** | 同 #5 处置 |
 | `arm_ext_frame_timer_node_is_valid`<br>(arm_ext_executor.c:2573) | frame.ext 定时器节点;注释点名 frame.ext 0x2C9486/0x2C9538,R9+0x94 链 | 运行时:node+0x1C 已映射 AND `*(node+0x00)==0x79ABBCCF` | 静默返回 0 | **SDK形状** | 保留;magic 校验是充分的结构确认;可将常量 `0x79ABBCCF` 提取为具名宏(已有 ARM_EXT_COMPACT_TIMER_MAGIC) |
 | `arm_ext_foreground_child_has_frame_timer_queue`<br>(arm_ext_executor.c:2586) | DOTA frame.ext 定时器队列,R9+0x94/0x9C/0xA0;注释点名 DOTA 0x2C96A0 | 纯运行时:foreground 标志 + 偏移映射 + magic 节点校验(0x79ABBCCF @+0) | 静默返回 0 | **SDK形状** | 保留;固定偏移 0x94/0x9C/0xA0 建议提升为具名常量 |
 | `arm_ext_compact_timer_node_is_valid`<br>(arm_ext_executor.c:2605) | compact 子模块定时器节点(仅映射检查,无 magic) | 运行时:node+0x00 和 +0x1C 已映射;**无 magic 校验** | 静默返回 0 | **灰区** | 与 aex_mem.c 的 `arm_ext_compact_timer_magic_node_is_valid` 不一致:后者要求 magic;建议统一为带 magic 校验的版本,评估是否存在无 magic 的合法节点【待核实】 |
@@ -61,17 +64,18 @@
 |---|---|---|
 | **SDK形状** | 10 | `find_wrapper_timer_dispatch`(pat2段)、`arm_ext_frame_timer_node_is_valid`、`arm_ext_foreground_child_has_frame_timer_queue`、`arm_ext_wrapper_timer_node_is_valid`、`arm_ext_wrapper_compact_timer_node_is_valid`、`arm_ext_wrapper_compact_timer_queue_at`、`arm_ext_wrapper_has_timer_queue`、`arm_ext_compact_timer_magic_node_is_valid`(aex_mem)、`arm_ext_collect_wrapper_compact_timer_nodes` |
 | **灰区** | 9 | `find_wrapper_timer_dispatch`(主段)、`arm_ext_child_needs_short_pack_alias`(Level 1)、`arm_ext_child_needs_short_pack_alias`(Level 2)、`arm_ext_compact_timer_node_is_valid`、`arm_ext_compact_timer_queue_at`、`arm_ext_foreground_child_has_compact_timer_queue`、`arm_ext_wrapper_dispatch_is_busy`、`arm_ext_collect_primary_compact_timer_nodes`、`arm_ext_collect_active_compact_timer_nodes`、`read_game_timer_head` |
-| **单应用指纹** | 9 | `find_wrapper_timer_dispatch`(chain_thunk_pat 段)、`find_wrapper_compact_heap_free_return`、`patch_wrapper_stack_size`、`arm_ext_child_has_compact_timer_walker`、`arm_ext_child_has_compact_r9_state_list`、`arm_ext_child_reads_record100_to_compact_r9_buffer`、`arm_ext_child_needs_short_pack_alias`(Level 3/4)、`arm_ext_discover_private_child_rw_shift`、`arm_ext_private_child_has_safe_rw_bridge_layout`、`arm_ext_mirror_read_file_to_adjacent_slot` |
+| **单应用指纹** | 8 | `find_wrapper_timer_dispatch`(chain_thunk_pat 段)、`find_wrapper_compact_heap_free_return`、`patch_wrapper_stack_size`、`arm_ext_child_has_compact_timer_walker`、`arm_ext_child_has_compact_r9_state_list`、`arm_ext_discover_private_child_rw_shift`、`arm_ext_private_child_has_safe_rw_bridge_layout`、`arm_ext_mirror_read_file_to_adjacent_slot` |
 
-> 注:部分函数(如 `find_wrapper_timer_dispatch`)内含多个独立子段,各子段分级不同,拆开计算后实际条目数为 28。
+> 注:部分函数(如 `find_wrapper_timer_dispatch`)内含多个独立子段。28 是本页原始
+> 快照的统计口径；两条删除线记录仅作历史审计，不再代表当前实现。
 
 ---
 
 ## 四、显式 fallback 链评审
 
-### 4.1 `short_pack_alias` 四级回退
+### 4.1 `short_pack_alias` 五级路径选择
 **所在文件:** arm_ext_executor.c:606  
-**调用路径:** `arm_ext_apply_short_pack_alias_for_private_child` → `arm_ext_child_needs_short_pack_alias`(Level 1~4 见上节) → `arm_ext_short_pack_alias_for_host_path`(5 级路径)
+**调用路径:** `arm_ext_apply_short_pack_alias_for_private_child` → `arm_ext_child_needs_short_pack_alias`(Level 1~3 见上节) → `arm_ext_short_pack_alias_for_host_path`(5 级路径)
 
 **各级依据:**
 

@@ -33,7 +33,7 @@ async function waitForStartedFrame(vmrp: VmrpE2e): Promise<PpmImage> {
   return frame;
 }
 
-describe("op6120 4M cold boot", () => {
+describe("op6120 cold boot", () => {
   let vmrp: VmrpE2e | undefined;
   let ws: VmrpWorkspace | undefined;
 
@@ -74,6 +74,34 @@ describe("op6120 4M cold boot", () => {
     await vi.waitFor(async () => {
       expect(await vmrp!.drawCount()).toBeGreaterThan(startedDrawCount);
     }, { timeout: 5_000, interval: 100 });
+
+    const output = `${await readFile(vmrp.stdoutPath, "utf8")}\n${await readFile(vmrp.stderrPath, "utf8")}`;
+    expect(output).not.toMatch(/UC_ERR|UC_MEM|unmapped|INVARIANT|uc_emu_start failed|FATAL/);
+  }, 120_000);
+
+  it("keeps a valid MRP identity when the imported host name exceeds 32 bytes", async () => {
+    expect(await sha256("test/fixtures/op6120.mrp")).toBe(MRP_SHA256);
+
+    ws = await VmrpWorkspace.create();
+    const importedName = "愤怒的小鸟VS僵尸2_v1002.mrp";
+    // game.ext reads record[100] as a direct package-name pointer and checks
+    // for `.mrp`; its earlier selector-100 MPS initializer must not be mistaken
+    // for a fixed package-name copy merely because the basename is 34 bytes.
+    expect(Buffer.byteLength(importedName, "utf8")).toBe(34);
+    const mrp = ws.path(`mythroad/${importedName}`);
+    await copyFile("test/fixtures/op6120.mrp", mrp);
+    await copyFile("test/fixtures/plugins/advbar.mrp", ws.path("mythroad/plugins/advbar.mrp"));
+
+    vmrp = await VmrpE2e.start(mrp, {
+      workDir: ws.dir,
+      dnsMap: LOCAL_DNS_MAP,
+      timeoutMs: 90_000,
+    });
+    const started = await waitForStartedFrame(vmrp);
+
+    expect(started.pixel(184, 128)).toEqual([240, 240, 240]);
+    expect(started.uniqueColorCount()).toBe(1_697);
+    expect(await vmrp.drawCount()).toBeGreaterThan(0);
 
     const output = `${await readFile(vmrp.stdoutPath, "utf8")}\n${await readFile(vmrp.stderrPath, "utf8")}`;
     expect(output).not.toMatch(/UC_ERR|UC_MEM|unmapped|INVARIANT|uc_emu_start failed|FATAL/);
