@@ -895,6 +895,29 @@ char *get_filename(char *outputbuf, const char *filename) {
     return outputbuf;
 }
 
+/*
+ * get_filename() 编码规则的逆操作：guest 世界（VM/EXT ARM 代码）固定使用
+ * GBK 编码，宿主文件系统使用 UTF-8 时（FLAG_USE_UTF8_FS），暴露给 guest 的
+ * 文件名/包名必须先转成 GBK —— guest 会把它拼进 cache/<包名> 之类的路径再
+ * 交回来，由 get_filename() 按 GBK→UTF-8 还原。若缺少本转换，UTF-8 字节会
+ * 被当作 GBK 二次转换生成乱码路径，且 UTF-8 中文比 GBK 长，还会撑爆 guest
+ * 侧固定长度的包名缓冲区。非 UTF-8 文件系统上宿主路径本身就是本地编码，
+ * 原样拷贝。
+ */
+void dsm_host_path_to_guest(char *buf, uint32 bufsize, const char *host_path) {
+    if (!buf || !bufsize) return;
+    if (!host_path) host_path = "";
+    if (dsmInFuncs->flags & FLAG_USE_UTF8_FS) {
+        char *gb = UTF8StrToGBStr((uint8 *)host_path, NULL);
+        if (gb) {
+            snprintf_(buf, bufsize, "%s", gb);
+            mr_freeExt(gb);
+            return;
+        }
+    }
+    snprintf_(buf, bufsize, "%s", host_path);
+}
+
 typedef struct {
     int device;
     int status;
