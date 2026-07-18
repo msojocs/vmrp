@@ -80,6 +80,18 @@ VMRP_EXPORT int vmrp_api_set_dns_map(const char *map);
 VMRP_EXPORT int vmrp_api_event(int code, int p0, int p1);
 
 /*
+ * Motion chip (accelerometer, SKYENGINE mr_plat(4001~4006) 动感芯片接口):
+ * x/y/z are gravity components in ±1000 (the range advertised by plat(4006)).
+ * Axis convention (device coordinates): phone flat face-up -> +Z max; screen
+ * facing left, held sideways -> +X max; screen facing away, upright -> +Y max.
+ * Samples are dropped while the guest has no active listener; poll
+ * vmrp_api_motion_active() and only push platform sensor data when it
+ * returns >= 0 (-1 = idle, 0 = shake mode, 1 = tilt mode).
+ */
+VMRP_EXPORT int vmrp_api_motion(int x, int y, int z);
+VMRP_EXPORT int vmrp_api_motion_active(void);
+
+/*
  * Timer: shared-library builds run the VM timer on a native worker thread so
  * Flutter hosts do not need to schedule it on the UI isolate. These functions
  * are kept for ABI compatibility with hosts that still use manual scheduling.

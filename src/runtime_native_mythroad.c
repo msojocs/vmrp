@@ -9,6 +9,7 @@
 extern int32 mr_start_dsm(char *filename, char *ext, char *entry);
 extern int32 mr_event(int16 type, int32 param1, int32 param2);
 extern int32 mr_timer(void);
+extern int32 mr_motion_input(int32 x, int32 y, int32 z);
 
 int vmrp_runtime_init(VmrpRuntime *rt) {
     memset(rt, 0, sizeof(*rt));
@@ -34,6 +35,12 @@ int vmrp_runtime_event(VmrpRuntime *rt, int32_t code, int32_t p0, int32_t p1) {
 int vmrp_runtime_timer(VmrpRuntime *rt) {
     (void)rt;
     return mr_timer();
+}
+
+/* 动感芯片样本注入(语义见 mythroad.c mr_motion_input 注释) */
+int vmrp_runtime_motion(VmrpRuntime *rt, int32_t x, int32_t y, int32_t z) {
+    (void)rt;
+    return mr_motion_input(x, y, z);
 }
 
 void vmrp_runtime_destroy(VmrpRuntime *rt) {

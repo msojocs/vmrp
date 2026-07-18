@@ -46,6 +46,7 @@ static char *edit_text_snapshot = NULL;
 
 typedef enum {
     API_CMD_EVENT,
+    API_CMD_MOTION, /* 动感芯片样本:code/p0/p1 复用为 x/y/z 分量 */
     API_CMD_SET_EDIT_TEXT,
     API_CMD_CANCEL_EDIT
 } ApiCommandType;
@@ -498,6 +499,9 @@ static API_THREAD_RET api_worker_main(void *userdata) {
                 case API_CMD_EVENT:
                     event(cmd.code, cmd.p0, cmd.p1);
                     break;
+                case API_CMD_MOTION:
+                    vmrp_motion_input(cmd.code, cmd.p0, cmd.p1);
+                    break;
                 case API_CMD_SET_EDIT_TEXT:
                     api_apply_edit_text_command(cmd.text);
                     cmd.text = NULL;
@@ -760,6 +764,41 @@ VMRP_EXPORT int vmrp_api_event(int code, int p0, int p1) {
     }
     return ret;
 #endif
+}
+
+/* 动感芯片样本注入:x/y/z 为重力加速度分量,取值 ±1000(plat 4006 量程
+ * 契约),坐标系见《动感芯片接口》(平放 Z 正最大、屏幕向左横立 X 正最大、
+ * 屏幕背向自己竖立 Y 正最大)。guest 未开启监听时样本被忽略;嵌入端应
+ * 在 vmrp_api_motion_active() 返回 >=0 时才开启平台传感器推送。 */
+VMRP_EXPORT int vmrp_api_motion(int x, int y, int z) {
+    if (!api_running || vmrp_is_exited()) {
+        api_running = 0;
+        pending_timer_ms = 0;
+        return -1;
+    }
+#if VMRP_API_ASYNC_RUNNER
+    ApiCommand cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.type = API_CMD_MOTION;
+    cmd.code = x;
+    cmd.p0 = y;
+    cmd.p1 = z;
+    return api_queue_command(cmd);
+#else
+    int ret = vmrp_motion_input((int32_t)x, (int32_t)y, (int32_t)z);
+    if (vmrp_is_exited()) {
+        api_running = 0;
+        pending_timer_ms = 0;
+    }
+    return ret;
+#endif
+}
+
+/* guest 的动感监听状态:-1=未监听(嵌入端应关闭传感器),
+ * 0=晃动模式(MR_MOTION_EVENT_SHAKE),1=倾斜模式(MR_MOTION_EVENT_TILT)。
+ * 轮询风格与 get_screen_dirty 一致,建议随 dirty 帧复查。 */
+VMRP_EXPORT int vmrp_api_motion_active(void) {
+    return (int)dsm_motion_listening_mode();
 }
 
 VMRP_EXPORT int vmrp_api_timer(void) {

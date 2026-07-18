@@ -21,6 +21,7 @@
 #include "./include/printf.h"
 #include "./include/string.h"
 #include "./luadec/luadec.h"
+#include "./include/dsm.h" /* dsm_motion_listening_mode:动感芯片监听状态 */
 #include "../include/arm_ext_executor.h"
 
 /* FULL Mythroad exposes the Lua-runtime startup ABI.  MINI uses version 2011;
@@ -4309,6 +4310,26 @@ int32 mr_event(int16 type, int32 param1, int32 param2) {
         return MR_SUCCESS;  // deal
     }
     return MR_IGNORE;  // didnot deal
+}
+
+/*
+ * 动感芯片样本注入入口(宿主侧传感器驱动):x/y/z 为重力加速度分量,取值
+ * ±DSM_MOTION_ACC_MAX(与 plat(4006) 返回的量程契约一致),坐标系按
+ * 《动感芯片接口》文档(平放 Z 正最大、屏幕向左横立 X 正最大等)。
+ *
+ * guest 经 plat(4004/4005) 开启监听后才上送;事件按文档契约为
+ * mr_event(MR_MOTION_EVENT, MR_MOTION_EVENT_SHAKE|TILT, T_MOTION_ACC*)。
+ * 第三参数是 guest 可读指针:EXT 游戏运行在 unicorn 独立地址空间,样本写入
+ * 模块的持久槽位(arm_ext_host_motion_acc_slot)后传 guest 地址;无 EXT 模块
+ * 时(纯 Lua 应用)没有已知的动感消费方,不上送。
+ */
+int32 mr_motion_input(int32 x, int32 y, int32 z) {
+    int32 mode = dsm_motion_listening_mode();
+    if (mode < 0) return MR_IGNORE;
+    if (!native_ext) return MR_IGNORE;
+    uint32 slot = arm_ext_host_motion_acc_slot(native_ext, x, y, z);
+    if (!slot) return MR_IGNORE;
+    return mr_event(MR_MOTION_EVENT, mode, (int32)slot);
 }
 
 int32 mr_timer(void) {

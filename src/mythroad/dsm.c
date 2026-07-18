@@ -71,6 +71,24 @@ void dsm_set_lcd_rotation(int32 rotation) {
     dsmLcdRotation = rotation;
 }
 
+/* 动感芯片(加速度传感器)状态,guest 经 mr_plat(4001~4006) 控制(接口语义
+ * 见 dsm.h 声明处)。真机上这是传感器驱动状态,由 DSM 层持有;宿主注入层
+ * (mr_motion_input)经 dsm_motion_listening_mode() 判断是否需要上送样本。 */
+static int32 dsmMotionPowered = 0;
+static int32 dsmMotionListening = 0;
+static int32 dsmMotionMode = MR_MOTION_EVENT_SHAKE;
+
+static void dsm_motion_reset(void) {
+    dsmMotionPowered = 0;
+    dsmMotionListening = 0;
+    dsmMotionMode = MR_MOTION_EVENT_SHAKE;
+}
+
+int32 dsm_motion_listening_mode(void) {
+    if (!dsmMotionPowered || !dsmMotionListening) return -1;
+    return dsmMotionMode;
+}
+
 typedef struct DsmMrpWriteTracker {
     int32 handle;
     char path[DSM_MAX_FILE_LEN];
@@ -1487,6 +1505,28 @@ int32 mr_plat(int32 code, int32 param) {
             return MR_IGNORE;
         case MR_SET_KEY_END:  // 1214 启用/禁用按键结束事件
             return MR_SUCCESS;
+        /* 动感芯片接口(SKYENGINE 文档 mr_plat(4001~4006)),状态机在本文件
+         * 顶部 dsmMotion*;样本注入入口是宿主侧 mr_motion_input()。 */
+        case 4001:  // 停止动感芯片监听
+            dsmMotionListening = 0;
+            return MR_SUCCESS;
+        case 4002:  // 给动感芯片上电
+            dsmMotionPowered = 1;
+            return MR_SUCCESS;
+        case 4003:  // 给动感芯片断电(监听随之失效)
+            dsmMotionPowered = 0;
+            dsmMotionListening = 0;
+            return MR_SUCCESS;
+        case 4004:  // 监听晃动模式,值经 mr_event(18, SHAKE, T_MOTION_ACC*) 上送
+            dsmMotionListening = 1;
+            dsmMotionMode = MR_MOTION_EVENT_SHAKE;
+            return MR_SUCCESS;
+        case 4005:  // 监听倾斜模式,值经 mr_event(18, TILT, T_MOTION_ACC*) 上送
+            dsmMotionListening = 1;
+            dsmMotionMode = MR_MOTION_EVENT_TILT;
+            return MR_SUCCESS;
+        case 4006:  // 量程查询:返回 A(>1000),上送分量范围 ±(A-1000)
+            return 1000 + DSM_MOTION_ACC_MAX;
         default:
             LOGW("mr_plat(code:%d, param:%d) not impl!", code, param);
             break;
@@ -1821,8 +1861,9 @@ int32 dsm_init(DSM_REQUIRE_FUNCS *inFuncs) {
     dsmInFuncs = inFuncs;
     dsmStartTime = dsmInFuncs->get_uptime_ms();
     holdTextMem = NULL;
-    /* LCD 旋转是 guest 运行期经 plat(101) 请求的状态,随 DSM 初始化归零 */
+    /* LCD 旋转/动感芯片是 guest 运行期经 plat 请求的状态,随 DSM 初始化归零 */
     dsm_set_lcd_rotation(0);
+    dsm_motion_reset();
     dsm_mrp_reset_all();
     dsm_media_reset_all();
 

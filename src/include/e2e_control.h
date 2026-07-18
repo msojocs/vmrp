@@ -22,6 +22,9 @@ typedef struct VmrpE2eHooks {
     uint32_t (*timer_pending_generation)(void *userdata);
     int (*timer_dispatch_in_progress)(void *userdata);
     int (*runtime_exited)(void *userdata);
+    /* 动感芯片样本注入(MOTION 命令主线程回投后调用),
+     * 返回 0=已上送,非 0=guest 未开启监听 */
+    int (*motion_input)(int32_t x, int32_t y, int32_t z, void *userdata);
     void *userdata;
 } VmrpE2eHooks;
 

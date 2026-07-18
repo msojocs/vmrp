@@ -2727,6 +2727,25 @@ void arm_ext_host_cache_sync(ArmExtModule *m, const void *host_data, uint32 len)
     arm_ext_sync_internal_nested_module(m, addr, copy_len);
 }
 
+uint32_t arm_ext_host_motion_acc_slot(ArmExtModule *m,
+                                      int32 x, int32 y, int32 z) {
+    /* 动感芯片 T_MOTION_ACC{int32 x,y,z} 上送槽位:MR_MOTION_EVENT 的第三
+     * 参数是 guest 可读指针,真机上指向平台侧静态缓冲。这里懒分配一次
+     * 12 字节并按样本覆写复用(arm_alloc 是 bump 分配器,不能按事件分配),
+     * guest 在事件处理中同步读取,复用同一地址与真机语义一致。 */
+    if (!m) return 0;
+    if (!m->motion_acc_addr) {
+        m->motion_acc_addr = arm_alloc(m, 12u);
+        if (!m->motion_acc_addr) return 0;
+    }
+    uint8_t *dst = (uint8_t *)arm_ptr(m, m->motion_acc_addr);
+    if (!dst) return 0;
+    memcpy(dst + 0, &x, 4);
+    memcpy(dst + 4, &y, 4);
+    memcpy(dst + 8, &z, 4);
+    return m->motion_acc_addr;
+}
+
 void arm_ext_unload(ArmExtModule *m) {
     if (!m) return;
     if (m->profile && m->profile->cleanup)
