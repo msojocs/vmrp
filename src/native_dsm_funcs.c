@@ -964,12 +964,15 @@ static int32 native_stopSound(int type) {
     return MR_SUCCESS;
 }
 
+/* 震动马达(SKYENGINE 手册 mr_startShake.md):委托前端 bridge 实现,
+ * 契约返回 MR_SUCCESS。 */
 static int32 native_startShake(int32 ms) {
-    (void)ms;
+    guiStartShake(ms);
     return MR_SUCCESS;
 }
 
 static int32 native_stopShake(void) {
+    guiStopShake();
     return MR_SUCCESS;
 }
 

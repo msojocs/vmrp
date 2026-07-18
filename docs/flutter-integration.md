@@ -819,6 +819,34 @@ void _pollMotionState() {
 }
 ```
 
+### 震动马达
+游戏经 `mr_startShake(ms)` / `mr_stopShake()` 控制振动器（SKYENGINE 手册
+mr_startShake.md）。C 侧只记录最新请求，嵌入端轮询取走后调平台振动器：
+
+- `vmrp_api_take_shake()`：取走并清除请求（轮询风格同 `getScreenDirty()`，
+  建议随 dirty 帧/timer 后复查）
+  - `0`：无新请求
+  - `>0`：开始震动 N 毫秒
+  - `-1`：停止震动
+- 连续 start/stop 只保留最后一次（与真机马达"后到指令决定状态"一致）
+
+```dart
+// FFI 绑定
+typedef _vmrp_api_take_shake_C = Int32 Function();
+typedef _vmrp_api_take_shake_Dart = int Function();
+// takeShake = _lib.lookupFunction<...>('vmrp_api_take_shake');
+
+// 轮询处(示例:vibration 包;HapticFeedback 仅短促反馈不支持时长)
+void _pollShake() {
+  final req = _bindings.takeShake();
+  if (req > 0) {
+    Vibration.vibrate(duration: req);
+  } else if (req < 0) {
+    Vibration.cancel();
+  }
+}
+```
+
 ### 屏幕缓冲区格式
 - RGB565，16-bit per pixel，little-endian
 - 行优先存储，大小 = `width * height * 2` 字节（width/height 为旋转感知

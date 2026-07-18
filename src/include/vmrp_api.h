@@ -92,6 +92,16 @@ VMRP_EXPORT int vmrp_api_motion(int x, int y, int z);
 VMRP_EXPORT int vmrp_api_motion_active(void);
 
 /*
+ * Vibration motor (mr_startShake/mr_stopShake, SKYENGINE 手册
+ * mr_startShake.md).  Pull-based like get_screen_dirty: the guest's latest
+ * request is held until taken.  Return value: 0 = no new request,
+ * >0 = start vibrating for N milliseconds (call the platform vibrator),
+ * -1 = stop vibrating.  Consecutive start/stop requests collapse to the
+ * last one (matches real motor behavior).  Poll after events/timer ticks.
+ */
+VMRP_EXPORT int vmrp_api_take_shake(void);
+
+/*
  * Timer: shared-library builds run the VM timer on a native worker thread so
  * Flutter hosts do not need to schedule it on the UI isolate. These functions
  * are kept for ABI compatibility with hosts that still use manual scheduling.

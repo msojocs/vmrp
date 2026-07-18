@@ -309,8 +309,17 @@ void saveEditText(char *str) {
     holdEditText[len] = '\0';
 }
 
-int32_t editCreate(const char *title, const char *text, int32_t type, int32_t max_size) {
-    isEditMode = true;
+/* 震动马达 bridge(mr_startShake/mr_stopShake):SDL 桌面前端没有振动器
+ * 硬件,仅日志记录;真实震动由 Flutter 前端经 vmrp_api_take_shake 对接。 */
+void guiStartShake(int32_t ms) {
+    SDL_Log("guiStartShake(%d ms)", ms);
+}
+
+void guiStopShake(void) {
+    SDL_Log("guiStopShake()");
+}
+
+int32_t editCreate(const char *title, const char *text, int32_t type, int32_t max_size) {    isEditMode = true;
     editMaxSize = max_size;
     SDL_Log("title: '%s', text: '%s', type: %d, max_size: %d", title, text, type, max_size);
     /* Opening an editor must not replace text that the user copied before
