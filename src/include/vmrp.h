@@ -11,6 +11,10 @@
 #include "vmrp_args.h"
 
 typedef struct VmrpConfig {
+    /* screen_width/height 始终是 --screen 配置的物理面板尺寸。guest 经
+     * mr_plat(101,param) 设置的 LCD 旋转状态由 DSM 层持有
+     * (dsm_get_lcd_rotation),展示层用 vmrp_display_width/height() 取
+     * 旋转后的显示尺寸(奇数旋转为面板转置)。 */
     int screen_width;
     int screen_height;
     int memory_mb; /* 应用可见内存(MB):1/2/4/6/8/16,0 视为默认 */
@@ -28,6 +32,12 @@ static inline uint32_t vmrp_memory_bytes(int memory_mb) {
 }
 
 extern VmrpConfig vmrp_config;
+
+/* 旋转后的显示尺寸(用户视角):真机 plat(101) 旋转后应用绘制转置画布,
+ * LCD 控制器旋转扫描,用户横握手机所见即画布原样。模拟器展示层因此不做
+ * 像素级旋转,只在奇数旋转(90°/270°)时把窗口/裁剪/行宽按面板转置处理。 */
+int vmrp_display_width(void);
+int vmrp_display_height(void);
 
 int32_t event(int32_t code, int32_t p1, int32_t p2);
 int32_t timer(void);

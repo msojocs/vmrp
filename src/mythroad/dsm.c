@@ -57,6 +57,20 @@
 static DSM_REQUIRE_FUNCS *dsmInFuncs;
 static uint32 dsmStartTime;  //虚拟机初始化时间，用来计算系统运行时间
 
+/* 当前 LCD 旋转(MR_LCD_ROTATE_*: 0=正常,1=90°,2=180°,3=270°)。guest 经
+ * mr_plat(101,param) 设置;真机上这是 LCD 驱动状态,故由 DSM 层持有(本层
+ * 编译时未定义 VMRP,不能访问 vmrp_config)。宿主展示层经
+ * dsm_get_lcd_rotation() 读取以计算旋转后的显示尺寸。 */
+static int32 dsmLcdRotation = 0;
+
+int32 dsm_get_lcd_rotation(void) {
+    return dsmLcdRotation;
+}
+
+void dsm_set_lcd_rotation(int32 rotation) {
+    dsmLcdRotation = rotation;
+}
+
 typedef struct DsmMrpWriteTracker {
     int32 handle;
     char path[DSM_MAX_FILE_LEN];
@@ -1454,13 +1468,23 @@ int32 mr_plat(int32 code, int32 param) {
         case 1100:  // 浏览器引擎初始化查询（wbrw在加载主页前调用）
             return MR_SUCCESS;
         case 101:
-            /* 设置/查询 LCD 旋转,param 取 MR_LCD_ROTATE_*(0=正常,3=270°)。
+            /* 设置 LCD 旋转,param 取 MR_LCD_ROTATE_*(0=正常,3=270°)。
              * gtcm(SphinxJoy 引擎)启动时调 plat(101,3) 请求横屏;反汇编
              * (game.ext 0x2370AC: cmp r0,#0 / beq 正常路径)证明返回非 0
-             * 会进入"不支持横竖转换请退出"错误分支并黑屏。模拟器的帧缓冲
-             * 方向由应用自行绘制、展示层裁剪,接受请求返回 MR_SUCCESS。
-             * 兼容性:此前返回 MR_IGNORE(1),已有样本中仅 gtcm 调用该码。 */
-            return MR_SUCCESS;
+             * 会进入"不支持横竖转换请退出"错误分支并黑屏,必须返回
+             * MR_SUCCESS。
+             * 旋转状态记入 vmrp_config.screen_rotation,消费方:
+             * - 展示层(main.c/vmrp_api.c)按 vmrp_display_width/height()
+             *   自动翻转窗口/裁剪/行宽;
+             * - ARM EXT 桥(aex_t037)随后调 arm_ext_apply_lcd_rotation()
+             *   把模块画布基准与 ARM 可见 mr_screen_w/h 更新为显示尺寸,
+             *   等价于真机 LCD 驱动旋转后更新平台屏幕全局。 */
+            /* 0..3 即 MR_LCD_ROTATE_NORMAL/90/180/270(mrporting.h:796) */
+            if (param >= 0 && param <= 3) {
+                dsm_set_lcd_rotation(param);
+                return MR_SUCCESS;
+            }
+            return MR_IGNORE;
         case MR_SET_KEY_END:  // 1214 启用/禁用按键结束事件
             return MR_SUCCESS;
         default:
@@ -1797,6 +1821,8 @@ int32 dsm_init(DSM_REQUIRE_FUNCS *inFuncs) {
     dsmInFuncs = inFuncs;
     dsmStartTime = dsmInFuncs->get_uptime_ms();
     holdTextMem = NULL;
+    /* LCD 旋转是 guest 运行期经 plat(101) 请求的状态,随 DSM 初始化归零 */
+    dsm_set_lcd_rotation(0);
     dsm_mrp_reset_all();
     dsm_media_reset_all();
 

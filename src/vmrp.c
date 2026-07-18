@@ -28,6 +28,7 @@
 #include "./include/network.h"
 #include "./include/runtime.h"
 #include "./include/arm_ext_executor.h"
+#include "./mythroad/include/dsm.h" /* dsm_get_lcd_rotation:plat(101) 旋转状态 */
 
 #define VMRP_LOG_ENABLED() (getenv("VMRP_LOG") != NULL)
 #define VMRP_LOG(...)                          \
@@ -49,6 +50,20 @@ VmrpConfig vmrp_config = {
     .device_month = DEFAULT_DEVICE_MONTH,
     .device_day = DEFAULT_DEVICE_DAY,
 };
+
+/* 旋转后的显示尺寸:奇数旋转(90°/270°)时为面板转置,否则即面板尺寸。
+ * 旋转状态由 DSM 层持有(guest 经 plat(101) 设置,见 dsm.c);语义见
+ * vmrp.h 声明处注释。rotation==0 时与 screen_width/height 恒等,未调
+ * plat(101) 的应用路径行为不变。 */
+int vmrp_display_width(void) {
+    return (dsm_get_lcd_rotation() & 1) ? vmrp_config.screen_height
+                                        : vmrp_config.screen_width;
+}
+
+int vmrp_display_height(void) {
+    return (dsm_get_lcd_rotation() & 1) ? vmrp_config.screen_width
+                                        : vmrp_config.screen_height;
+}
 
 static VmrpRuntime runtime;
 #ifdef _WIN32
@@ -255,6 +270,7 @@ int startVmrp(const VmrpArgs *args) {
     vmrp_set_exit_requested(0);
     vmrp_config.screen_width = args->screen_width;
     vmrp_config.screen_height = args->screen_height;
+    /* LCD 旋转由 dsm_init() 随 DSM 初始化归零(vmrp_runtime_init 内) */
     vmrp_config.memory_mb = args->memory_mb;
     /* The DSM callback reads this virtual handset RTC through table[34]. */
     vmrp_config.device_year = args->device_year;

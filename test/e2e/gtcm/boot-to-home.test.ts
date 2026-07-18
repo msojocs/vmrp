@@ -18,8 +18,9 @@ describe("gtcm 进入主界面", () => {
     ws = await VmrpWorkspace.create();
     fs.rmSync(ws.path('mythroad/gtcm'), { recursive: true, force: true })
     
-    // gtcm 是横屏(480x320)构建,按其原生分辨率运行以显示完整画面。
-    vmrp = await VmrpE2e.start("test/fixtures/gtcm.mrp", { workDir: ws.dir, screen: "480x320" });
+    // gtcm 面向 320x480 竖屏真机,启动时经 plat(101,3) 请求横屏,
+    // 模拟器窗口自动翻转为 480x320——断言坐标仍是横屏坐标。
+    vmrp = await VmrpE2e.start("test/fixtures/gtcm.mrp", { workDir: ws.dir, screen: "320x480" });
 
     await vmrp.delay(7000);
     // 不开启音乐
@@ -59,8 +60,9 @@ describe("gtcm 进入主界面", () => {
     fs.rmSync(ws.path('mythroad/gtcm'), { recursive: true, force: true })
     fs.rmSync(ws.path('mythroad/plugins/netpay.mrp'), { recursive: true, force: true })
     
-    // gtcm 是横屏(480x320)构建,按其原生分辨率运行以显示完整画面。
-    vmrp = await VmrpE2e.start("test/fixtures/gtcm.mrp", { workDir: ws.dir, screen: "480x320" });
+    // gtcm 面向 320x480 竖屏真机,启动时经 plat(101,3) 请求横屏,
+    // 模拟器窗口自动翻转为 480x320——断言坐标仍是横屏坐标。
+    vmrp = await VmrpE2e.start("test/fixtures/gtcm.mrp", { workDir: ws.dir, screen: "320x480" });
 
     await vmrp.delay(7_000);
     // 不开启音乐
@@ -98,10 +100,13 @@ describe("gtcm 进入主界面", () => {
     {
       await vmrp.key('ENTER', 1_000);
       await vmrp.delay(2_000);
-      // rgb(40, 40, 40)
+      // netpay 下载提示界面:gtcm 进入付费流程前调 plat(101,0) 撤销 LCD
+      // 旋转(真机行为,用户竖握手机操作),窗口自动翻回 320x480 竖屏。
+      // 断言标题栏与底部软键栏的深灰底色 rgb(40, 40, 40)。
       const screen = await vmrp.screen("pay");
-      expect(screen.pixel(95, 312)).toEqual([40, 40, 40]);
-      expect(screen.pixel(374, 310)).toEqual([40, 40, 40]);
+      expect(screen.pixel(60, 8)).toEqual([40, 40, 40]);
+      expect(screen.pixel(80, 465)).toEqual([40, 40, 40]);
+      expect(screen.pixel(240, 465)).toEqual([40, 40, 40]);
     }
   });
 });

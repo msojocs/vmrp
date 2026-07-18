@@ -7,6 +7,7 @@
  */
 #include "../include/arm_ext_priv.h"
 #include "../include/bridge.h"
+#include "../include/vmrp.h" /* vmrp_display_width/height:LCD 旋转后的显示尺寸 */
 
 /* 宿主屏幕全局(mythroad 层导出,语义见 aex_mem/abi 文档) */
 extern uint16 *mr_screenBuf;
@@ -1428,6 +1429,32 @@ void arm_ext_restore_modal_screen_snapshot(ArmExtModule *m) {
         }
         m->modal_screen_snapshot_valid = 0;
     }
+}
+
+/*
+ * guest 经 plat(101) 设置 LCD 旋转成功后调用(aex_t037),等价于真机 LCD
+ * 驱动旋转后更新平台屏幕全局:把模块画布基准 m->screen_w/h 与 ARM 可见的
+ * mr_screen_w/h(table[92/93] 槽)更新为旋转后的显示尺寸(vmrp_config 面板
+ * 尺寸的转置)。画布字节数在转置下不变(w*h*2 相等),无需迁移缓冲。
+ *
+ * 之后转置拒绝保护(arm_ext_push_draw_screen_context)与
+ * hook_screen_dim_read 以旋转后的尺寸为基准工作:gtcm 随后写入的横屏画布
+ * (480,320) 与基准相等被平凡采纳,付费框写入的 (320,480) 才是转置的撤销
+ * 请求照常被拒绝——与旋转前以 --screen 480x320 预转窗口运行的行为一致。
+ *
+ * 宿主侧 memcpy 写 guest 内存不会触发 unicorn 内存钩子,钩子按地址注册也
+ * 无需重挂。
+ */
+void arm_ext_apply_lcd_rotation(ArmExtModule *m) {
+    if (!m || !m->screen_w_slot || !m->screen_h_slot) return;
+    uint32_t dw = (uint32_t)vmrp_display_width();
+    uint32_t dh = (uint32_t)vmrp_display_height();
+    if (!dw || !dh) return;
+    m->screen_w = (int32_t)dw;
+    m->screen_h = (int32_t)dh;
+    m->screen_len = dw * dh * 2u;
+    memcpy(arm_ptr(m, m->screen_w_slot), &dw, 4);
+    memcpy(arm_ptr(m, m->screen_h_slot), &dh, 4);
 }
 
 void hook_screen_dim_write(uc_engine *uc, uc_mem_type type,

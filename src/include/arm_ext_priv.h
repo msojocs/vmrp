@@ -142,6 +142,8 @@ void hook_screen_dim_write(uc_engine *uc, uc_mem_type type, uint64_t address,
                            int size, int64_t value, void *user_data);
 void hook_screen_dim_read(uc_engine *uc, uc_mem_type type, uint64_t address,
                           int size, int64_t value, void *user_data);
+/* plat(101) LCD 旋转生效后同步模块画布基准与 ARM 可见 mr_screen_w/h */
+void arm_ext_apply_lcd_rotation(ArmExtModule *m);
 void enter_screen_context(ArmExtModule *m, uint16 **saved_screenBuf,
                           uint32_t *saved_present_depth);
 void leave_screen_context(ArmExtModule *m, uint16 *saved_screenBuf,

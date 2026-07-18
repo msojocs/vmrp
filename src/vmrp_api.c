@@ -3,6 +3,7 @@
 #include "./include/bridge.h"
 #include "./include/memory.h"
 #include "./include/native_dsm_funcs.h"
+#include "./mythroad/include/dsm.h" /* dsm_get/set_lcd_rotation:plat(101) 旋转状态 */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -201,8 +202,11 @@ void guiDrawBitmapWithStride(uint16_t *bmp, int32_t x, int32_t y,
                              int32_t source_x,
                              int32_t source_y) {
     if (!screen_buf || !bmp || source_stride <= 0 || w <= 0 || h <= 0) return;
-    int sw = vmrp_config.screen_width;
-    int sh = vmrp_config.screen_height;
+    /* LCD 旋转(plat(101))后 screen_buf 行宽/裁剪按显示尺寸;像素总数在转置
+     * 下不变(w*h 相等),无需重分配。嵌入端经 get_screen_width/height/
+     * rotation 读到同一显示尺寸,对 buffer 的行宽解释保持一致。 */
+    int sw = vmrp_display_width();
+    int sh = vmrp_display_height();
     int32_t min_x = x < 0 ? 0 : x;
     int32_t min_y = y < 0 ? 0 : y;
     int32_t max_x = x + w;
@@ -237,9 +241,10 @@ void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
      * Default DSM callers submit mr_screenBuf rectangles, so their source
      * coordinates remain absolute screen coordinates.  Local bitmap presents
      * use guiDrawBitmapWithStride() directly.
+     * 行宽取旋转后的显示宽度(rotation==0 时与面板宽度相同)。
      */
     guiDrawBitmapWithStride(bmp, x, y, w, h,
-                            vmrp_config.screen_width, x, y);
+                            vmrp_display_width(), x, y);
 }
 
 int32_t timerStart(uint16_t t) {
@@ -563,6 +568,9 @@ VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h) {
     if (screen_h <= 0) screen_h = DEFAULT_SCREEN_HEIGHT;
     vmrp_config.screen_width = screen_w;
     vmrp_config.screen_height = screen_h;
+    /* LCD 旋转是 guest 运行期经 plat(101) 请求的状态,初始化时归零
+     * (dsm_init 也会归零,这里保证 start 之前 getter 即返回初始值) */
+    dsm_set_lcd_rotation(0);
 
     free(screen_buf);
     free(screen_rgba_buf);
@@ -890,12 +898,21 @@ VMRP_EXPORT int vmrp_api_get_screen_dirty(void) {
     return d;
 }
 
+/* 返回旋转后的显示尺寸(rotation==0 时即 init 传入的面板尺寸)。guest 经
+ * plat(101) 请求横屏后这里读到转置尺寸,与 screen_buf 的行宽解释一致。 */
 VMRP_EXPORT int vmrp_api_get_screen_width(void) {
-    return vmrp_config.screen_width;
+    return vmrp_display_width();
 }
 
 VMRP_EXPORT int vmrp_api_get_screen_height(void) {
-    return vmrp_config.screen_height;
+    return vmrp_display_height();
+}
+
+/* 当前 LCD 旋转(MR_LCD_ROTATE_*: 0=正常,1=90°,2=180°,3=270°)。嵌入端在
+ * 每次 dirty 帧后复查 width/height/rotation,变化时按新尺寸重建纹理/布局
+ * (轮询风格与 get_screen_dirty 一致)。 */
+VMRP_EXPORT int vmrp_api_get_screen_rotation(void) {
+    return (int)dsm_get_lcd_rotation();
 }
 
 VMRP_EXPORT int vmrp_api_audio_sample_rate(void) {

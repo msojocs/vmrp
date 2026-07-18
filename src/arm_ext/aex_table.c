@@ -677,6 +677,12 @@ static void aex_t037(ArmExtModule *m, AexTableCtx *c) {
     uint32_t ret = MR_SUCCESS;
 
             ret = mr_plat((int32)r0, (int32)r1);
+            /* plat(101)=LCD 旋转:设置成功后把模块画布基准与 ARM 可见
+             * mr_screen_w/h 同步为旋转后的显示尺寸(真机 LCD 驱动行为),
+             * 之后 guest 写入的横屏画布尺寸与基准相等即被采纳。 */
+            if (r0 == 101u && ret == MR_SUCCESS) {
+                arm_ext_apply_lcd_rotation(m);
+            }
             if (arm_ext_diag_on()) {
                 uint32_t owner_p = 0, owner_h = 0;
                 uint32_t owner_file = 0, owner_len = 0;
