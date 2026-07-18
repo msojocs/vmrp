@@ -44,6 +44,13 @@ static int32_t edit_max_size = 0;
 static char *hold_edit_text = NULL;
 static char *edit_text_snapshot = NULL;
 
+/* 震动请求(mr_startShake/mr_stopShake,SKYENGINE 手册 mr_startShake.md)。
+ * 轮询模型:guest 请求记录在此,嵌入端经 vmrp_api_take_shake() 取走后调
+ * 平台振动器。取值:0=无新请求,>0=开始震动 N 毫秒,-1=停止震动;
+ * start/stop 相继发生时后者覆盖前者(last-action-wins,与真机马达一致——
+ * 后到的指令决定马达最终状态)。 */
+static int shake_request = 0;
+
 typedef enum {
     API_CMD_EVENT,
     API_CMD_MOTION, /* 动感芯片样本:code/p0/p1 复用为 x/y/z 分量 */
@@ -277,6 +284,28 @@ int32_t timerStop(void) {
 #else
     pending_timer_ms = 0;
     return 0;
+#endif
+}
+
+/* 震动马达 bridge:记录请求供嵌入端轮询,语义见 shake_request 声明处 */
+void guiStartShake(int32_t ms) {
+    if (ms <= 0) return;
+#if VMRP_API_ASYNC_RUNNER
+    api_lock();
+#endif
+    shake_request = (int)ms;
+#if VMRP_API_ASYNC_RUNNER
+    api_unlock();
+#endif
+}
+
+void guiStopShake(void) {
+#if VMRP_API_ASYNC_RUNNER
+    api_lock();
+#endif
+    shake_request = -1;
+#if VMRP_API_ASYNC_RUNNER
+    api_unlock();
 #endif
 }
 
@@ -592,6 +621,8 @@ VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h) {
 
     screen_dirty = 0;
     pending_timer_ms = 0;
+    /* 震动请求随初始化清空,避免上一会话的残留请求触发振动 */
+    shake_request = 0;
     image_processing_mode = VMRP_IMAGE_PROCESSING_NATIVE;
     api_dns_map[0] = '\0';
     api_dns_map_set = 0;
@@ -799,6 +830,21 @@ VMRP_EXPORT int vmrp_api_motion(int x, int y, int z) {
  * 轮询风格与 get_screen_dirty 一致,建议随 dirty 帧复查。 */
 VMRP_EXPORT int vmrp_api_motion_active(void) {
     return (int)dsm_motion_listening_mode();
+}
+
+/* 取走并清除 guest 的震动请求(轮询风格同 get_screen_dirty,建议随
+ * dirty 帧/timer 后复查):0=无新请求,>0=开始震动 N 毫秒(嵌入端调平台
+ * 振动器),-1=停止震动(mr_stopShake)。 */
+VMRP_EXPORT int vmrp_api_take_shake(void) {
+#if VMRP_API_ASYNC_RUNNER
+    api_lock();
+#endif
+    int req = shake_request;
+    shake_request = 0;
+#if VMRP_API_ASYNC_RUNNER
+    api_unlock();
+#endif
+    return req;
 }
 
 VMRP_EXPORT int vmrp_api_timer(void) {
