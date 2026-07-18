@@ -195,6 +195,12 @@ typedef _vmrp_api_get_screen_height_Dart = int Function();
 typedef _vmrp_api_get_screen_rotation_C = Int32 Function();
 typedef _vmrp_api_get_screen_rotation_Dart = int Function();
 
+typedef _vmrp_api_motion_C = Int32 Function(Int32, Int32, Int32);
+typedef _vmrp_api_motion_Dart = int Function(int, int, int);
+
+typedef _vmrp_api_motion_active_C = Int32 Function();
+typedef _vmrp_api_motion_active_Dart = int Function();
+
 typedef _vmrp_api_is_edit_active_C = Int32 Function();
 typedef _vmrp_api_is_edit_active_Dart = int Function();
 
@@ -218,6 +224,8 @@ class VmrpBindings {
   late final _vmrp_api_get_screen_width_Dart getScreenWidth;
   late final _vmrp_api_get_screen_height_Dart getScreenHeight;
   late final _vmrp_api_get_screen_rotation_Dart getScreenRotation;
+  late final _vmrp_api_motion_Dart motion;
+  late final _vmrp_api_motion_active_Dart motionActive;
   late final _vmrp_api_is_edit_active_Dart isEditActive;
   late final _vmrp_api_set_edit_text_Dart setEditText;
   late final _vmrp_api_cancel_edit_Dart cancelEdit;
@@ -238,6 +246,8 @@ class VmrpBindings {
     getScreenWidth = _lib.lookupFunction<_vmrp_api_get_screen_width_C, _vmrp_api_get_screen_width_Dart>('vmrp_api_get_screen_width');
     getScreenHeight = _lib.lookupFunction<_vmrp_api_get_screen_height_C, _vmrp_api_get_screen_height_Dart>('vmrp_api_get_screen_height');
     getScreenRotation = _lib.lookupFunction<_vmrp_api_get_screen_rotation_C, _vmrp_api_get_screen_rotation_Dart>('vmrp_api_get_screen_rotation');
+    motion = _lib.lookupFunction<_vmrp_api_motion_C, _vmrp_api_motion_Dart>('vmrp_api_motion');
+    motionActive = _lib.lookupFunction<_vmrp_api_motion_active_C, _vmrp_api_motion_active_Dart>('vmrp_api_motion_active');
     isEditActive = _lib.lookupFunction<_vmrp_api_is_edit_active_C, _vmrp_api_is_edit_active_Dart>('vmrp_api_is_edit_active');
     setEditText = _lib.lookupFunction<_vmrp_api_set_edit_text_C, _vmrp_api_set_edit_text_Dart>('vmrp_api_set_edit_text');
     cancelEdit = _lib.lookupFunction<_vmrp_api_cancel_edit_C, _vmrp_api_cancel_edit_Dart>('vmrp_api_cancel_edit');
@@ -772,6 +782,40 @@ if (_bindings.getScreenDirty() != 0) {
     _rebuildTexture(w, h);
   }
   _presentFrame(w, h);
+}
+```
+
+### 动感芯片（加速度传感器）
+部分游戏（如 gtdgdq）经 `mr_plat(4001~4006)` 使用动感芯片（SKYENGINE
+《动感芯片接口》），监听开启后由 `MR_MOTION_EVENT` 上送加速度样本：
+
+- `vmrp_api_motion_active()`：guest 监听状态，-1=未监听（**应关闭平台传感
+  器省电**），0=晃动模式，1=倾斜模式；轮询风格同 `getScreenDirty()`
+- `vmrp_api_motion(x, y, z)`：注入重力加速度分量，取值 **±1000**
+  （plat(4006) 向游戏通告的量程）；guest 未监听时样本被忽略
+
+坐标系（设备坐标，见《动感芯片接口》）：手机平放屏幕朝上 → +Z 最大；屏幕
+向左横立 → +X 最大；屏幕背向自己竖立 → +Y 最大。Android/iOS 传感器数据换
+算：`x = accel_x / 9.8 * 1000` 依次类推（注意平台轴向差异需按上述定义映射）。
+
+```dart
+// 传感器推送(示例:sensors_plus 包)
+StreamSubscription? _accelSub;
+void _pollMotionState() {
+  final mode = _bindings.motionActive();
+  if (mode >= 0 && _accelSub == null) {
+    _accelSub = accelerometerEventStream().listen((e) {
+      // 按《动感芯片接口》轴向定义换算到 ±1000
+      _bindings.motion(
+        (e.x / 9.8 * 1000).round(),
+        (e.y / 9.8 * 1000).round(),
+        (e.z / 9.8 * 1000).round(),
+      );
+    });
+  } else if (mode < 0 && _accelSub != null) {
+    _accelSub!.cancel();
+    _accelSub = null;
+  }
 }
 ```
 

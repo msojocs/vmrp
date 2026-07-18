@@ -231,6 +231,10 @@ struct ArmExtModule {
     uint32_t old_pack_table_addr;
     uint32_t old_start_table_addr;
     uint32_t start_parameter_table_addr;
+    /* 动感芯片 T_MOTION_ACC{x,y,z} 持久槽位(12 字节,懒分配后复用):
+     * MR_MOTION_EVENT 的第三参数是 guest 可读指针,每次上送覆写同一槽位,
+     * 避免 bump 分配器 arm_alloc 按事件泄漏。 */
+    uint32_t motion_acc_addr;
     uint32_t helper_addr;
     uint32_t p_addr;
     uint32_t screen_addr;

@@ -247,6 +247,13 @@ int32_t timer(void) {
     return vmrp_runtime_timer(&runtime);
 }
 
+/* 动感芯片样本注入(前端/嵌入端调用),guest 未开启监听时被忽略。
+ * x/y/z 取值 ±1000,坐标系见《动感芯片接口》文档。 */
+int32_t vmrp_motion_input(int32_t x, int32_t y, int32_t z) {
+    if (vmrp_get_exit_requested()) return MR_FAILED;
+    return vmrp_runtime_motion(&runtime, x, y, z);
+}
+
 int configureVmrpDnsMap(const char *map) {
     return my_configureDnsMap(map);
 }

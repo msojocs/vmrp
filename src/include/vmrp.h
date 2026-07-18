@@ -41,6 +41,9 @@ int vmrp_display_height(void);
 
 int32_t event(int32_t code, int32_t p1, int32_t p2);
 int32_t timer(void);
+/* 动感芯片样本注入:x/y/z 为重力加速度分量,取值 ±1000(plat 4006 量程
+ * 契约);guest 未经 plat(4004/4005) 开启监听时返回 MR_IGNORE。 */
+int32_t vmrp_motion_input(int32_t x, int32_t y, int32_t z);
 int configureVmrpDnsMap(const char *map);
 int startVmrp(const VmrpArgs *args);
 void stopVmrp(void);

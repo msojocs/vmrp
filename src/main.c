@@ -209,6 +209,13 @@ static int e2e_dump_screen_ppm_hook(const char *path, void *userdata) {
     return dump_screen_ppm(path);
 }
 
+/* MOTION 命令注入动感样本(主线程回投后执行,见 e2e_control.c)。
+ * 返回 0=已上送至 guest,非 0=guest 未开启动感监听。 */
+static int e2e_motion_input_hook(int32_t x, int32_t y, int32_t z, void *userdata) {
+    (void)userdata;
+    return vmrp_motion_input(x, y, z) == MR_SUCCESS ? 0 : 1;
+}
+
 static int e2e_dump_draw_frame_ppm_hook(int draw_count, const char *path,
                                         void *userdata) {
     (void)userdata;
@@ -963,6 +970,7 @@ int main(int argc, char *args[]) {
     e2e_hooks.timer_pending_generation = e2e_timer_pending_generation_hook;
     e2e_hooks.timer_dispatch_in_progress = e2e_timer_dispatch_in_progress_hook;
     e2e_hooks.runtime_exited = e2e_runtime_exited_hook;
+    e2e_hooks.motion_input = e2e_motion_input_hook;
     e2eControl = vmrp_e2e_control_create(e2eEventType, &e2e_hooks);
 
     if (startVmrp(&vmrp_args) != MR_SUCCESS) {

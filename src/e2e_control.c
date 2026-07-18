@@ -26,6 +26,12 @@ typedef struct {
     char path[1024];
     char response[1200];
     int draw_count;
+    /* MOTION 命令复用同一主线程回投通道:is_motion 置位时忽略 path/
+     * draw_count,主线程调用 hooks.motion_input(mx,my,mz) 注入动感样本。 */
+    int is_motion;
+    int32_t mx;
+    int32_t my;
+    int32_t mz;
     int done;
     SDL_mutex *mutex;
     SDL_cond *cond;
@@ -536,6 +542,44 @@ static void e2e_handle_screen(VmrpE2eControl *control, const char *path,
     SDL_DestroyMutex(req.mutex);
 }
 
+/* MOTION 与 SCREEN 一样必须回主线程执行(guest 事件入口非线程安全),
+ * 复用同一自定义事件回投+条件变量等待通道。 */
+static void e2e_handle_motion(VmrpE2eControl *control,
+                              int32_t x, int32_t y, int32_t z, int fd) {
+    E2eScreenRequest req;
+    memset(&req, 0, sizeof(req));
+    req.mutex = SDL_CreateMutex();
+    req.cond = SDL_CreateCond();
+    if (!req.mutex || !req.cond) {
+        if (req.cond) SDL_DestroyCond(req.cond);
+        if (req.mutex) SDL_DestroyMutex(req.mutex);
+        e2e_write_line(fd, "ERR sync_init_failed");
+        return;
+    }
+    req.is_motion = 1;
+    req.mx = x;
+    req.my = y;
+    req.mz = z;
+
+    SDL_Event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type = control->event_type;
+    ev.user.data1 = control;
+    ev.user.data2 = &req;
+
+    SDL_LockMutex(req.mutex);
+    if (SDL_PushEvent(&ev) != 1) {
+        SDL_UnlockMutex(req.mutex);
+        e2e_write_line(fd, "ERR push_event_failed");
+    } else {
+        while (!req.done) SDL_CondWait(req.cond, req.mutex);
+        SDL_UnlockMutex(req.mutex);
+        e2e_write_line(fd, req.response);
+    }
+    SDL_DestroyCond(req.cond);
+    SDL_DestroyMutex(req.mutex);
+}
+
 static void e2e_handle_client(VmrpE2eControl *control, int fd) {
     char line[2048];
     if (e2e_read_line(fd, line, sizeof(line)) <= 0) {
@@ -602,6 +646,13 @@ static void e2e_handle_client(VmrpE2eControl *control, int fd) {
         ev.type = SDL_QUIT;
         SDL_PushEvent(&ev);
         e2e_write_line(fd, "OK quit");
+    } else if (strcasecmp(op, "MOTION") == 0) {
+        int x, y, z;
+        if (sscanf(line, "%*31s %d %d %d", &x, &y, &z) != 3) {
+            e2e_write_line(fd, "ERR usage");
+            return;
+        }
+        e2e_handle_motion(control, (int32_t)x, (int32_t)y, (int32_t)z, fd);
     } else if (strcasecmp(op, "SCREEN") == 0) {
         e2e_handle_screen(control, a[0] ? a : e2e_screen_dump_path(control),
                           0, fd);
@@ -704,11 +755,25 @@ void vmrp_e2e_control_start_if_requested(VmrpE2eControl *control) {
     fflush(stdout);
 }
 
-/* 在主线程上执行 SCREEN：唯一需要回到主循环的命令（读取 SDL surface）。 */
+/* 在主线程上执行 SCREEN/MOTION：SCREEN 读取 SDL surface，MOTION 调用
+ * guest 事件入口，两者都必须在 VM 所在的主循环线程执行。 */
 void vmrp_e2e_control_execute(VmrpE2eControl *control, SDL_Event *event) {
     if (!control || !event) return;
     E2eScreenRequest *req = (E2eScreenRequest *)event->user.data2;
     if (!req) return;
+
+    if (req->is_motion) {
+        if (control->hooks.motion_input) {
+            int ret = control->hooks.motion_input(req->mx, req->my, req->mz,
+                                                  control->hooks.userdata);
+            /* MR_IGNORE(1) 表示 guest 未开启动感监听,回报给测试脚本区分 */
+            e2e_finish_screen(req, ret == 0 ? "OK motion delivered"
+                                            : "OK motion ignored");
+        } else {
+            e2e_finish_screen(req, "ERR motion_unsupported");
+        }
+        return;
+    }
 
     if (req->draw_count > 0) {
         if (control->hooks.dump_draw_frame_ppm &&

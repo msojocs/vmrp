@@ -131,4 +131,16 @@ void dsm_host_path_to_guest(char *buf, uint32 bufsize, const char *host_path);
 int32 dsm_get_lcd_rotation(void);
 void dsm_set_lcd_rotation(int32 rotation);
 
+/* 动感芯片(加速度传感器)接口,SKYENGINE 文档《动感芯片接口》与
+ * mr_plat(4001~4006):4002 上电/4003 断电/4004 晃动监听/4005 倾斜监听/
+ * 4001 停止监听/4006 量程查询。监听值经
+ * mr_event(MR_MOTION_EVENT, MR_MOTION_EVENT_SHAKE|TILT, T_MOTION_ACC*) 上送。 */
+#define MR_MOTION_EVENT_SHAKE 0
+#define MR_MOTION_EVENT_TILT 1
+/* 模拟器动感芯片量程:上送分量取值 ±DSM_MOTION_ACC_MAX,
+ * plat(4006) 按契约返回 1000+DSM_MOTION_ACC_MAX。 */
+#define DSM_MOTION_ACC_MAX 1000
+/* 已上电且在监听时返回监听模式(MR_MOTION_EVENT_SHAKE/TILT),否则返回 -1 */
+int32 dsm_motion_listening_mode(void);
+
 #endif

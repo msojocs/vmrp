@@ -29,5 +29,8 @@ uint32 arm_ext_read_timer_queue(ArmExtModule *m);
 void arm_ext_reset_child_modules(ArmExtModule *m);
 void arm_ext_unload(ArmExtModule *m);
 void arm_ext_host_cache_sync(ArmExtModule *m, const void *host_data, uint32 len);
+/* 写入并返回动感芯片 T_MOTION_ACC{x,y,z} 的 guest 持久槽位地址
+ * (MR_MOTION_EVENT 第三参数);模块未就绪或分配失败返回 0。 */
+uint32 arm_ext_host_motion_acc_slot(ArmExtModule *m, int32 x, int32 y, int32 z);
 
 #endif
