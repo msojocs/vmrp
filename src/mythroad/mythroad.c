@@ -4269,18 +4269,17 @@ int32 mr_event(int16 type, int32 param1, int32 param2) {
             if (status != MR_IGNORE)
                 return status;
         }
-        if (native_ext) {
-            mr_c_event_st event = {0};
-            event.code = type;
-            event.param0 = param1;
-            event.param1 = param2;
-            int32 status = native_ext_event(1, &event, sizeof(event));
-            if (status != MR_IGNORE)
-                return status;
-        }
-
         mrp_getglobal(vm_state, "dealevent");
         if (mrp_isfunction(vm_state, -1)) {
+            /* 原版平台的 mr_event 只有两级:显式注册的 mr_event_function
+             * (对应上面的 native_event_function),然后 Lua dealevent;
+             * 原始事件从不直接投递给 C ext——ext 只经 dealevent 打包转发
+             * (_strCom 801)收到事件。20-byte native_ext_event 是 vmrp 为
+             * 无 Lua hook 的 EXT-only runtime 补的兼容入口。若在 dealevent
+             * 存在时也先调它,同一按键会两次进入 wrapper,且 MR_IGNORE 语义
+             * 变得含混:重放会双重处理,强制消费又截断 Lua 路径。因此与
+             * 原生语义及 suspend/resume 的 Lua-owner 契约保持一致:有
+             * dealevent 时由 Lua 独占普通事件。 */
             mrp_pushnumber(vm_state, type);
             mrp_pushnumber(vm_state, param1);
             mrp_pushnumber(vm_state, param2);
@@ -4303,6 +4302,15 @@ int32 mr_event(int16 type, int32 param1, int32 param2) {
         } else { /* no dealevent function */
             MRDBGPRINTF("dealevent is nil!");
             mrp_pop(vm_state, 1); /* remove dealevent */
+            if (native_ext) {
+                mr_c_event_st event = {0};
+                event.code = type;
+                event.param0 = param1;
+                event.param1 = param2;
+                int32 status = native_ext_event(1, &event, sizeof(event));
+                if (status != MR_IGNORE)
+                    return status;
+            }
         }
         // mrp_setgcthreshold(vm_state, 0);
 

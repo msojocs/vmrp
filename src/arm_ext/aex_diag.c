@@ -392,11 +392,11 @@ static void hook_watch_pc(uc_engine *uc, uint64_t address, uint32_t size,
                           void *user_data) {
     (void)size;
     ArmExtPcWatch *w = (ArmExtPcWatch *)user_data;
-    printf("arm_ext_watch: base=0x%X rel=0x%X pc=0x%X r0=0x%X r1=0x%X r2=0x%X r3=0x%X lr=0x%X\n",
+    printf("arm_ext_watch: base=0x%X rel=0x%X pc=0x%X r0=0x%X r1=0x%X r2=0x%X r3=0x%X lr=0x%X r9=0x%X\n",
            w->base, w->rel, (uint32_t)address,
            reg_read32(uc, UC_ARM_REG_R0), reg_read32(uc, UC_ARM_REG_R1),
            reg_read32(uc, UC_ARM_REG_R2), reg_read32(uc, UC_ARM_REG_R3),
-           reg_read32(uc, UC_ARM_REG_LR));
+           reg_read32(uc, UC_ARM_REG_LR), reg_read32(uc, UC_ARM_REG_R9));
 }
 
 void arm_ext_install_pc_watches(ArmExtModule *m, uint32_t base, uint32_t len) {

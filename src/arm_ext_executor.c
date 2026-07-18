@@ -1305,6 +1305,9 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
         uc_hook_add(m->uc, &got_hook, UC_HOOK_MEM_WRITE, hook_got_write, m,
                     EXT_HEAP_ADDR, EXT_BASE_ADDR + EXT_MEM_SIZE - 1);
     }
+    /* VMRP_ARM_EXT_WATCH_PC 之前只覆盖嵌套模块;wrapper 自身(cfunction.ext,
+     * 基址 EXT_CODE_ADDR)的层栈/定时器例程同样需要定点观察,补上同一机制 */
+    arm_ext_install_pc_watches(m, EXT_CODE_ADDR, m->code_len);
 
     reg_write32(m->uc, UC_ARM_REG_R0, (uint32_t)load_code);
     uint16 *saved_screenBuf = NULL;
@@ -1540,6 +1543,125 @@ static void arm_ext_restore_modal_fg_snapshot(ArmExtModule *m) {
     m->modal_fg_snapshot_valid = 0;
 }
 
+/*
+ * graphics.ext 类 wrapper 可信扩展在私有 loader 的 staging 窗口(mr_cacheSync
+ * 已过、注册未确认)内被调用 init 时,宿主 R9 同步存在一个已证实的语义分歧:
+ * 进 wrapper 代码时 R9 被切为 wrapper rw,返回 staging 代码时新基址尚未进
+ * registry、无法恢复,init 便以 wrapper R9 运行,把自己的初始化数据按固定
+ * 偏移写进 wrapper RW(geyaxz 实测:RW+0x1C selected 事件层被写 1;
+ * RW+0x2C/0x30 延迟命令队列 {head,tail} 被写成注册句柄与 mr_table 槽指针)。
+ * 完整修复(staging 窗口内按 child P[0] 恢复 R9)已验证可消除该腐蚀,但它
+ * 让 SKY 推广/计费框架真正跑通启动流程(联网上报、termsync/gbreg 注册),
+ * game 随即等待一个 vmrp 尚未模拟的完成信号——当前全部通过的用例都建立在
+ * 该框架瘫痪的基线上。在补齐那条链路之前,宿主以结构性证据修复被踩坏的两个
+ * wrapper 不变量(事件层选择、延迟命令队列),不引入应用/按键/像素分支。
+ *
+ * 事件层:cfunction.ext 在 RW+0xF4 维护八组 {head,tail} 订阅链,RW+0x1C 是
+ * selected;code=1 分发器(+0x1A3C)只遍历 selected 层且无空层回退;唯一的
+ * 降层路径是 guest 命令 (1,0x2A) → 10ms 软定时器 → +0xC80 teardown。selected
+ * 被踩成 1 后层 1 恒为 canonical empty {head=NULL, tail=&head},所有输入被
+ * 丢弃。仅当 selected 顶层连续 canonical empty 且下层链结构性包含 primary
+ * extChunk 时才收缩 selected。
+ */
+static int arm_ext_restore_drained_event_layer(ArmExtModule *m,
+                                               uint32_t wrapper_rw,
+                                               uint32_t primary_ext_chunk) {
+    enum {
+        EVENT_LEVEL_SELECTED_OFF = 0x1Cu,
+        EVENT_LEVEL_TABLE_OFF = 0xF4u,
+        EVENT_LEVEL_COUNT = 8u,
+        EVENT_NODE_CHUNK_OFF = 0x10u,
+        EVENT_CHAIN_LIMIT = 64u
+    };
+    if (!m || !wrapper_rw || !primary_ext_chunk ||
+        !arm_ptr(m, wrapper_rw + EVENT_LEVEL_SELECTED_OFF)) {
+        return 0;
+    }
+
+    uint32_t selected = 0;
+    memcpy(&selected, arm_ptr(m, wrapper_rw + EVENT_LEVEL_SELECTED_OFF), 4);
+    if (selected == 0 || selected >= EVENT_LEVEL_COUNT) return 0;
+
+    uint32_t table = wrapper_rw + EVENT_LEVEL_TABLE_OFF;
+    uint32_t target = selected;
+    while (target > 0) {
+        uint32_t head_addr = table + target * 8u;
+        if (!arm_ptr(m, head_addr + 4u)) return 0;
+        uint32_t head = 0, tail = 0;
+        memcpy(&head, arm_ptr(m, head_addr), 4);
+        memcpy(&tail, arm_ptr(m, head_addr + 4u), 4);
+        if (head != 0 || tail != head_addr) break;
+        target--;
+    }
+    if (target == selected) return 0;
+
+    uint32_t node = 0;
+    uint32_t target_head_addr = table + target * 8u;
+    if (!arm_ptr(m, target_head_addr)) return 0;
+    memcpy(&node, arm_ptr(m, target_head_addr), 4);
+    int primary_linked = 0;
+    for (uint32_t i = 0; node && i < EVENT_CHAIN_LIMIT; ++i) {
+        if (!arm_ptr(m, node + EVENT_NODE_CHUNK_OFF)) return 0;
+        uint32_t chunk = 0, next = 0;
+        memcpy(&chunk, arm_ptr(m, node + EVENT_NODE_CHUNK_OFF), 4);
+        if (chunk == primary_ext_chunk) {
+            primary_linked = 1;
+            break;
+        }
+        memcpy(&next, arm_ptr(m, node), 4);
+        if (next == node) return 0;
+        node = next;
+    }
+    if (!primary_linked) return 0;
+
+    memcpy(arm_ptr(m, wrapper_rw + EVENT_LEVEL_SELECTED_OFF), &target, 4);
+    if (arm_ext_diag_on()) {
+        printf("DIAG event_layer_restore selected=%u target=%u primaryChunk=0x%X\n",
+               selected, target, primary_ext_chunk);
+    }
+    return 1;
+}
+
+/*
+ * 延迟命令队列:wrapper 命令入口(+0x1254)在"关闭定时器挂起"(RW+8 非零)
+ * 时把命令排队到 RW+0x2C/0x30 的 {head,tail} 侵入链(空态 {0, &head},节点
+ * 为堆指针),10ms 关闭回调(+0xC60)清 RW+8 后由 +0xD28 排空。上述 staging
+ * 腐蚀把 head 写成小整数注册句柄、tail 写成 EXT_TABLE 槽指针,首次入队即向
+ * mr_table 槽写节点指针,随后 +0xD28 在低内存垃圾链上永久循环(geyaxz 失败
+ * 菜单选择后整机卡死)。head/tail 同时非法在真实队列态中不可能出现,以此为
+ * 证据把队列恢复为 canonical empty。
+ */
+static int arm_ext_restore_wrapper_command_queue(ArmExtModule *m,
+                                                 uint32_t wrapper_rw) {
+    enum { CMD_QUEUE_HEAD_OFF = 0x2Cu, CMD_QUEUE_TAIL_OFF = 0x30u };
+    if (!m || !wrapper_rw) return 0;
+    uint32_t head_addr = wrapper_rw + CMD_QUEUE_HEAD_OFF;
+    uint32_t tail_addr = wrapper_rw + CMD_QUEUE_TAIL_OFF;
+    if (!arm_ptr(m, head_addr) || !arm_ptr(m, tail_addr)) return 0;
+
+    uint32_t head = 0, tail = 0;
+    memcpy(&head, arm_ptr(m, head_addr), 4);
+    memcpy(&tail, arm_ptr(m, tail_addr), 4);
+
+    /* 合法态:空 {0, &head} 或 head/tail 均为可映射堆指针 */
+    int head_plausible =
+        head == 0 || (head >= EXT_HEAP_ADDR && arm_ptr(m, head));
+    int tail_plausible =
+        tail == head_addr || (tail >= EXT_HEAP_ADDR && arm_ptr(m, tail));
+    if (head_plausible && tail_plausible) return 0;
+    /* 只处理两个字段同时非法的确定性腐蚀签名,避免误伤未知布局 */
+    if (head_plausible || tail_plausible) return 0;
+
+    uint32_t zero = 0;
+    memcpy(arm_ptr(m, head_addr), &zero, 4);
+    memcpy(arm_ptr(m, tail_addr), &head_addr, 4);
+    if (arm_ext_diag_on()) {
+        printf("DIAG cmd_queue_restore head=0x%X tail=0x%X rw=0x%X\n",
+               head, tail, wrapper_rw);
+    }
+    return 1;
+}
+
 /* code=2 之后宿主 timer 已停但仍有活跃队列(四处判活条件各异)时,统一
  * 保持 50ms 宿主 tick,动作与 table[31] mr_timerStart 语义一致。
  * Phase 3 去重:此前四段逐字重复(issues doc M1)。 */
@@ -1615,7 +1737,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         call_p_addr = m->timer_p_addr;
         call_helper_addr = m->timer_helper_addr;
     }
-    int wrapper_raw_event_routed = 0;
     int reopen_set_this_call = 0;
     uint32_t modal_ext_chunk = 0;
     uint32_t modal_suspend_depth_pre = 0;
@@ -1669,17 +1790,6 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
         if (_ec && m->primary_helper_addr && arm_ptr(m, _ec + 8)) {
             memcpy(arm_ptr(m, _ec + 8), &m->primary_helper_addr, 4);
         }
-        /*
-         * Host-originated code=1 packets carry five int32 fields.  The wrapper
-         * sees those raw events before Lua dealevent; return success for them
-         * so a key press is not replayed by Lua's later 12-byte _strCom(801)
-         * forwarding path.  Keep 12-byte internal forwards on the helper's real
-         * return value, which lets non-modal overlays decline events after
-         * their visible state has already been cleared.
-         */
-        if (input_len >= 20 && input_addr) {
-            wrapper_raw_event_routed = 1;
-        }
     }
 
     /* chain walker dispatch 的 supplementary_init_done 计数在
@@ -1687,6 +1797,13 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
 
     uint32_t rw_base = 0;
     memcpy(&rw_base, arm_ptr(m, call_p_addr), 4);
+    if (has_separate_wrapper && call_p_addr == m->p_addr) {
+        /* staging 窗口 R9 分歧踩坏的 wrapper 不变量(注释见函数定义):
+         * 队列修复须在首次入队前生效,事件层收缩只在无模态挂起时进行 */
+        arm_ext_restore_wrapper_command_queue(m, rw_base);
+        if (code == 1 && modal_suspend_depth_pre == 0)
+            arm_ext_restore_drained_event_layer(m, rw_base, modal_ext_chunk);
+    }
     if (arm_ext_diag_on()) {
         uint32_t ev[5] = {0, 0, 0, 0, 0};
         if (code == 1 && input_addr && input_len >= sizeof(ev) &&
@@ -2102,20 +2219,18 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
     if (output) *output = arm_output ? (uint8 *)arm_ptr(m, arm_output) : NULL;
     int32_t call_result = (int32_t)reg_read32(m->uc, UC_ARM_REG_R0);
     if (arm_ext_diag_on()) {
-        printf("DIAG arm_ext_return code=%d input_len=%u callR0=%d wrapperRaw=%d enteredModal=%d modalPre=%u modalPost=%u activeP=0x%X activeH=0x%X timerP=0x%X timerH=0x%X hostTimer=%d mrTimer=%d\n",
-               (int)code, input_len, call_result, wrapper_raw_event_routed,
-               wrapper_entered_modal, modal_suspend_depth_pre,
+        printf("DIAG arm_ext_return code=%d input_len=%u callR0=%d enteredModal=%d modalPre=%u modalPost=%u activeP=0x%X activeH=0x%X timerP=0x%X timerH=0x%X hostTimer=%d mrTimer=%d\n",
+               (int)code, input_len, call_result, wrapper_entered_modal,
+               modal_suspend_depth_pre,
                modal_suspend_depth_post, m->active_p_addr,
                m->active_helper_addr, m->timer_p_addr, m->timer_helper_addr,
                m->host_timer_pending, mr_timer_state);
     }
     arm_ext_dispatch_pending_sms_result(m);
 
-    /* 20-byte 原始事件已经先经过 wrapper；这里向宿主返回 MR_SUCCESS，
-     * 避免同一个输入随后又经 Lua 的 12-byte _strCom(801) 转发重复处理。
-     * 事件导致 0->1 进入模态时也必须消费；12-byte 内部转发仍返回
-     * helper 的真实 R0，供非模态前台模块在清掉可见层后继续把事件交给 game/Lua。 */
-    if (wrapper_raw_event_routed || wrapper_entered_modal) return MR_SUCCESS;
+    /* A wrapper event that enters a modal child is consumed at that ownership
+     * boundary even when the wrapper ABI reports MR_IGNORE to its caller. */
+    if (wrapper_entered_modal) return MR_SUCCESS;
     return call_result;
 }
 

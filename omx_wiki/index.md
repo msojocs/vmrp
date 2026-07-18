@@ -1,9 +1,10 @@
 # Wiki Index
 
-> 37 pages | Last updated: 2026-07-17T14:12:39.389Z
+> 38 pages | Last updated: 2026-07-18T11:18:52.774Z
 
 ## debugging
 
+- [ARM EXT canonical empty event layer recovery](arm-ext-canonical-empty-event-layer-recovery.md) — # ARM EXT canonical empty event layer recovery
 - [Cookie child return reload protocol (table[138] binary _RL record)](cookie-child-return-opening-folder-frame-replay.md) — # Cookie child return reload protocol (table[138] binary _RL record)
 - [Cookie MRP restart and FULL runtime version contract](cookie-mrp-restart-and-full-runtime-version-contract.md) — # Cookie MRP restart and FULL runtime version contract
 - [DOTA browser plugin DSM package provenance](dota-browser-plugin-dsm-package-provenance.md) — # DOTA browser plugin DSM package provenance
