@@ -109,6 +109,15 @@ VMRP_EXPORT const uint8_t *vmrp_api_get_screen_rgba_buffer(void);
 VMRP_EXPORT int vmrp_api_get_screen_dirty(void);
 VMRP_EXPORT int vmrp_api_get_screen_width(void);
 VMRP_EXPORT int vmrp_api_get_screen_height(void);
+/*
+ * Current LCD rotation requested by the guest via mr_plat(101, param)
+ * (MR_LCD_ROTATE_*: 0=normal, 1=90°, 2=180°, 3=270°).  For odd rotations the
+ * width/height getters above return the transposed panel size and the screen
+ * buffer rows use that width as stride.  Poll after each dirty frame and
+ * rebuild the texture/layout when width/height/rotation changed
+ * (总像素数在转置下不变,buffer 指针保持有效).
+ */
+VMRP_EXPORT int vmrp_api_get_screen_rotation(void);
 
 /*
  * Audio stream: the runtime decodes/synthesizes MRP sound into signed

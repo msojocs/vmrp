@@ -11,8 +11,9 @@
 #include "./include/vmrp.h"
 
 void printScreen(char *filename, uint16_t *buf) {
-    int w = vmrp_config.screen_width;
-    int h = vmrp_config.screen_height;
+    /* buf 为全屏缓冲,LCD 旋转后其几何即显示尺寸(rotation==0 时同面板) */
+    int w = vmrp_display_width();
+    int h = vmrp_display_height();
     uint32_t pixel_bytes = (uint32_t)(w * h * 2);
     uint32_t file_size = 70 + pixel_bytes;
     int32_t neg_h = -h;

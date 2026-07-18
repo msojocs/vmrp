@@ -192,6 +192,9 @@ typedef _vmrp_api_get_screen_width_Dart = int Function();
 typedef _vmrp_api_get_screen_height_C = Int32 Function();
 typedef _vmrp_api_get_screen_height_Dart = int Function();
 
+typedef _vmrp_api_get_screen_rotation_C = Int32 Function();
+typedef _vmrp_api_get_screen_rotation_Dart = int Function();
+
 typedef _vmrp_api_is_edit_active_C = Int32 Function();
 typedef _vmrp_api_is_edit_active_Dart = int Function();
 
@@ -214,6 +217,7 @@ class VmrpBindings {
   late final _vmrp_api_get_screen_dirty_Dart getScreenDirty;
   late final _vmrp_api_get_screen_width_Dart getScreenWidth;
   late final _vmrp_api_get_screen_height_Dart getScreenHeight;
+  late final _vmrp_api_get_screen_rotation_Dart getScreenRotation;
   late final _vmrp_api_is_edit_active_Dart isEditActive;
   late final _vmrp_api_set_edit_text_Dart setEditText;
   late final _vmrp_api_cancel_edit_Dart cancelEdit;
@@ -233,6 +237,7 @@ class VmrpBindings {
     getScreenDirty = _lib.lookupFunction<_vmrp_api_get_screen_dirty_C, _vmrp_api_get_screen_dirty_Dart>('vmrp_api_get_screen_dirty');
     getScreenWidth = _lib.lookupFunction<_vmrp_api_get_screen_width_C, _vmrp_api_get_screen_width_Dart>('vmrp_api_get_screen_width');
     getScreenHeight = _lib.lookupFunction<_vmrp_api_get_screen_height_C, _vmrp_api_get_screen_height_Dart>('vmrp_api_get_screen_height');
+    getScreenRotation = _lib.lookupFunction<_vmrp_api_get_screen_rotation_C, _vmrp_api_get_screen_rotation_Dart>('vmrp_api_get_screen_rotation');
     isEditActive = _lib.lookupFunction<_vmrp_api_is_edit_active_C, _vmrp_api_is_edit_active_Dart>('vmrp_api_is_edit_active');
     setEditText = _lib.lookupFunction<_vmrp_api_set_edit_text_C, _vmrp_api_set_edit_text_Dart>('vmrp_api_set_edit_text');
     cancelEdit = _lib.lookupFunction<_vmrp_api_cancel_edit_C, _vmrp_api_cancel_edit_Dart>('vmrp_api_cancel_edit');
@@ -732,9 +737,48 @@ VMRP 的工作目录（文件 I/O 根目录）是 MRP 文件所在的目录。
 
 通过 `vmrp_api_init(width, height)` 设置。分辨率必须在 `start()` 之前设定。
 
+### 屏幕旋转（横屏游戏）
+部分游戏（如 gtcm/贪吃猫，面向 320x480 竖屏真机）运行期经
+`mr_plat(101, param)` 请求 LCD 旋转（`MR_LCD_ROTATE_*`：0=正常，1=90°，
+2=180°，3=270°），并可在进入付费/下载等插件界面前撤销旋转再恢复。
+旋转是**运行期状态**，宿主需在每次 dirty 帧后复查：
+
+- `vmrp_api_get_screen_rotation()`：返回当前旋转（0..3）
+- `vmrp_api_get_screen_width()` / `vmrp_api_get_screen_height()`：**旋转感知**，
+  奇数旋转（90°/270°）时返回 `init` 面板尺寸的转置（如 320x480 → 480x320），
+  屏幕缓冲区行宽同步按该宽度解释
+- 总像素数在转置下不变，`getScreenBuffer()` 指针保持有效，无需重新 `init`
+
+Dart FFI 绑定：
+
+```dart
+typedef _vmrp_api_get_screen_rotation_C = Int32 Function();
+typedef _vmrp_api_get_screen_rotation_Dart = int Function();
+// ...
+getScreenRotation = _lib.lookupFunction<_vmrp_api_get_screen_rotation_C,
+    _vmrp_api_get_screen_rotation_Dart>('vmrp_api_get_screen_rotation');
+```
+
+VmrpEngine 轮询处（每次 dirty 帧后）：
+
+```dart
+if (_bindings.getScreenDirty() != 0) {
+  final w = _bindings.getScreenWidth();
+  final h = _bindings.getScreenHeight();
+  if (w != _lastW || h != _lastH) {
+    // 旋转发生:按新尺寸重建 Image/纹理与触摸坐标映射,
+    // 触摸坐标始终以当前 w x h 画布为准(1:1,无需变换)。
+    _lastW = w; _lastH = h;
+    _rebuildTexture(w, h);
+  }
+  _presentFrame(w, h);
+}
+```
+
 ### 屏幕缓冲区格式
 - RGB565，16-bit per pixel，little-endian
-- 行优先存储，大小 = `width * height * 2` 字节
+- 行优先存储，大小 = `width * height * 2` 字节（width/height 为旋转感知
+  getter 的当前返回值）
 - 上面的 `getScreenRGBA()` 示例中已包含 RGB565 → RGBA8888 转换
 
 ### 定时器模型

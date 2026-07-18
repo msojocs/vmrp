@@ -125,5 +125,10 @@ int32 mr_restart_old_app(void);
 /* 宿主编码路径 → guest(GBK) 编码；get_filename() 编码规则的逆操作，
  * 详见 dsm.c 中实现处的注释。 */
 void dsm_host_path_to_guest(char *buf, uint32 bufsize, const char *host_path);
+/* 当前 LCD 旋转(MR_LCD_ROTATE_*: 0=正常,1=90°,2=180°,3=270°)。guest 经
+ * mr_plat(101,param) 设置(真机 LCD 驱动状态,由 DSM 层持有);宿主展示层
+ * 据此计算旋转后的显示尺寸(vmrp_display_width/height)。 */
+int32 dsm_get_lcd_rotation(void);
+void dsm_set_lcd_rotation(int32 rotation);
 
 #endif
