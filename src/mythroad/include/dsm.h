@@ -122,5 +122,8 @@ typedef struct start_t {
 
 int32 dsm_init(DSM_REQUIRE_FUNCS *inFuncs);
 int32 mr_restart_old_app(void);
+/* 宿主编码路径 → guest(GBK) 编码；get_filename() 编码规则的逆操作，
+ * 详见 dsm.c 中实现处的注释。 */
+void dsm_host_path_to_guest(char *buf, uint32 bufsize, const char *host_path);
 
 #endif

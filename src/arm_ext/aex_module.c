@@ -8,6 +8,7 @@
  */
 #include "../include/arm_ext_priv.h"
 #include "../include/fileLib.h"
+#include "../mythroad/include/dsm.h" /* dsm_host_path_to_guest：包名别名转 guest(GBK) 编码 */
 
 #ifndef _MSC_VER
 #include <unistd.h>
@@ -402,8 +403,16 @@ void arm_ext_init_pack_names(ArmExtModule *m) {
     }
     snprintf(m->pack_host_path, sizeof(m->pack_host_path), "%s",
              host_path ? host_path : "");
-    snprintf(m->pack_alias, sizeof(m->pack_alias), "%s",
-             (alias && *alias) ? alias : m->pack_host_path);
+    /*
+     * 真机上 table[100] 的包名是 GBK 字节，而宿主文件系统给出的路径是
+     * UTF-8。EXT 代码会把该别名剥掉目录/.mrp 后拼进 cache/<包名> 等路径
+     * 再交回 get_filename()（按 GBK→UTF-8 还原），所以 ARM 可见的别名
+     * 必须存成 GBK：否则 UTF-8 字节被二次转换生成乱码目录，且 UTF-8
+     * 中文比 GBK 长，会撑爆 EXT 固定长度的包名缓冲区。guest 回传的 GBK
+     * 别名由 arm_ext_pack_to_host_path() 精确匹配映射回 pack_host_path。
+     */
+    dsm_host_path_to_guest(m->pack_alias, sizeof(m->pack_alias),
+                           (alias && *alias) ? alias : m->pack_host_path);
 }
 
 const char *arm_ext_pack_to_host_path(ArmExtModule *m, const char *pack) {

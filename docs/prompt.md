@@ -546,10 +546,8 @@ tool/server-http.js已启动，修改tool/proxy.js来实现代理服务器。
 记得存储记忆数据。
 
 工作区中的修改是修复以下BUG产生的，分析实现方案是否合理：
-命令`build/vmrp build/mythroad/愤怒的小鸟VS僵尸2_v1002.mrp`执行后，会黑屏。
+命令`build/vmrp build/mythroad/愤怒的小鸟VS僵尸2_v1002-3.mrp`执行后，`build/mythroad/cache`会出现乱码文件夹，分析哪里来的，如果是程序释放资源的文件夹，那就修正编码。
 
-预期结果：游戏正常启动。
-实际结果：重命名为`愤怒的小鸟VS僵尸2.mrp`可以启动，看起来只是名称问题。
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。
