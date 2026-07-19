@@ -8,7 +8,7 @@
 目标命令为：
 
 ```bash
-build/vmrp build/mythroad/490111_240x320_sanguo.mrp
+build/skyengine build/mythroad/490111_240x320_sanguo.mrp
 ```
 
 所有历史运行都使用 `SDL_VIDEODRIVER=dummy` 或 SDL 自带的
@@ -113,7 +113,7 @@ talkcat/game-prepare + gtcm/boot-to-home + gxdzc/gxdzc-pixel
 
 ## 4. 历史二分：R9 同步是触发边界，不是直接根因
 
-以“同步 code-0 是否返回”为判据，在 `/tmp/vmrp-sanguo-history` 中构建
+以“同步 code-0 是否返回”为判据，在 `/tmp/skyengine-sanguo-history` 中构建
 和运行关键提交，结果如下：
 
 | 提交/实验 | code-0 | game/plugin 加载 | PPM |
@@ -135,11 +135,11 @@ _mr_readFile reallen:224
 _mr_readFile reallen:4532
 _mr_readFile reallen:20770
 _mr_readFile reallen:14314
-[startVmrp] vmrp_runtime_start_dsm returned 0x0
+[startVmrp] skyengine_runtime_start_dsm returned 0x0
 ```
 
 这证明它们不是在 Lua、MRP 索引或 `game.ext` 加载前提前返回。两次
-`/tmp/vmrp_screen.ppm` 都是 P6 240x320，SHA-256 均为
+`/tmp/skyengine_screen.ppm` 都是 P6 240x320，SHA-256 均为
 `1edcc2a5a6f7f596acf98d8fbd248c4175886dc8759e6d75ec652b339c2a53b6`，
 且 230400 个像素字节全部为 0。故“code-0 返回”绝不等于“游戏正常启动”。
 
@@ -165,7 +165,7 @@ allocator 分歧稳定暴露为同步 teardown 活锁。它没有证明 R9 sync 
 
 ### Vitest e2e
 
-`VmrpE2e` 用 `VMRP_E2E_SOCKET` 启动 `build/vmrp`，自动设置 SDL video/audio
+`VmrpE2e` 用 `SKYENGINE_E2E_SOCKET` 启动 `build/skyengine`，自动设置 SDL video/audio
 dummy driver，并把 `SCREEN` 输出直接解析为 PPM。`VmrpWorkspace.create()`
 为每个 `it()` 复制独立 `mythroad/`，避免插件、缓存和存档并发污染。
 
@@ -182,13 +182,13 @@ pnpm exec vitest run test/e2e --reporter=verbose
 
 ### CTest 残留陷阱
 
-当前源码已经没有可构建的 `vmrp-unit`：`9e7bcd8` 删除
+当前源码已经没有可构建的 `skyengine-unit`：`9e7bcd8` 删除
 `test/unit/test_arm_ext.c`、`unit_stubs.c` 和 wrapper assets，`f4b6c11`
 删除 CMake 的 test target/`add_test`。但既有 `build/CTestTestfile.cmake` 和
-`build/vmrp-unit` 仍可能残留，使 `ctest -N` 显示一个测试、`ctest` 甚至报告
+`build/skyengine-unit` 仍可能残留，使 `ctest -N` 显示一个测试、`ctest` 甚至报告
 通过。该结果来自陈旧 build tree，不能作为当前源码门禁。
 
-当前 `CMakeLists.txt` 中“vmrp-unit 只链接这部分”的注释也已过期。除非后续
+当前 `CMakeLists.txt` 中“skyengine-unit 只链接这部分”的注释也已过期。除非后续
 恢复 unit target，否则最终验证不要把 stale `ctest` 计入成功项。
 
 ## 6. 修复后的分层验证命令
@@ -210,7 +210,7 @@ pnpm exec vitest run test/e2e --reporter=verbose
 新增后，首轮命令应为：
 
 ```bash
-cmake --build build --target vmrp -j2
+cmake --build build --target skyengine -j2
 pnpm exec tsc --noEmit
 pnpm exec vitest run test/e2e/sanguo/boot-to-home.test.ts --reporter=verbose
 ```
@@ -242,7 +242,7 @@ pnpm exec vitest run test/e2e/talkcat/game-prepare.test.ts --reporter=verbose
 ### 6.3 最终兼容门禁
 
 ```bash
-cmake --build build --target vmrp -j2
+cmake --build build --target skyengine -j2
 pnpm exec tsc --noEmit
 pnpm exec vitest run test/e2e --reporter=verbose
 git diff --check
@@ -269,8 +269,8 @@ pnpm exec vitest run test/e2e/gfhcq/temp.test.ts --reporter=verbose
   free-after-read 地址复用、GTMC 付费界面和 GXDZC 像素流程。
 - 最终重建后定向集：3 files / 6 tests 通过，307.26s。
 - 默认并行全量：19 files / 32 tests 通过，289.89s。
-- `cmake --build build --target vmrp -j2`、`pnpm exec tsc --noEmit` 和
-  `git diff --check` 通过。旧 `build/vmrp-unit`/`CTestTestfile.cmake` 不对应
+- `cmake --build build --target skyengine -j2`、`pnpm exec tsc --noEmit` 和
+  `git diff --check` 通过。旧 `build/skyengine-unit`/`CTestTestfile.cmake` 不对应
   当前源码中的 target，不计为 unit 覆盖。
 - 本次未修改 screen/damage 路径，因此默认排除的
   `test/e2e/gfhcq/temp.test.ts` 不属于此 allocator 修复的必需门禁。

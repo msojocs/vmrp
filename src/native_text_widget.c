@@ -5,7 +5,7 @@
 #include <string.h>
 
 #include "./include/bridge.h"
-#include "./include/fileLib.h"
+#include "./include/file_lib.h"
 #include "./include/types.h"
 #include "./include/skyengine.h"
 
@@ -67,7 +67,7 @@ static int tw_presenting = 0;
 static int32_t tw_font_fd = 0;
 
 /* 打开平台 16px 字库。失败返回 0:调用方按 MR_FAILED 处理,不做降级绘制。
- * 路径说明:进程已 chdir 到 --work-dir(vmrp.c),guest 文件系统根对应宿主
+ * 路径说明:进程已 chdir 到 --work-dir(skyengine.c),guest 文件系统根对应宿主
  * "mythroad/"(dsm.c MYTHROAD_PATH),故 guest 的 system/gb16.uc2 在宿主侧
  * 是 mythroad/system/gb16.uc2;my_open 接受宿主相对路径。 */
 static int tw_font_open(void) {
@@ -192,8 +192,8 @@ static int tw_visible_lines(int ph) {
 
 /* 整页渲染并上屏(黑底绿字;上屏经 guiDrawBitmap 走统一 present 计数) */
 static void tw_render_and_present(void) {
-    int pw = vmrp_display_width();
-    int ph = vmrp_display_height();
+    int pw = skyengine_display_width();
+    int ph = skyengine_display_height();
     uint16_t *page = (uint16_t *)calloc((size_t)pw * (size_t)ph, sizeof(uint16_t));
     if (page == NULL) return;
 
@@ -235,8 +235,8 @@ int native_text_widget_capture_frame(const uint16_t *bmp, int32_t x, int32_t y,
     if (tw_presenting) return 0; /* 文本框自身的上屏帧:直通,不入镜像 */
     if (bmp == NULL || stride <= 0 || w <= 0 || h <= 0) return 0;
 
-    int dw = vmrp_display_width();
-    int dh = vmrp_display_height();
+    int dw = skyengine_display_width();
+    int dh = skyengine_display_height();
     if (tw_mirror == NULL || tw_mirror_w != dw || tw_mirror_h != dh) {
         /* 显示尺寸变化(plat(101) 旋转):镜像重建,旧内容对新尺寸无意义 */
         free(tw_mirror);
@@ -268,7 +268,7 @@ int native_text_widget_capture_frame(const uint16_t *bmp, int32_t x, int32_t y,
 /* 关闭时把镜像整帧重推上屏,露出被文本框遮住的应用画面 */
 static void tw_present_mirror(void) {
     if (!tw_mirror_valid || tw_mirror == NULL) return;
-    if (tw_mirror_w != vmrp_display_width() || tw_mirror_h != vmrp_display_height()) return;
+    if (tw_mirror_w != skyengine_display_width() || tw_mirror_h != skyengine_display_height()) return;
     tw_presenting = 1;
     guiDrawBitmap(tw_mirror, 0, 0, tw_mirror_w, tw_mirror_h);
     tw_presenting = 0;
@@ -378,7 +378,7 @@ int native_text_widget_filter_event(int32_t code, int32_t p0, int32_t *dialog_pa
             }
             return 1;
         case MR_KEY_DOWN: {
-            int vis = tw_visible_lines(vmrp_display_height());
+            int vis = tw_visible_lines(skyengine_display_height());
             if (tw.scroll + vis < tw.line_count) {
                 tw.scroll++;
                 tw_render_and_present();

@@ -78,7 +78,7 @@ loop() main event loop:
         └─ if (ev.type == SDL_MOUSEBUTTONDOWN) [line 474]
            ├─ Log click: "[CLICK] #%u down x=%d y=%d"
            ├─ Call: event(MR_MOUSE_DOWN, ev.button.x, ev.button.y)
-           │  └─ Routes to emulated code via vmrp_runtime_event()
+           │  └─ Routes to emulated code via skyengine_runtime_event()
            └─ Log return: "[CLICK] #%u down ret=%d"
         
         └─ if (ev.type == SDL_MOUSEBUTTONUP) [line 486]
@@ -97,10 +97,10 @@ loop() main event loop:
 
 ### Event Dispatch to Emulated Code
 
-**File: src/vmrp.c, event() function [lines 347-349]**
+**File: src/skyengine.c, event() function [lines 347-349]**
 ```c
 int32_t event(int32_t code, int32_t p1, int32_t p2) {
-    return vmrp_runtime_event(&runtime, code, p1, p2);
+    return skyengine_runtime_event(&runtime, code, p1, p2);
 }
 ```
 
@@ -111,7 +111,7 @@ This routes all events (from auto-clicks, real input, or timers) to the ARM emul
 ## 2. PPM Screen Dumps
 
 ### Mechanism
-Screenshots are saved as PPM (Portable PixMap) format to `/tmp/vmrp_screen.ppm` for verification in headless environments.
+Screenshots are saved as PPM (Portable PixMap) format to `/tmp/skyengine_screen.ppm` for verification in headless environments.
 
 ### Triggering PPM Dumps
 
@@ -121,7 +121,7 @@ Screenshots are saved as PPM (Portable PixMap) format to `/tmp/vmrp_screen.ppm` 
    ```c
    if (guiDrawBitmapCount == 5 || 
        (guiDrawBitmapCount % 30 == 0 && getenv("SKYENGINE_PPM"))) {
-       dump_screen_ppm("/tmp/vmrp_screen.ppm");
+       dump_screen_ppm("/tmp/skyengine_screen.ppm");
    }
    ```
    - Always dumps on the 5th guiDrawBitmap() call
@@ -130,7 +130,7 @@ Screenshots are saved as PPM (Portable PixMap) format to `/tmp/vmrp_screen.ppm` 
 2. **SIGUSR1 Signal Handler** (lines 70-73):
    ```c
    static void sigusr1_handler(int sig) {
-       dump_screen_ppm("/tmp/vmrp_screen.ppm");
+       dump_screen_ppm("/tmp/skyengine_screen.ppm");
    }
    ```
    - Installed at startup (line 539) 
@@ -161,20 +161,20 @@ Screenshots are saved as PPM (Portable PixMap) format to `/tmp/vmrp_screen.ppm` 
      └─ Write 3 bytes per pixel (R, G, B in raw binary)
 
 3. File Location:
-   /tmp/vmrp_screen.ppm
+   /tmp/skyengine_screen.ppm
 ```
 
 **PPM is a text/binary format:**
 - P6 = "raw" (binary) PPM format
 - Simple format readable by ImageMagick, GIMP, etc.
-- Can convert: `convert /tmp/vmrp_screen.ppm output.png`
+- Can convert: `convert /tmp/skyengine_screen.ppm output.png`
 
 ### Environment Variable Control
 
 - **VMRP_PPM**: If set, enable continuous PPM dumps every 30 frames
   - Without this: only dumps on frame 5
   - With this: frame 5 + every 30 frames after
-- **Purpose**: Keep `/tmp/vmrp_screen.ppm` always showing current screen state
+- **Purpose**: Keep `/tmp/skyengine_screen.ppm` always showing current screen state
 - **Tradeoff**: Small disk I/O overhead vs. real-time visibility in headless testing
 
 ---
@@ -262,7 +262,7 @@ loop():
                     └────┬────┴────┬─────────┘
                          │        │
                     ┌────▼────────▼────┐
-                    │ vmrp_runtime_event()
+                    │ skyengine_runtime_event()
                     │ Routes to ARM     │
                     │ Unicorn engine    │
                     └───────┬──────────┘
@@ -295,7 +295,7 @@ Timer Callback (runs in SDL timer thread):
   └─ Create custom SDL event with registered type (timerEventType)
      └─ SDL_PushEvent() → queues to main thread
         └─ Main loop detects custom event
-           └─ Calls timer() → vmrp_runtime_timer()
+           └─ Calls timer() → skyengine_runtime_timer()
               └─ Executes Mythroad timer callback in emulator
 ```
 
@@ -314,7 +314,7 @@ Emulated code calls guiDrawBitmap():
   ├─ Check if PPM dump needed:
   │  ├─ Always on frame 5
   │  └─ Every 30 frames if VMRP_PPM set
-  │     └─ dump_screen_ppm("/tmp/vmrp_screen.ppm")
+  │     └─ dump_screen_ppm("/tmp/skyengine_screen.ppm")
   │
   ├─ Lock SDL surface if needed
   │
@@ -374,7 +374,7 @@ VMRP_AUTO_CLICK_DELAY_MS=1000
         │  ├─ SDL_MOUSEBUTTONUP    │
         │  ├─ SDL_PushEvent()      │  ├─ Logs "[CLICK] #1 down"
         │  └─ Sleep 1000ms         │  ├─ event(MR_MOUSE_DOWN, 50, 100)
-        │                     │     │  │  └─ vmrp_runtime_event()
+        │                     │     │  │  └─ skyengine_runtime_event()
         │                     │     │  │     └─ Calls emulator
         │                     │     │  │        with new state
         │                     │     │  └─ Logs "[CLICK] #1 down ret=..."

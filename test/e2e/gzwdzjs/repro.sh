@@ -8,7 +8,7 @@ cp -rL "$ROOT/wasm/dist/fs/mythroad" "$WS/mythroad"
 cp "$ROOT/test/fixtures/gzwdzjs.mrp" "$WS/mythroad/"
 seq='-2,0,3000;-4,0,1000;-4,0,1000;-4,0,1000;-4,0,1000;-4,0,1000;-4,0,1000;-4,0,15000;-4,0,15000'
 timeout 90s env VMRP_AUTO_CLICK_DELAY_MS=5000 VMRP_AUTO_CLICKS="$seq" \
-  "$ROOT/build/vmrp" --work-dir "$WS" "$WS/mythroad/gzwdzjs.mrp"
+  "$ROOT/build/skyengine" --work-dir "$WS" "$WS/mythroad/gzwdzjs.mrp"
 rc=$?
 rm -rf "$WS"
 exit $rc

@@ -51,7 +51,7 @@
             "name": "debug linux",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/build/vmrp",
+            "program": "${workspaceFolder}/build/skyengine",
             "args": [],
             "cwd": "${workspaceFolder}",
             // "miDebuggerPath": "/usr/bin/gdb"

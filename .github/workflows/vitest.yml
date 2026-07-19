@@ -39,7 +39,7 @@ jobs:
         run: cmake -S . -B build
 
       - name: Build Sky Engine
-        run: cmake --build build --target vmrp --parallel
+        run: cmake --build build --target skyengine --parallel
 
       - name: Run Vitest
         id: vitest
@@ -54,5 +54,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vitest-last-frames-${{ github.run_attempt }}
-          path: /tmp/vmrp-e2e-*/screen.ppm
+          path: /tmp/skyengine-e2e-*/screen.ppm
           if-no-files-found: warn

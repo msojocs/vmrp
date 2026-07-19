@@ -34,7 +34,7 @@ int native_text_widget_capture_frame(const uint16_t *bmp, int32_t x, int32_t y,
                                      int32_t sx, int32_t sy);
 
 /*
- * 事件钩子:guest 事件入口(vmrp_runtime_event)前置过滤。
+ * 事件钩子:guest 事件入口(skyengine_runtime_event)前置过滤。
  * 返回 0=未激活不拦截;1=事件已被平台消费(不再投递给应用);
  * 2=软键命中文本框按钮,调用方应改投 MR_DIALOG_EVENT,参数写入 *dialog_param。
  */

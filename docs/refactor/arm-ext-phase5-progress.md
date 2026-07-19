@@ -14,7 +14,7 @@
 - **字节扫描加速**:`arm_ext_bytes_contain` 从逐字节推进改为 memchr 跳到
   首字节候选再整段比对,结果与朴素实现严格等价(单测以朴素实现为
   oracle 对拍,含首字节高频重复构造 + 边界)。
-- vmrp-unit 升至 **69 checks**。
+- skyengine-unit 升至 **69 checks**。
 
 ## P5.3 golden 关键帧回归 ✅
 
@@ -39,7 +39,7 @@
 
 ## 验证
 
-- vmrp-unit 69 checks ✅;全量 e2e 17 文件/29 用例 ✅(含新 golden 用例);
+- skyengine-unit 69 checks ✅;全量 e2e 17 文件/29 用例 ✅(含新 golden 用例);
   第一方告警 0 ✅。
 - 错误路径用例说明:方案提到的"删 netpay"错误路径已由
   test/e2e/gzwdzjs/game-start.test.ts 覆盖(本轮工作起点即该用例);

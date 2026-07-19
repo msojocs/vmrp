@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 import fs from "fs";
 
 describe("geyaxz", () => {
@@ -23,7 +23,7 @@ describe("geyaxz", () => {
     engine = await SkyEngineE2e.start("test/fixtures/geyaxz.mrp", { workDir: ws.dir });
 
     await vi.waitFor(async () => {
-      if (!engine) throw new Error('vmrp not defined')
+      if (!engine) throw new Error('skyengine not defined')
       const screen = await engine.screen('bgm-select')
       // rgb(128, 220, 232)
       expect(screen.pixel(112, 125)).toEqual([128, 220, 232])
@@ -35,7 +35,7 @@ describe("geyaxz", () => {
       // 点击右键，不开启声音
       await engine.key('RIGHT_SOFT', 1_000)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen('home')
         // rgb(128, 220, 232)
         expect(screen.pixel(112, 125)).not.toEqual([128, 220, 232])
@@ -50,7 +50,7 @@ describe("geyaxz", () => {
       // 开始游戏，进入选择关卡界面
       await engine.key('ENTER', 1_000)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen('select')
         // rgb(104, 148, 144)
         expect(screen.pixel(99, 92)).toEqual([104, 148, 144])
@@ -63,7 +63,7 @@ describe("geyaxz", () => {
       // 回车选择第一个关卡
       await engine.key('ENTER', 1_000)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen('game')
         // rgb(96, 84, 144)
         expect(screen.pixel(32, 229)).toEqual([96, 84, 144])
@@ -95,7 +95,7 @@ describe("geyaxz", () => {
         await engine.delay(500)
       }
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen('failed-menu')
         // rgb(192, 216, 208)
         expect(screen.pixel(69, 239)).toEqual([192, 216, 208])
@@ -107,7 +107,7 @@ describe("geyaxz", () => {
       await engine.delay(500)
       await engine.key('ENTER', 1_000)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen('retry')
         // rgb(192, 216, 208)
         expect(screen.pixel(69, 239)).not.toEqual([192, 216, 208])

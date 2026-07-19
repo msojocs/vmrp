@@ -15,7 +15,7 @@ extern int32_t timerStart(uint16_t t);
 extern int32_t timerStop(void);
 /* 震动马达(mr_startShake/mr_stopShake,SKYENGINE 手册 mr_startShake.md):
  * 各前端自行实现——SDL 桌面无振动器为空实现;共享库(Flutter)记录请求供
- * 嵌入端轮询(vmrp_api_take_shake)后调平台振动器。 */
+ * 嵌入端轮询(skyengine_api_take_shake)后调平台振动器。 */
 extern void guiStartShake(int32_t ms);
 extern void guiStopShake(void);
 extern int32_t editCreate(const char *title, const char *text, int32_t type, int32_t max_size);

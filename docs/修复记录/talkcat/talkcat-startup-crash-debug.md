@@ -4,7 +4,7 @@ Date: 2026-07-02
 
 ## Request / constraints
 
-- Target command: `build/vmrp build/mythroad/talkcat.mrp`.
+- Target command: `build/skyengine build/mythroad/talkcat.mrp`.
 - Expected: successfully enter the game main screen.
 - Actual: crashes during startup data extraction with
   `arm_ext_executor: uc_emu_start(0xE83A55) failed: 10 (Invalid instruction (UC_ERR_INSN_INVALID))`.
@@ -19,9 +19,9 @@ masked by existing `build/mythroad/talkcat/*` files:
 
 ```bash
 timeout 120s env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  VMRP_PPM=1 VMRP_PPM_PATH=/tmp/talkcat-clean.ppm \
-  build/vmrp --work-dir /tmp/vmrp-talkcat-work \
-  /home/msojocs/github/vmrp/build/mythroad/talkcat.mrp \
+  VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/talkcat-clean.ppm \
+  build/skyengine --work-dir /tmp/skyengine-talkcat-work \
+  /home/msojocs/github/skyengine/build/mythroad/talkcat.mrp \
   > /tmp/talkcat-clean.out 2> /tmp/talkcat-clean.err
 ```
 
@@ -46,9 +46,9 @@ Focused rerun:
 ```bash
 timeout 70s env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
   VMRP_ARM_EXT_TRACE_PC=1 VMRP_ARM_EXT_DIAG=1 \
-  VMRP_PPM=1 VMRP_PPM_PATH=/tmp/talkcat-diag.ppm \
-  build/vmrp --work-dir /tmp/vmrp-talkcat-work-diag \
-  /home/msojocs/github/vmrp/build/mythroad/talkcat.mrp \
+  VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/talkcat-diag.ppm \
+  build/skyengine --work-dir /tmp/skyengine-talkcat-work-diag \
+  /home/msojocs/github/skyengine/build/mythroad/talkcat.mrp \
   > /tmp/talkcat-diag.out 2> /tmp/talkcat-diag.err
 ```
 
@@ -88,7 +88,7 @@ The missing native behavior was `mr_plat(MR_GET_FILE_POS, fd)`. `MR_IGNORE` is
 Implemented the generic file-position query instead of adding a TalkCat-specific
 branch:
 
-- `src/include/fileLib.h`: declared `my_tell(int32_t f)`.
+- `src/include/file_lib.h`: declared `my_tell(int32_t f)`.
 - `src/fileLib.c`: added `my_tell()` using `lseek(fd, 0, MR_SEEK_CUR)`.
 - `src/mythroad/include/dsm.h`: added `tell` to `DSM_REQUIRE_FUNCS`.
 - `src/native_dsm_funcs.c`: wired `.tell = my_tell`.
@@ -103,13 +103,13 @@ arithmetic before calling `mr_read()`.
 Focused clean-workdir diagnostic:
 
 ```bash
-rm -rf /tmp/vmrp-talkcat-work-fixed-diag
-install -d /tmp/vmrp-talkcat-work-fixed-diag
+rm -rf /tmp/skyengine-talkcat-work-fixed-diag
+install -d /tmp/skyengine-talkcat-work-fixed-diag
 timeout 90s env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
   VMRP_ARM_EXT_DIAG=1 VMRP_ARM_EXT_TRACE_PC=1 \
-  VMRP_PPM=1 VMRP_PPM_PATH=/tmp/talkcat-fixed-diag.ppm \
-  build/vmrp --work-dir /tmp/vmrp-talkcat-work-fixed-diag \
-  /home/msojocs/github/vmrp/build/mythroad/talkcat.mrp \
+  VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/talkcat-fixed-diag.ppm \
+  build/skyengine --work-dir /tmp/skyengine-talkcat-work-fixed-diag \
+  /home/msojocs/github/skyengine/build/mythroad/talkcat.mrp \
   > /tmp/talkcat-fixed-diag.out 2> /tmp/talkcat-fixed-diag.err
 ```
 
@@ -145,11 +145,11 @@ the guest's payload-length calculation.
 Normal clean-workdir startup without heavy ARM diagnostics:
 
 ```bash
-rm -rf /tmp/vmrp-talkcat-goal-audit2 /tmp/talkcat-goal-audit2.ppm
-install -d /tmp/vmrp-talkcat-goal-audit2
+rm -rf /tmp/skyengine-talkcat-goal-audit2 /tmp/talkcat-goal-audit2.ppm
+install -d /tmp/skyengine-talkcat-goal-audit2
 timeout 120s env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  VMRP_PPM=1 VMRP_PPM_PATH=/tmp/talkcat-goal-audit2.ppm \
-  build/vmrp --work-dir /tmp/vmrp-talkcat-goal-audit2 \
+  VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/talkcat-goal-audit2.ppm \
+  build/skyengine --work-dir /tmp/skyengine-talkcat-goal-audit2 \
   build/mythroad/talkcat.mrp \
   > /tmp/talkcat-goal-audit2.out 2> /tmp/talkcat-goal-audit2.err
 ```
@@ -161,7 +161,7 @@ Result:
   memory/unmapped failures, `FFFFFC19`, `want=4294966297`, or `1231` missing
   implementation logs.
 - Clean extraction produced 92 files under
-  `/tmp/vmrp-talkcat-goal-audit2/mythroad/talkcat`.
+  `/tmp/skyengine-talkcat-goal-audit2/mythroad/talkcat`.
 - PPM capture was valid and nonblank:
   `P6 240x320`, `pixel_bytes=230400`, `unique=3397`,
   `nonblack_pixels=76451`.

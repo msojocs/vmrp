@@ -5,7 +5,7 @@
  * 等文件桥在磁盘查不到时使用。函数体自 arm_ext_executor.c 原样迁移。
  */
 #include "../include/arm_ext_priv.h"
-#include "../include/fileLib.h"
+#include "../include/file_lib.h"
 
 #include <zlib.h>
 
@@ -37,7 +37,7 @@ void parse_mrp_cache(ArmExtModule *m, const char *mrp_path) {
     m->mrp_cache_count = 0;
     if (!mrp_path || !*mrp_path) return;
 
-    FILE *fp = vmrp_host_fopen(mrp_path, "rb");
+    FILE *fp = skyengine_host_fopen(mrp_path, "rb");
     if (!fp) return;
     fseek(fp, 0, SEEK_END);
     long sz = ftell(fp);

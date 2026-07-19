@@ -21,7 +21,7 @@ metadata:
 ## 旧版残留说明（已不准确，保留备查）
 
 ## 现象（可复现判据）
-- `VMRP_PPM=1 VMRP_NO_MOUSE=1 VMRP_AUTO_CLICKS="0,0,3000;223,308,1000" build/vmrp mythroad/dota.mrp`，每秒 cp `/tmp/vmrp_screen.ppm`。稳态(t≥5)：top(0-79)与 bottom(160-319) 有内容，band(80-159) 全黑(nonblack=0/19200)。
+- `VMRP_PPM=1 VMRP_NO_MOUSE=1 VMRP_AUTO_CLICKS="0,0,3000;223,308,1000" build/skyengine mythroad/dota.mrp`，每秒 cp `/tmp/skyengine_screen.ppm`。稳态(t≥5)：top(0-79)与 bottom(160-319) 有内容，band(80-159) 全黑(nonblack=0/19200)。
 - 基线 9d24757 **更糟**（top 也不画）。所以这不是回归，是 dota 菜单一直没完整渲染；HEAD 已修好 top/bottom，只剩中段。
 
 ## 真因（已证实，逐层反汇编）

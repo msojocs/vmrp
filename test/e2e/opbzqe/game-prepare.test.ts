@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 import fs from "fs";
 
 describe("opbzqe 进入主菜单", () => {
@@ -48,7 +48,7 @@ describe("opbzqe 进入主菜单", () => {
       await engine.key('RIGHT', 1_000)
       await engine.delay(1_000);
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const afterRight = await engine.screen("after-right");
         // 消失检查
         expect(afterRight.pixel(110, 27)).not.toEqual([128, 48, 40]);

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 import fs from "fs";
 
 describe("istore 进入主界面", () => {
@@ -22,7 +22,7 @@ describe("istore 进入主界面", () => {
 
     {
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         // 无网络提示
         const screen = await engine.screen("home");
         // rgb(112, 152, 208)

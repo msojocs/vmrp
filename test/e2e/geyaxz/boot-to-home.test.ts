@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 import fs from "fs";
 
 describe("geyaxz", () => {
@@ -23,7 +23,7 @@ describe("geyaxz", () => {
     engine = await SkyEngineE2e.start("test/fixtures/geyaxz.mrp", { workDir: ws.dir });
 
     await vi.waitFor(async () => {
-      if (!engine) throw new Error('vmrp not defined')
+      if (!engine) throw new Error('skyengine not defined')
       const screen = await engine.screen('bgm-select')
       // rgb(128, 220, 232)
       expect(screen.pixel(112, 125)).toEqual([128, 220, 232])
@@ -34,7 +34,7 @@ describe("geyaxz", () => {
     // 点击右键，不开启声音
     await engine.key('RIGHT_SOFT', 1_000)
     await vi.waitFor(async () => {
-      if (!engine) throw new Error('vmrp not defined')
+      if (!engine) throw new Error('skyengine not defined')
       const screen = await engine.screen('bgm-select')
       // rgb(128, 220, 232)
       expect(screen.pixel(112, 125)).not.toEqual([128, 220, 232])
@@ -55,7 +55,7 @@ describe("geyaxz", () => {
     engine = await SkyEngineE2e.start("test/fixtures/geyaxz.mrp", { workDir: ws.dir });
 
     await vi.waitFor(async () => {
-      if (!engine) throw new Error('vmrp not defined')
+      if (!engine) throw new Error('skyengine not defined')
       const screen = await engine.screen('bgm-select')
       // rgb(128, 220, 232)
       expect(screen.pixel(112, 125)).toEqual([128, 220, 232])
@@ -67,7 +67,7 @@ describe("geyaxz", () => {
       // 点击右键，不开启声音
       await engine.key('RIGHT_SOFT', 1_000)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen('bgm-select')
         // rgb(128, 220, 232)
         expect(screen.pixel(112, 125)).not.toEqual([128, 220, 232])
@@ -80,7 +80,7 @@ describe("geyaxz", () => {
       // 开始游戏，进入选择关卡界面
       await engine.key('ENTER', 1_000)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen('select')
         // rgb(104, 148, 144)
         expect(screen.pixel(99, 92)).toEqual([104, 148, 144])
@@ -93,7 +93,7 @@ describe("geyaxz", () => {
       // 回车选择第一个关卡
       await engine.key('ENTER', 1_000)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen('game')
         // rgb(96, 84, 144)
         expect(screen.pixel(32, 229)).toEqual([96, 84, 144])
@@ -130,7 +130,7 @@ describe("geyaxz", () => {
       await engine.delay(500)
       await engine.click(12, 162, 1_000)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen('game-1-ok')
         // rgb(184, 216, 200)
         expect(screen.pixel(11, 106)).toEqual([184, 216, 200])
@@ -143,7 +143,7 @@ describe("geyaxz", () => {
       await engine.key('ENTER', 1_000)
       await engine.delay(5_000)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen('download-plugin')
         // 通用下载提示只有五种颜色;正文区域的深绿色可排除高彩色游戏菜单。
         expect(screen.pixel(80, 80)).toEqual([0, 4, 0])

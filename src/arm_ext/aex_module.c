@@ -7,8 +7,8 @@
  * 函数体原样迁移。
  */
 #include "../include/arm_ext_priv.h"
-#include "../include/fileLib.h"
-#include "../mythroad/include/dsm.h" /* dsm_host_path_to_guest：包名别名转 guest(GBK) 编码 */
+#include "../include/file_lib.h"
+#include "../include/dsm.h" /* dsm_host_path_to_guest：包名别名转 guest(GBK) 编码 */
 
 #ifndef _MSC_VER
 #include <unistd.h>

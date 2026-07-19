@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 
 // 钢铁战将(240x320, FULL Lua + cfunction.ext 私有 game.ext)。fixture SHA-256:
 // 65f41d75b54b66d9fe747c7df0b50b5d2808ff71c08bdbf4a860989d976773da。

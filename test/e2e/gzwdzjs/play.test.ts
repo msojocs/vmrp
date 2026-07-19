@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 import fs from "fs";
 
 describe("gzwdzjs 游戏", () => {
@@ -49,7 +49,7 @@ describe("gzwdzjs 游戏", () => {
         await engine.delay(1_000);
       }
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("need-power");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
@@ -63,7 +63,7 @@ describe("gzwdzjs 游戏", () => {
         await engine.delay(1_000);
       }
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("need-power");
         // rgb(200, 204, 248)
         expect(screen.pixel(94, 145)).toEqual([200, 204, 248]);
@@ -77,7 +77,7 @@ describe("gzwdzjs 游戏", () => {
       await engine.key('LEFT_SOFT', 1_000);
       console.info('等待演示动画')
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("need-power");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
@@ -100,7 +100,7 @@ describe("gzwdzjs 游戏", () => {
       console.info('左软键确定开始教程')
       await engine.key('LEFT_SOFT', 1_000);
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("introduce");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
@@ -127,7 +127,7 @@ describe("gzwdzjs 游戏", () => {
       await engine.delay(1_000);
       // 现在只有豌豆
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("only-pea");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
@@ -140,7 +140,7 @@ describe("gzwdzjs 游戏", () => {
       }
       // 提示完，开始选植物
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("select-plant");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).not.toEqual([208, 244, 200]);
@@ -153,7 +153,7 @@ describe("gzwdzjs 游戏", () => {
       await engine.delay(1_000);
       // 种在草地上，推荐种左边
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("plant-on-grass");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
@@ -164,7 +164,7 @@ describe("gzwdzjs 游戏", () => {
       await engine.delay(5_000);
       // 提示完，开始选植物
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("select-plant");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).not.toEqual([208, 244, 200]);
@@ -177,7 +177,7 @@ describe("gzwdzjs 游戏", () => {
       await engine.delay(1_000);
       // 种在草地上，推荐种左边
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("plant-on-grass");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
@@ -191,7 +191,7 @@ describe("gzwdzjs 游戏", () => {
       }
       // 等待关卡结束提示
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("teach-end");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
@@ -201,7 +201,7 @@ describe("gzwdzjs 游戏", () => {
       await engine.delay(1_000);
       // 关卡结束提示确认后，60 秒内应显示“获得新植物”界面。
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("new-plant");
         expect(screen.pixel(1, 1)).toEqual([184, 252, 0]);
         // rgb(208, 244, 200)

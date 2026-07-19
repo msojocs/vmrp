@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { copyFile, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace, type PpmImage } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace, type PpmImage } from "../engine-e2e.js";
 
 const MRP_SHA256 = "8a0d57d6952412cb9bf7ca21766b0a7831ccf8de90aded3cebef2bcb5b32c0e8";
 const SKY_SHA256 = "2d2708d82c46ef5a830b9f9635bd60b4e21e795fa6cf9be9e8dc6850615e9565";
@@ -29,8 +29,8 @@ async function waitForFrame(
   return frame;
 }
 
-async function expectNoArmFault(vmrp: SkyEngineE2e): Promise<void> {
-  const output = `${await readFile(vmrp.stdoutPath, "utf8")}\n${await readFile(vmrp.stderrPath, "utf8")}`;
+async function expectNoArmFault(engine: SkyEngineE2e): Promise<void> {
+  const output = `${await readFile(engine.stdoutPath, "utf8")}\n${await readFile(engine.stderrPath, "utf8")}`;
   expect(output).not.toMatch(/UC_MEM|UC_ERR|uc_emu_start failed|FATAL/);
 }
 

@@ -130,8 +130,8 @@ case 82: ret = MR_SUCCESS; break;
 
 | 用例 | 结果 |
 |---|---|
-| `build/vmrp mythroad/gghjt.mrp` | gghjt.pak 673448 B；splash 通过；生成 `mythroad/gghjt/data~.bin` 146880 B；开始读 `mythroad/system/ntp/pyone.sys`；控制台 0 个 `arm_ext_executor:` 错误行；不再出现 `stack-corrupt callback` / `mid-Thumb2` / `not implemented` 任何提示。trace 长度 91739 行（之前是 22098 行就崩溃了）。 |
-| `build/vmrp mythroad/mpc.mrp` | 无回归，0 错误。 |
+| `build/skyengine mythroad/gghjt.mrp` | gghjt.pak 673448 B；splash 通过；生成 `mythroad/gghjt/data~.bin` 146880 B；开始读 `mythroad/system/ntp/pyone.sys`；控制台 0 个 `arm_ext_executor:` 错误行；不再出现 `stack-corrupt callback` / `mid-Thumb2` / `not implemented` 任何提示。trace 长度 91739 行（之前是 22098 行就崩溃了）。 |
+| `build/skyengine mythroad/mpc.mrp` | 无回归，0 错误。 |
 
 ## 5. 经验复盘
 

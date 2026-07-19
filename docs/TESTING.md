@@ -3,11 +3,11 @@
 ## Test Runner
 
 VMRP now keeps the automated test entrypoint in Vitest only. CMake only builds
-emulator/library targets; build `vmrp`, then run the TypeScript e2e tests with
+emulator/library targets; build `skyengine`, then run the TypeScript e2e tests with
 pnpm.
 
 ```bash
-cmake --build build --target vmrp
+cmake --build build --target skyengine
 pnpm test:e2e
 ```
 
@@ -19,7 +19,7 @@ pnpm vitest run test/e2e/opbzqe/game-prepare.test.ts
 
 ## E2E Harness
 
-The Vitest harness starts `build/vmrp` with `VMRP_E2E_SOCKET` and talks to the
+The Vitest harness starts `build/skyengine` with `SKYENGINE_E2E_SOCKET` and talks to the
 emulator through a local socket.  Commands are marshalled onto SDL's main
 thread before they touch input handling or screenshot capture.
 
@@ -41,8 +41,8 @@ Useful environment overrides:
 
 | Variable | Purpose |
 | --- | --- |
-| `VMRP_BIN` | Path to the vmrp executable, defaults to `build/vmrp`. |
-| `VMRP_WORK_DIR` | Runtime working directory, defaults to repository root. |
+| `VMRP_BIN` | Path to the skyengine executable, defaults to `build/skyengine`. |
+| `SKYENGINE_WORK_DIR` | Runtime working directory, defaults to repository root. |
 | `VMRP_TIMEOUT_MS` | Socket startup and command timeout. |
 
 ## Visual Assertions

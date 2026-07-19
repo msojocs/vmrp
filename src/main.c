@@ -62,7 +62,7 @@ static SDL_atomic_t runtimeExited;
 
 static const char *screen_dump_path(void) {
     const char *path = getenv("SKYENGINE_PPM_PATH");
-    return (path && *path) ? path : "/tmp/vmrp_screen.ppm";
+    return (path && *path) ? path : "/tmp/skyengine_screen.ppm";
 }
 
 static int dump_screen_ppm(const char *path) {
@@ -214,7 +214,7 @@ static int e2e_dump_screen_ppm_hook(const char *path, void *userdata) {
  * 返回 0=已上送至 guest,非 0=guest 未开启动感监听。 */
 static int e2e_motion_input_hook(int32_t x, int32_t y, int32_t z, void *userdata) {
     (void)userdata;
-    return vmrp_motion_input(x, y, z) == MR_SUCCESS ? 0 : 1;
+    return skyengine_motion_input(x, y, z) == MR_SUCCESS ? 0 : 1;
 }
 
 static int e2e_dump_draw_frame_ppm_hook(int draw_count, const char *path,
@@ -259,7 +259,7 @@ static int e2e_runtime_exited_hook(void *userdata) {
 }
 
 static void e2e_publish_runtime_exit(void) {
-    if (vmrp_is_exited()) SDL_AtomicSet(&runtimeExited, 1);
+    if (skyengine_is_exited()) SDL_AtomicSet(&runtimeExited, 1);
 }
 
 static void e2e_publish_timer_dispatch(uint32_t generation) {
@@ -277,7 +277,7 @@ static void e2e_publish_timer_dispatch(uint32_t generation) {
  * 自定义事件，由主循环统一调度 timer()，保证单线程串行执行。 */
 static Uint32 timerEventType = 0;
 static Uint32 e2eEventType = (Uint32)-1;
-static VmrpE2eControl *e2eControl = NULL;
+static E2eControl *e2eControl = NULL;
 static bool isEditMode = false;
 static int32_t editMaxSize = 0;
 static char *holdEditText = NULL;
@@ -311,7 +311,7 @@ void saveEditText(char *str) {
 }
 
 /* 震动马达 bridge(mr_startShake/mr_stopShake):SDL 桌面前端没有振动器
- * 硬件,仅日志记录;真实震动由 Flutter 前端经 vmrp_api_take_shake 对接。 */
+ * 硬件,仅日志记录;真实震动由 Flutter 前端经 skyengine_api_take_shake 对接。 */
 void guiStartShake(int32_t ms) {
     SDL_Log("guiStartShake(%d ms)", ms);
 }
@@ -370,8 +370,8 @@ void guiDrawBitmapWithStride(uint16_t *bmp, int32_t x, int32_t y,
      * VM 全部在 SDL 主循环线程执行(定时器回调仅 SDL_PushEvent),此处调
      * SDL_SetWindowSize 线程安全;resize 使旧 surface 失效,须在取 surface
      * 之前完成。rotation==0 时显示尺寸恒等于窗口创建尺寸,行为不变。 */
-    int display_w = vmrp_display_width();
-    int display_h = vmrp_display_height();
+    int display_w = skyengine_display_width();
+    int display_h = skyengine_display_height();
     {
         int win_w = 0, win_h = 0;
         SDL_GetWindowSize(window, &win_w, &win_h);
@@ -419,7 +419,7 @@ void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
      * rotation==0 时与面板宽度相同。
      */
     guiDrawBitmapWithStride(bmp, x, y, w, h,
-                            vmrp_display_width(), x, y);
+                            skyengine_display_width(), x, y);
 }
 
 #ifdef __EMSCRIPTEN__
@@ -584,7 +584,7 @@ static int dispatch_key_up(SDL_Keycode code) {
 
 static void complete_e2e_key_event(const SDL_KeyboardEvent *key, int delivered) {
     e2e_publish_runtime_exit();
-    vmrp_e2e_control_key_event_completed(
+    e2e_control_key_event_completed(
         e2eControl, key->type, key->keysym.sym,
         key->windowID, (uint32_t)key->keysym.scancode, delivered);
 }
@@ -592,7 +592,7 @@ static void complete_e2e_key_event(const SDL_KeyboardEvent *key, int delivered) 
 static void dispatch_e2e_key_up(int after_timer) {
     int32_t raw_code;
     uint32_t token;
-    if (!vmrp_e2e_control_take_key_up(
+    if (!e2e_control_take_key_up(
             e2eControl, after_timer, &raw_code, &token)) return;
 
     SDL_Keycode code = (SDL_Keycode)raw_code;
@@ -605,9 +605,9 @@ static void dispatch_e2e_key_up(int after_timer) {
         delivered = dispatch_key_up(code);
     }
     e2e_publish_runtime_exit();
-    vmrp_e2e_control_key_event_completed(
+    e2e_control_key_event_completed(
         e2eControl, SDL_KEYUP, code,
-        VMRP_E2E_KEY_WINDOW_ID, token, delivered);
+        E2E_KEY_WINDOW_ID, token, delivered);
 }
 
 static void dispatch_mouse_down(int x, int y) {
@@ -740,7 +740,7 @@ void loop(void) {
     SDL_Event ev;
     bool isLoop = true;
 
-    vmrp_e2e_control_start_if_requested(e2eControl);
+    e2e_control_start_if_requested(e2eControl);
     startAutoClicksIfRequested();
 
 #if defined(__EMSCRIPTEN__)
@@ -754,7 +754,7 @@ void loop(void) {
         while (SDL_WaitEvent(&ev))
 #endif
         {
-            if (vmrp_is_exited()) {
+            if (skyengine_is_exited()) {
                 isLoop = false;
                 break;
             }
@@ -764,7 +764,7 @@ void loop(void) {
                 break;
             }
             if (ev.type == e2eEventType) {
-                vmrp_e2e_control_execute(e2eControl, &ev);
+                e2e_control_execute(e2eControl, &ev);
                 continue;
             }
             if (ev.type == timerEventType) {
@@ -790,7 +790,7 @@ void loop(void) {
                 SDL_AtomicSet(&timerDispatchInProgress, 0);
                 /* 默认 E2E 短按在这一拍结束时立即 release，不依赖控制线程调度。 */
                 dispatch_e2e_key_up(1);
-                if (vmrp_is_exited()) {
+                if (skyengine_is_exited()) {
                     isLoop = false;
                     break;
                 }
@@ -875,7 +875,7 @@ void loop(void) {
                     dispatch_mouse_up(ev.button.x, ev.button.y);
                     break;
             }
-            if (vmrp_is_exited()) {
+            if (skyengine_is_exited()) {
                 isLoop = false;
                 break;
             }
@@ -925,11 +925,11 @@ int main(int argc, char *args[]) {
     signal(SIGUSR1, sigusr1_handler);
 #endif
     if (argc > 1 && (strcmp(args[1], "-h") == 0 || strcmp(args[1], "--help") == 0)) {
-        vmrp_args_print_usage(args[0]);
+        skyengine_args_print_usage(args[0]);
         return 0;
     }
-    VmrpArgs vmrp_args;
-    if (vmrp_args_parse(argc, args, &vmrp_args) != MR_SUCCESS) {
+    SkyEngineArgs skyengine_args;
+    if (skyengine_args_parse(argc, args, &skyengine_args) != MR_SUCCESS) {
         return -1;
     }
 
@@ -957,16 +957,16 @@ int main(int argc, char *args[]) {
 #endif
 
     /* SDL 窗口必须按 --screen/环境变量解析出的分辨率创建。此前窗口用
-     * vmrp_config 的编译期默认值(240x320),而 --screen 要到后面的
-     * startVmrp() 才写入 vmrp_config,导致任何非默认分辨率都只显示
+     * skyengine_config 的编译期默认值(240x320),而 --screen 要到后面的
+     * startVmrp() 才写入 skyengine_config,导致任何非默认分辨率都只显示
      * 240x320 窗口(gtcm --screen 480x320 只能看到左上裁切)。这里提前
      * 同步一次;startVmrp() 内部的赋值保持不变(共享库入口依赖它)。 */
-    vmrp_config.screen_width = vmrp_args.screen_width;
-    vmrp_config.screen_height = vmrp_args.screen_height;
+    skyengine_config.screen_width = skyengine_args.screen_width;
+    skyengine_config.screen_height = skyengine_args.screen_height;
 
     /* guiDrawBitmap writes to SDL_GetWindowSurface(); avoiding an OpenGL window
      * lets the E2E pixel tests run under SDL's dummy video driver in CI. */
-    window = SDL_CreateWindow("vmrp", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, vmrp_config.screen_width, vmrp_config.screen_height, 0);
+    window = SDL_CreateWindow("skyengine", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, skyengine_config.screen_width, skyengine_config.screen_height, 0);
     if (window == NULL) {
         printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
         SDL_Quit();
@@ -989,18 +989,18 @@ int main(int argc, char *args[]) {
     e2e_hooks.timer_dispatch_in_progress = e2e_timer_dispatch_in_progress_hook;
     e2e_hooks.runtime_exited = e2e_runtime_exited_hook;
     e2e_hooks.motion_input = e2e_motion_input_hook;
-    e2eControl = vmrp_e2e_control_create(e2eEventType, &e2e_hooks);
+    e2eControl = e2e_control_create(e2eEventType, &e2e_hooks);
 
-    if (startVmrp(&vmrp_args) != MR_SUCCESS) {
-        vmrp_e2e_control_destroy(e2eControl);
+    if (startEngine(&skyengine_args) != MR_SUCCESS) {
+        e2e_control_destroy(e2eControl);
         e2eControl = NULL;
         SDL_DestroyWindow(window);
         SDL_Quit();
         return -1;
     }
-    if (vmrp_is_exited()) {
-        stopVmrp();
-        vmrp_e2e_control_destroy(e2eControl);
+    if (skyengine_is_exited()) {
+        stopEngine();
+        e2e_control_destroy(e2eControl);
         e2eControl = NULL;
         SDL_DestroyWindow(window);
         SDL_Quit();
@@ -1012,9 +1012,9 @@ int main(int argc, char *args[]) {
 #else
     loop();
 #endif
-    vmrp_e2e_control_destroy(e2eControl);
+    e2e_control_destroy(e2eControl);
     e2eControl = NULL;
-    stopVmrp();
+    stopEngine();
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;

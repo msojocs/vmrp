@@ -1,6 +1,6 @@
 ---
 title: "gms payment latency analysis"
-tags: ["vmrp", "gms", "payment", "sms", "arm-ext", "e2e"]
+tags: ["skyengine", "gms", "payment", "sms", "arm-ext", "e2e"]
 created: 2026-06-26T13:59:05+08:00
 updated: 2026-06-26T14:12:07+08:00
 sources: ["docs/gms-payment-latency-analysis.md"]

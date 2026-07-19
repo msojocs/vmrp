@@ -24,7 +24,7 @@ Next step: identify whether the fieldless proxy2 image packet prevents the image
 
 ## Update 2026-07-12T23:01:00+0800
 
-- Baseline no-xvfb command passed but still exposes the image defect: `VMRP_E2E_KEEP_TMP=1 VMRP_PPM=1 pnpm vitest run test/e2e/wbrw/temp.test.ts --reporter=verbose` wrote `/tmp/vmrp-e2e-Z0iEO6/loaded.ppm`; workspace `/tmp/vmrp-ws-YsDudE` has `cache3/5235.dat` page SKY and `cache3/5920.dat` 5291-byte PNG.
+- Baseline no-xvfb command passed but still exposes the image defect: `VMRP_E2E_KEEP_TMP=1 VMRP_PPM=1 pnpm vitest run test/e2e/wbrw/temp.test.ts --reporter=verbose` wrote `/tmp/skyengine-e2e-Z0iEO6/loaded.ppm`; workspace `/tmp/skyengine-ws-YsDudE` has `cache3/5235.dat` page SKY and `cache3/5920.dat` 5291-byte PNG.
 - Current cache index after the Go run is only 16 bytes (`64 00 00 00 ...`) and does not contain per-image records. The image file exists as `.dat`, not `.gif`.
 - Reference cache `temp/brw/http/cache3/index.dat` is made of 100-byte entries and stores image paths like `brw/http/cache3/6652994.gif`; sampled `*.gif` files are raw GIF89a bytes. This confirms the real browser cache names image entries with `.gif` even though the stored payload is just the response bytes.
 - Disassembly evidence: `game.ext+0x22398..0x22818` image layout checks decoded/supplied width and height and reaches the alt branch at `+0x22760` when dimensions remain non-positive. `game.ext+0x27020` parses proxy2 packets and supports zero response fields, so field count zero by itself is not an envelope parse failure. `game.ext+0x21640` maps proxy2 type 1 to `/image`, while `+0x211cc` maps request type 1 to packet code 2; current image request captures show packet code 2 and many telemetry fields but no range fields.
@@ -39,7 +39,7 @@ Next step: identify whether the fieldless proxy2 image packet prevents the image
 
 ## Update 2026-07-12T23:37:00+0800
 
-- External `omx ask claude` advisor failed with a 502 upstream error and produced no usable protocol-field advice; artifact is `.omx/artifacts/claude-focused-subagent-task-in-home-msojocs-github-vmrp-inspect-wb-2026-07-12T15-20-59-818Z.md`.
+- External `omx ask claude` advisor failed with a 502 upstream error and produced no usable protocol-field advice; artifact is `.omx/artifacts/claude-focused-subagent-task-in-home-msojocs-github-skyengine-inspect-wb-2026-07-12T15-20-59-818Z.md`.
 - Disassembly of `game.ext+0x27020` confirms proxy2 packet parsing accepts zero response fields; `game.ext+0x22398..0x22818` then reaches the image alt branch only after decoded/supplied dimensions at the image layout descriptor remain non-positive.
 - The image layout path does not call public `mr_platEx(3001/3002)` directly. It loads a function pointer from R9-relative slot `0x4634` and calls it with private codes `12`, `13`, and `15`; the call sequence creates/opens an image descriptor, queries dimensions, and frees the descriptor on failure. This makes missing host/private image decode plumbing a live competing root cause.
 - Current `src/mythroad/dsm.c` implements `mr_platEx(4033)` as a plain success return for WBRW browser-renderer initialization, but it does not install or expose an image helper. Historic platform headers and source show public image info/decode ABI (`MR_GET_IMG_INFO=3001`, `MR_DECODE_IMG=3002`) but the observed WBRW path uses the private 12/13/15 browser image hook instead.

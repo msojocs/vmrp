@@ -7,7 +7,7 @@ metadata:
 
 目标：把 src/app_compat.c + src/app_compat_gghjt.c 的硬编码 hook 改成通用代码（最终删掉 profile）。
 
-关键发现：gghjt 的 hook 不是"应用专属逻辑"，而是 vmrp 通用 EXT 加载/重定位机制的补丁。`on_child_synced` 硬编码的 `table[3..19]`/`table[26]` 经 `third_party/mtk_disasm` 的 `_mr_c_function_table` 解码后，就是 memcpy/strcpy/sprintf…/mr_printf 这些**标准 C 运行时函数表槽位**——任何 ext 子模块都要重定位的，可数据驱动通用化。
+关键发现：gghjt 的 hook 不是"应用专属逻辑"，而是 skyengine 通用 EXT 加载/重定位机制的补丁。`on_child_synced` 硬编码的 `table[3..19]`/`table[26]` 经 `third_party/mtk_disasm` 的 `_mr_c_function_table` 解码后，就是 memcpy/strcpy/sprintf…/mr_printf 这些**标准 C 运行时函数表槽位**——任何 ext 子模块都要重定位的，可数据驱动通用化。
 
 **third_party/mtk_disasm 是权威参考**（不是闭源黑盒）：含 mythroad VM 反汇编、`mythroad_mini_relocations.txt`（148 项 _mr_c_function_table + 16 项 _mr_c_internal_table 完整布局，table 从数据段 offset 0xa4 起，index=(offset-0xa4)/4）、以及已有伪 C 还原 `DECOMPILATION_ANALYSIS.md`。table[25]=_mr_c_function_new=标准子模块加载器入口。
 
@@ -16,4 +16,4 @@ metadata:
 **仍未做（残留硬编码，下一步可选）：** (1) `should_protect_got_addr` 仍按 gghjt profile 的 wrapper_rw+0x190 偏移；(2) gzip/netpay 提取 hook（intercept_write/post_read_hook，magic 0x2001BC/0xBE）仍 app 专属；(3) `app_compat_select` 仍按文件名 "gghjt.mrp" 选 profile（为上述两项服务）。(4) "根因修复"（让私有 loader 自己填 record，从而删整个 profile）未做——属高风险，留待评估。
 
 **Why:** 之前误以为加载器源码闭源不可参考，实际 mtk_disasm 提供了完整机制。
-**How to apply:** 通用化时遍历子模块 GOT，凡值落在函数表区间的槽统一回填 table_base+index*4，删掉 on_child_synced/should_protect_got_addr 的魔数；read/write 的 gzip 补丁对照 mr_iolib/mr_inflate 与 internal table[7..10] (mr_gzInBuf/LG_gzinptr) 语义。验证用 vmrp_app_compat_tests + test/gghjt/download-plugin-enter.sh。死代码 save/restore_wrapper_state 直接删。相关 [[gghjt-is-game]]。
+**How to apply:** 通用化时遍历子模块 GOT，凡值落在函数表区间的槽统一回填 table_base+index*4，删掉 on_child_synced/should_protect_got_addr 的魔数；read/write 的 gzip 补丁对照 mr_iolib/mr_inflate 与 internal table[7..10] (mr_gzInBuf/LG_gzinptr) 语义。验证用 skyengine_app_compat_tests + test/gghjt/download-plugin-enter.sh。死代码 save/restore_wrapper_state 直接删。相关 [[gghjt-is-game]]。

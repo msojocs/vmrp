@@ -4,7 +4,7 @@
 
 ## 现象
 
-`build/vmrp build/mythroad/gtcm.mrp`(240x320 默认分辨率)启动后黑屏。
+`build/skyengine build/mythroad/gtcm.mrp`(240x320 默认分辨率)启动后黑屏。
 预期: 启动游戏(贪吃猫, SphinxJoy, mrc C SDK: mrc_loader.ext → cfunction.ext
 wrapper → game.ext + graphics.ext)。
 
@@ -56,9 +56,9 @@ capstone 反汇编(cfunction.ext/game.ext,子 agent 完成三轮取证)。
 - 240x320(默认): 逻辑画布 480x320,窗口显示左上 240x320 裁切区,游戏
   正常启动运行(开场"是否开启音乐"→ 主界面猫全图)。
 - `--screen 480x320`: 全画面正常显示。附带修复了 main.c 的窗口创建时序
-  bug: SDL_CreateWindow 此前用 vmrp_config 的编译期默认值(240x320),
-  而 --screen 解析结果要到 startVmrp() 才写入 vmrp_config,导致任何
-  非默认分辨率窗口都是 240x320;现在创建窗口前先同步 vmrp_args 的
+  bug: SDL_CreateWindow 此前用 skyengine_config 的编译期默认值(240x320),
+  而 --screen 解析结果要到 startVmrp() 才写入 skyengine_config,导致任何
+  非默认分辨率窗口都是 240x320;现在创建窗口前先同步 skyengine_args 的
   分辨率。
 - 320x480 / 240x400 运行仍有独立的 Unicorn TCG 崩溃(host 侧,
   tb_tc_cmp bp=0x0),与本修复无关,未处理(剩余风险)。
@@ -69,7 +69,7 @@ capstone 反汇编(cfunction.ext/game.ext,子 agent 完成三轮取证)。
   点击后 30s/50s 主画面 90%+ 非零像素,画面正确(贪吃猫主界面)。
 - gtcm 480x320(--screen): 同样正常,全画面可见。
 - 回归: gghjt game-start(不花屏/不缺渲染)、gxdzc-pixel、talkcat 启动、
-  dota download-plugin(返回重进/成功)全部通过;test_vmrp*, 4 个原生
+  dota download-plugin(返回重进/成功)全部通过;test_skyengine*, 4 个原生
   单测全部通过。
 - 临时诊断代码(main.c/mythroad.c/arm_ext_executor.c/arm_ext_internal.h 的
   DIAG 打印、PC ring 扩容、SP/LR ring)已全部移除;保留 dsm.c 的

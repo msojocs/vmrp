@@ -54,7 +54,7 @@ typedef struct {
 static int isCMWAP = FALSE;  // 当前 mr_initNetwork 模式，只用于之后新建的 socket
 static struct rb_root sockets = RB_ROOT;
 
-#define VMRP_DNS_MAP_MAX 32
+#define SKYENGINE_DNS_MAP_MAX 32
 #define VMRP_DNS_NAME_MAX 255
 
 typedef struct {
@@ -62,14 +62,14 @@ typedef struct {
     char fake[VMRP_DNS_NAME_MAX + 1];
 } DnsMapEntry;
 
-static DnsMapEntry dnsMap[VMRP_DNS_MAP_MAX];
+static DnsMapEntry dnsMap[SKYENGINE_DNS_MAP_MAX];
 static int dnsMapCount = 0;
 
 #define VMRP_NET_LOG_ENABLED() (getenv("SKYENGINE_NETWORK_LOG") != NULL || getenv("SKYENGINE_LOG") != NULL)
 #define VMRP_NET_LOG(...)                       \
     do {                                       \
         if (VMRP_NET_LOG_ENABLED()) {          \
-            fprintf(stderr, "[vmrp-net] ");    \
+            fprintf(stderr, "[skyengine-net] ");    \
             fprintf(stderr, __VA_ARGS__);      \
             fflush(stderr);                    \
         }                                      \
@@ -162,7 +162,7 @@ static int parseDnsMapEntry(char* entry) {
         copyNormalizedDomain(fakeNorm, sizeof(fakeNorm), fake) != MR_SUCCESS) {
         return MR_FAILED;
     }
-    if (dnsMapCount >= VMRP_DNS_MAP_MAX) return MR_FAILED;
+    if (dnsMapCount >= SKYENGINE_DNS_MAP_MAX) return MR_FAILED;
 
     strcpy(dnsMap[dnsMapCount].original, originalNorm);
     strcpy(dnsMap[dnsMapCount].fake, fakeNorm);

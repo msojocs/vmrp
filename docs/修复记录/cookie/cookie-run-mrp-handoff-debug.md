@@ -31,7 +31,7 @@
 
 - 标准命令 `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/cookie/run-mrp.test.ts --reporter=verbose` 返回 1 passed，但当前用例末尾只有固定 delay，没有末态断言，因此这是测试假绿。
 - 使用同一个 `VmrpE2e` helper 逐步执行且不修改测试文件，六个现有 PPM 像素全部命中；最后一条 `KEY LEFT_SOFT` 返回 `OK key 61 exited`，此前 `draw_count=17`，进程在 1 秒内退出。
-- 保留现场：artifact `/tmp/vmrp-e2e-2hb4x2`，workspace `/tmp/vmrp-ws-QAEOpj`。命名 PPM 均为 `240x320` P6；最后按键后 socket 已随进程关闭，无法再截末态图。
+- 保留现场：artifact `/tmp/skyengine-e2e-2hb4x2`，workspace `/tmp/skyengine-ws-QAEOpj`。命名 PPM 均为 `240x320` P6；最后按键后 socket 已随进程关闭，无法再截末态图。
 - stdout/stderr 共 27 行，没有启用 trace。关键顺序是一次 `native dsm_init success`，随后解析 `applist2.sky-mobi.net` 失败，最终打印 `mythroad exit.`；不存在第二次 DSM/MRP 初始化。
 - 工作区中存在 `mythroad/dsm_gm.mrp`，所以不能把退出归因于默认返回包缺失。
 
@@ -92,12 +92,12 @@
 ## 最终画面与回归
 
 - `test/e2e/cookie/run-mrp.test.ts` 删除固定 `delay(10_000)` 和 TODO，改为等待应用列表主体像素 `(120,180)=[24,160,200]`，再断言标题栏 `(120,10)=[24,104,136]`。旧等待页对应两点分别为 `[200,224,248]` 和 `[0,24,112]`，不会误通过。
-- 保留的最终 artifact 是 `/tmp/vmrp-e2e-aHIAVT`。`second-app.ppm` 为 `240x320` P6，SHA-256 是 `d3d014208fb1fac6862c4c2ab2a6479aa582a09b3a6df8908f74e9301d29c3ba`；stderr 明确出现第二次 `_mr_intra_start` 和 `dofile('start.mr')`。
+- 保留的最终 artifact 是 `/tmp/skyengine-e2e-aHIAVT`。`second-app.ppm` 为 `240x320` P6，SHA-256 是 `d3d014208fb1fac6862c4c2ab2a6479aa582a09b3a6df8908f74e9301d29c3ba`；stderr 明确出现第二次 `_mr_intra_start` 和 `dofile('start.mr')`。
 - 所有图形验证都使用 `SDL_VIDEODRIVER=dummy` 和 `SDL_AUDIODRIVER=dummy`，没有使用 `xvfb`，也没有保留大范围 ARM trace。
 - 最终验证：
 
   ```text
-  cmake --build build --target vmrp -j2                         passed
+  cmake --build build --target skyengine -j2                         passed
   ctest --test-dir build --output-on-failure                    1/1 passed
   pnpm exec tsc --noEmit                                        passed
   pnpm exec vitest run test/e2e/cookie/run-mrp.test.ts          1/1 passed
@@ -107,7 +107,7 @@
 ## 2026-07-15 子应用退出回退失败续查
 
 - 当前暂存的 `test/e2e/cookie/run-mrp.test.ts` 已扩展为：在 Cookie 文件管理器中选择末项“冒泡浏览器”，启动 `wbrw.mrp`，再通过 WBRW 菜单选择“退出”，预期回到 Cookie 文件管理器启动前的末项位置。
-- 目标用例无 `xvfb` 复现失败：`VMRP_E2E_KEEP_TMP=1 pnpm exec vitest run test/e2e/cookie/run-mrp.test.ts --reporter=verbose`。产物目录 `/tmp/vmrp-e2e-Kn7hW0`，工作目录 `/tmp/vmrp-ws-tYKhkM`。
+- 目标用例无 `xvfb` 复现失败：`VMRP_E2E_KEEP_TMP=1 pnpm exec vitest run test/e2e/cookie/run-mrp.test.ts --reporter=verbose`。产物目录 `/tmp/skyengine-e2e-Kn7hW0`，工作目录 `/tmp/skyengine-ws-tYKhkM`。
 - 失败点是最后的 `back-to-file-manage`，断言点 `(100,216)` 实际为 `[248,252,248]`，不是文件管理器高亮 `[248,200,24]`。PPM 转 PNG 后确认末态仍是 WBRW 首页，底栏显示左软键“菜单”、右软键“退出”，不是 Cookie 文件管理器。
 - 日志中 `_mr_intra_start` 出现三次，说明 Cookie、WBRW、以及一次返回旧应用的启动路径都被触发；当前首要问题不是宿主进程直接退出，而是“退出”后的旧应用/前台状态没有恢复到 Cookie 文件管理器的原位置。
 - 下一步证据：用逐键截图确认 WBRW 退出确认链路是否真正调用 `mr_exit()`，再用窄口径 table[54]/`MR_STATE_STOP`/old app 文件名日志或反汇编确认 WBRW 退出时写入的返回参数。
@@ -118,11 +118,11 @@
 - `_RL` 返回参数在 resume 前后重放也不足以生成正确过渡帧；正确边界是父应用自己在 `mr_findStart()` 成功打开目录前已经绘制过的目录打开提示。因此在 DSM `mr_findStart()` 成功后记录当前 `mr_screenBuf`，作为应用自绘的目录打开过渡帧。
 - 暂停父应用用于 RESTART handoff 时，快照同时保存最终列表帧和最后一次目录打开过渡帧。子应用 STOP/退出后恢复父 VM 时，先用窄窗口 `_DispUpEx()` 回放目录打开帧，再恢复最终列表帧并调用 `resumeApp()`。这保留了“打开目标文件夹”的视觉流程，且没有 Cookie/WBRW 包名判断、文字识别或像素驱动生产逻辑。
 - E2E 增加 `SCREEN_DRAW`，从 SDL draw ring 逐帧导出退出后的 PPM。`test/e2e/cookie/run-mrp.test.ts` 在最后确认退出后收集 `return-draw-*.ppm`，断言至少一帧命中“正在打开”像素签名，并断言没有命中“正在启动”签名。
-- 本次无 `xvfb` 验证产物为 `/tmp/vmrp-e2e-8tsnlb`。逐帧证据：`return-draw-0046.ppm` 命中“正在打开”，关键像素为 `(194,249)=[24,96,216]`、`(150,251)=[0,76,200]`、`(100,216)=[248,252,248]`、`(8,259)=[232,240,248]`、`(42,269)=[232,240,248]`；`return-draw-0047.ppm` 起回到文件管理器最终列表，`(100,216)=[248,200,24]`。退出后采集帧未命中“正在启动”签名。
+- 本次无 `xvfb` 验证产物为 `/tmp/skyengine-e2e-8tsnlb`。逐帧证据：`return-draw-0046.ppm` 命中“正在打开”，关键像素为 `(194,249)=[24,96,216]`、`(150,251)=[0,76,200]`、`(100,216)=[248,252,248]`、`(8,259)=[232,240,248]`、`(42,269)=[232,240,248]`；`return-draw-0047.ppm` 起回到文件管理器最终列表，`(100,216)=[248,200,24]`。退出后采集帧未命中“正在启动”签名。
 - 最终验证：
 
   ```text
-  cmake --build build --target vmrp -j2                                      passed
+  cmake --build build --target skyengine -j2                                      passed
   VMRP_E2E_KEEP_TMP=1 pnpm exec vitest run test/e2e/cookie/run-mrp.test.ts    1/1 passed
   pnpm exec tsc --noEmit                                                     passed
   ctest --test-dir build --output-on-failure                                 1/1 passed
@@ -130,9 +130,9 @@
 
 ## 2026-07-15 并行全量回归复核
 
-- 不能把兼容性证明降级为顺序执行；默认并行全量 E2E 必须可用。一次被用户中断的顺序复核残留了后台 Vitest/vmrp 进程，已清理后重新执行默认并行命令。
+- 不能把兼容性证明降级为顺序执行；默认并行全量 E2E 必须可用。一次被用户中断的顺序复核残留了后台 Vitest/skyengine 进程，已清理后重新执行默认并行命令。
 - 默认并行命令 `pnpm exec vitest run test/e2e --reporter=verbose` 通过，结果为 `19 files, 31 tests passed`，总耗时 `273.01s`。这覆盖 Cookie 目标用例以及 DOTA/GGHJT/Optwar/Talkcat 等插件下载、退出、返回重进路径。
-- 另用 `VMRP_E2E_KEEP_TMP=1 pnpm exec vitest run test/e2e/cookie/run-mrp.test.ts --reporter=verbose` 保留最新逐帧产物 `/tmp/vmrp-e2e-Vdk5ke`。`return-draw-0047.ppm` 命中“正在打开”签名，且视觉转换图 `return-draw-0047.png` 底部文本为“正在打开”；`return-draw-0048.ppm` 起回到文件管理器最终列表，采集帧未命中“正在启动”签名。
+- 另用 `VMRP_E2E_KEEP_TMP=1 pnpm exec vitest run test/e2e/cookie/run-mrp.test.ts --reporter=verbose` 保留最新逐帧产物 `/tmp/skyengine-e2e-Vdk5ke`。`return-draw-0047.ppm` 命中“正在打开”签名，且视觉转换图 `return-draw-0047.png` 底部文本为“正在打开”；`return-draw-0048.ppm` 起回到文件管理器最终列表，采集帧未命中“正在启动”签名。
 
 ## 2026-07-16 直接确认键启动路径复现与快照根因
 
@@ -140,7 +140,7 @@
   `ENTER`。精确命令
   `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/cookie/run-mrp.test.ts -t 方式二 --reporter=verbose`
   稳定失败于“返回帧不得出现正在启动”的断言；本轮首个保留产物为
-  `/tmp/vmrp-e2e-ESL4Ry`。
+  `/tmp/skyengine-e2e-ESL4Ry`。
 - PPM 逐帧证明恢复过程不是父应用冷启动：`return-draw-0043.ppm` 正确显示
   “正在打开”，`0044.ppm`、`0045.ppm` 随后恢复文件列表却保留底部
   “正在启动，请稍候...”。生命周期诊断也只出现 Cookie、WBRW 两次
@@ -185,7 +185,7 @@
 - 测试先在 workspace 准备 `wbrw.mrp` 再启动 Cookie，移除初始枚举竞态；返回
   断言比较 `y=0..295` 整个应用内容区与启动前 PPM，状态栏时钟区域除外。该区域
   完整覆盖标题、列表、选择位置和底部启动/打开提示。
-- 最终 distinct-history 实现的无 `xvfb` 保留产物 `/tmp/vmrp-e2e-uhqu1M` 中，方式二
+- 最终 distinct-history 实现的无 `xvfb` 保留产物 `/tmp/skyengine-e2e-uhqu1M` 中，方式二
   `return-draw-0043.ppm` 为“正在打开”；`0044.ppm`、`0045.ppm` 的 SHA-256
   `a7c2a05df997b006d006f7dbd3e27d699daa8838c6b2a9f344492e774c267847`
   与启动前 `file-manage-bottom.ppm` 完全相同。返回后 `RIGHT_SOFT` 仍能进入
@@ -193,7 +193,7 @@
 - 已完成验证：
 
   ```text
-  cmake --build build --target vmrp -j2                         passed
+  cmake --build build --target skyengine -j2                         passed
   pnpm vitest run test/e2e/cookie/run-mrp.test.ts -t 方式二     1 passed
   pnpm vitest run test/e2e/cookie/run-mrp.test.ts -t 方式一     1 passed
   pnpm exec tsc --noEmit                                        passed
@@ -208,7 +208,7 @@
 ## 2026-07-16 方案复审：present history / 快照回放方案被否决
 
 - 基线复测：当前工作树 `pnpm vitest run test/e2e/cookie/run-mrp.test.ts -t 方式二`
-  通过（产物 `/tmp/vmrp-e2e-NY0sLP`），但通过方式是伪造的：
+  通过（产物 `/tmp/skyengine-e2e-NY0sLP`），但通过方式是伪造的：
   `return-draw-0044/0045.ppm` 与启动前 `file-manage-bottom.ppm` SHA-256 完全相同
   （`cddd8822f93803b6…`），`return-draw-0043.ppm` 的“正在打开”是
   `mr_findStart()` 时截存的旧帧回放。返回过程中文件管理器并没有真正重新打开
@@ -237,7 +237,7 @@
 
 ## 2026-07-16 Phase 1 运行时证据：launch 前持久化 + `_RL` 冷启动实测
 
-- `SKYENGINE_LOG=1 VMRP_LIFECYCLE_DIAG=1` 逐事件追踪（产物 `/tmp/vmrp-e2e-ombWvn`）确认协议：
+- `SKYENGINE_LOG=1 VMRP_LIFECYCLE_DIAG=1` 逐事件追踪（产物 `/tmp/skyengine-e2e-ombWvn`）确认协议：
   - Cookie 从文件管理器启动 wbrw 前，先写 `mythroad/fm.sav`（13 字节，
     `00 00 00 01 | 00 00 00 00 | 01 00 00 00 | 06`，末字节 0x06 与选中项
     序号 6 吻合；字面量 0x3F094 紧邻 `..\appmgr\filemanager\fm_view.c`），
@@ -249,7 +249,7 @@
     在该流程中从未被访问。
 - 受控实验：临时移除快照拦截（`mr_timer` RESTART 分支回归 `mr_stop()+_mr_intra_start()`，
   `arm_ext_finish_callback_state` RESTART 分支回归“同步文件名+发布”），
-  产物 `/tmp/vmrp-e2e-aqDs8w`：返回时 Cookie 真实冷重启，**跳过了开机 splash
+  产物 `/tmp/skyengine-e2e-aqDs8w`：返回时 Cookie 真实冷重启，**跳过了开机 splash
   直接进主页图标网格**（`_RL` 参数被 Cookie 识别），但没有回到文件管理器，
   也从未尝试读 `fm.sav`。断言 `isOpeningFolderFrame` 失败。
 - 结论：宿主侧 handoff（参数同步、包名别名、冷重启）已经把 `_RL` 送达；
@@ -332,7 +332,7 @@
   （memcpy 128 回宿主，不补 NUL）；
 - 其余文件名槽（table[100..103]）保持字符串语义不变。
 
-### 修复后的实测（产物 /tmp/vmrp-e2e-FzVoYp）
+### 修复后的实测（产物 /tmp/skyengine-e2e-FzVoYp）
 
 - 返回路径日志出现 `mr_open(mythroad/fm.sav,1)`（读）→ `mr_remove(fm.sav)` →
   末尾 `mr_findStart(mythroad/)` 重开根目录：文件管理器真实重载，
@@ -353,9 +353,9 @@
   列表内容无关，`isOpeningFolderFrame`/`isStartupOverlayFrame` 像素签名无需改动。
 - 结果：
   ```text
-  cmake --build build --target vmrp -j            passed
-  pnpm vitest run ... -t 方式二                    1 passed (产物 /tmp/vmrp-e2e-tZHWPH)
-  pnpm vitest run ... -t 方式一                    1 passed (产物 /tmp/vmrp-e2e-ZLESpM)
+  cmake --build build --target skyengine -j            passed
+  pnpm vitest run ... -t 方式二                    1 passed (产物 /tmp/skyengine-e2e-tZHWPH)
+  pnpm vitest run ... -t 方式一                    1 passed (产物 /tmp/skyengine-e2e-ZLESpM)
   ```
 - 关键区别于旧方案：返回时日志出现 `mr_open(mythroad/fm.sav,1)` 读 →
   `mr_remove(fm.sav)` → `mr_findStart(mythroad/)` 重开根目录，文件列表**真实
@@ -365,7 +365,7 @@
 
 ```text
 pnpm exec tsc --noEmit                          passed
-ctest --test-dir build --output-on-failure      1/1 (vmrp-unit) passed
+ctest --test-dir build --output-on-failure      1/1 (skyengine-unit) passed
 pnpm exec vitest run test/e2e                    19 files, 32 tests passed (308.50s, 无 xvfb)
 ```
 

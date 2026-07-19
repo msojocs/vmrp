@@ -14,7 +14,7 @@
 
 这些问题不一定都会立刻 crash。对“部分 MRP 启动黑屏”而言，更危险的是静默失败：资源读取失败、EXT 初始化回调丢失、timer/event 函数地址错误、网络异步回调跳错地址、屏幕缓冲或宽高表项错位，都会让主循环还在跑但首屏不绘制。
 
-Flutter 集成路径会把 native Mythroad、DSM、ARM EXT executor 一起打进共享库：`CMakeLists.txt:388-401`。Flutter 侧通过 FFI 直接读取 `Pointer<Uint16>` 屏幕缓冲：`docs/flutter-integration.md:183-184`，并要求所有 `vmrp_api_*` 调用在同一线程：`docs/flutter-integration.md:724-725`。因此 native 层的地址、回调、ABI 错误即使没有立刻崩溃，也会在 Flutter 侧表现为首帧不刷新或黑屏。
+Flutter 集成路径会把 native Mythroad、DSM、ARM EXT executor 一起打进共享库：`CMakeLists.txt:388-401`。Flutter 侧通过 FFI 直接读取 `Pointer<Uint16>` 屏幕缓冲：`docs/flutter-integration.md:183-184`，并要求所有 `skyengine_api_*` 调用在同一线程：`docs/flutter-integration.md:724-725`。因此 native 层的地址、回调、ABI 错误即使没有立刻崩溃，也会在 Flutter 侧表现为首帧不刷新或黑屏。
 
 ## 参考提交说明
 
@@ -285,15 +285,15 @@ Android arm64 采用 LP64：
 - `src/fileLib.c:84-101`：POSIX `read/write` 返回值是 `ssize_t`，当前落入 `int32_t`。
 - `src/fileLib.c:134-139`：`stat.st_size` 是 `off_t`，当前直接作为 `int32_t` 返回。
 - `src/fileLib.c:238-240`：`readFile()` 未检查 `my_getLen()` 的负值就 `malloc(len)`，负数会转成巨大 `size_t`。
-- `src/arm_ext_executor.c:796-823` 和 `src/vmrp.c:132-158`：`ftell()` 返回 `long`，后续多次 `(uint32_t)sz` 参与 MRP 边界判断。
-- `src/arm_ext_executor.c:834-854` 和 `src/vmrp.c:67-90`：zlib 输出长度从 `total_out` 下转到 `uint32`，扩容 `cap * 2` 缺少溢出检查。
+- `src/arm_ext_executor.c:796-823` 和 `src/skyengine.c:132-158`：`ftell()` 返回 `long`，后续多次 `(uint32_t)sz` 参与 MRP 边界判断。
+- `src/arm_ext_executor.c:834-854` 和 `src/skyengine.c:67-90`：zlib 输出长度从 `total_out` 下转到 `uint32`，扩容 `cap * 2` 缺少溢出检查。
 - `src/arm_ext_executor.c:1578-1616`：`mr_platEx` 的 `host_output_len` 用于 `arm_alloc((uint32_t)host_output_len + 1)` 和 `memcpy()`，缺少 `0..INT32_MAX` 与 `+1` 溢出检查。
 - `src/arm_ext_executor.c:2814-2819`：ARM EXT 写回的 `uint32_t arm_output_len` 直接转 `int32`。
 - `src/mythroad/mythroad.c:3576-3591`：调用侧只判断 `output && output_len`，负 `output_len` 进入 `mrp_pushlstring()` 时会再转成巨大 `size_t`。
 - `src/arm_ext_executor.c:1761-1768`：ARM 网络参数 `r2` 是 `uint32_t`，直接转 `int` 传给 `mr_recv/mr_send/mr_sendto`。
 - `src/mythroad/src/mr_dump.c:35-49` 写 host `size_t`；`src/mythroad/src/mr_undump.c:72-75` 固定读 4 字节 `uint32`，预编译 chunk 长度格式在 LP64 下不一致。
 - `src/mythroad/dsm.c:1117-1125` 把 `int32 *output_len` 强转成 `uint32 *` 给 `UCS2BEStrToGBStr()`；`src/mythroad/encode.c:183-199` 被调函数按 `uint32` 写输出长度。
-- `src/arm_ext_executor.c:2320-2328`、`src/vmrp_api.c:80-88`：屏幕尺寸乘法先在 `int32/int` 中完成，再转 `uint32_t/size_t`。
+- `src/arm_ext_executor.c:2320-2328`、`src/skyengine_api.c:80-88`：屏幕尺寸乘法先在 `int32/int` 中完成，再转 `uint32_t/size_t`。
 
 影响：
 

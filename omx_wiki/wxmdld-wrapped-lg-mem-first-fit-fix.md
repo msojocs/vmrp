@@ -1,6 +1,6 @@
 ---
 title: "WXMDLD wrapped LG_mem first-fit and nested resource-owner fix"
-tags: ["vmrp", "wxmdld", "arm-ext", "allocator", "lg-mem", "table125", "disassembly", "ppm"]
+tags: ["skyengine", "wxmdld", "arm-ext", "allocator", "lg-mem", "table125", "disassembly", "ppm"]
 created: 2026-07-17T05:27:48Z
 updated: 2026-07-17T05:53:01Z
 sources: ["src/arm_ext_executor.c", "src/arm_ext/aex_mem.c", "src/arm_ext/aex_table.c", "src/mythroad/mem.c", "docs/修复记录/wxmdld-99-percent-crash-debug.md"]
@@ -14,7 +14,7 @@ schemaVersion: 1
 
 ## Symptom
 
-`build/vmrp build/mythroad/wxmdld.mrp` stopped on its Flash loading page at 99%
+`build/skyengine build/mythroad/wxmdld.mrp` stopped on its Flash loading page at 99%
 and raised `UC_MEM_READ_UNMAPPED` at `PC=0x23E128`, address `0x7801023E`.
 After correcting that path, a fresh work directory exposed a second failure at
 `PC=0x239644`, address `0x38383838`; an existing-cache restart could succeed.

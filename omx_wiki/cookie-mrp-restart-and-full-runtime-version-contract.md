@@ -89,7 +89,7 @@ removed.
 
 ## Evidence and regression
 
-The final no-xvfb artifact `/tmp/vmrp-e2e-aHIAVT/second-app.ppm` is a 240x320 P6
+The final no-xvfb artifact `/tmp/skyengine-e2e-aHIAVT/second-app.ppm` is a 240x320 P6
 image with SHA-256
 `d3d014208fb1fac6862c4c2ab2a6479aa582a09b3a6df8908f74e9301d29c3ba`.
 Runtime logs show the second `_mr_intra_start` executing `dofile('start.mr')`.
@@ -98,7 +98,7 @@ All graphical runs used SDL's dummy video/audio drivers.
 Verification completed on 2026-07-15:
 
 ```text
-cmake --build build --target vmrp -j2                  passed
+cmake --build build --target skyengine -j2                  passed
 ctest --test-dir build --output-on-failure             1/1 passed
 pnpm exec tsc --noEmit                                 passed
 focused Cookie E2E                                    1/1 passed

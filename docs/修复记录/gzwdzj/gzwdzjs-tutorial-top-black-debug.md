@@ -17,7 +17,7 @@
   `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gzwdzjs/game-start.test.ts -t 教程 --reporter=verbose`
 - 结果:失败于 `test/e2e/gzwdzjs/game-start.test.ts:87`,
   `screen.pixel(75,75) == [0,0,0]`。
-- 保留目录:`/tmp/vmrp-e2e-EUtFlT`。
+- 保留目录:`/tmp/skyengine-e2e-EUtFlT`。
 - PPM 证据:
   - `start-confirm.ppm`: `unique=240`,上半屏非黑 `38400`,下半屏非黑 `36904`,
     `(75,75)=[232,184,40]`。
@@ -80,10 +80,10 @@
 ## 2026-07-06 22:58 验证
 
 - 构建:
-  `cmake --build build --target vmrp -j2`
+  `cmake --build build --target skyengine -j2`
 - focused:
   `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gzwdzjs/game-start.test.ts -t 教程 --reporter=verbose`
-  通过,保留目录 `/tmp/vmrp-e2e-afKb8y`。
+  通过,保留目录 `/tmp/skyengine-e2e-afKb8y`。
 - focused PPM:
   - `game-start.ppm`: `240x320`,`unique=84`,
     上半屏非黑 `48000`,下半屏非黑 `27318`,非黑行范围 `0..319`;

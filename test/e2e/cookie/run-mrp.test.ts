@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace, type PpmImage, type Rgb } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace, type PpmImage, type Rgb } from "../engine-e2e.js";
 import { cpSync, mkdirSync, rmSync } from "fs";
 
 function pixelEquals(screen: PpmImage, x: number, y: number, expected: Rgb): boolean {
@@ -22,7 +22,7 @@ function isStartupOverlayFrame(screen: PpmImage): boolean {
 }
 
 async function collectDrawFrames(
-  vmrp: SkyEngineE2e,
+  engine: SkyEngineE2e,
   startDrawCount: number,
   namePrefix: string,
 ): Promise<PpmImage[]> {
@@ -31,7 +31,7 @@ async function collectDrawFrames(
   for (let i = 0; i < 40; i += 1) {
     let response: string;
     try {
-      response = await vmrp.command(`WAIT_DRAW ${drawCount} 250`, 750);
+      response = await engine.command(`WAIT_DRAW ${drawCount} 250`, 750);
     } catch (error) {
       // A quiet 250ms interval is expected while a restarted parent rebuilds
       // its list.  Socket/protocol failures are not an end-of-frames signal.
@@ -44,7 +44,7 @@ async function collectDrawFrames(
     if (!match) throw new Error(`Unexpected WAIT_DRAW response: ${response}`);
     const nextDrawCount = Number(match[1]);
     for (let draw = drawCount + 1; draw <= nextDrawCount; draw += 1) {
-      frames.push(await vmrp.screenDraw(draw, `${namePrefix}-${String(draw).padStart(4, "0")}`));
+      frames.push(await engine.screenDraw(draw, `${namePrefix}-${String(draw).padStart(4, "0")}`));
     }
     drawCount = nextDrawCount;
   }
@@ -76,7 +76,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
 
     {
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         // 从第一项向上循环到末项“文件管理”，直接验证末行高亮背景。
         const screen = await engine.screen("home");
         // rgb(32, 72, 112)
@@ -90,7 +90,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       await engine.key('LEFT_SOFT', 1_000, 250)
 
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         // 主页面
         const screen = await engine.screen("menu-first");
         // rgb(248, 192, 32)
@@ -104,7 +104,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       await engine.key('UP', 1_000)
 
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         // 主页面
         const screen = await engine.screen("menu-last");
         // rgb(248, 192, 32)
@@ -118,7 +118,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       await engine.key('LEFT_SOFT', 1_000)
 
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         // 文件管理根目录加载完成后第一项高亮；目录可全部显示时右侧不会绘制滚动滑块。
         const screen = await engine.screen("file-manage-top");
         // rgb(248, 200, 24)
@@ -132,7 +132,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       await engine.key('UP', 1_000)
 
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         // 从第一项向上循环到末项“冒泡浏览器”，直接验证末行高亮背景。
         // 预创建 brw/ 后根目录为 8 项,末项高亮下移到 y≈248。
         const screen = await engine.screen("file-manage-bottom");
@@ -148,7 +148,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       await engine.key('LEFT_SOFT', 1_000)
 
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         // 文件菜单第一项“进入”的高亮背景证明菜单已打开。
         const screen = await engine.screen("file-manage-menu");
         // rgb(248, 192, 32)
@@ -181,7 +181,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       await engine.key('LEFT_SOFT', 1_000)
       // rgb(224, 240, 248)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         const screen = await engine.screen("second-app-menu");
         expect(screen.pixel(71, 283)).toEqual([224, 240, 248]);
       }, {
@@ -194,7 +194,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       await engine.key('UP', 1_000)
       // rgb(128, 192, 240)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         const screen = await engine.screen("second-app-menu");
         expect(screen.pixel(68, 284)).toEqual([128, 192, 240]);
       }, {
@@ -217,7 +217,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       expect(returnFrames.some(isStartupOverlayFrame)).toBe(false);
 
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         if (!fileManagerBeforeLaunch) throw new Error("启动前文件管理器画面未初始化");
         const screen = await engine.screen("back-to-file-manage");
         expect(screen.diffPixelCount(fileManagerBeforeLaunch, {
@@ -235,7 +235,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       // 接收正常事件，不能只停留在一张宿主强制提交的列表快照上。
       await engine.key('RIGHT_SOFT', 2_000);
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         const screen = await engine.screen("parent-home-after-return");
         expect(screen.pixel(75, 276)).toEqual([32, 72, 112]);
       }, {
@@ -259,7 +259,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
 
     {
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         // 从第一项向上循环到末项“文件管理”，直接验证末行高亮背景。
         const screen = await engine.screen("home");
         // rgb(32, 72, 112)
@@ -273,7 +273,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       await engine.key('LEFT_SOFT', 1_000, 250)
 
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         // 主页面
         const screen = await engine.screen("menu-first");
         // rgb(248, 192, 32)
@@ -287,7 +287,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       await engine.key('UP', 1_000)
 
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         // 主页面
         const screen = await engine.screen("menu-last");
         // rgb(248, 192, 32)
@@ -301,7 +301,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       await engine.key('LEFT_SOFT', 1_000)
 
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         // 文件管理根目录加载完成后第一项高亮；目录可全部显示时右侧不会绘制滚动滑块。
         const screen = await engine.screen("file-manage-top");
         // rgb(248, 200, 24)
@@ -315,7 +315,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       await engine.key('UP', 1_000)
 
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         // 从第一项向上循环到末项“冒泡浏览器”，直接验证末行高亮背景。
         // 预创建 brw/ 后根目录为 8 项,末项高亮下移到 y≈248。
         const screen = await engine.screen("file-manage-bottom");
@@ -350,7 +350,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       await engine.key('LEFT_SOFT', 1_000)
       // rgb(224, 240, 248)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         const screen = await engine.screen("second-app-menu");
         expect(screen.pixel(71, 283)).toEqual([224, 240, 248]);
       }, {
@@ -363,7 +363,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       await engine.key('UP', 1_000)
       // rgb(128, 192, 240)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         const screen = await engine.screen("second-app-menu");
         expect(screen.pixel(68, 284)).toEqual([128, 192, 240]);
       }, {
@@ -386,7 +386,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       expect(returnFrames.some(isStartupOverlayFrame)).toBe(false);
 
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         if (!fileManagerBeforeLaunch) throw new Error("启动前文件管理器画面未初始化");
         const screen = await engine.screen("back-to-file-manage");
         expect(screen.diffPixelCount(fileManagerBeforeLaunch, {
@@ -404,7 +404,7 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       // 接收正常事件，不能只停留在一张宿主强制提交的列表快照上。
       await engine.key('RIGHT_SOFT', 2_000);
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("skyengine 未初始化");
         const screen = await engine.screen("parent-home-after-return");
         expect(screen.pixel(75, 276)).toEqual([32, 72, 112]);
       }, {

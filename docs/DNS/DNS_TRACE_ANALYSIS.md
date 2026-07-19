@@ -1,45 +1,45 @@
-# DNS Resolution Trace Analysis: `build/vmrp mythroad/gghjt.mrp` → `rop.skymobiapp.com`
+# DNS Resolution Trace Analysis: `build/skyengine mythroad/gghjt.mrp` → `rop.skymobiapp.com`
 
 ## Executive Summary
 
-When executing `build/vmrp mythroad/gghjt.mrp`, the application makes a network request to `rop.skymobiapp.com`. The DNS resolution for this domain is intercepted and redirected to `127.0.0.1` via a built-in DNS mapping table. This document traces the complete flow from initialization through socket connection.
+When executing `build/skyengine mythroad/gghjt.mrp`, the application makes a network request to `rop.skymobiapp.com`. The DNS resolution for this domain is intercepted and redirected to `127.0.0.1` via a built-in DNS mapping table. This document traces the complete flow from initialization through socket connection.
 
 ---
 
 ## 1. DEFAULT DNS MAPPING CONFIGURATION
 
-### Location: `src/vmrp.c:28`
+### Location: `src/skyengine.c:28`
 ```c
-#define VMRP_DEFAULT_DNS_MAP "wap.skmeg.com->159.75.119.124;rop.skymobiapp.com->127.0.0.1"
+#define DEFAULT_DNS_MAP "wap.skmeg.com->159.75.119.124;rop.skymobiapp.com->127.0.0.1"
 ```
 
 **Key Points:**
 - `rop.skymobiapp.com` is mapped to `127.0.0.1` (localhost)
 - This is the **default** mapping; can be overridden by:
   1. CLI argument: `--dns-map` (highest priority)
-  2. Environment variable: `VMRP_DNS_MAP`
-  3. Configuration API call: `vmrp_api_set_dns_map()`
+  2. Environment variable: `SKYENGINE_DNS_MAP`
+  3. Configuration API call: `skyengine_api_set_dns_map()`
   4. Default (lowest priority)
 
-### Selection Priority: `src/vmrp.c:216-233`
+### Selection Priority: `src/skyengine.c:216-233`
 ```c
 static const char *selectStartupDnsMap(const char *dns_map_arg, VmrpDnsMapSource *source) {
     if (dns_map_arg) {                    // CLI --dns-map
-        *source = VMRP_DNS_MAP_SOURCE_CLI;
+        *source = SKYENGINE_DNS_MAP_SOURCE_CLI;
         return dns_map_arg;
     }
     if (startup_config.dns_map_set &&     // Config API
-        startup_config.dns_map_source == VMRP_DNS_MAP_SOURCE_CONFIG) {
-        *source = VMRP_DNS_MAP_SOURCE_CONFIG;
+        startup_config.dns_map_source == SKYENGINE_DNS_MAP_SOURCE_CONFIG) {
+        *source = SKYENGINE_DNS_MAP_SOURCE_CONFIG;
         return startup_config.dns_map;
     }
     const char *env_dns_map = getenv("SKYENGINE_DNS_MAP");  // Environment variable
     if (env_dns_map != NULL) {
-        *source = VMRP_DNS_MAP_SOURCE_ENV;
+        *source = SKYENGINE_DNS_MAP_SOURCE_ENV;
         return env_dns_map;
     }
-    *source = VMRP_DNS_MAP_SOURCE_DEFAULT;
-    return VMRP_DEFAULT_DNS_MAP;          // Hardcoded default
+    *source = SKYENGINE_DNS_MAP_SOURCE_DEFAULT;
+    return DEFAULT_DNS_MAP;          // Hardcoded default
 }
 ```
 
@@ -48,14 +48,14 @@ static const char *selectStartupDnsMap(const char *dns_map_arg, VmrpDnsMapSource
 ## 2. DNS MAP INITIALIZATION FLOW
 
 ### Step 1: VMRP Main Entry Point
-**File:** `src/vmrp.c:235-282` (`prepareVmrpArgs()`)
+**File:** `src/skyengine.c:235-282` (`prepareVmrpArgs()`)
 
 1. Parses command-line arguments (lines 243-244)
 2. Selects which DNS map to use based on priority (line 269)
 3. Applies the DNS map (line 270)
 
 ### Step 2: Apply DNS Map Configuration
-**File:** `src/vmrp.c:198-214`
+**File:** `src/skyengine.c:198-214`
 
 ```c
 static int applyStartupDnsMap(const char *map, VmrpDnsMapSource source) {
@@ -383,7 +383,7 @@ typedef struct {
     char fake[VMRP_DNS_NAME_MAX + 1];      // "127.0.0.1"
 } DnsMapEntry;
 
-static DnsMapEntry dnsMap[VMRP_DNS_MAP_MAX];  // Array of up to 32 entries
+static DnsMapEntry dnsMap[SKYENGINE_DNS_MAP_MAX];  // Array of up to 32 entries
 static int dnsMapCount = 0;
 ```
 
@@ -499,29 +499,29 @@ typedef struct {
 ## 11. CONFIGURATION AND OVERRIDE MECHANISMS
 
 ### 1. **Default (Hardcoded)**
-- Location: `src/vmrp.c:28`
+- Location: `src/skyengine.c:28`
 - Value: `"wap.skmeg.com->159.75.119.124;rop.skymobiapp.com->127.0.0.1"`
 
 ### 2. **Environment Variable Override**
 ```bash
-export VMRP_DNS_MAP="rop.skymobiapp.com->127.0.0.1;other.com->1.2.3.4"
-vmrp mythroad/gghjt.mrp
+export SKYENGINE_DNS_MAP="rop.skymobiapp.com->127.0.0.1;other.com->1.2.3.4"
+skyengine mythroad/gghjt.mrp
 ```
-- Selected in: `src/vmrp.c:226-230`
+- Selected in: `src/skyengine.c:226-230`
 
 ### 3. **Command-Line Override (Highest Priority)**
 ```bash
-vmrp --dns-map "rop.skymobiapp.com->192.168.1.1" mythroad/gghjt.mrp
+skyengine --dns-map "rop.skymobiapp.com->192.168.1.1" mythroad/gghjt.mrp
 ```
-- Parsed in: `src/vmrp.c:158-164`
-- Priority check: `src/vmrp.c:217-219`
+- Parsed in: `src/skyengine.c:158-164`
+- Priority check: `src/skyengine.c:217-219`
 
 ### 4. **API Call Override**
 ```c
-vmrp_api_set_dns_map("rop.skymobiapp.com->10.0.0.1");
+skyengine_api_set_dns_map("rop.skymobiapp.com->10.0.0.1");
 ```
-- Function: `src/vmrp.c:212-214`
-- API header: `src/include/vmrp_api.h`
+- Function: `src/skyengine.c:212-214`
+- API header: `src/include/skyengine_api.h`
 
 ---
 
@@ -540,9 +540,9 @@ static int copyNormalizedDomain(char* dst, size_t dstSize, const char* src) {
 ```
 
 ### Constants
-- `VMRP_DNS_MAP_MAX = 32` (max entries in DNS map)
+- `SKYENGINE_DNS_MAP_MAX = 32` (max entries in DNS map)
 - `VMRP_DNS_NAME_MAX = 255` (max hostname length)
-- `VMRP_DNS_MAP_LIMIT = 2048` (max string length for entire map)
+- `SKYENGINE_DNS_MAP_LIMIT = 2048` (max string length for entire map)
 
 ### Platform-Specific
 - Uses `getaddrinfo()` for IPv4/IPv6 resolution (modern approach)
@@ -555,10 +555,10 @@ static int copyNormalizedDomain(char* dst, size_t dstSize, const char* src) {
 
 | Component | File | Line | Purpose |
 |-----------|------|------|---------|
-| Default DNS map | `vmrp.c` | 28 | Hardcoded default with `rop.skymobiapp.com->127.0.0.1` |
-| Parse arguments | `vmrp.c` | 133-186 | Handle `--dns-map` CLI argument |
-| Select DNS map | `vmrp.c` | 216-233 | Priority: CLI > Config > Env > Default |
-| Apply DNS map | `vmrp.c` | 198-214 | Call `my_configureDnsMap()` |
+| Default DNS map | `skyengine.c` | 28 | Hardcoded default with `rop.skymobiapp.com->127.0.0.1` |
+| Parse arguments | `skyengine.c` | 133-186 | Handle `--dns-map` CLI argument |
+| Select DNS map | `skyengine.c` | 216-233 | Priority: CLI > Config > Env > Default |
+| Apply DNS map | `skyengine.c` | 198-214 | Call `my_configureDnsMap()` |
 | Configure DNS | `network.c` | 125-159 | Parse map string, split by `;,\n` |
 | Parse entry | `network.c` | 90-123 | Parse `original->fake`, normalize domain |
 | Lookup mapping | `network.c` | 161-174 | Search dnsMap[], return mapped name |
@@ -576,7 +576,7 @@ static int copyNormalizedDomain(char* dst, size_t dstSize, const char* src) {
 ### To trace DNS resolution in action:
 ```bash
 # Enable verbose output (already in code)
-vmrp --dns-map "rop.skymobiapp.com->127.0.0.1" mythroad/gghjt.mrp
+skyengine --dns-map "rop.skymobiapp.com->127.0.0.1" mythroad/gghjt.mrp
 ```
 
 ### Expected console output:
@@ -591,10 +591,10 @@ my_connect('127.0.0.1', <port>)
 ### To change the mapping:
 ```bash
 # Use environment variable
-VMRP_DNS_MAP="rop.skymobiapp.com->10.0.0.5" vmrp mythroad/gghjt.mrp
+SKYENGINE_DNS_MAP="rop.skymobiapp.com->10.0.0.5" skyengine mythroad/gghjt.mrp
 
 # Or CLI argument (highest priority)
-vmrp --dns-map "rop.skymobiapp.com->10.0.0.5" mythroad/gghjt.mrp
+skyengine --dns-map "rop.skymobiapp.com->10.0.0.5" mythroad/gghjt.mrp
 ```
 
 ---

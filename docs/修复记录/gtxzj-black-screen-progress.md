@@ -4,7 +4,7 @@
 
 ## 目标与约束
 
-- 复现命令：`build/vmrp build/mythroad/gtxzj.mrp`。
+- 复现命令：`build/skyengine build/mythroad/gtxzj.mrp`。
 - 目标：游戏正常启动并进入可交互画面；不得按包名、哈希或场景添加特判。
 - 运行使用现有 `DISPLAY=:0`/WSLg 图形会话，不使用 Xvfb。
 - trace 日志必须保持有界；画面以 PPM 的结构、像素和交互共同验证。
@@ -28,7 +28,7 @@
   ```
 
   对应 entry 偏移/压缩长度为 `0x52310/0x2D9E` 和 `0x42AEC/0xF80E`。
-- 当前修复构建 `build/vmrp` build-id：
+- 当前修复构建 `build/skyengine` build-id：
   `fe38a6d32e0a1c4ba78310c0ae2adce903a51d6a`。
 - 该包不是提交 `b9ecee2` 已修复并加入回归的 `sanguo_490111.mrp`；后者
   SHA-256 为 `bcbac32a...`。旧包的动态 LG_mem arena 结论和非黑 PPM
@@ -42,7 +42,7 @@
   compact scheduler offset `0x1FC`，compact heap control offset `0x14C`，
   compact free return 文件偏移 `0x2644`，没有 chain walker。
 - `start.mr` 的同步启动调用已经返回，日志到达：
-  `vmrp_runtime_start_dsm returned 0x0` 和 `After app init`。因此当前黑屏
+  `skyengine_runtime_start_dsm returned 0x0` 和 `After app init`。因此当前黑屏
   不在旧 `490111` 卡住的同步 wrapper teardown，也不是 Lua 入口未返回。
 - 运行 15 秒没有一次有效 screen draw，设置 `VMRP_PPM=1` 仍无自动 PPM。
   存活时向进程发送 `SIGUSR1` 后得到 `/tmp/gtxzj-live.ppm`：P6 240x320，
@@ -110,7 +110,7 @@
 - 首阶段 PPM 正常显示“我要冒泡”和 Moshi Logo。约 6 秒后进入状态索引 10，
   对应 `0x23C8F8` 的“是否开启音效？”文本菜单；若工作目录没有基础字库，
   `mr_open(mythroad/system/gb12.uc2/gb16.uc2)` 都返回 0，该文本菜单会再次全黑。
-- `build/vmrp` 默认以可执行文件目录 `build/` 为 work-dir，但修复前
+- `build/skyengine` 默认以可执行文件目录 `build/` 为 work-dir，但修复前
   `build/mythroad/system` 只有字体安装 MRP，没有解包后的 `.uc2`。因此用户原命令
   还需要构建系统部署基础字库，不能只修 RTC。
 
@@ -118,19 +118,19 @@
 
 - 新增设备 RTC 配置：默认日期为 2011-01-01，适合旧 MRP 的确定性回放；
   时分秒仍随宿主时钟。CLI `--device-date YYYY-MM-DD|host` 和环境变量
-  `VMRP_DEVICE_DATE` 可选择任意合法日期或恢复真实宿主日期。
-- `getDatetime` 只读取公共 `VmrpConfig`，没有任何应用身份或失败状态分支。
+  `SKYENGINE_DEVICE_DATE` 可选择任意合法日期或恢复真实宿主日期。
+- `getDatetime` 只读取公共 `SkyEngineConfig`，没有任何应用身份或失败状态分支。
   日期解析校验固定格式、月份天数和闰年，非法日期在启动前明确失败。
-- 共享库通过 `vmrp_api_set_device_date("YYYY-MM-DD"|"host")` 复用同一校验并在
-  `vmrp_api_start()` 传播配置，非法调用不会覆盖上一次有效模式。
-- CMake 的 `skyengine-system-assets` 依赖在每次请求构建 `vmrp` 时使用
+- 共享库通过 `skyengine_api_set_device_date("YYYY-MM-DD"|"host")` 复用同一校验并在
+  `skyengine_api_start()` 传播配置，非法调用不会覆盖上一次有效模式。
+- CMake 的 `skyengine-system-assets` 依赖在每次请求构建 `skyengine` 时使用
   `copy_if_different` 把 `gb12.uc2`、`gb16.uc2` 复制到
-  `$<TARGET_FILE_DIR:vmrp>/mythroad/system`，无需重链接即可恢复缺失或过期字库。
+  `$<TARGET_FILE_DIR:skyengine>/mythroad/system`，无需重链接即可恢复缺失或过期字库。
 - 新增 `test/fixtures/gtxzj.mrp` 和 `test/e2e/gtxzj/boot-to-title.test.ts`。测试等待
   稳定像素而不是固定启动补调用，覆盖音效菜单、RIGHT_SOFT、标题画面、DOWN 选择
   和 ENTER 打开“无存档”对话框。
 - 新增 `test/e2e/gtxzj/device-date.test.ts`，自动覆盖六种非法日历输入、
-  `VMRP_DEVICE_DATE`、CLI 覆盖环境变量和 `host` 模式，共 9 个日期契约用例。
+  `SKYENGINE_DEVICE_DATE`、CLI 覆盖环境变量和 `host` 模式，共 9 个日期契约用例。
 
 ## 最终目标验证
 
@@ -175,15 +175,15 @@
 - GGHJT：正式开始不花屏、直接开始不缺渲染 2/2 通过。
 - OPGLQA：字体下载/切换后的顶部渲染 1/1 通过。
 
-- `cmake --build build --target vmrp -j2` 和 `pnpm exec tsc --noEmit` 均通过。
+- `cmake --build build --target skyengine -j2` 和 `pnpm exec tsc --noEmit` 均通过。
 - 删除已部署的 `build/mythroad/system/gb12.uc2` 后再次增量构建，没有重链接也会
   执行 `skyengine-system-assets` 并恢复相同 SHA-256 的字库。
-- 使用 `-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/tmp/vmrp-runtime-dir-audit` 的独立配置
+- 使用 `-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/tmp/skyengine-runtime-dir-audit` 的独立配置
   验证 link 输出和两份字库都位于该目录，构建目录本身没有误放的 `mythroad/`。
 - `SKYENGINE_BUILD_SHARED_ONLY=ON` 的 `skyengine-shared` 构建通过；公共日期 API 对
   `host`、合法闰日和多种非法日期返回值符合契约。以独立共享库进程启动 GTXZJ，
   `2011-01-01` 在 7 秒后有 1134 个非零 RGB565 像素，`host` 在当前日期 2 秒后
-  仍为 0，证明配置确实穿过 `vmrp_api_start()` 到 table[34]；活动运行期间改为
+  仍为 0，证明配置确实穿过 `skyengine_api_start()` 到 table[34]；活动运行期间改为
   `host` 会返回 `-1`，原固定日期继续产生 1134 个非零像素。
 - 第一次完整回归发现源码模板下残留了本次诊断生成且被 Git 忽略的
   `wasm/dist/fs/mythroad/gtxzj/`，它给 Cookie 文件管理器增加一个根目录项，导致

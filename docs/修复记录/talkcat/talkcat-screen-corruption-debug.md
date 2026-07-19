@@ -4,18 +4,18 @@
 
 ## 问题
 
-- 命令:`build/vmrp build/mythroad/talkcat.mrp`
+- 命令:`build/skyengine build/mythroad/talkcat.mrp`
 - 预期:游戏主界面显示正常。
 - 实际:进入主界面后画面存在大量散布的短横线花屏(彩色噪点线段)。
 
 ## 复现(2026-07-02 11:21)
 
 ```bash
-rm -rf /tmp/vmrp-tc-repro /tmp/talkcat-repro.ppm
-install -d /tmp/vmrp-tc-repro
+rm -rf /tmp/skyengine-tc-repro /tmp/talkcat-repro.ppm
+install -d /tmp/skyengine-tc-repro
 timeout 60s env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy VMRP_NO_MOUSE=1 \
-  VMRP_PPM=1 VMRP_PPM_PATH=/tmp/talkcat-repro.ppm \
-  build/vmrp --work-dir /tmp/vmrp-tc-repro build/mythroad/talkcat.mrp
+  VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/talkcat-repro.ppm \
+  build/skyengine --work-dir /tmp/skyengine-tc-repro build/mythroad/talkcat.mrp
 ```
 
 结果:
@@ -112,7 +112,7 @@ timeout 60s env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy VMRP_NO_MOUSE=1 \
 
 ## 2026-07-02 验证
 
-两次干净 workdir 60s/45s 运行 `build/vmrp build/mythroad/talkcat.mrp`:
+两次干净 workdir 60s/45s 运行 `build/skyengine build/mythroad/talkcat.mrp`:
 - PPM 240x320 主界面完全正常:背景、猫、全部 UI 图标(齿轮/信息/关闭/
   静音/脚印/旋转)清晰渲染;打哈欠动画帧正常。
 - 屏幕像素中搜索 MRP 索引特征字节(.jpg/.slg/start/yawn):0 命中
@@ -183,7 +183,7 @@ timeout 60s env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy VMRP_NO_MOUSE=1 \
 
 复现(子 Agent):真实 SDL 视频驱动(WSLg 窗口)下启动 ~4.5s 必崩,
 无需任何交互;SDL_VIDEODRIVER=dummy 永不触发。最小复现:
-`rm -rf build/mythroad/talkcat && DISPLAY=:0 build/vmrp build/mythroad/talkcat.mrp`。
+`rm -rf build/mythroad/talkcat && DISPLAY=:0 build/skyengine build/mythroad/talkcat.mrp`。
 
 根因链(运行时 DIAG + 反汇编交叉验证):
 1. game.ext 用格式串 "%m%d.jpg"(0x2D7188)构建路径,目标是 30 字节

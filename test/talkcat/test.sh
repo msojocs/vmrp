@@ -1,3 +1,3 @@
 #!/bin/bash
 rm -rf build/mythroad/talkcat
-build/vmrp build/mythroad/talkcat.mrp
+build/skyengine build/mythroad/talkcat.mrp

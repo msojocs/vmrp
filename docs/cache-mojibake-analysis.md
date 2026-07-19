@@ -3,7 +3,7 @@
 ## 现象
 
 ```
-build/vmrp build/mythroad/愤怒的小鸟VS僵尸2_v1002-3.mrp
+build/skyengine build/mythroad/愤怒的小鸟VS僵尸2_v1002-3.mrp
 ```
 
 运行后 `build/mythroad/cache/` 出现空目录 `鎰ゆ€掔殑灏忛笩VS鍍靛案2_v1002-3`。
@@ -28,7 +28,7 @@ GBK 名字 27 字节放得下，UTF-8 名字 35 字节溢出且丢失 NUL 终止
 
 1. 真机上 Mythroad guest 世界（VM/EXT ARM 代码）全部使用 **GBK** 编码，
    table[100]（包名）在真机上是 GBK 字节。
-2. vmrp 在 Linux 上把宿主 **UTF-8** 路径原样暴露给 guest：
+2. skyengine 在 Linux 上把宿主 **UTF-8** 路径原样暴露给 guest：
    - `arm_ext_init_pack_names()`（src/arm_ext/aex_module.c:375）取
      `mr_get_pack_filename()`（宿主 UTF-8），推导 cwd 相对别名
      `mythroad/愤怒的小鸟VS僵尸2_v1002-3.mrp`，存入 `m->pack_alias`；

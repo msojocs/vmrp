@@ -4,7 +4,7 @@
 #include "./include/memory.h"
 #include "./include/native_dsm_funcs.h"
 #include "./include/native_text_widget.h"
-#include "./mythroad/include/dsm.h" /* dsm_get/set_lcd_rotation:plat(101) 旋转状态 */
+#include "./include/dsm.h" /* dsm_get/set_lcd_rotation:plat(101) 旋转状态 */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,7 +37,7 @@ static int pending_timer_ms = 0;
 static int api_running = 0;
 static int api_paused = 0;
 static int image_processing_mode = VMRP_IMAGE_PROCESSING_NATIVE;
-static char api_dns_map[VMRP_DNS_MAP_LIMIT];
+static char api_dns_map[SKYENGINE_DNS_MAP_LIMIT];
 static int api_dns_map_set = 0;
 
 static int edit_active = 0;
@@ -46,7 +46,7 @@ static char *hold_edit_text = NULL;
 static char *edit_text_snapshot = NULL;
 
 /* 震动请求(mr_startShake/mr_stopShake,SKYENGINE 手册 mr_startShake.md)。
- * 轮询模型:guest 请求记录在此,嵌入端经 vmrp_api_take_shake() 取走后调
+ * 轮询模型:guest 请求记录在此,嵌入端经 skyengine_api_take_shake() 取走后调
  * 平台振动器。取值:0=无新请求,>0=开始震动 N 毫秒,-1=停止震动;
  * start/stop 相继发生时后者覆盖前者(last-action-wins,与真机马达一致——
  * 后到的指令决定马达最终状态)。 */
@@ -221,8 +221,8 @@ void guiDrawBitmapWithStride(uint16_t *bmp, int32_t x, int32_t y,
     /* LCD 旋转(plat(101))后 screen_buf 行宽/裁剪按显示尺寸;像素总数在转置
      * 下不变(w*h 相等),无需重分配。嵌入端经 get_screen_width/height/
      * rotation 读到同一显示尺寸,对 buffer 的行宽解释保持一致。 */
-    int sw = vmrp_display_width();
-    int sh = vmrp_display_height();
+    int sw = skyengine_display_width();
+    int sh = skyengine_display_height();
     int32_t min_x = x < 0 ? 0 : x;
     int32_t min_y = y < 0 ? 0 : y;
     int32_t max_x = x + w;
@@ -260,7 +260,7 @@ void guiDrawBitmap(uint16_t *bmp, int32_t x, int32_t y, int32_t w, int32_t h) {
      * 行宽取旋转后的显示宽度(rotation==0 时与面板宽度相同)。
      */
     guiDrawBitmapWithStride(bmp, x, y, w, h,
-                            vmrp_display_width(), x, y);
+                            skyengine_display_width(), x, y);
 }
 
 int32_t timerStart(uint16_t t) {
@@ -360,7 +360,7 @@ static const uint8_t *screen_rgba_native(void) {
 #if VMRP_API_ASYNC_RUNNER
     screen_lock();
 #endif
-    size_t pixel_count = (size_t)vmrp_config.screen_width * (size_t)vmrp_config.screen_height;
+    size_t pixel_count = (size_t)skyengine_config.screen_width * (size_t)skyengine_config.screen_height;
     uint8_t *dst = screen_rgba_buf;
     for (size_t i = 0; i < pixel_count; i++) {
         uint16_t c = screen_buf[i];
@@ -481,7 +481,7 @@ static void api_apply_cancel_edit_command(void) {
 }
 
 static void api_finish_if_exited(void) {
-    if (!vmrp_is_exited()) return;
+    if (!skyengine_is_exited()) return;
     api_lock();
     api_running = 0;
     pending_timer_ms = 0;
@@ -537,7 +537,7 @@ static API_THREAD_RET api_worker_main(void *userdata) {
                     event(cmd.code, cmd.p0, cmd.p1);
                     break;
                 case API_CMD_MOTION:
-                    vmrp_motion_input(cmd.code, cmd.p0, cmd.p1);
+                    skyengine_motion_input(cmd.code, cmd.p0, cmd.p1);
                     break;
                 case API_CMD_SET_EDIT_TEXT:
                     api_apply_edit_text_command(cmd.text);
@@ -600,15 +600,15 @@ static void api_stop_worker(void) {}
 
 /* --- Public API --- */
 
-VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h) {
+VMRP_EXPORT int skyengine_api_init(int screen_w, int screen_h) {
     api_stop_worker();
 #if VMRP_API_ASYNC_RUNNER
     api_ensure_sync();
 #endif
     if (screen_w <= 0) screen_w = DEFAULT_SCREEN_WIDTH;
     if (screen_h <= 0) screen_h = DEFAULT_SCREEN_HEIGHT;
-    vmrp_config.screen_width = screen_w;
-    vmrp_config.screen_height = screen_h;
+    skyengine_config.screen_width = screen_w;
+    skyengine_config.screen_height = screen_h;
     /* LCD 旋转是 guest 运行期经 plat(101) 请求的状态,初始化时归零
      * (dsm_init 也会归零,这里保证 start 之前 getter 即返回初始值) */
     dsm_set_lcd_rotation(0);
@@ -652,65 +652,65 @@ VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h) {
     return 0;
 }
 
-VMRP_EXPORT int vmrp_api_set_memory(int memory_mb) {
+VMRP_EXPORT int skyengine_api_set_memory(int memory_mb) {
     if (memory_mb != 1 && memory_mb != 2 && memory_mb != 4 &&
         memory_mb != 6 && memory_mb != 8 && memory_mb != 16) {
         return -1;
     }
-    vmrp_config.memory_mb = memory_mb;
+    skyengine_config.memory_mb = memory_mb;
     return 0;
 }
 
-VMRP_EXPORT int vmrp_api_set_device_date(const char *date) {
+VMRP_EXPORT int skyengine_api_set_device_date(const char *date) {
     int year, month, day;
 
-    /* Runtime callbacks read vmrp_config on the worker thread, so date mode is
+    /* Runtime callbacks read skyengine_config on the worker thread, so date mode is
      * an inter-run setting and must never change while a VM is active. */
-    if (vmrp_api_is_running()) return -1;
-    if (vmrp_args_parse_device_date(date, &year, &month, &day) != MR_SUCCESS) {
+    if (skyengine_api_is_running()) return -1;
+    if (skyengine_args_parse_device_date(date, &year, &month, &day) != MR_SUCCESS) {
         return -1;
     }
     /* Commit the mode only after full validation so a bad call preserves the
      * embedding host's previously selected RTC configuration. */
-    vmrp_config.device_year = year;
-    vmrp_config.device_month = month;
-    vmrp_config.device_day = day;
+    skyengine_config.device_year = year;
+    skyengine_config.device_month = month;
+    skyengine_config.device_day = day;
     return 0;
 }
 
-VMRP_EXPORT int vmrp_api_set_work_dir(const char *work_dir) {
+VMRP_EXPORT int skyengine_api_set_work_dir(const char *work_dir) {
     int n;
     if (!work_dir || !*work_dir) return -1;
-    n = snprintf(vmrp_config.work_dir, sizeof(vmrp_config.work_dir), "%s", work_dir);
-    if (n < 0 || (size_t)n >= sizeof(vmrp_config.work_dir)) {
-        vmrp_config.work_dir[0] = '\0';
+    n = snprintf(skyengine_config.work_dir, sizeof(skyengine_config.work_dir), "%s", work_dir);
+    if (n < 0 || (size_t)n >= sizeof(skyengine_config.work_dir)) {
+        skyengine_config.work_dir[0] = '\0';
         return -1;
     }
     return 0;
 }
 
-VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char *entry) {
-    VMRP_API_LOG("[vmrp_api] start('%s','%s','%s')\n", mrp_path ? mrp_path : "(null)",
+VMRP_EXPORT int skyengine_api_start(const char *mrp_path, const char *ext, const char *entry) {
+    VMRP_API_LOG("[skyengine_api] start('%s','%s','%s')\n", mrp_path ? mrp_path : "(null)",
                  ext ? ext : "(null)", entry ? entry : "(null)");
-    VMRP_API_LOG("[vmrp_api] work_dir='%s' dns_map_set=%d dns_map='%s'\n",
-                 vmrp_config.work_dir[0] ? vmrp_config.work_dir : "(unset)",
+    VMRP_API_LOG("[skyengine_api] work_dir='%s' dns_map_set=%d dns_map='%s'\n",
+                 skyengine_config.work_dir[0] ? skyengine_config.work_dir : "(unset)",
                  api_dns_map_set,
                  api_dns_map_set ? api_dns_map : "(default)");
     if (!mrp_path || !*mrp_path) return -1;
     if (!ext || !*ext) ext = "start.mr";
 
-    VmrpArgs args = vmrp_args_default();
-    args.screen_width = vmrp_config.screen_width;
-    args.screen_height = vmrp_config.screen_height;
+    SkyEngineArgs args = skyengine_args_default();
+    args.screen_width = skyengine_config.screen_width;
+    args.screen_height = skyengine_config.screen_height;
     /* Preserve the embedding host's explicit virtual-date or host-clock mode. */
-    args.device_year = vmrp_config.device_year;
-    args.device_month = vmrp_config.device_month;
-    args.device_day = vmrp_config.device_day;
-    if (vmrp_config.memory_mb > 0) {
-        args.memory_mb = vmrp_config.memory_mb;
+    args.device_year = skyengine_config.device_year;
+    args.device_month = skyengine_config.device_month;
+    args.device_day = skyengine_config.device_day;
+    if (skyengine_config.memory_mb > 0) {
+        args.memory_mb = skyengine_config.memory_mb;
     }
-    if (vmrp_config.work_dir[0]) {
-        snprintf(args.work_dir, sizeof(args.work_dir), "%s", vmrp_config.work_dir);
+    if (skyengine_config.work_dir[0]) {
+        snprintf(args.work_dir, sizeof(args.work_dir), "%s", skyengine_config.work_dir);
     }
     snprintf(args.mrp_path, sizeof(args.mrp_path), "%s", mrp_path);
     snprintf(args.ext_name, sizeof(args.ext_name), "%s", ext);
@@ -719,23 +719,23 @@ VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char
         snprintf(args.dns_map, sizeof(args.dns_map), "%s", api_dns_map);
     }
 
-    VMRP_API_LOG("[vmrp_api] startVmrp...\n");
-    int ret = startVmrp(&args);
-    VMRP_API_LOG("[vmrp_api] startVmrp returned %d\n", ret);
-    api_running = (ret == 0 && !vmrp_is_exited()) ? 1 : 0;
+    VMRP_API_LOG("[skyengine_api] startVmrp...\n");
+    int ret = startEngine(&args);
+    VMRP_API_LOG("[skyengine_api] startVmrp returned %d\n", ret);
+    api_running = (ret == 0 && !skyengine_is_exited()) ? 1 : 0;
 #if VMRP_API_ASYNC_RUNNER
     if (api_running && api_start_worker() != 0) {
         api_running = 0;
-        stopVmrp();
+        stopEngine();
         return -1;
     }
 #endif
     return ret;
 }
 
-VMRP_EXPORT void vmrp_api_destroy(void) {
+VMRP_EXPORT void skyengine_api_destroy(void) {
     api_stop_worker();
-    stopVmrp();
+    stopEngine();
     free(screen_buf);
     free(screen_rgba_buf);
     screen_buf = NULL;
@@ -752,37 +752,37 @@ VMRP_EXPORT void vmrp_api_destroy(void) {
     edit_active = 0;
 }
 
-VMRP_EXPORT int vmrp_api_set_dns_map(const char *map) {
-    char copy[VMRP_DNS_MAP_LIMIT];
+VMRP_EXPORT int skyengine_api_set_dns_map(const char *map) {
+    char copy[SKYENGINE_DNS_MAP_LIMIT];
 
-    VMRP_API_LOG("[vmrp_api] set_dns_map('%s')\n", map ? map : "(null)");
+    VMRP_API_LOG("[skyengine_api] set_dns_map('%s')\n", map ? map : "(null)");
     if (!map || !*map) {
         api_dns_map[0] = '\0';
         api_dns_map_set = 0;
-        int ret = configureVmrpDnsMap(map) == 0 ? 0 : -1;
-        VMRP_API_LOG("[vmrp_api] set_dns_map cleared ret=%d\n", ret);
+        int ret = configureSkyEngineDnsMap(map) == 0 ? 0 : -1;
+        VMRP_API_LOG("[skyengine_api] set_dns_map cleared ret=%d\n", ret);
         return ret;
     }
 
     int n = snprintf(copy, sizeof(copy), "%s", map);
     if (n < 0 || (size_t)n >= sizeof(copy)) {
-        VMRP_API_LOG("[vmrp_api] set_dns_map too long\n");
+        VMRP_API_LOG("[skyengine_api] set_dns_map too long\n");
         return -1;
     }
-    if (configureVmrpDnsMap(copy) != 0) {
+    if (configureSkyEngineDnsMap(copy) != 0) {
         api_dns_map[0] = '\0';
         api_dns_map_set = 0;
-        VMRP_API_LOG("[vmrp_api] set_dns_map invalid\n");
+        VMRP_API_LOG("[skyengine_api] set_dns_map invalid\n");
         return -1;
     }
     snprintf(api_dns_map, sizeof(api_dns_map), "%s", copy);
     api_dns_map_set = 1;
-    VMRP_API_LOG("[vmrp_api] set_dns_map stored entries='%s'\n", api_dns_map);
+    VMRP_API_LOG("[skyengine_api] set_dns_map stored entries='%s'\n", api_dns_map);
     return 0;
 }
 
-VMRP_EXPORT int vmrp_api_event(int code, int p0, int p1) {
-    if (!api_running || vmrp_is_exited()) {
+VMRP_EXPORT int skyengine_api_event(int code, int p0, int p1) {
+    if (!api_running || skyengine_is_exited()) {
         api_running = 0;
         pending_timer_ms = 0;
         return -1;
@@ -797,7 +797,7 @@ VMRP_EXPORT int vmrp_api_event(int code, int p0, int p1) {
     return api_queue_command(cmd);
 #else
     int ret = event((int32_t)code, (int32_t)p0, (int32_t)p1);
-    if (vmrp_is_exited()) {
+    if (skyengine_is_exited()) {
         api_running = 0;
         pending_timer_ms = 0;
     }
@@ -808,9 +808,9 @@ VMRP_EXPORT int vmrp_api_event(int code, int p0, int p1) {
 /* 动感芯片样本注入:x/y/z 为重力加速度分量,取值 ±1000(plat 4006 量程
  * 契约),坐标系见《动感芯片接口》(平放 Z 正最大、屏幕向左横立 X 正最大、
  * 屏幕背向自己竖立 Y 正最大)。guest 未开启监听时样本被忽略;嵌入端应
- * 在 vmrp_api_motion_active() 返回 >=0 时才开启平台传感器推送。 */
-VMRP_EXPORT int vmrp_api_motion(int x, int y, int z) {
-    if (!api_running || vmrp_is_exited()) {
+ * 在 skyengine_api_motion_active() 返回 >=0 时才开启平台传感器推送。 */
+VMRP_EXPORT int skyengine_api_motion(int x, int y, int z) {
+    if (!api_running || skyengine_is_exited()) {
         api_running = 0;
         pending_timer_ms = 0;
         return -1;
@@ -824,8 +824,8 @@ VMRP_EXPORT int vmrp_api_motion(int x, int y, int z) {
     cmd.p1 = z;
     return api_queue_command(cmd);
 #else
-    int ret = vmrp_motion_input((int32_t)x, (int32_t)y, (int32_t)z);
-    if (vmrp_is_exited()) {
+    int ret = skyengine_motion_input((int32_t)x, (int32_t)y, (int32_t)z);
+    if (skyengine_is_exited()) {
         api_running = 0;
         pending_timer_ms = 0;
     }
@@ -836,14 +836,14 @@ VMRP_EXPORT int vmrp_api_motion(int x, int y, int z) {
 /* guest 的动感监听状态:-1=未监听(嵌入端应关闭传感器),
  * 0=晃动模式(MR_MOTION_EVENT_SHAKE),1=倾斜模式(MR_MOTION_EVENT_TILT)。
  * 轮询风格与 get_screen_dirty 一致,建议随 dirty 帧复查。 */
-VMRP_EXPORT int vmrp_api_motion_active(void) {
+VMRP_EXPORT int skyengine_api_motion_active(void) {
     return (int)dsm_motion_listening_mode();
 }
 
 /* 取走并清除 guest 的震动请求(轮询风格同 get_screen_dirty,建议随
  * dirty 帧/timer 后复查):0=无新请求,>0=开始震动 N 毫秒(嵌入端调平台
  * 振动器),-1=停止震动(mr_stopShake)。 */
-VMRP_EXPORT int vmrp_api_take_shake(void) {
+VMRP_EXPORT int skyengine_api_take_shake(void) {
 #if VMRP_API_ASYNC_RUNNER
     api_lock();
 #endif
@@ -855,8 +855,8 @@ VMRP_EXPORT int vmrp_api_take_shake(void) {
     return req;
 }
 
-VMRP_EXPORT int vmrp_api_timer(void) {
-    if (!api_running || vmrp_is_exited()) {
+VMRP_EXPORT int skyengine_api_timer(void) {
+    if (!api_running || skyengine_is_exited()) {
         api_running = 0;
         pending_timer_ms = 0;
         return -1;
@@ -871,7 +871,7 @@ VMRP_EXPORT int vmrp_api_timer(void) {
 #else
     pending_timer_ms = 0;
     int ret = timer();
-    if (vmrp_is_exited()) {
+    if (skyengine_is_exited()) {
         api_running = 0;
         pending_timer_ms = 0;
     }
@@ -879,8 +879,8 @@ VMRP_EXPORT int vmrp_api_timer(void) {
 #endif
 }
 
-VMRP_EXPORT int vmrp_api_get_timer_interval(void) {
-    if (!api_running || vmrp_is_exited()) {
+VMRP_EXPORT int skyengine_api_get_timer_interval(void) {
+    if (!api_running || skyengine_is_exited()) {
         api_running = 0;
         pending_timer_ms = 0;
         return 0;
@@ -892,7 +892,7 @@ VMRP_EXPORT int vmrp_api_get_timer_interval(void) {
 #endif
 }
 
-VMRP_EXPORT int vmrp_api_set_image_processing_mode(int mode) {
+VMRP_EXPORT int skyengine_api_set_image_processing_mode(int mode) {
     if (mode != VMRP_IMAGE_PROCESSING_NATIVE &&
         mode != VMRP_IMAGE_PROCESSING_OPENCV) {
         return -1;
@@ -901,11 +901,11 @@ VMRP_EXPORT int vmrp_api_set_image_processing_mode(int mode) {
     return 0;
 }
 
-VMRP_EXPORT int vmrp_api_get_image_processing_mode(void) {
+VMRP_EXPORT int skyengine_api_get_image_processing_mode(void) {
     return image_processing_mode;
 }
 
-VMRP_EXPORT int vmrp_api_is_running(void) {
+VMRP_EXPORT int skyengine_api_is_running(void) {
 #if VMRP_API_ASYNC_RUNNER
     int running;
     /* A status query is called synchronously from Flutter's UI isolate. It
@@ -916,7 +916,7 @@ VMRP_EXPORT int vmrp_api_is_running(void) {
     api_unlock();
     return running;
 #else
-    if (api_running && vmrp_is_exited()) {
+    if (api_running && skyengine_is_exited()) {
         api_running = 0;
         pending_timer_ms = 0;
     }
@@ -924,9 +924,9 @@ VMRP_EXPORT int vmrp_api_is_running(void) {
 #endif
 }
 
-VMRP_EXPORT int vmrp_api_pause(void) {
+VMRP_EXPORT int skyengine_api_pause(void) {
 #if VMRP_API_ASYNC_RUNNER
-    if (!api_running || vmrp_is_exited()) return -1;
+    if (!api_running || skyengine_is_exited()) return -1;
     api_lock();
     if (!api_paused) {
         api_paused = 1;
@@ -947,9 +947,9 @@ VMRP_EXPORT int vmrp_api_pause(void) {
 #endif
 }
 
-VMRP_EXPORT int vmrp_api_resume(void) {
+VMRP_EXPORT int skyengine_api_resume(void) {
 #if VMRP_API_ASYNC_RUNNER
-    if (!api_running || vmrp_is_exited()) return -1;
+    if (!api_running || skyengine_is_exited()) return -1;
     api_lock();
     if (api_paused) {
         api_paused = 0;
@@ -965,11 +965,11 @@ VMRP_EXPORT int vmrp_api_resume(void) {
 #endif
 }
 
-VMRP_EXPORT const uint16_t *vmrp_api_get_screen_buffer(void) {
+VMRP_EXPORT const uint16_t *skyengine_api_get_screen_buffer(void) {
     return screen_buf;
 }
 
-VMRP_EXPORT const uint8_t *vmrp_api_get_screen_rgba_buffer(void) {
+VMRP_EXPORT const uint8_t *skyengine_api_get_screen_rgba_buffer(void) {
     switch (image_processing_mode) {
         case VMRP_IMAGE_PROCESSING_OPENCV:
             return screen_rgba_opencv();
@@ -979,7 +979,7 @@ VMRP_EXPORT const uint8_t *vmrp_api_get_screen_rgba_buffer(void) {
     }
 }
 
-VMRP_EXPORT int vmrp_api_get_screen_dirty(void) {
+VMRP_EXPORT int skyengine_api_get_screen_dirty(void) {
 #if VMRP_API_ASYNC_RUNNER
     screen_lock();
 #endif
@@ -993,39 +993,39 @@ VMRP_EXPORT int vmrp_api_get_screen_dirty(void) {
 
 /* 返回旋转后的显示尺寸(rotation==0 时即 init 传入的面板尺寸)。guest 经
  * plat(101) 请求横屏后这里读到转置尺寸,与 screen_buf 的行宽解释一致。 */
-VMRP_EXPORT int vmrp_api_get_screen_width(void) {
-    return vmrp_display_width();
+VMRP_EXPORT int skyengine_api_get_screen_width(void) {
+    return skyengine_display_width();
 }
 
-VMRP_EXPORT int vmrp_api_get_screen_height(void) {
-    return vmrp_display_height();
+VMRP_EXPORT int skyengine_api_get_screen_height(void) {
+    return skyengine_display_height();
 }
 
 /* 当前 LCD 旋转(MR_LCD_ROTATE_*: 0=正常,1=90°,2=180°,3=270°)。嵌入端在
  * 每次 dirty 帧后复查 width/height/rotation,变化时按新尺寸重建纹理/布局
  * (轮询风格与 get_screen_dirty 一致)。 */
-VMRP_EXPORT int vmrp_api_get_screen_rotation(void) {
+VMRP_EXPORT int skyengine_api_get_screen_rotation(void) {
     return (int)dsm_get_lcd_rotation();
 }
 
-VMRP_EXPORT int vmrp_api_audio_sample_rate(void) {
+VMRP_EXPORT int skyengine_api_audio_sample_rate(void) {
     return native_audio_sample_rate();
 }
 
-VMRP_EXPORT int vmrp_api_audio_channels(void) {
+VMRP_EXPORT int skyengine_api_audio_channels(void) {
     return native_audio_channels();
 }
 
-VMRP_EXPORT int vmrp_api_audio_is_active(void) {
-    if (!api_running || vmrp_is_exited()) return 0;
+VMRP_EXPORT int skyengine_api_audio_is_active(void) {
+    if (!api_running || skyengine_is_exited()) return 0;
     return native_audio_is_active();
 }
 
-VMRP_EXPORT int vmrp_api_audio_render_s16le(void *buffer, int frames) {
+VMRP_EXPORT int skyengine_api_audio_render_s16le(void *buffer, int frames) {
     if (frames <= 0) {
         return 0;
     }
-    if (!api_running || vmrp_is_exited()) {
+    if (!api_running || skyengine_is_exited()) {
         if (buffer) {
             memset(buffer, 0, (size_t)frames * (size_t)native_audio_channels() * sizeof(int16_t));
         }
@@ -1034,12 +1034,12 @@ VMRP_EXPORT int vmrp_api_audio_render_s16le(void *buffer, int frames) {
     return native_audio_render_s16le(buffer, frames);
 }
 
-VMRP_EXPORT void vmrp_api_audio_stop(void) {
+VMRP_EXPORT void skyengine_api_audio_stop(void) {
     native_audio_stop();
 }
 
-VMRP_EXPORT int vmrp_api_is_edit_active(void) {
-    if (!api_running || vmrp_is_exited()) return 0;
+VMRP_EXPORT int skyengine_api_is_edit_active(void) {
+    if (!api_running || skyengine_is_exited()) return 0;
 #if VMRP_API_ASYNC_RUNNER
     api_lock();
     int active = edit_active;
@@ -1050,9 +1050,9 @@ VMRP_EXPORT int vmrp_api_is_edit_active(void) {
 #endif
 }
 
-VMRP_EXPORT const char *vmrp_api_get_edit_text(void) {
+VMRP_EXPORT const char *skyengine_api_get_edit_text(void) {
     static const char empty_text[] = "";
-    if (!api_running || vmrp_is_exited()) return "";
+    if (!api_running || skyengine_is_exited()) return "";
 #if VMRP_API_ASYNC_RUNNER
     api_lock();
     const char *source = edit_active && hold_edit_text ? hold_edit_text : "";
@@ -1076,8 +1076,8 @@ VMRP_EXPORT const char *vmrp_api_get_edit_text(void) {
     return edit_text_snapshot;
 }
 
-VMRP_EXPORT int vmrp_api_set_edit_text(const char *text) {
-    if (!api_running || vmrp_is_exited()) {
+VMRP_EXPORT int skyengine_api_set_edit_text(const char *text) {
+    if (!api_running || skyengine_is_exited()) {
         api_running = 0;
         pending_timer_ms = 0;
         return -1;
@@ -1121,8 +1121,8 @@ VMRP_EXPORT int vmrp_api_set_edit_text(const char *text) {
 #endif
 }
 
-VMRP_EXPORT int vmrp_api_cancel_edit(void) {
-    if (!api_running || vmrp_is_exited()) {
+VMRP_EXPORT int skyengine_api_cancel_edit(void) {
+    if (!api_running || skyengine_is_exited()) {
         api_running = 0;
         pending_timer_ms = 0;
         return -1;

@@ -4,7 +4,7 @@
 
 ## 目标与约束
 
-- 复现命令：`build/vmrp build/mythroad/490111_240x320_sanguo.mrp`。
+- 复现命令：`build/skyengine build/mythroad/490111_240x320_sanguo.mrp`。
 - 目标：默认参数下正常启动游戏；修复不得依赖包名或应用特定分支。
 - 图形验证使用 SDL dummy 与 PPM，不使用 Xvfb。
 - ARM trace 仅使用有界诊断、PC 环形缓冲和反汇编地址观察点。
@@ -72,8 +72,8 @@
 - 历史二分显示移除早期 R9 basic-block 同步也可让 code=0 返回，但历史 PPM 仍是
   230400 字节全零、SHA-256 `1edcc2a5...`。该实验只改变活锁是否持续，不能证明
   游戏启动；当前直接根因仍由动态链节点、固定 host end 和修复后非黑 PPM 共同证明。
-- 已通过：`cmake --build build --target vmrp -j2`、`pnpm exec tsc --noEmit`、
-  `git diff --check`。`build/CTestTestfile.cmake` 和 `build/vmrp-unit` 都是已从
+- 已通过：`cmake --build build --target skyengine -j2`、`pnpm exec tsc --noEmit`、
+  `git diff --check`。`build/CTestTestfile.cmake` 和 `build/skyengine-unit` 都是已从
   当前源码删除的旧 unit target 残留，所以本次不把 `ctest` 结果当作当前源码覆盖证据。
 - allocator focused E2E 已通过 3 files / 6 tests：talkcat 启动、资源包安装和循环取消；
   gtcm 启动和付费界面；gxdzc 像素流程。

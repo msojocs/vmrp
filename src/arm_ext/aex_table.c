@@ -8,7 +8,7 @@
  */
 #include "../include/arm_ext_priv.h"
 #include "../include/network.h"
-#include "../include/fileLib.h"
+#include "../include/file_lib.h"
 #include "../include/utils.h"
 
 #include <ctype.h>

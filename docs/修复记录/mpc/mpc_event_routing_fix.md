@@ -5,7 +5,7 @@
 执行：
 
 ```bash
-build/vmrp mythroad/mpc.mrp
+build/skyengine mythroad/mpc.mrp
 ```
 
 最初会在启动后出现 ARM EXT 执行错误；修复后程序可启动，但点击应用内部菜单没有反应。
@@ -68,13 +68,13 @@ cmake --build build
 运行：
 
 ```bash
-timeout 30 build/vmrp mythroad/mpc.mrp
+timeout 30 build/skyengine mythroad/mpc.mrp
 ```
 
 验证结果：
 
 - 不再出现 `UC_ERR_INSN_INVALID`。
-- 启动成功：`vmrp_runtime_start_dsm(...): 0x0`。
+- 启动成功：`skyengine_runtime_start_dsm(...): 0x0`。
 - 点击内部菜单区域后，事件被 `game.ext` 处理并触发局部/全屏刷新。
 
 ## 注意

@@ -20,7 +20,7 @@
   - Conclusion: SDL/PPM present is copying the intended ARM screen buffer. The missing image pixels are already absent before present, so the bug is in image resource decode/composition into the ARM screen buffer, not in `guiDrawBitmap`.
 - MRP directory enumeration of `test/fixtures/gwkdl_v1003.mrp` shows 57 entries. Early entries include `game.ext`/`graphics.ext`; image resources continue far past index 16, including `logo0.bmp` at index 54 and `logo1.bmp` at index 55.
 - Fixed the generic MRP cache hard limit by converting `ArmExtModule::mrp_cache` from a fixed 16-entry array to a dynamically grown array. This matches the existing comment "cache all entries" and is not app-specific.
-- Rebuilt successfully with `cmake --build build --target vmrp`.
+- Rebuilt successfully with `cmake --build build --target skyengine`.
 - `pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts` still fails after the cache change: menu PPM reports only 2 unique colors. Therefore the fixed 16-entry cache was a real generic bug but is not the root cause of this gwkdl image path.
 - Focus shifted to the ARM-side resource loader. Disassembly around `game.ext` `0xE96052` shows a generic loader that:
   - handles `$`/`*` in-memory resources first;
@@ -29,12 +29,12 @@
   - scans variable-length MRP directory names and offsets;
   - reads the selected payload for decode.
   The next check is whether host `open/read/seek` presents the main MRP bytes in exactly the layout expected by this ARM scanner.
-- Manual E2E repro retained artifacts at `/tmp/vmrp-e2e-3wKg7e`:
+- Manual E2E repro retained artifacts at `/tmp/skyengine-e2e-3wKg7e`:
   - `bgm-select.ppm` unique colors: 2.
   - `menu.ppm` unique colors: 2.
   - stdout/stderr contain no direct `_mr_readFile`/`BitmapLoad` failure for the missing game art.
   - stdout repeatedly opens the absolute main MRP path, which matches the disassembled private ARM resource loader path rather than the host `_mr_readFile` helper path.
-- Added temporary `VMRP_ARM_EXT_FILE_DIAG` diagnostics and reproduced at `/tmp/vmrp-e2e-DSv81x`.
+- Added temporary `VMRP_ARM_EXT_FILE_DIAG` diagnostics and reproduced at `/tmp/skyengine-e2e-DSv81x`.
   - The main MRP header read returns `4D525047 EF050000 C4680500 F0000000`, matching `MRPG`, index length `1519`, total size `354500`, index start `240`.
   - The private ARM loader seeks to `224` from current position after reading the 16-byte header, reads the full `1287`-byte index, and later seeks to resource offsets from the directory.
   - Gzip payload reads succeed for image resources including `npc1.bmp`, `logo0.bmp`, `logo1.bmp`, `mk.bmp`, `if.bmp`, `zm.bmp`, and the unnamed packed resources (`a`, `bg`, etc.).
@@ -57,37 +57,37 @@
   - Conclusion: resource extraction/decompression is alive, but the active menu draw path never blits those decoded buffers to the screen. The next target is the ARM-side draw dispatcher/function-pointer setup, not SDL presentation or host `_DrawBitmap`.
 - 12:37 resumed from the existing repro and diff. The next narrowed target is private child module setup/bridge repair, especially `graphics.ext`, because the decoded buffers are present in ARM heap while the only visible drawing calls are text points and background rectangles.
 - Thumb disassembly correction: the earlier plain ARM objdump output mis-decoded mixed ARM/Thumb child code. Re-reading in forced Thumb mode shows `graphics.ext` helper at `0x671141` and its init path copies a table-like block from the parent record into child RW. The suspected failure is now a generic private-loader bridge/RW layout issue rather than the resource file bridge.
-- Added a temporary child-sync diagnostic and ran the target with `VMRP_E2E_KEEP_TMP=1`; artifact `/tmp/vmrp-e2e-cEBwNv`.
+- Added a temporary child-sync diagnostic and ran the target with `VMRP_E2E_KEEP_TMP=1`; artifact `/tmp/skyengine-e2e-cEBwNv`.
   - `graphics.ext`: `file=0x670C98`, `len=0x1FC0`, `P=0x6E95A4`, `H=0x671141`, `rw=0x672C5C`, `record=0x6E9300`, `ext_type=1`.
   - The record contains host table bridge entries, but the child RW had no bridge values before repair.
   - A generic compact SDK bridge layout (`record[26] -> rw+0x20`, `record[3..19] -> rw+0x24..0x64`) was tested; it did not change the PPM result (`menu.ppm` still 2 colors). This reduces confidence that the missing image is only a basic memcpy bridge issue.
   - The same log also reports `exRam:-3221504B required.`, suggesting either an ARM-side allocator/global-state misread or a failed scratch-buffer path; this remains under investigation.
 - 13:05 resumed from the handoff. Current focus is to verify with a narrow block hook whether the `graphics.ext` Thumb blit routines around `0x671188` and `0x672000` execute at all, then decide whether the defect is call dispatch, bridge layout, allocator state, or framebuffer ownership.
-- 13:18 added `VMRP_ARM_EXT_GFX_DIAG` as a narrow basic-block hook and reproduced at `/tmp/vmrp-e2e-N2vCF3`.
+- 13:18 added `VMRP_ARM_EXT_GFX_DIAG` as a narrow basic-block hook and reproduced at `/tmp/skyengine-e2e-N2vCF3`.
   - `menu.ppm` is still 2 colors: `[16,96,168]` background plus yellow text.
   - The graphics code does execute. The log reaches `0x67200C -> 0x6720C8 -> 0x671180`, then prints `exRam:-3221504B required.`.
   - This shifts the active root-cause search from "graphics library not called" to "graphics library draw/decode path computes a corrupt scratch RAM size or reads a corrupt global before blitting".
 - 13:32 resumed from handoff. `VMRP_ARM_EXT_EXRAM_DIAG` had shown no host table[38] calls for 1014/1015 around this failure, only code 1204. Therefore the negative `exRam` line is generated by `graphics.ext` internal accounting/scanning code, not by the host `mr_platEx(1014)` branch directly returning a bad value.
 - Current next probe is intentionally narrow: inspect `graphics.ext` Thumb routines around `0x671DB4`, `0x6722F8`, `0x672844`, `0x672970`, and `0x6729A4`, plus the RW words near `r9 == 0x672C5C`, to find which global/list entry produces the `0xFFCED800` size.
-- 13:00 ran `VMRP_ARM_EXT_GFX_MEM_DIAG=1` at `/tmp/vmrp-e2e-W5NeIg`; menu remains 2 colors. No `GFX_MEM_DIAG` lines appeared, which means the exact PCs selected were not basic-block entry addresses. The next revision matches narrow ranges around the same disassembled functions rather than exact addresses.
-- 13:06 reran with range-based `GFX_MEM_DIAG` at `/tmp/vmrp-e2e-KmlEQq`.
+- 13:00 ran `VMRP_ARM_EXT_GFX_MEM_DIAG=1` at `/tmp/skyengine-e2e-W5NeIg`; menu remains 2 colors. No `GFX_MEM_DIAG` lines appeared, which means the exact PCs selected were not basic-block entry addresses. The next revision matches narrow ranges around the same disassembled functions rather than exact addresses.
+- 13:06 reran with range-based `GFX_MEM_DIAG` at `/tmp/skyengine-e2e-KmlEQq`.
   - The target gwkdl menu is still 2 colors.
   - `graphics.ext` executes with `r9=0x672C5C`.
   - The local queue area around `r9+0x84` stays zero before the negative `exRam` print.
   - The last captured graphics block before the message is around `0x671E52`, the wrapper that calls the stream renderer.
-  - A previously noticed `/tmp/vmrp-e2e-R5Vhnk` run with `exRam:312320B required.` was for `gghjt.mrp`, not this gwkdl fixture, so it is not a valid success comparison.
+  - A previously noticed `/tmp/skyengine-e2e-R5Vhnk` run with `exRam:312320B required.` was for `gghjt.mrp`, not this gwkdl fixture, so it is not a valid success comparison.
   - Next narrow probe: log the LR for table[26] `mr_printf` when its format string contains `exRam`, then disassemble the exact print call site.
 - 2026-06-23 resumed again from the existing diagnostics. Current narrow target is the
   exact `graphics.ext` print caller for `exRam`, because resource reads and gzip
   payload copies are already confirmed, while the final screen only receives
   background rectangles and text points.
-- `VMRP_ARM_EXT_PRINTF_DIAG=1` repro artifact: `/tmp/vmrp-e2e-SckjzE`.
+- `VMRP_ARM_EXT_PRINTF_DIAG=1` repro artifact: `/tmp/skyengine-e2e-SckjzE`.
   The target test still fails with `menu.ppm` having only 2 colors. The
   `exRam` print is called with `lr=0x64664D`, `fmt=0x662CB8`, `r1=0xFFCED800`
   (`-3221504`), and `r9=0x66B754`. Next step is disassembling the loaded child
   module around `0x64664D` and tracing the source of that signed size.
 - `VMRP_ARM_EXT_CHILD_DIAG=1 VMRP_ARM_EXT_PRINTF_DIAG=1` repro artifact:
-  `/tmp/vmrp-e2e-ZGK74Q`. This corrects the previous module assumption:
+  `/tmp/skyengine-e2e-ZGK74Q`. This corrects the previous module assumption:
   `lr=0x64664D` belongs to the primary `game.ext` instance
   (`file=0x646120`, `len=0x25630`, `rw=0x66B754`, `H=0x65BFB1`), not
   `graphics.ext`. `graphics.ext` is a later child at `file=0x670C98`. The next
@@ -114,12 +114,12 @@
 - 14:18 graphics.ext forced-Thumb disassembly: init at 0x670FBA uses r5 = r9 - 0x6C, then stores record[26] and record[3..19] into that pre-R9 bridge block. The renderer later loads function pointers from the same structure via offsets around (global+0x1C0), e.g. r9+0x188 for point drawing. The earlier compact rw+0x20 repair is therefore not the layout this graphics module executes.
 - 14:37 runtime GFX_BRIDGE_DIAG at 0x6722E2 showed the previous probe was reading r9-0x6C strings, not the active call table. Re-reading the Thumb literal sequence shows graphics renderers load file_base[0] through a PC-relative global and then call record[119]/record[122]-style slots. Direct pixel write probe did not hit, so the current blocker is why the image path falls back to/only reaches shape/text table calls instead of the bitmap stream write loop.
 - 15:04 resumed from the handoff. Current source still contains temporary graphics/exRam diagnostics and a speculative private-child bridge repair. The next diagnostic is intentionally narrower: instrument only table[3] memcpy calls from the graphics.ext runtime range, or copies whose destination overlaps the ARM framebuffer. This should prove whether the graphics blit helper copies pixels into screen memory, an offscreen surface, or not at all.
-- 15:16 `VMRP_ARM_EXT_GFX_COPY_DIAG=1` repro artifact: `/tmp/vmrp-e2e-DfH5Hx`. The test still fails (`menu.ppm` has 2 colors) and no `GFX_COPY_DIAG` lines appear. Therefore the missing menu art does not reach the graphics.ext row-copy helper and no table[3] copy targets the framebuffer before the capture. The next target is child module initialization/R9/bridge state rather than SDL present or memcpy blit implementation.
+- 15:16 `VMRP_ARM_EXT_GFX_COPY_DIAG=1` repro artifact: `/tmp/skyengine-e2e-DfH5Hx`. The test still fails (`menu.ppm` has 2 colors) and no `GFX_COPY_DIAG` lines appear. Therefore the missing menu art does not reach the graphics.ext row-copy helper and no table[3] copy targets the framebuffer before the capture. The next target is child module initialization/R9/bridge state rather than SDL present or memcpy blit implementation.
 - 15:31 corrected a disassembly mistake. `graphics.ext` is mixed ARM/Thumb: the entry at `file+8` is ARM and `BLX`s into Thumb code at `0x671F7C`. Its helper sets `r9 = P->start_of_ER_RW`; the init routine computes `r5 = r9 + 0x70 - 0x6C`, so the bridge block starts at `r9+4`, not `r9-0x6C`. The row-copy helper at `0x6712F4` loads `r9+0x28`, which maps to record/table[4] (`memmove`), not table[3] (`memcpy`). The previous `GFX_COPY_DIAG` only covered table[3], so the next run must include table[4].
 - 15:45 new bridge diagnostics show `graphics.ext` reaches `0x6722E2` with `P=0x6E95A4`, `P[0]=0x672C5C`, and RW bridge slots mostly zero while later slots contain `table[8]`/`table[9]`. `CHILD_DIAG` confirms the module record can contain `record[3..19]`/`record[26]`, but the copied RW block used by the renderer lacks the early bridge entries. Leading fix: repair blank record bridge slots immediately when private-loader `mr_cacheSync` identifies the runtime header, before the child entry copies record slots into its RW block.
-- 16:00 implemented the early record repair experiment and reran with diagnostics; artifact `/tmp/vmrp-e2e-9gtFjG`. It did not change the PPM or the bridge snapshot. Re-reading the call site shows `0x6722E2` is a wrapper to `record[122] DrawRect`, so the zero early bridge slots in that snapshot are not proof that row blit is using a blank function pointer. Current focus returns to the game-side `exRam`/resource-layer decision path, because after `exRam:-3221504B required.` the app keeps drawing background/text but never enters the bitmap stream renderer before the capture.
+- 16:00 implemented the early record repair experiment and reran with diagnostics; artifact `/tmp/skyengine-e2e-9gtFjG`. It did not change the PPM or the bridge snapshot. Re-reading the call site shows `0x6722E2` is a wrapper to `record[122] DrawRect`, so the zero early bridge slots in that snapshot are not proof that row blit is using a blank function pointer. Current focus returns to the game-side `exRam`/resource-layer decision path, because after `exRam:-3221504B required.` the app keeps drawing background/text but never enters the bitmap stream renderer before the capture.
 
-- 14:08 long-wait manual repro: started gwkdl, waited 5s, clicked music “否”, then waited an additional 15s before capture. Artifact `/tmp/vmrp-gwkdl-long-5zY18w/menu-long.ppm` still has exactly 2 colors: blue background and yellow text. This rules out an early screenshot/race; image blitting never reaches the ARM framebuffer in the prepared menu state.
+- 14:08 long-wait manual repro: started gwkdl, waited 5s, clicked music “否”, then waited an additional 15s before capture. Artifact `/tmp/skyengine-gwkdl-long-5zY18w/menu-long.ppm` still has exactly 2 colors: blue background and yellow text. This rules out an early screenshot/race; image blitting never reaches the ARM framebuffer in the prepared menu state.
 
 - 14:19 controlled memory experiment: temporarily exposed 512KB ARM EXT origin memory. `game.ext` changed from `exRam:-3221504B required.` to `exRam:448512B required.` and called `MR_MALLOC_SCRRAM(1014)`, which returned ARM address `0x351468` length `449536`. The menu PPM still has only 2 colors, so the bug is not just absence of SCRRAM; the post-allocation image/decode/blit path still fails or is skipped.
 - 14:26 resumed after handoff. The latest 512KB experiment plus `EXRAM_COPY_DIAG` proved decoded resource-sized buffers are copied into the SCRRAM range (examples: `npc1.bmp`, `logo0.bmp`, `logo1.bmp`, `mk.bmp`, `if.bmp`, `zm.bmp`-sized payloads), but there is still no copy/blit into the ARM screen buffer and a long-wait capture remains exactly two colors. This removes "resource load delay" and "SCRRAM allocation absent" as sole explanations. The current root search is the game-side draw dispatcher / memory-accounting state that decides whether those buffers are scheduled for rendering.
@@ -139,7 +139,7 @@
   to `0x65B38C` around `0x65B8D8..0x65B8F8`. The next runtime probe will log
   only these blocks to see whether the object pointer is missing, lookup fails,
   clipping rejects the draw, or writes land outside the ARM screen buffer.
-- 15:17 rebuilt current source and reran with `VMRP_E2E_KEEP_TMP=1 VMRP_ARM_EXT_GAME_RENDER_DIAG=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`. Artifact: `/tmp/vmrp-e2e-7V61s9`. The assertion still fails with `menu.ppm` having 2 colors, so the next read is the narrow render diagnostic stdout for branch/object state in `game.ext` `0x65B650`.
+- 15:17 rebuilt current source and reran with `VMRP_E2E_KEEP_TMP=1 VMRP_ARM_EXT_GAME_RENDER_DIAG=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`. Artifact: `/tmp/skyengine-e2e-7V61s9`. The assertion still fails with `menu.ppm` having 2 colors, so the next read is the narrow render diagnostic stdout for branch/object state in `game.ext` `0x65B650`.
 
 - 2026-06-23 resumed from the current experimental tree. The source still has
   broad temporary diagnostics and a speculative private-child bridge repair, so
@@ -257,7 +257,7 @@
   returns 0 because `wrapper_timer_dispatch_addr` is intentionally 0 for this
   wrapper. The half-implemented `chain_walker_owner` path is therefore not
   reached by the normal `mr_timer()` route.
-- New baseline run `/tmp/vmrp-e2e-KLQQps` still fails with `menu.ppm` having
+- New baseline run `/tmp/skyengine-e2e-KLQQps` still fails with `menu.ppm` having
   only 2 colors, but it also shows a repeated primary `game.ext` crash after
   successful SCRRAM allocation:
   `UC_MEM_READ_UNMAPPED addr=0x0F4C23EC`, `PC=0x2CCB82`, `R9=0x2EB754`,
@@ -306,9 +306,9 @@
   `pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts` without xvfb, keep the
   temp artifacts, then inspect stdout/stderr and PPM colors to confirm the
   current failure mode before changing behavior.
-- Rebuilt `build/vmrp` successfully and reproduced with
+- Rebuilt `build/skyengine` successfully and reproduced with
   `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`.
-  Artifact: `/tmp/vmrp-e2e-ZIVAdF`.
+  Artifact: `/tmp/skyengine-e2e-ZIVAdF`.
   - `bgm-select.ppm`: 2 colors, black plus yellow text.
   - `menu.ppm`: 1 color only, `#1060a8` across all 240x320 pixels.
   - stdout shows `MEM-I:total:524288`, `exRam:448512B required.`, and
@@ -323,7 +323,7 @@
 
 - 16:56 接手已有排查后先复跑当前工作树：
   `env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`。
-  最新 artifact: `/tmp/vmrp-e2e-Dsy4np`。
+  最新 artifact: `/tmp/skyengine-e2e-Dsy4np`。
   - `mem-check.ppm`: 2 色，黑底 + 白字。
   - `bgm-select.ppm`: 2 色，黑底 + 黄字。
   - `menu.ppm`: 2 色，蓝底 `[16,96,168]` 76499 像素 +
@@ -337,7 +337,7 @@
     并继续追 `[game_rw+0x84]` draw callback 为什么未安装。
 
 - 10:11 resumed after the test update. Latest kept repro from the prior run:
-  `/tmp/vmrp-e2e-L8WOE5`; `menu.ppm` still has only two colors, so the updated
+  `/tmp/skyengine-e2e-L8WOE5`; `menu.ppm` still has only two colors, so the updated
   assertion is still catching the same missing-image bug.
 - Current source has the confirmed memory/platform fixes in place
   (`origin_mem_len=512KB`, ARM origin_mem stat slot sync, MT6229, low table
@@ -349,7 +349,7 @@
   indicates that flag changes whether `0x1F50` queues events or dispatches
   them, so the next diagnostic will log only the cfunction MPS/timer blocks.
 - 10:15 reran with `VMRP_ARM_EXT_MPS_DIAG=1 VMRP_ARM_EXT_GAME_RENDER_DIAG=1
-  VMRP_ARM_EXT_GAME_RW_WRITE_DIAG=1`; artifact `/tmp/vmrp-e2e-GhJ84P`.
+  VMRP_ARM_EXT_GAME_RW_WRITE_DIAG=1`; artifact `/tmp/skyengine-e2e-GhJ84P`.
   `menu.ppm` still has two colors.
 - This run proves the current failure is no longer "image initialization never
   starts": `game.ext+0x1127C` image init executes and the renderer
@@ -370,12 +370,12 @@
   diagnostics. Next step is to rerun only
   `pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts` and use the resulting
   PPM/stdout as the new baseline.
-- Baseline rerun artifact: `/tmp/vmrp-e2e-Ld0Xfy`.
+- Baseline rerun artifact: `/tmp/skyengine-e2e-Ld0Xfy`.
   `menu.ppm` still has only 2 colors (`[16,96,168]` background and
   `[248,240,0]` text). stdout shows `exRam:448512B required.` followed by
   `exRam:Alloc:addr:0x35105c,len:449536`, so the current failure is after
   successful SCRRAM allocation, not the old negative exRam path.
-- Narrow render/child diagnostic artifact: `/tmp/vmrp-e2e-khzmbQ`.
+- Narrow render/child diagnostic artifact: `/tmp/skyengine-e2e-khzmbQ`.
   Runtime modules: primary `game.ext` at `0x2C6120`, `graphics.ext` at
   `0x2F0C98`, and a third child at `0x2F2E28`. `game.ext+0x15530` looks up the
   image stream and returns `0x350F2C`; the loop then repeatedly calls the
@@ -388,7 +388,7 @@
 
 - 用户修正测试后重新运行：
   `env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`。
-  当前 artifact: `/tmp/vmrp-e2e-AXoWOU`。
+  当前 artifact: `/tmp/skyengine-e2e-AXoWOU`。
 - 结果仍失败在最终断言：`expected 2 to be greater than 16`。
 - PPM 验证：
   - `bgm-select.ppm`: 240x320，2 色：黑色 76365 像素，黄色 `[248,240,0]` 435 像素。
@@ -399,11 +399,11 @@
   lookup 返回非零资源对象，但最终没有进入直接像素写入路径。下一步新增更窄的
   renderer clip/loop 诊断，记录 `0x15530` 绘制函数栈槽和分支处寄存器，确认是
   clip 范围、宽高、模式位还是目标地址导致所有图片块被跳过。
-- `VMRP_ARM_EXT_GAME_RENDER_DIAG=1` artifact `/tmp/vmrp-e2e-evqNtE`：
+- `VMRP_ARM_EXT_GAME_RENDER_DIAG=1` artifact `/tmp/skyengine-e2e-evqNtE`：
   `0x1127C` 图像初始化执行，`0x15530` renderer 执行。renderer 进入
   `0x270D` 模式分支，并通过 `table[145] mr_platDrawChar` 绘制字形；这是
   “请按任意键”等文字路径，不是 `zm.bmp` 位图路径。
-- `VMRP_ARM_EXT_TABLE_DIAG=1` artifact `/tmp/vmrp-e2e-R5zOvu`：
+- `VMRP_ARM_EXT_TABLE_DIAG=1` artifact `/tmp/skyengine-e2e-R5zOvu`：
   调用统计为 `table[3] memcpy=53839`、`table[119] DrawPoint=15252`、
   `table[122] DrawRect=109`、`table[123] DrawText=48`、`table[145]
   mr_platDrawChar=80`，没有 `table[120/121/147/148]`。结论：目标画面前台
@@ -412,13 +412,13 @@
 
 ## 2026-06-24
 
-- Rebuilt current workspace with `cmake --build build --target vmrp`; build
+- Rebuilt current workspace with `cmake --build build --target skyengine`; build
   succeeds.
 - Current target run:
   `env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`
   fails earlier than the final menu assertion:
   `boot.pixel(227, 301)` is `[0,0,0]`, expected `[248,252,248]`.
-- Latest retained artifact checked: `/tmp/vmrp-e2e-Y9BfMh`.
+- Latest retained artifact checked: `/tmp/skyengine-e2e-Y9BfMh`.
   `bgm-select.ppm` is 240x320 with only two colors:
   black and `[248,240,0]`; pixel `(227,301)` is black.
   `screen.ppm` from the automatic/default dump is also two colors but uses
@@ -430,10 +430,10 @@
   timer/screen-present sequence is still not matching the real wrapper
   dispatch order.
 - After the user corrected the test expectation, reran the target with the
-  same command. New artifact: `/tmp/vmrp-e2e-ptARWV`. The test now reaches the
+  same command. New artifact: `/tmp/skyengine-e2e-ptARWV`. The test now reaches the
   final `"menu"` screenshot and fails the image assertion:
   `wake.uniqueColorCount()` is `2`, expected `>16`.
-- `/tmp/vmrp-e2e-ptARWV/menu.ppm` colors are only blue background
+- `/tmp/skyengine-e2e-ptARWV/menu.ppm` colors are only blue background
   `[16,96,168]` and yellow text `[248,240,0]`.
   Stdout shows the exRam path is now positive and allocated:
   `exRam:448512B required.` and `exRam:Alloc:addr:0x35105c,len:449536`.
@@ -489,7 +489,7 @@
   `extChunk+0x34` 临时设为 1 的实验。后续需要先用目标用例验证这些改动的
   实际效果，再把保留项收敛为通用 wrapper timer dispatch 修复，移除不成立
   的直接 game helper 补发路径。
-- 当前实验树复跑目标用例保留 artifact `/tmp/vmrp-e2e-uiyl6y`。日志显示
+- 当前实验树复跑目标用例保留 artifact `/tmp/skyengine-e2e-uiyl6y`。日志显示
   `find_wrapper_timer_dispatch` 已让 `arm_ext_primary_helper()` 返回非零，
   但返回地址是 `0xE83591`。反汇编确认 `0xE83590` 只是单个 timer 节点的
   resume 回调：它检查 `EXT_CHUNK_MAGIC`、递减 `extChunk+0x34`、再调用
@@ -517,11 +517,11 @@
     旧 `wrapper_rw+0x274` 只保留为对照字段，不再作为保活依据。
   - 删除直接补调 `game.ext + 0x11160` 的死代码实验，避免继续把错误
     wrapper 上下文之外的调用路径混入判断。
-- 复跑 artifact `/tmp/vmrp-e2e-5Z2RHM`：`game.ext` 已进入
+- 复跑 artifact `/tmp/skyengine-e2e-5Z2RHM`：`game.ext` 已进入
   `0x1127C` 和 `0x15530`，但 `GAME_PRESENT_DIAG` 连续 120 次显示
   `draw_cb=0x0`，PPM 仍为 2 色。这证明当前问题已不是“图像初始化完全
   未执行”，而是 primary `game_rw+0x84` 的 present 前回调仍未安装。
-- `VMRP_ARM_EXT_CHILD_DIAG=1` 复跑 artifact `/tmp/vmrp-e2e-E1qBJa`：
+- `VMRP_ARM_EXT_CHILD_DIAG=1` 复跑 artifact `/tmp/skyengine-e2e-E1qBJa`：
   private loader 已同步三段模块：
   - primary `game.ext`: `chunk=0x348E04 P=0x348E60 H=0x2DBFB1 rw=0x2EB754`
   - `graphics.ext`: `chunk=0x34E09C P=0x34E0F8 H=0x2F1141 rw=0x2F2C5C`
@@ -543,7 +543,7 @@
   `VMRP_ARM_EXT_GAME_RENDER_DIAG=1`、`VMRP_ARM_EXT_GAME_RW_WRITE_DIAG=1`，
   避免全量 trace。目标是确认 `graphics.ext`/第三个 child 的初始化是否写入
   primary `game_rw+0x84`，或是否写到了错误 RW/偏移。
-- 09:11 根据最新失败 artifact `/tmp/vmrp-e2e-BwR3GO` 重新对照反汇编：
+- 09:11 根据最新失败 artifact `/tmp/skyengine-e2e-BwR3GO` 重新对照反汇编：
   `TIMER_CHAIN_DIAG dispatch-pre` 的节点 `[node+0x0C] = 0x34E09C`，
   即 `graphics.ext` 的 extChunk；但 `arm_ext_call_dispatch()` 传入
   `R0 = primary game.ext extChunk (0x348E04)`。反汇编确认 `0xE83B50`
@@ -557,7 +557,7 @@
 
 - 09:32 用户修正测试后按目标命令重跑：
   `env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`。
-  artifact `/tmp/vmrp-e2e-BfLGST`，仍失败于最终 `menu` 截图：
+  artifact `/tmp/skyengine-e2e-BfLGST`，仍失败于最终 `menu` 截图：
   `uniqueColorCount() == 2`。
   PPM 验证：`bgm-select.ppm` 只有黑/黄两色，`menu.ppm` 只有蓝背景
   `[16,96,168]` 和黄字 `[248,240,0]`，`screen.ppm` 只有黑/近白两色。
@@ -566,7 +566,7 @@
   验证普通 helper `code=2` 路由下 wrapper 是否消费真正 timer 队列，以及
   `graphics.ext` 是否按协议安装 primary `game_rw+0x84` draw callback。
 
-- 09:34 窄诊断复跑 artifact `/tmp/vmrp-e2e-DMETzY`：
+- 09:34 窄诊断复跑 artifact `/tmp/skyengine-e2e-DMETzY`：
   `CHILD_DIAG` 同步了 primary `game.ext`、`graphics.ext`、第三个 child；
   `wrapperTimer=0`，说明 19KB chain thunk 已被正确排除，不再走错误的
   `arm_ext_call_dispatch()` 路径。普通 `code=2` 进入 wrapper helper
@@ -591,7 +591,7 @@
   关注 `record+0x7C/0x80`、`P/rw` 桥接槽、primary `game_rw+0x84`，以及
   private-loader `mr_cacheSync` 同步时机是否早于 child entry 完成。
 
-- 10:00 窄诊断 artifact `/tmp/vmrp-e2e-i9zLTM` 仍失败，PPM 三张图分别只有
+- 10:00 窄诊断 artifact `/tmp/skyengine-e2e-i9zLTM` 仍失败，PPM 三张图分别只有
   2 色。`GFX_REL_DIAG` 命中 260 条但按 `file` 分组后可见：
   `graphics.ext` 只进入 `0x1420/0x15E0/0x1660` 等渲染 helper，没有命中
   `0x12E4` 初始化段；third child 命中 `0x1CD8` 调度器；primary game 也有同形
@@ -601,7 +601,7 @@
   record，但没有被同步到 primary/game present 读取的协议槽。
 - 10:03 用户再次要求继续并重跑目标用例：
   `env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`。
-  artifact `/tmp/vmrp-e2e-7rF896`，仍失败在
+  artifact `/tmp/skyengine-e2e-7rF896`，仍失败在
   `wake.uniqueColorCount() > 16`，实际为 2。PPM 结果保持一致：
   `bgm-select.ppm` 黑/黄 2 色，`menu.ppm` 蓝底 `[16,96,168]` + 黄字
   `[248,240,0]` 2 色，`screen.ppm` 黑/近白 2 色。stdout 只有
@@ -623,7 +623,7 @@
   `test/e2e/gwkdl/game-prepare.test.ts` 基线，确认失败点是否仍为最终 PPM
   只有 2 色；随后继续沿反汇编确认的 wrapper MPS/timer 与
   `graphics.ext` scheduler 路径收窄，不启用全量 trace。
-- 10:30 基线复跑完成，artifact `/tmp/vmrp-e2e-W6BcSL`，仍失败：
+- 10:30 基线复跑完成，artifact `/tmp/skyengine-e2e-W6BcSL`，仍失败：
   `menu.ppm` 240x320 只有 2 色（蓝底 `[16,96,168]` 与黄字
   `[248,240,0]`），`bgm-select.ppm` 和 `screen.ppm` 也各只有 2 色。
   这确认测试修正后失败形态未变；下一步先修正 `VMRP_ARM_EXT_MPS_DIAG`
@@ -641,7 +641,7 @@
 - 10:45 继续前一轮诊断状态。当前基线仍为 `menu.ppm` 仅 2 色；已确认 wrapper `cfunction.ext+0x3E6C` timer consumer 会运行，并且 primary `game.ext+0x15530` renderer 会处理非空 bitmap/object 数据。下一步修正过期的 `VMRP_ARM_EXT_GFX_WRITE_DIAG`（旧绝对 PC 过滤会漏掉 private-loader 映射的 graphics.ext），并新增 primary renderer 写屏/写 exRam 的窄诊断，先证明像素到底有没有被 ARM 代码写入可见 framebuffer。
 - 10:49 新增/修正窄写入诊断后复跑：
   `env VMRP_E2E_KEEP_TMP=1 VMRP_ARM_EXT_GFX_WRITE_DIAG=1 VMRP_ARM_EXT_GAME_RENDER_WRITE_DIAG=1 VMRP_ARM_EXT_GAME_RW_WRITE_DIAG=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`。
-  artifact `/tmp/vmrp-e2e-gWiQvn`，仍失败，`menu.ppm` 仅蓝底/黄字 2 色。
+  artifact `/tmp/skyengine-e2e-gWiQvn`，仍失败，`menu.ppm` 仅蓝底/黄字 2 色。
   诊断结论：`GAME_RENDER_WRITE_DIAG` 300 次命中 primary `game.ext+0x155DE..0x157F0`，写入地址均为 `0x2A7Axx` 栈/临时缓冲，`screenOff=FFFFFFFF` 且 `exramOff=FFFFFFFF`；说明 renderer 正在解码 bitmap/object 数据，但没有走直接 framebuffer `strh` 写屏路径。`GFX_WRITE_DIAG` 修正为模块相对后命中 `graphics.ext` 与 third child 的 scheduler/renderer，但同样没有写入 screen；后段 primary `game.ext+0x1376..0x1428` 命中 exRam 只是扩展内存分配链表/资源结构更新，不是图像像素提交。
 - 10:56 反汇编 `game.ext+0x15530` 与 `graphics.ext+0x1660`：二者在 `[rw+0x1C] == 0x270D` 时都会调用 table[145]（`mr_platDrawChar`）绘制逐点/字形；不等于 `0x270D` 才进入后续 `strh` 直接 framebuffer 路径。该分支解释了为何当前只有黄字被画出，但还不能单独解释 `zm.bmp` 位图没有提交。进一步检查 table[147]/[148] 发现运行库函数表中存在 `mr_transbitmapDraw`/`mr_drawRegion`，但 executor switch 尚未实现；不过现有 stdout 没有 `table[147]/[148] not implemented`，需要用 `TABLE_DIAG` 和资源名诊断确认 `zm.bmp` 实际走哪条 host 接口，避免误修。
 
@@ -681,7 +681,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 
 - 已执行 `env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`，
   当前源码/二进制仍失败：`wake.uniqueColorCount()` 实际为 2。
-- artifact: `/tmp/vmrp-e2e-kg8jQ2`。
+- artifact: `/tmp/skyengine-e2e-kg8jQ2`。
 - PPM 色彩统计：
   - `mem-check.ppm`: 2 色，黑色 72119，近白 `#f8fcf8` 4681。
   - `bgm-select.ppm`: 2 色，黑色 76365，黄字 `#f8f000` 435。
@@ -697,7 +697,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 
 - 执行：
   `env VMRP_E2E_KEEP_TMP=1 VMRP_ARM_EXT_TIMER_DIAG=1 VMRP_ARM_EXT_CHILD_DIAG=1 VMRP_ARM_EXT_TABLE_DIAG=1 VMRP_ARM_EXT_GAME_RW_WRITE_DIAG=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`。
-- artifact: `/tmp/vmrp-e2e-mEAuAZ`，仍失败，最终 PPM 2 色。
+- artifact: `/tmp/skyengine-e2e-mEAuAZ`，仍失败，最终 PPM 2 色。
 - 后段 `TIMER_DIAG` 显示 `wrw+0x1F4` 已被注入 `0x348E40`，且
   `gameRW=0x2EB754 game84=[00000000 002F0C74 00000000 ...]` 反复保持：
   `game_rw+0x84` 一直为 0，`game_rw+0x88` 有 timer head。
@@ -729,7 +729,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 
 - 执行：
   `env VMRP_E2E_KEEP_TMP=1 VMRP_ARM_EXT_TIMER_DIAG=1 VMRP_ARM_EXT_MPS_DIAG=1 VMRP_ARM_EXT_GFX_REL_DIAG=1 VMRP_ARM_EXT_GAME_RW_WRITE_DIAG=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`。
-- artifact: `/tmp/vmrp-e2e-yj4lDD`，仍失败，`menu.ppm` 只有 2 色。
+- artifact: `/tmp/skyengine-e2e-yj4lDD`，仍失败，`menu.ppm` 只有 2 色。
 - `arm_ext_primary_helper()` 在该 wrapper 上持续返回 `0x0`：
   `wrapper_timer_dispatch=0`、`chain_walker_thunk=0xE83B51`，所以 `mr_timer()` 当前不会进入 `arm_ext_call_dispatch()`；实际运行路径仍是普通 wrapper helper `code=2`。
 - wrapper `code=2`/MPS 与 graphics 子模块确实在执行；`GFX_REL_DIAG` 命中 second/third child 的 renderer/scheduler，说明 graphics 模块并非完全未初始化。
@@ -775,10 +775,10 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 
 ## 2026-06-24 17:25 CST — narrow table/timer repro
 
-- 重建通过：`cmake --build build --target vmrp`。
+- 重建通过：`cmake --build build --target skyengine`。
 - 运行：
   `env VMRP_E2E_KEEP_TMP=1 VMRP_ARM_EXT_TRACE=1 VMRP_ARM_EXT_TABLE_DIAG=1 VMRP_ARM_EXT_GAME_RENDER_WRITE_DIAG=1 VMRP_ARM_EXT_TIMER_DIAG=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`。
-- artifact: `/tmp/vmrp-e2e-FdcdoJ`，仍失败；`menu.ppm` 仍只有蓝底/黄字 2 色。
+- artifact: `/tmp/skyengine-e2e-FdcdoJ`，仍失败；`menu.ppm` 仍只有蓝底/黄字 2 色。
 - 该 run 的 `stdout.log` 因 `VMRP_ARM_EXT_TRACE=1` 较大（约 22MB），但关键信息有限：
   - 未出现 `captured timerStart` / `captured timerStop`，说明全局
     table[31]/[32] 在本次路径没有被 ARM veneer 直接替换后再被
@@ -809,11 +809,11 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 
 ## 2026-06-24 18:34 CST — rebuilt and reproduced
 
-- 执行 `cmake --build build --target vmrp` 成功；仅 vendored Unicorn 出现既有
+- 执行 `cmake --build build --target skyengine` 成功；仅 vendored Unicorn 出现既有
   编译 warning。
 - 执行 `env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`
   仍失败：`wake.uniqueColorCount()` 实际为 2。
-- artifact: `/tmp/vmrp-e2e-4EBcSO`。
+- artifact: `/tmp/skyengine-e2e-4EBcSO`。
 - PPM 统计：`menu.ppm` 为 240x320、2 色，`#1060a8` 76499 像素、
   `#f8f000` 301 像素；`mem-check.ppm`/`bgm-select.ppm` 也保持 2 色。
 - 下一步用窄诊断确认资源读、table[120/145] 图形调用、game present 前
@@ -823,7 +823,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 
 - 根据用户提示先收窄到两张 logo：`strings -a test/fixtures/gwkdl_v1003.mrp`
   可见 `logo0.bmp` 与 `logo1.bmp`，历史解包目录
-  `/tmp/vmrp-gwkdl-extract-13481/{raw,dec}` 中也存在两者。
+  `/tmp/skyengine-gwkdl-extract-13481/{raw,dec}` 中也存在两者。
 - 本文档早期记录显示二者 gzip payload 可离线解码，且曾观察到
   `logo0.bmp` 尺寸级别的大块数据 copy 到 SCRRAM/exRam；下一步直接用
   `VMRP_ARM_EXT_FILE_DIAG` 复跑，确认当前运行时是否打开/读取这两个文件。
@@ -832,7 +832,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 
 - 运行：
   `env VMRP_E2E_KEEP_TMP=1 VMRP_ARM_EXT_FILE_DIAG=1 VMRP_ARM_EXT_TABLE_DIAG=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`。
-- artifact: `/tmp/vmrp-e2e-EZjen1`，仍失败；stdout 约 15MB，未开全量 trace。
+- artifact: `/tmp/skyengine-e2e-EZjen1`，仍失败；stdout 约 15MB，未开全量 trace。
 - 解析 MRP 目录：
   - `logo0.bmp`: offset `336333` (`0x521cd`), packed `15498` (`0x3c8a`), gzip。
   - `logo1.bmp`: offset `351849` (`0x55e69`), packed `2651` (`0xa5b`), gzip。
@@ -849,7 +849,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 
 - 子 Agent 结果与本地结果一致：资源和 PPM harness 正常；两张 logo 是多色
   decoded payload，当前失败不在文件系统/解包层。
-- `/tmp/vmrp-e2e-EZjen1/stdout.log` 统计：`table[29]` 166 次、
+- `/tmp/skyengine-e2e-EZjen1/stdout.log` 统计：`table[29]` 166 次、
   `table[119]` 33646 次、`table[122]` 187 次、`table[145]` 80 次；
   没有 `table[120]`、`table[121]`、`table[147]`、`table[148]`。
 - 这说明 logo 读取后没有走 host `_DrawBitmap`/`mr_transbitmapDraw`/
@@ -872,7 +872,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 
 - 执行带窄诊断的目标用例：
   `VMRP_ARM_EXT_CHILD_DIAG=1 VMRP_ARM_EXT_GFX_REL_DIAG=1 VMRP_ARM_EXT_GAME_RENDER_DIAG=1 VMRP_ARM_EXT_GAME_RW_WRITE_DIAG=1 VMRP_ARM_EXT_TABLE_DIAG=1 VMRP_ARM_EXT_SCREEN_WRITE_DIAG=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`。
-- artifact: `/tmp/vmrp-e2e-ev7NKb`，仍失败，`menu.ppm` 只有
+- artifact: `/tmp/skyengine-e2e-ev7NKb`，仍失败，`menu.ppm` 只有
   `#1060a8` 和 `#f8f000` 两色。
 - 运行时同步了三段 child：primary `game.ext`、`graphics.ext`、第三个
   child。`graphics.ext` 的 selected record 中 `record[31]/record[32]`
@@ -929,7 +929,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 
 ## 2026-06-24 20:38 CST — selector probe narrowed
 
-- 上一轮 artifact `/tmp/vmrp-e2e-IF2UHf` 证明 broad `VMRP_ARM_EXT_SELECTOR_DIAG`
+- 上一轮 artifact `/tmp/skyengine-e2e-IF2UHf` 证明 broad `VMRP_ARM_EXT_SELECTOR_DIAG`
   会被 wrapper loader/timer 路径消耗上限：360 条内只看到 primary
   `game.ext+0x1590C` 与 wrapper `0x342C` 一类调用，没有捕获
   `game.ext+0x15DF0..0x15E02` 的最终 `code=5, selector=0x21` 导出请求。
@@ -942,7 +942,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 
 ## 2026-06-24 21:03 CST — setup branch probe added
 
-- 继续接手当前工作树；确认 `/tmp/vmrp-e2e-J0UCcY` 仍失败，且 diagnostics
+- 继续接手当前工作树；确认 `/tmp/skyengine-e2e-J0UCcY` 仍失败，且 diagnostics
   下 `menu.ppm` 退化为 1 色 `#1060a8`。这不改变根因方向：bitmap/export
   路径仍未建立。
 - 该 artifact 的 `SELECTOR_DIAG` 只看到 primary `game.ext+0x158D4/0x1590C`
@@ -966,8 +966,8 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
   env-gated gwkdl 窄诊断 hook、512KB `origin_mem_len`、origin memory slot
   同步、动态 MRP cache 等既有改动。
 - 干净复现命令：
-  `cmake --build build --target vmrp && env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`。
-- artifact: `/tmp/vmrp-e2e-oyYei4`。测试仍失败：
+  `cmake --build build --target skyengine && env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`。
+- artifact: `/tmp/skyengine-e2e-oyYei4`。测试仍失败：
   `wake.uniqueColorCount()` 实际为 2。
 - PPM 统计：
   - `mem-check.ppm`: 2 色，黑色 72119、`#f8fcf8` 4681。
@@ -997,12 +997,12 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
   `(ver + 0xF9F9A440) > 0x270F` 阈值，但不在上述任何子区间内，因此
   `0x11964` 返回 0，`0x15E18` 返回 0，`0x15CB0` 跳过 `0x15D2C`，
   最终不会发出 graphics selector `0x21` 导出表请求。
-- 先尝试将 vmrp 默认 DSM 平台从 `MT6229` 改为 `MT6253`。这不是
+- 先尝试将 skyengine 默认 DSM 平台从 `MT6229` 改为 `MT6253`。这不是
   app-specific 分支；它只是声明一个真实的 MTK 平台，使通用
   `mr_getUserInfo().ver` 变为 `101100182`，落在当前反汇编接受的
   `101100000..101109999` 区间。
 - 该值让进程在 MRP startup 内走入较重路径，E2E harness socket 30s 内未创建
-  （artifact `/tmp/vmrp-e2e-UmpTSc`，最后反复 `dsmSwitchPath`/`netpay.mrp`）。
+  （artifact `/tmp/skyengine-e2e-UmpTSc`，最后反复 `dsmSwitchPath`/`netpay.mrp`）。
   改用同样被反汇编接受的真实 MTK 平台 `MT6227`，生成
   `ver=101070182`，对应 `101070000..101079999 -> 0x40018800`。
 - 下一步 rebuild 后先跑目标 e2e；若仍失败，再用 selector/setup 窄诊断验证
@@ -1041,7 +1041,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
   - `r4` node 的关键字段、`node+0x30` callback 归属，以及
     `wrapper_rw+0x40/0x44/0x48` key 4/5/6 slot。
 - 下一次命令：
-  `env VMRP_ARM_EXT_SETUP_DIAG=1 VMRP_ARM_EXT_SELECTOR_DIAG=1 VMRP_ARM_EXT_NODE_DETAIL_DIAG=1 timeout 12s build/vmrp --work-dir . test/fixtures/gwkdl_v1003.mrp > /tmp/gwkdl-node-detail.out 2> /tmp/gwkdl-node-detail.err`。
+  `env VMRP_ARM_EXT_SETUP_DIAG=1 VMRP_ARM_EXT_SELECTOR_DIAG=1 VMRP_ARM_EXT_NODE_DETAIL_DIAG=1 timeout 12s build/skyengine --work-dir . test/fixtures/gwkdl_v1003.mrp > /tmp/gwkdl-node-detail.out 2> /tmp/gwkdl-node-detail.err`。
   目标是直接判断 `0x220` 是否返回非 0、`0x32DC` 是否返回 `-1`，
   还是后续 key-table store 被跳过。
 
@@ -1059,7 +1059,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
     `0x220` materialize/load helper。
   - `cfunction.ext+0xFFA` 只有在 `0x220` 和 `0x32DC` 成功后才把 node
     发布到 `wrapper_rw+0x30+key*4`；key 5 即 `wrapper_rw+0x44`。
-- 失败机理：vmrp 之前只把 `0x00010000..0x01010000` 映射为 ARM EXT 内存，
+- 失败机理：skyengine 之前只把 `0x00010000..0x01010000` 映射为 ARM EXT 内存，
   `0x40018800` 不在 `arm_ptr()`/Unicorn 可见范围内。wrapper 希望把
   `graphics.ext` materialize 到该 MTK graphics/device band，结果 key 5
   注册不能完成，后续 graphics selector/export 链路建立不完整。
@@ -1073,9 +1073,9 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
     code 若保留高地址运行，仍能走通用 R9/module 恢复逻辑。
   - 这是地址模型修复，不是 gwkdl 分支，也不是图片 fallback。
 - 验证：
-  - `cmake --build build --target vmrp` 通过。
+  - `cmake --build build --target skyengine` 通过。
   - `env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`
-    通过，artifact `/tmp/vmrp-e2e-ay9OBT`。
+    通过，artifact `/tmp/skyengine-e2e-ay9OBT`。
   - PPM 统计：`menu.ppm` 从失败时的 2 色变为 52 色；
     主要颜色包括蓝底 `#1060a8` 54801 像素，以及多组位图颜色
     `#c8ecf8`、`#f8f8f8`、`#001020`、`#080830`、`#a87000`、
@@ -1084,11 +1084,11 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 ## 2026-06-25 10:43 CST — completion audit rerun
 
 - 按原目标重新验证当前工作树，而不是只沿用上一轮结果：
-  - `cmake --build build --target vmrp` 通过。
+  - `cmake --build build --target skyengine` 通过。
   - `git diff --check` 无 whitespace error。
   - 未使用 `xvfb`。
   - `env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`
-    通过，artifact `/tmp/vmrp-e2e-AGnB50`。
+    通过，artifact `/tmp/skyengine-e2e-AGnB50`。
 - PPM 证据：
   - `menu.ppm`: `240x320`，52 色；top colors 包括蓝底 `#1060a8`
     54801 像素，以及 `#c8ecf8`、`#f8f8f8`、`#001020`、`#080830`、
@@ -1103,7 +1103,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 - 当前工作树复查：存在已暂存的 `src/arm_ext_executor.c` 修正，内容为移除
   早期 gwkdl 调查中未最终采用的 `compact-sdk` RW bridge 镜像，仅保留
   `verdload` 已反汇编确认的 RW 布局；`docs/prompt.md` 仍是用户已有修改。
-- 构建：`cmake --build build --target vmrp` 通过。
+- 构建：`cmake --build build --target skyengine` 通过。
 - 完整命令：`pnpm vitest run test/e2e`。结果 5 个测试文件通过、2 个失败：
   - 通过：`gwkdl/game-prepare`、`dota/download-plugin`、`optwar/game-prepare`、
     `opbzqe/game-prepare`、`gxdzc/gxdzc-pixel`。
@@ -1125,7 +1125,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
 
 - 最小复现：
   `env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gghjt/download-plugin.test.ts -t "下载付费插件 - 下载完毕$"`。
-  artifact `/tmp/vmrp-e2e-Mq81aa`，失败点仍是 `pay-start.ppm`
+  artifact `/tmp/skyengine-e2e-Mq81aa`，失败点仍是 `pay-start.ppm`
   `(104,147)=[184,144,64]`，预期 `[104,104,224]`。
 - PPM 证据：
   - `download-plugin.ppm`、`download-ing.ppm`、`download-end.ppm` 均为下载 UI
@@ -1134,7 +1134,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
     `mr_rename(mythroad/vld/7530a10/7530a1.t to mythroad/plugins/netpay.mrp)`，
     说明插件落盘成功。
   - 点击“确定”后 `pay-start.ppm` 变回主菜单色系，未进入 netpay/pay modal。
-- `VMRP_ARM_EXT_DIAG=1` artifact `/tmp/vmrp-e2e-EnIs6V`：
+- `VMRP_ARM_EXT_DIAG=1` artifact `/tmp/skyengine-e2e-EnIs6V`：
   - 下载过程中 active child 为 `P=0x39D548/H=0x32B2FD`，primary
     `extChunk[0x34]=1`，foreground cover 是全屏，符合模态 child 显示。
   - 关闭后 active 回到 primary `P=0x34AB24/H=0x2E2325`，primary
@@ -1181,7 +1181,7 @@ game 也有自己独立的 delta chain (game_rw+0x88)。
   真实设备上通常是持久化提取状态探测，不能被包内 basename 资源掩盖。
   该规则是通用路径语义修正，不是 gghjt 分支。
 - 验证：
-  - `cmake --build build --target vmrp -j2` 通过。
+  - `cmake --build build --target skyengine -j2` 通过。
   - `pnpm vitest run test/e2e/gghjt/download-plugin.test.ts` 通过：
     5 passed，约 206s。
   - `pnpm vitest run test/e2e/gghjt/game-start.test.ts` 通过：

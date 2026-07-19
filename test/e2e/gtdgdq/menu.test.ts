@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 import fs from "fs";
 
 describe("gtdgdq", () => {
@@ -23,7 +23,7 @@ describe("gtdgdq", () => {
 
     {
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen("bgm-select");
         // rgb(0, 200, 248)
         expect(screen.pixel(219, 312)).toEqual([0, 200, 248]);
@@ -31,7 +31,7 @@ describe("gtdgdq", () => {
       // 不开启音乐
       await engine.key('RIGHT_SOFT', 1_000);
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen("menu");
         // rgb(248, 248, 240)
         expect(screen.pixel(168, 162)).toEqual([248, 248, 240]);
@@ -45,7 +45,7 @@ describe("gtdgdq", () => {
       // 平台文本页是黑底绿字；同时确认标题、正文和返回栏均已绘制，
       // 避免仅凭任意一处 draw/diff 将空白本地窗口误判为帮助页。
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen("help");
         expect(screen.diffPixelCount(menu)).toBeGreaterThan(0);
         expect(screen.uniqueColorCount()).toBe(2);
@@ -60,7 +60,7 @@ describe("gtdgdq", () => {
       // 覆盖的同一 guest 菜单帧。
       await engine.key('RIGHT_SOFT', 1_000);
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const restored = await engine.screen("menu-restored");
         expect(restored.diffPixelCount(menu)).toBe(0);
       })

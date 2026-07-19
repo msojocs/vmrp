@@ -32,11 +32,11 @@
 因此本文把证据分为两层：
 
 - 平台 ABI 层：来自 `third_party/mtk_disasm`，说明 native EXT 的加载、function table、internal table、event/timer callback 是什么。
-- gghjt 私有层：来自 `/tmp/vmrp_mrp_extract/cfunction.ext`、`verdload.ext`、`game.ext` 的目标反汇编和运行诊断，说明本问题真正的根因。
+- gghjt 私有层：来自 `/tmp/skyengine_mrp_extract/cfunction.ext`、`verdload.ext`、`game.ext` 的目标反汇编和运行诊断，说明本问题真正的根因。
 
 ## 3. 样本信息
 
-本次分析的内嵌 EXT 文件来自 `/tmp/vmrp_mrp_extract`：
+本次分析的内嵌 EXT 文件来自 `/tmp/skyengine_mrp_extract`：
 
 | 文件 | 大小 | SHA-256 |
 | --- | ---: | --- |
@@ -279,10 +279,10 @@ child 关闭后，`game.ext` 会进入 close/completion 路径。相关状态由
 
 ```bash
 cmake --build build -j2
-timeout 240 env VMRP_NO_MOUSE=1 VMRP_PPM=1 ./test/gghjt/continue-twice.sh || pkill -f 'build/vmrp|vmrp'
-timeout 180 env VMRP_NO_MOUSE=1 VMRP_PPM=1 ./test/gghjt/pay-normal-enter.sh || pkill -f 'build/vmrp|vmrp'
-timeout 180 env VMRP_NO_MOUSE=1 VMRP_PPM=1 ./test/gghjt/pay-normal-back.sh || pkill -f 'build/vmrp|vmrp'
-timeout 180 env VMRP_NO_MOUSE=1 VMRP_PPM=1 ./test/gghjt/download-plugin-enter.sh || pkill -f 'build/vmrp|vmrp'
+timeout 240 env VMRP_NO_MOUSE=1 VMRP_PPM=1 ./test/gghjt/continue-twice.sh || pkill -f 'build/skyengine|skyengine'
+timeout 180 env VMRP_NO_MOUSE=1 VMRP_PPM=1 ./test/gghjt/pay-normal-enter.sh || pkill -f 'build/skyengine|skyengine'
+timeout 180 env VMRP_NO_MOUSE=1 VMRP_PPM=1 ./test/gghjt/pay-normal-back.sh || pkill -f 'build/skyengine|skyengine'
+timeout 180 env VMRP_NO_MOUSE=1 VMRP_PPM=1 ./test/gghjt/download-plugin-enter.sh || pkill -f 'build/skyengine|skyengine'
 ```
 
 诊断复验：原窄口径 PC/RW 诊断（`VMRP_GGHJT_PC_DIAG` / `VMRP_GGHJT_RW_DIAG`）已从代码移除，下列依赖其 marker 的检查项当前无法直接观测，如需使用需先恢复对应埋点。
@@ -291,7 +291,7 @@ timeout 180 env VMRP_NO_MOUSE=1 VMRP_PPM=1 ./test/gghjt/download-plugin-enter.sh
 
 - 日志中无 `UC_ERR`、`invalid memory`、`Unhandled CPU exception`。
 - PPM 中第三次及后续 child 界面标题、正文、按钮都完整显示。
-- 进程无残留（用 `pkill` 清理后无遗留 `vmrp`）。
+- 进程无残留（用 `pkill` 清理后无遗留 `skyengine`）。
 
 重点检查（原依赖已移除的 PC/RW 诊断 marker，需恢复埋点后才能观测）：
 

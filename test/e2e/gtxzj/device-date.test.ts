@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 
 describe("设备日期配置", () => {
   let engine: SkyEngineE2e | undefined;
@@ -8,7 +8,7 @@ describe("设备日期配置", () => {
   let savedDeviceDate: string | undefined;
 
   beforeEach(() => {
-    savedDeviceDate = process.env.VMRP_DEVICE_DATE;
+    savedDeviceDate = process.env.SKYENGINE_DEVICE_DATE;
   });
 
   afterEach(async () => {
@@ -16,8 +16,8 @@ describe("设备日期配置", () => {
     engine = undefined;
     await ws?.dispose();
     ws = undefined;
-    if (savedDeviceDate === undefined) delete process.env.VMRP_DEVICE_DATE;
-    else process.env.VMRP_DEVICE_DATE = savedDeviceDate;
+    if (savedDeviceDate === undefined) delete process.env.SKYENGINE_DEVICE_DATE;
+    else process.env.SKYENGINE_DEVICE_DATE = savedDeviceDate;
   });
 
   it.each([
@@ -28,7 +28,7 @@ describe("设备日期配置", () => {
     "2011-01-00",
     "2011-01-01x",
   ])("在启动前拒绝非法日期 %s", date => {
-    const bin = process.env.VMRP_BIN ?? "build/vmrp";
+    const bin = process.env.VMRP_BIN ?? "build/skyengine";
     const result = spawnSync(bin, [
       "--device-date",
       date,
@@ -43,7 +43,7 @@ describe("设备日期配置", () => {
   });
 
   it("接受环境变量中的确定性通过日期", async () => {
-    process.env.VMRP_DEVICE_DATE = "2012-06-20";
+    process.env.SKYENGINE_DEVICE_DATE = "2012-06-20";
     ws = await SkyEngineWorkspace.create();
     engine = await SkyEngineE2e.start("test/fixtures/gtxzj.mrp", { workDir: ws.dir });
 
@@ -56,7 +56,7 @@ describe("设备日期配置", () => {
   }, 25_000);
 
   it("命令行日期覆盖无效环境变量", async () => {
-    process.env.VMRP_DEVICE_DATE = "invalid";
+    process.env.SKYENGINE_DEVICE_DATE = "invalid";
     ws = await SkyEngineWorkspace.create();
     engine = await SkyEngineE2e.start("test/fixtures/gtxzj.mrp", {
       workDir: ws.dir,

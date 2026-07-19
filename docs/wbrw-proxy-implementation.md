@@ -48,7 +48,7 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   私有 record，并要求 `[0..105]` 是连续有效区间；存在 owner 但 record 损坏时明确
   失败，不回退到外层包。主模块无 owner 时仍直接使用主表。私有 record 取出的显式
   `brw/wfnt16c.mrp` 继续按现有优先级走 host-package 分支，不会被 child-resource 覆盖。
-- 单元测试覆盖主表、私有 record 和损坏 record 不回退；`vmrp-unit` 为 104 checks
+- 单元测试覆盖主表、私有 record 和损坏 record 不回退；`skyengine-unit` 为 104 checks
   全通过。
 - E2E 使用 guest 固定连接的 `127.0.0.1:80` 服务，并保持 HTTP Host 为
   `proxy2.51mrp.com`；不增加端点改写参数。
@@ -58,8 +58,8 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   `98763f1c6bff5cdef6a3fd3c22e34168d0445359f9fdcb3c34bc381e85dbac3a`；安装产物
   `system/1008.uni` 为 34,272 字节，SHA-256
   `5e3515001810f6e25363a9152b4d449877aa24b38c17a9358b178af94c36e5e6`。
-- 保留证据为 `/tmp/vmrp-e2e-sqyAuE`（下载/安装）、`/tmp/vmrp-e2e-NTbM4h`
-  （同 workspace 重启）和 `/tmp/vmrp-ws-c4Dp1J`。人工检查 PPM：下载询问、
+- 保留证据为 `/tmp/skyengine-e2e-sqyAuE`（下载/安装）、`/tmp/skyengine-e2e-NTbM4h`
+  （同 workspace 重启）和 `/tmp/skyengine-ws-c4Dp1J`。人工检查 PPM：下载询问、
   `wfnt16c.mrp 1K/21K`、下载成功/立即安装均正确；安装确认后无失败提示；重启后
   `16号字体` 带选中圆点，设置中心显示 `字体: 16号字体`，且没有新增 `/mrp` 请求。
   全程未使用 xvfb 或大 trace。
@@ -102,8 +102,8 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   `0,1800,...,21600`，每包 tag7=22、tag8=`22302-offset`、tag16 起止/总长
   和 payload 一致；重组体与 `/sd` full 和 fixture 三方相等，SHA-256 均为
   `98763f1c6bff5cdef6a3fd3c22e34168d0445359f9fdcb3c34bc381e85dbac3a`。
-- 最终加固后的 E2E 在 23.91s 内通过，目录为 `/tmp/vmrp-e2e-ikTR0a` 和
-  `/tmp/vmrp-ws-Ezi2zo`。测试先由浏览器完成 `/mrp`，避免 `/sd` 预热掩盖首包
+- 最终加固后的 E2E 在 23.91s 内通过，目录为 `/tmp/skyengine-e2e-ikTR0a` 和
+  `/tmp/skyengine-ws-Ezi2zo`。测试先由浏览器完成 `/mrp`，避免 `/sd` 预热掩盖首包
   加载问题；并核对本轮恰好 13 个偏移，再验证第二个有效 appid 和完整 HTTP
   Range/错误矩阵。落盘 MRP 为 22302 字节且哈希准确；`dllist1` 为 1320
   字节，包含目标名、MIME 和完整 `/sd` URL，完成/总长均为 22302；
@@ -150,8 +150,8 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   22302 字节，与目标文件逐字节相等，SHA-256 一致。这一阶段只证明代理
   协议层，后续再由客户端 E2E 和 PPM 完成验收。
 - 目标 E2E 在收紧按键时长、提示区域差异、下载列表和落盘哈希断言后多轮通过，
-  最终实现轮为 23.77s，保留目录 `/tmp/vmrp-e2e-Y4X8x9` 和
-  `/tmp/vmrp-ws-JIB10I`。真实客户端请求 `/mrp` 13 次，tag10 偏移为
+  最终实现轮为 23.77s，保留目录 `/tmp/skyengine-e2e-Y4X8x9` 和
+  `/tmp/skyengine-ws-JIB10I`。真实客户端请求 `/mrp` 13 次，tag10 偏移为
   `1800,3600,...,21600`；最终 `brw/wfnt16c.mrp` 是 22302 字节，
   SHA-256 与指定目标一致，`dllist1` 为 1320 字节，`dwnlist.dat`
   收敛为 4 字节。
@@ -180,7 +180,7 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   必须包含完整目标下载 URL、文件名和 `application/sky-mrp`，最终发布文件名必须
   恰为 `sky_SaiNes-v1010.mrp`，不能由任意其他完整 MRP 使测试通过。
 - 当前工作树在全部审查修复后重新运行目标 E2E 通过（49.60s），证据位于
-  `/tmp/vmrp-e2e-3bKSD7` 与 `/tmp/vmrp-ws-K7oLWr`。人工检查 PPM 确认目标链接焦点、
+  `/tmp/skyengine-e2e-3bKSD7` 与 `/tmp/skyengine-ws-K7oLWr`。人工检查 PPM 确认目标链接焦点、
   `0/未知 -> 1K/51K -> 22K/51K -> 49K/51K` 进度及“下载成功”提示。请求偏移仍为
   `0, 1800, ... 52200`，无 EOF 请求；最终文件为 52792 字节，`MRPG` 和 offset 8
   声明长度均正确，SHA-256 `adec80acc99e82a5122bef5fc9c6d600232cf6da51466e6cea4e6da48c9617ba`
@@ -199,7 +199,7 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   EOF 请求。曾尝试的空 200 EOF 包会删除已经完整的 `.mrp.dt` 并显示失败，因此
   `/res` 对 `rangeStart >= objectLength` 返回 416，不提供额外完成分支。
 - 收紧后的 E2E 于 2026-07-11 运行通过（59.51s）。保留证据位于
-  `/tmp/vmrp-e2e-TJWx2E` 和 `/tmp/vmrp-ws-9bFFtK`：焦点框确实位于
+  `/tmp/skyengine-e2e-TJWx2E` 和 `/tmp/skyengine-ws-9bFFtK`：焦点框确实位于
   `sky_SaiNes-v1010.mrp`；下载管理画面从 `0/未知` 依次增长到 `50K/51K`，随后
   显示“下载成功”。最终文件 `mythroad/sky_SaiNes-v1010.mrp` 为 52792 字节，
   以 `MRPG` 开头，头部 offset 8 声明长度同为 52792，SHA-256 为
@@ -234,12 +234,12 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
 
 ### 2026-07-11: 外层 302 证伪，改用页面内 `lib.download`
 - 第一版特殊请求处理返回外层 `HTTP 302 Location`。目标请求确实到达
-  `_page2_1783737479117.bin`，但 `/tmp/vmrp-e2e-Eeo8IJ/stdout.log` 只看到
+  `_page2_1783737479117.bin`，但 `/tmp/skyengine-e2e-Eeo8IJ/stdout.log` 只看到
   socket 15 收到 160B 的 302 后创建 socket 16，没有 raw GET；
   `download-activated-8.ppm` 明确显示“网络连接错误74”。这证明 proxy2 模式
   要求外层 200，不能复用 raw HTTP 模式的 301/302/303 跟随器。
 - 焦点 PPM 同时校正了测试交互：详情页链接在首屏下方，DOWN 会先滚动正文；
-  `/tmp/vmrp-e2e-Eeo8IJ/download-focus.ppm` 已人工确认蓝色焦点框位于
+  `/tmp/skyengine-e2e-Eeo8IJ/download-focus.ppm` 已人工确认蓝色焦点框位于
   `sky_SaiNes-v1010.mrp`，不是在线模拟器链接。
 - 内置 `mphome.sky` 自带可复核的下载脚本：字符串池有 `lib.download`、下载 URL、
   文件名、`application/sky-mrp`、`FALSE`；脚本段为
@@ -279,7 +279,7 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
 - 当前 `HEAD=178e873`、工作树干净时重新运行
   `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/wbrw/proxy.test.ts --reporter=verbose`，
   用例在 76.28s 后失败于 `hasSubLinkCache(...) === false`。保留画面目录为
-  `/tmp/vmrp-e2e-pEC0S3`，独立工作区为 `/tmp/vmrp-ws-U8eTpD`。
+  `/tmp/skyengine-e2e-pEC0S3`，独立工作区为 `/tmp/skyengine-ws-U8eTpD`。
 - PPM 人工检查：`loaded.ppm` 已完整显示目标首页；`focus.ppm` 的焦点框画在第一个链接
   `mynes [顶]`；短按回车后，超时保存的 `sublink.ppm` 仍是同一首页，只是时钟变化。
   因此不是测试缓存判据误报，页面确实没有导航。
@@ -287,7 +287,7 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   `_page2_1783670896145.bin`（179B）才是地址栏首次加载（tag1 为空、tag2=
   `mrp.gddhy.net`、tag3=inputaddr）。点击后没有第三个 `/page2`，故故障发生在浏览器
   焦点/激活阶段，尚未进入代理抓取子页面阶段。
-- 首页缓存 `/tmp/vmrp-ws-U8eTpD/mythroad/brw/http/cache3/14352.dat` 为 2602B，
+- 首页缓存 `/tmp/skyengine-ws-U8eTpD/mythroad/brw/http/cache3/14352.dat` 为 2602B，
   池和记录流边界均可完整走到 EOF；首个链接记录为 row `0x4E` -> caption `0x38`
   (`mynes [顶]`) -> href `0x54(e2=3)` (`.../sky_SaiNes-v1010`)。数据本身包含正确 URL。
 - 将页头标题从 `0x38` 改成 `0x54` 并未解决问题。当前更强的嫌疑是：生成器把所有
@@ -309,8 +309,8 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
 - 离线生成包为 2720B、payload 2698B、pool 86 项；记录流 87 条精确走到 EOF。
   首锚点 `captionIndex=9`，`pool[8]` 为
   `http://mrp.gddhy.net/mrp/sky_SaiNes-v1010`，`pool[9]` 为 `mynes [顶]`。
-- 聚焦 E2E 通过：`1 passed`，17.41s；保留目录 `/tmp/vmrp-e2e-0f6UxK`，
-  工作区 `/tmp/vmrp-ws-bFGMJ0`。第三个 `/page2` 包
+- 聚焦 E2E 通过：`1 passed`，17.41s；保留目录 `/tmp/skyengine-e2e-0f6UxK`，
+  工作区 `/tmp/skyengine-ws-bFGMJ0`。第三个 `/page2` 包
   `_page2_1783672497346.bin` 的 tag1=`/mrp/sky_SaiNes-v1010`、
   tag2=`mrp.gddhy.net`、tag3=`http://mrp.gddhy.net/`。
 - 缓存证据：`14327.dat` 是首页（2698B，`第1页 - WAP下载站`）；
@@ -345,10 +345,10 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
 - Re-ran `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/wbrw/proxy.test.ts --reporter=verbose`;
   the focused test can pass while the preserved screenshot still shows a page
   load error.
-- Latest contradictory artifact `/tmp/vmrp-e2e-WzdETQ` and workspace
-  `/tmp/vmrp-ws-75t8yV`: `cache3/13998.dat` is 477 bytes and contains
+- Latest contradictory artifact `/tmp/skyengine-e2e-WzdETQ` and workspace
+  `/tmp/skyengine-ws-75t8yV`: `cache3/13998.dat` is 477 bytes and contains
   `<title>百度一下</title>`, `http://wap.baidu.com/`, and multiple `百度`
-  strings, but `/tmp/vmrp-e2e-WzdETQ/loaded.png` visibly shows title-bar text
+  strings, but `/tmp/skyengine-e2e-WzdETQ/loaded.png` visibly shows title-bar text
   `获取页面错误32` and the built-in home page body. Cache presence is therefore
   not sufficient evidence of success.
 - Reverse-engineering evidence from extracted `game.ext`: proxy-related strings
@@ -416,7 +416,7 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   WAP page, title `第1页 - WAP下载站`). Test glyph-pixel assertions updated:
   after-paste (107,17) black/(108,17) white; foreground (41,10) yellow
   [248,240,168] + (79,10) gray [96,100,96] (stable stroke run x=77..84 at y=10).
-- PPM-verified result (`/tmp/vmrp-e2e-atstsl/loaded.ppm`): yellow title bar
+- PPM-verified result (`/tmp/skyengine-e2e-atstsl/loaded.ppm`): yellow title bar
   with `第1页 - WAP下载站`, URL link line, body = 软件列表/mynes/RX管理器/… all
   from the target site; no forms, no template residue. Cache `.dat` contains
   both `http://mrp.gddhy.net/` and UTF-8 `WAP下载站`. Focused test passes.
@@ -457,15 +457,15 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
 - Test now clicks a sub-link: after the target page loads, `DOWN` moves focus
   (lands on the LAST visible link row, `听听音阅 [顶]` → `/mrp/sky_opttyy`),
   not the first one.
-- First repro round (screenshots `/tmp/vmrp-e2e-tkIlrI`): `ENTER` did NOT
+- First repro round (screenshots `/tmp/skyengine-e2e-tkIlrI`): `ENTER` did NOT
   navigate — it opened the link long-press context menu (复制/新窗口打开/快速搜索/
   书签/…, no plain "打开" item). Cause: the test sets `VMRP_E2E_HOLD_MS=1500`
-  for paste stability, and vmrp holds every injected key for that long, so
+  for paste stability, and skyengine holds every injected key for that long, so
   ENTER registers as a long-press. Packet dumps confirm NO third `/page2`
   request reached the proxy in that round.
 - Navigation path chosen: link menu item `2. 新窗口打开` via digit key "2"
   (menu items are digit-selectable), which matches the user's manual flow.
-- Second repro round (`/tmp/vmrp-e2e-WjYiU6`, packets `_page2_1783593791382.bin`):
+- Second repro round (`/tmp/skyengine-e2e-WjYiU6`, packets `_page2_1783593791382.bin`):
   menu item 2 ("新窗口打开") DID navigate. The click request is structurally
   identical to first load — same endpoint `/page2`, same header `code=1`
   (packet-level; the internal request-type code=2 selects the /page2 endpoint),
@@ -518,7 +518,7 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   quirk (real focus was on a plain-text row). Short ENTER (120ms) DOES
   navigate when the real focus row is a link; digit 5 opens the context menu.
 - `src/e2e_control.c`: `KEY <name> [hold_ms]` now accepts an optional per-press
-  hold override (falls back to VMRP_E2E_HOLD_MS/500); `vmrp-e2e.ts` `key()`
+  hold override (falls back to VMRP_E2E_HOLD_MS/500); `skyengine-e2e.ts` `key()`
   gained a `holdMs` parameter. This is generic input-injection plumbing, not
   app-specific logic.
 - Sub-link assertion generalized: cache3 `.dat` pool head is parsed
@@ -544,7 +544,7 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
 - Final test sequence: 2× short DOWN (120ms each, one row per press) →
   **short ENTER (120ms) navigates directly** (no menu needed). The
   long-press-menu + digit-2 path also works but is unnecessary.
-- Result (`/tmp/vmrp-e2e-bDO9Yu`, PASSED with tightened assertions): third
+- Result (`/tmp/skyengine-e2e-bDO9Yu`, PASSED with tightened assertions): third
   /page2 request `tag1=/mrp/sky_SaiNes-v1010 tag2=mrp.gddhy.net
   tag3=http://mrp.gddhy.net/`; cache `17327.dat` =
   `http://mrp.gddhy.net/mrp/sky_SaiNes-v1010` titled `mynes - WAP下载站`;
@@ -578,8 +578,8 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
 - Verification: 98 C checks passed; the 10s focused run passed in 16.92s and the
   full 10s/5s matrix passed in 29.09s.  WBRW input and both gzwdzjs scheduler
   regressions passed.  Retained `loaded.ppm` files are
-  `/tmp/vmrp-e2e-m9aJxn/loaded.ppm` (10s) and
-  `/tmp/vmrp-e2e-ZTIR6z/loaded.ppm` (5s); visual inspection confirms the same
+  `/tmp/skyengine-e2e-m9aJxn/loaded.ppm` (10s) and
+  `/tmp/skyengine-e2e-ZTIR6z/loaded.ppm` (5s); visual inspection confirms the same
   complete `第1页 - WAP下载站` title, software list, scrollbar, and menu bar.
   No endpoint-remapping option is present or used.
 
@@ -601,8 +601,8 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   title.
 - Final verification: 100 C checks passed; three complete 10s/5s matrices
   passed, followed by WBRW input and both gzwdzjs regressions.  Final retained
-  PPMs `/tmp/vmrp-e2e-UoQ1Ww/loaded.ppm` and
-  `/tmp/vmrp-e2e-WjvyKe/loaded.ppm` were visually checked and both show the
+  PPMs `/tmp/skyengine-e2e-UoQ1Ww/loaded.ppm` and
+  `/tmp/skyengine-e2e-WjvyKe/loaded.ppm` were visually checked and both show the
   complete target page.
 
 ### 2026-07-12: physical Ctrl+V ordering and browser-menu exit
@@ -617,7 +617,7 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   requires the exact `editGetText()` URL, cache URL/title, and foreground PPM.
 - The same test opens WBRW's own menu, selects its displayed `7.退出` command,
   captures the confirmation dialog, confirms with the left soft key, and waits
-  for the vmrp child process to exit.  Test cleanup's SDL `QUIT` is not accepted
+  for the skyengine child process to exit.  Test cleanup's SDL `QUIT` is not accepted
   as evidence.  Both successful runs end with guest `mythroad exit.` logs.
 - Narrow PC watches prove that exit is another consumer of the same primary
   scheduler, not an unrelated menu bug.  The `game.ext` walker at file
@@ -636,8 +636,8 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   test covers both cases.
 - Two independent dummy-driver matrices passed for both 10s and 5s idle paths,
   plus `input-text.test.ts`.  Retained second-round artifacts are
-  `/tmp/vmrp-e2e-Wr3KSB`, `/tmp/vmrp-e2e-zNuZbZ`, and
-  `/tmp/vmrp-e2e-UTJvhc`.  The two target-page images are byte-identical and
+  `/tmp/skyengine-e2e-Wr3KSB`, `/tmp/skyengine-e2e-zNuZbZ`, and
+  `/tmp/skyengine-e2e-UTJvhc`.  The two target-page images are byte-identical and
   have 114 colors; home-to-loaded differences are 3,841 title pixels, 59,424
   body pixels, and 67,230 full-screen pixels.  Menu and confirmation ROI
   differences are 13,515 and 18,242 pixels.  Visual inspection confirms the
@@ -668,10 +668,10 @@ Test: `pnpm vitest run test/e2e/wbrw/proxy.test.ts`
   normal rendering, so screenshots cannot act as hidden SDL heartbeats.
 - Two clean dummy-driver 10s/5s matrices passed, including exact cache
   URL/title, target-page pixels, and guest menu exit.  Retained artifacts are
-  `/tmp/vmrp-e2e-tcWtRh`, `/tmp/vmrp-e2e-7RmxsP`,
-  `/tmp/vmrp-e2e-7QXMqO`, and `/tmp/vmrp-e2e-zAI4IE`.
+  `/tmp/skyengine-e2e-tcWtRh`, `/tmp/skyengine-e2e-7RmxsP`,
+  `/tmp/skyengine-e2e-7QXMqO`, and `/tmp/skyengine-e2e-zAI4IE`.
 - A full persisted-state run also passed on the final binary without screen
-  events: `/tmp/vmrp-persistent-final-v2`.  It exercised `/simpleDownload`, paused
+  events: `/tmp/skyengine-persistent-final-v2`.  It exercised `/simpleDownload`, paused
   500ms before Ctrl+V, sent `/page2`, matched the exact page cache, then exited
   through `菜单 -> 7.退出 -> 确定` with code 0.  `final.ppm` is 240x320 with
   113 colors and visually shows the complete target page.  TypeScript checks,

@@ -1,4 +1,4 @@
-#include "./include/fileLib.h"
+#include "./include/file_lib.h"
 #include "./include/utils.h"
 #include "./include/compat_msvc.h"
 
@@ -65,7 +65,7 @@ static int utf8_to_wide_mode(const char *mode, wchar_t *out, size_t out_len) {
 }
 #endif
 
-FILE *vmrp_host_fopen(const char *filename, const char *mode) {
+FILE *skyengine_host_fopen(const char *filename, const char *mode) {
 #ifdef _WIN32
     wchar_t *wfilename = utf8_to_wide(filename);
     wchar_t wmode[16];
@@ -83,7 +83,7 @@ FILE *vmrp_host_fopen(const char *filename, const char *mode) {
 #endif
 }
 
-int32_t vmrp_host_chdir(const char *name) {
+int32_t skyengine_host_chdir(const char *name) {
 #ifdef _WIN32
     wchar_t *wname = utf8_to_wide(name);
     int ret;
@@ -368,7 +368,7 @@ int32_t my_closedir(int32_t f) {
     return MR_SUCCESS;
 }
 
-void vmrp_writeFile(const char *filename, void *data, uint32 length) {
+void skyengine_writeFile(const char *filename, void *data, uint32 length) {
     int fh = my_open(filename, MR_FILE_CREATE | MR_FILE_RDWR);
     int32_t wLen = 0;
     char *ptr = (char *)data;
@@ -383,7 +383,7 @@ void vmrp_writeFile(const char *filename, void *data, uint32 length) {
     my_close(fh);
 }
 
-char *readFile(const char *filename) {
+char *skyengine_readFile(const char *filename) {
     int32_t len = my_getLen(filename);
     char *p = malloc(len);
     if (p == NULL) {

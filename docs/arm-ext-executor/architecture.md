@@ -24,7 +24,7 @@ ARM EXT 执行器负责把一个 ARM/Thumb EXT 二进制放入可运行的 Mythr
 - Mythroad MR/Lua VM 的主体逻辑；
 - 真实短信、通话、支付或厂商在线服务。
 
-这些能力由 `src/main.c`、`src/vmrp.c`、`src/network.c`、`src/native_dsm_funcs.c` 和 `src/mythroad/` 提供。
+这些能力由 `src/main.c`、`src/skyengine.c`、`src/network.c`、`src/native_dsm_funcs.c` 和 `src/mythroad/` 提供。
 
 ## 2. 对外 API
 

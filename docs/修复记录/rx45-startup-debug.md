@@ -4,7 +4,7 @@ Date: 2026-06-26
 
 ## Request / Constraints
 
-- Target command: `build/vmrp temp/RX4.5.mrp`.
+- Target command: `build/skyengine temp/RX4.5.mrp`.
 - Symptom: application startup fails.
 - Trace output can be very large; avoid dumping full traces.
 - Do not use `xvfb`.
@@ -20,10 +20,10 @@ Date: 2026-06-26
   - `test/e2e/rx/` untracked.
   - `test/fixtures/rx4.5.mrp` untracked.
 - Existing binaries:
-  - `build/vmrp`
-  - `build/test_vmrp*`
+  - `build/skyengine`
+  - `build/test_skyengine*`
 - Relevant existing docs:
-  - `docs/TESTING.md` says the Vitest e2e harness uses `VMRP_E2E_SOCKET` and does not require `xvfb`.
+  - `docs/TESTING.md` says the Vitest e2e harness uses `SKYENGINE_E2E_SOCKET` and does not require `xvfb`.
   - Screenshots are dumped as PPM files through the e2e `SCREEN` command.
 
 ## Running Notes
@@ -39,23 +39,23 @@ Command:
 
 ```bash
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-VMRP_PPM=1 VMRP_PPM_PATH=/tmp/rx45.ppm \
-timeout 5s build/vmrp temp/RX4.5.mrp
+VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/rx45.ppm \
+timeout 5s build/skyengine temp/RX4.5.mrp
 ```
 
 Result:
 
 - Exit status was `124` from `timeout`, so the host process did not immediately exit.
-- `stderr` showed `startVmrp` and `vmrp_runtime_start_dsm()` returned `0x0`.
+- `stderr` showed `startVmrp` and `skyengine_runtime_start_dsm()` returned `0x0`.
 - Startup then hit an ARM EXT execution error:
   - `UC_MEM_READ_UNMAPPED addr=0x80110004 size=2`
   - crash PC `0x2DFAC2` in Thumb mode.
   - `last_file=0x2C60A4..0x2E8F14`.
   - register state included `R2=0x80110004`, `R9=0x002E9208`, `R10=0x002C5FB4`, `LR=0x002DF9EB`.
-- Executor wrote a narrow crash dump to `/tmp/vmrp_crash.bin` with suggested command:
+- Executor wrote a narrow crash dump to `/tmp/skyengine_crash.bin` with suggested command:
 
 ```bash
-arm-none-eabi-objdump -D -b binary -m arm -M force-thumb --adjust-vma=0x2DF9C2 /tmp/vmrp_crash.bin
+arm-none-eabi-objdump -D -b binary -m arm -M force-thumb --adjust-vma=0x2DF9C2 /tmp/skyengine_crash.bin
 ```
 
 Current hypothesis to validate: RX startup reaches a nested/ext module, then a Thumb routine dereferences a pointer derived from an invalid high address (`0x80110004`) rather than a mapped EXT/platform address. Need disassembly and data-flow proof before changing code.
@@ -71,7 +71,7 @@ The test lane independently reproduced the same failure shape without `xvfb`:
 - Existing focused command:
 
 ```bash
-env VMRP_E2E_KEEP_TMP=1 VMRP_BIN=build/vmrp VMRP_WORK_DIR=. \
+env VMRP_E2E_KEEP_TMP=1 VMRP_BIN=build/skyengine SKYENGINE_WORK_DIR=. \
   pnpm vitest run test/e2e/rx/app-prepare.test.ts
 ```
 
@@ -84,7 +84,7 @@ Current failure is therefore before any successful visible draw. PPM success cri
 
 ## 2026-06-26 Disassembly Around Crash
 
-`/tmp/vmrp_crash.bin` disassembly shows the crash is not an invalid branch target; it is a concrete load from a bad pointer:
+`/tmp/skyengine_crash.bin` disassembly shows the crash is not an invalid branch target; it is a concrete load from a bad pointer:
 
 ```asm
 0x2DFAB8: ldr   r1, [pc, #112]     ; literal 0x8C
@@ -134,7 +134,7 @@ range.
 Build:
 
 ```bash
-cmake --build build --target vmrp
+cmake --build build --target skyengine
 ```
 
 Result: build succeeded.
@@ -145,8 +145,8 @@ Direct no-xvfb smoke:
 
 ```bash
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-VMRP_PPM=1 VMRP_PPM_PATH=/tmp/rx45-final.ppm \
-timeout 8s build/vmrp 'temp/RX4.5.mrp'
+VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/rx45-final.ppm \
+timeout 8s build/skyengine 'temp/RX4.5.mrp'
 ```
 
 Result:
@@ -170,7 +170,7 @@ previous black/no-draw failure.
 Focused e2e:
 
 ```bash
-env VMRP_E2E_KEEP_TMP=1 VMRP_BIN=build/vmrp VMRP_WORK_DIR=. \
+env VMRP_E2E_KEEP_TMP=1 VMRP_BIN=build/skyengine SKYENGINE_WORK_DIR=. \
   pnpm vitest run test/e2e/rx/app-prepare.test.ts
 ```
 
@@ -183,9 +183,9 @@ at `(227,301)`.
 Regression e2e:
 
 ```bash
-env VMRP_BIN=build/vmrp VMRP_WORK_DIR=. pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts
-env VMRP_BIN=build/vmrp VMRP_WORK_DIR=. pnpm vitest run test/e2e/gxdzc/gxdzc-pixel.test.ts
-env VMRP_BIN=build/vmrp VMRP_WORK_DIR=. pnpm vitest run test/e2e/opbzqe/game-prepare.test.ts
+env VMRP_BIN=build/skyengine SKYENGINE_WORK_DIR=. pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts
+env VMRP_BIN=build/skyengine SKYENGINE_WORK_DIR=. pnpm vitest run test/e2e/gxdzc/gxdzc-pixel.test.ts
+env VMRP_BIN=build/skyengine SKYENGINE_WORK_DIR=. pnpm vitest run test/e2e/opbzqe/game-prepare.test.ts
 ```
 
 Result: all passed.

@@ -23,8 +23,8 @@ arm_ext_executor: invalid memory UC_MEM_READ_UNMAPPED addr=0x9D146118 size=4
 ```
 
 - 之后 `event()` 返回 -1，应用状态机死掉 → 表现为“卡死”（无新绘制/对话框不再出现）。
-- 崩溃现场 512 字节已存 `/tmp/vmrp_crash.bin`（0x232118..0x232318）。
-- 遗留观察：先前用户手动运行的 vmrp（PID 11176，cwd=build/）处于 SDL_WaitEvent
+- 崩溃现场 512 字节已存 `/tmp/skyengine_crash.bin`（0x232118..0x232318）。
+- 遗留观察：先前用户手动运行的 skyengine（PID 11176，cwd=build/）处于 SDL_WaitEvent
   poll 空闲态——与“guest 死掉后主循环闲置”的卡死表象一致。
 
 ## 崩溃指令分析
@@ -79,7 +79,7 @@ arm_ext_executor: invalid memory UC_MEM_READ_UNMAPPED addr=0x9D146118 size=4
 运行：`VMRP_WATCH_WRITE=0x226118,0x23B67C VMRP_WATCH_SENTINEL=0x232228
 pnpm vitest run test/e2e/talkcat/game-prepare.test.ts -t "循环"`
 
-## 2026-07-02 23:20 诊断 v1 输出分析（/tmp/vmrp-e2e-nBaB7j）
+## 2026-07-02 23:20 诊断 v1 输出分析（/tmp/skyengine-e2e-nBaB7j）
 
 v1 诊断本身有缺陷，但时间线仍有价值：
 
@@ -186,7 +186,7 @@ arm_ext_executor: invalid memory UC_MEM_READ_UNMAPPED addr=0x634F6118
 
 ## 2026-07-03 14:53 诊断 v5：type-6 parser 忽略 nested decode 失败
 
-补充观察 descriptor watch（`/tmp/vmrp-e2e-5LSnFY`）：
+补充观察 descriptor watch（`/tmp/skyengine-e2e-5LSnFY`）：
 
 ```text
 [CLICK] #35 down x=139 y=266
@@ -255,7 +255,7 @@ WATCH_READFILE_FAIL name='abc' reason=no_host_data fl=13213 ...
 验证：
 
 ```bash
-cmake --build build --target vmrp -j2
+cmake --build build --target skyengine -j2
 timeout 180s env VMRP_E2E_KEEP_TMP=1 \
   VMRP_WATCH_ALLOC=0x282000,0x286000 \
   pnpm vitest run test/e2e/talkcat/game-prepare.test.ts -t "循环" --reporter=verbose
@@ -267,7 +267,7 @@ timeout 180s env VMRP_E2E_KEEP_TMP=1 \
 ✓ test/e2e/talkcat/game-prepare.test.ts > talkcat 进入游戏 > 循环取消 123843ms
 ```
 
-通过 artifact：`/tmp/vmrp-e2e-9ckQqC`。stdout 中 #35 之后点击返回值保持 `0`，
+通过 artifact：`/tmp/skyengine-e2e-9ckQqC`。stdout 中 #35 之后点击返回值保持 `0`，
 `4886,4886,13213` 的 `readFile("abc")` 序列继续出现，未再出现 invalid memory
 或 `WATCH_READFILE_FAIL`。
 
@@ -327,7 +327,7 @@ src=0x277A9C {w=83,h=28,len=0x1316,type=0x6,base=0x282224}
 验证：
 
 ```bash
-cmake --build build --target vmrp -j2
+cmake --build build --target skyengine -j2
 timeout 180s env VMRP_E2E_KEEP_TMP=1 \
   VMRP_WATCH_ALLOC=0x282000,0x286000 \
   pnpm vitest run test/e2e/talkcat/game-prepare.test.ts -t "下载喝水资源包并安装" --reporter=verbose
@@ -342,7 +342,7 @@ timeout 180s env VMRP_E2E_KEEP_TMP=1 \
 ✓ 循环取消 123611ms
 ```
 
-安装通过 artifact：`/tmp/vmrp-e2e-FcrpeL`。关键证据：
+安装通过 artifact：`/tmp/skyengine-e2e-FcrpeL`。关键证据：
 
 ```text
 WATCH_READFILE name='abc' ret=0x282224 fl=4886 ... lenSlot=0xE7FDDC
@@ -351,4 +351,4 @@ WATCH_READFILE name='abc' ret=0x282224 fl=4886 ... lenSlot=0xE7FDDC
 
 也就是说子模块范围被 `table[44]` 数据读覆写后，后续 4886 字节 `mbutton`
 解码重新回到 TalkCat 预测的 `0x282224`，descriptor/base 与 backing storage
-再次匹配。循环回归 artifact：`/tmp/vmrp-e2e-RUAyZp`。
+再次匹配。循环回归 artifact：`/tmp/skyengine-e2e-RUAyZp`。

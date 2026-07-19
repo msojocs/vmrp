@@ -23,7 +23,7 @@
 ### B1. 逻辑画布放大时回拷宿主屏幕缓冲越界写（高）
 
 - 位置：`leave_screen_context`（约 5577–5594）、`arm_ext_call`（约 9384–9399）、`arm_ext_call_dispatch`（约 9859–9873）三处重复逻辑。
-- 现象：这些路径按 `m->screen_w * m->screen_h` 逐像素把 ARM 侧屏幕拷回宿主 `mr_screenBuf`。宿主 `mr_screenBuf` 按 `vmrp_config` / `mr_screen_w * mr_screen_h` 分配，而 `m->screen_w/h` 可被 `hook_screen_dim_write` / `arm_ext_push_draw_screen_context`（约 5697）采纳为 guest 设定的逻辑画布尺寸。校验只有 `≤2048×2048` 和 `w*h*2 ≤ EXT_SCREEN_RESERVE(1MB)`，**从未与宿主缓冲实际容量比较**。
+- 现象：这些路径按 `m->screen_w * m->screen_h` 逐像素把 ARM 侧屏幕拷回宿主 `mr_screenBuf`。宿主 `mr_screenBuf` 按 `skyengine_config` / `mr_screen_w * mr_screen_h` 分配，而 `m->screen_w/h` 可被 `hook_screen_dim_write` / `arm_ext_push_draw_screen_context`（约 5697）采纳为 guest 设定的逻辑画布尺寸。校验只有 `≤2048×2048` 和 `w*h*2 ≤ EXT_SCREEN_RESERVE(1MB)`，**从未与宿主缓冲实际容量比较**。
 - 触发场景：游戏把逻辑画布设得比宿主物理窗口大（如宿主 240×320、guest 480×320）时，回拷会越过宿主堆缓冲末尾 —— 这是真实游戏会遇到的正常行为，不是恶意构造。
 - 修复方向：回拷前用宿主缓冲真实容量（`mr_screen_w/mr_screen_h`）夹断拷贝行数/列数；或在采纳尺寸处同时校验宿主容量。
 
@@ -145,7 +145,7 @@
 
 ### M2. getenv 未缓存、无文档
 
-- 9 个 `VMRP_*` 开关（`VMRP_ARM_EXT_DIAG` 45 处、`VMRP_ARM_EXT_TRACE` 19 处、`VMRP_WATCH_*`、`VMRP_ARM_EXT_TRACE_PC`、`VMRP_ARM_EXT_TIMER_LIVENESS_DIAG`、`VMRP_ARM_EXT_SCREEN_DIAG`、`VMRP_MEMORY`），共 72 处 `getenv`，无集中文档。
+- 9 个 `VMRP_*` 开关（`VMRP_ARM_EXT_DIAG` 45 处、`VMRP_ARM_EXT_TRACE` 19 处、`VMRP_WATCH_*`、`VMRP_ARM_EXT_TRACE_PC`、`VMRP_ARM_EXT_TIMER_LIVENESS_DIAG`、`VMRP_ARM_EXT_SCREEN_DIAG`、`SKYENGINE_MEMORY`），共 72 处 `getenv`，无集中文档。
 - 热路径重复调用：`hook_table`（约 6329）、`hook_intr`（约 3003）每次进入都 `getenv`；单个 case 内多次调同一 env。watch 系列用了 `static int parsed = -1` 缓存，说明作者知道这个模式，只是未统一。可在 `arm_ext_load` 时一次性缓存进 `ArmExtModule`。
 
 ### M3. 魔法数字泛滥

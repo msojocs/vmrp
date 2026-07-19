@@ -31,7 +31,7 @@
 #endif
 
 #include "./include/bridge.h"
-#include "./include/fileLib.h"
+#include "./include/file_lib.h"
 #include "./include/native_text_widget.h"
 #include "./include/network.h"
 #include "./include/utils.h"
@@ -126,7 +126,7 @@ static BOOL CALLBACK native_audio_init_lock(PINIT_ONCE init_once, PVOID paramete
 }
 #endif
 
-/* dsm.h 在 VMRP 构建下只暴露平台函数表，不带 mrporting.h 里的声音枚举。
+/* 宿主侧 dsm.h 只暴露平台函数表，不带 mrporting.h 里的声音枚举。
  * 这里固定使用 mrc_base.h/mrporting.h 的 ABI 数值，保证 native 层解读一致。 */
 enum {
     NATIVE_SOUND_MIDI = 0,
@@ -146,15 +146,15 @@ static void native_log(char *msg) {
 
 static void native_exit(void) {
     puts("mythroad exit.");
-    vmrp_request_exit();
+    skyengine_request_exit();
 }
 
 static int32 native_mem_get(char **mem_base, uint32 *mem_len) {
     if (native_mem_base == NULL) {
-        /* 应用可见内存由 --memory/VMRP_MEMORY 配置(1M-16M),历史默认
+        /* 应用可见内存由 --memory/SKYENGINE_MEMORY 配置(1M-16M),历史默认
          * 4MB 改为跟随配置;非 EXT 应用(lua/mini mythroad)拿到的即为
          * 全部运行内存。 */
-        uint32 mem_size = vmrp_memory_bytes(vmrp_config.memory_mb);
+        uint32 mem_size = SKYENGINE_MEMORY_bytes(skyengine_config.memory_mb);
 #ifdef __linux__
 #ifdef __x86_64__
         native_mem_base = mmap(NULL, mem_size, PROT_READ | PROT_WRITE,
@@ -933,7 +933,7 @@ static int native_audio_play_midi(const void *data, uint32 dataLen, int32 loop) 
 static int32 native_playSound(int type, const void *data, uint32 dataLen, int32 loop) {
     /* Mythroad 传入的是完整内存音频流：gxdzc 的“是否开启音乐？”确认路径
      * 实测为 MR_SOUND_MIDI + 标准 SMF；MR_SOUND_PCM 按 mrc_base.h 标注处理为
-     * 8KHz/16bit/mono。Flutter 共享库通过 vmrp_api_audio_render_s16le()
+     * 8KHz/16bit/mono。Flutter 共享库通过 skyengine_api_audio_render_s16le()
      * 拉取统一的 44.1KHz/S16/stereo PCM，SDL 入口则用同一渲染器回调播放。 */
     switch (type) {
         case NATIVE_SOUND_MIDI:
@@ -1089,8 +1089,8 @@ static DSM_REQUIRE_FUNCS native_funcs = {
 
 DSM_REQUIRE_FUNCS *native_dsm_funcs_get(void) {
     native_uptime_base = (uint64_t)get_uptime_ms();
-    native_funcs.screen_width = vmrp_config.screen_width;
-    native_funcs.screen_height = vmrp_config.screen_height;
+    native_funcs.screen_width = skyengine_config.screen_width;
+    native_funcs.screen_height = skyengine_config.screen_height;
     return &native_funcs;
 }
 

@@ -16,7 +16,7 @@ download UI color `[0,4,0]`.
 
 ### Evidence
 
-The kept diagnostic run at `/tmp/vmrp-e2e-VlevcR` showed:
+The kept diagnostic run at `/tmp/skyengine-e2e-VlevcR` showed:
 
 - Startup still loads `game.ext` and the MTK platform graphics band correctly:
   `synced file=0x40018800 len=1048576`.
@@ -53,7 +53,7 @@ prevented the download UI from replacing the main menu.
 
 ### Verification
 
-- `cmake --build build --target vmrp -j2`
+- `cmake --build build --target skyengine -j2`
 - `pnpm vitest run test/e2e/gghjt/download-plugin.test.ts -t "下载付费插件 - 直接返回"`
 - `pnpm vitest run test/e2e/gwkdl/game-prepare.test.ts`
 

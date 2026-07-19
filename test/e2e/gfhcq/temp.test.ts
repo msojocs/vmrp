@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 import fs from "fs";
 import { readFile } from "fs/promises";
 
@@ -29,7 +29,7 @@ describe("gfhcq", () => {
     {
       await engine.delay(2_000);
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen('bgm-select')
         // rgb(248, 252, 248)
         expect(screen.pixel(256, 406)).toEqual([248, 252, 248])
@@ -39,7 +39,7 @@ describe("gfhcq", () => {
       // 不开启BGM
       await engine.key('RIGHT_SOFT', 1_000)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen('menu')
         // rgb(8, 8, 144)
         expect(screen.pixel(327, 583)).toEqual([8, 8, 144])

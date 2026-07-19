@@ -4,7 +4,7 @@
 
 ## 目标与约束
 
-- 复现命令：`build/vmrp build/mythroad/op6120.mrp --memory 4M`。
+- 复现命令：`build/skyengine build/mythroad/op6120.mrp --memory 4M`。
 - 预期：游戏完成加载并进入可交互界面；当前 4M 卡在进度画面，1M 正常。
 - 根因必须由 ARM 反汇编和运行现场共同证明，不能按应用名、包哈希或固定场景分支。
 - 不使用 Xvfb；只做有界日志、精确地址观察和 PPM/绘制计数验证。

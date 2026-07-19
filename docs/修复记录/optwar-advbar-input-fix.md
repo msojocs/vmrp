@@ -16,14 +16,14 @@
 ## 复现记录
 
 - 执行 `pnpm vitest run test/e2e/optwar/game-prepare.test.ts` 后失败：
-  - 失败点不是最终像素断言，而是 `await vmrp.key('RIGHT', 1_000)` 内部的 `WAIT_DRAW` 超时。
+  - 失败点不是最终像素断言，而是 `await skyengine.key('RIGHT', 1_000)` 内部的 `WAIT_DRAW` 超时。
   - E2E 返回：`ERR wait_draw_timeout current=22 target>22`。
 - 这说明 `RIGHT` 按键注入后没有产生任何新的 `guiDrawBitmap()`，菜单未切换，广告条也没有触发消隐重绘。
 - 下一步用手动 E2E socket 驱动保留 PPM 与日志，避免 Vitest `afterEach` 清理临时目录。
 
 ## 手动 E2E/PPM 记录
 
-- 诊断目录：`/tmp/vmrp-optwar-diag-Tmz6cA`。
+- 诊断目录：`/tmp/skyengine-optwar-diag-Tmz6cA`。
 - 环境只启用 `VMRP_ARM_EXT_DIAG=1`，未启用全量 trace。
 - 按键前 `DRAW_COUNT=22`，按 `KEY RIGHT` 并等待 1500ms 后仍为 `DRAW_COUNT=22`。
 - PPM 像素：
@@ -44,11 +44,11 @@
 ## 第一阶段修复验证
 
 - 已在 `arm_ext_should_accept_screen_write()` 进入 primary/wrapper 屏幕写入拒绝判断前，增加非模态空 cover 的 stale owner 清理。
-- 修复后 `cmake --build build --target vmrp` 通过。
+- 修复后 `cmake --build build --target skyengine` 通过。
 - 重新执行 `pnpm vitest run test/e2e/optwar/game-prepare.test.ts` 后，失败点从 `WAIT_DRAW` 超时推进到最终像素断言：
   - `(110,27)` 已经变化，说明顶部 advbar 区域可以被下层重绘覆盖；
   - `(10,41)` 未变化，说明方向键事件之后菜单切换仍未达到测试预期，或该采样点不能代表菜单切换。
-- 手动保留 PPM 的目录：`/tmp/vmrp-optwar-afterfix-5foXHm`。
+- 手动保留 PPM 的目录：`/tmp/skyengine-optwar-afterfix-5foXHm`。
   - `menu.ppm`：`(110,27)=[128,48,40]`，`(120,20)=[176,120,120]`，`(83,267)=[24,24,24]`，`(10,41)=[176,192,200]`。
   - `after-right.ppm`：`(110,27)=[128,152,168]`，`(120,20)=[128,152,168]`，`(83,267)=[24,24,24]`，`(10,41)=[176,192,200]`。
 - 下一步聚焦事件路由：确认 `code=1` 输入的 `MR_KEY_RIGHT/MR_KEY_LEFT` 是否经 wrapper 正确分发到 primary game，或是否仍被非模态 advbar 的前台分发元数据截留。
@@ -56,7 +56,7 @@
 ## 第二阶段事件路由诊断
 
 - 新增窄口径诊断点，只在 `VMRP_ARM_EXT_DIAG=1` 下打印 `code=1` 事件元组和 ARM helper 原始返回值，避免开启全量 trace。
-- 手动复现目录：`/tmp/vmrp-optwar-diag2-IyRthX`。
+- 手动复现目录：`/tmp/skyengine-optwar-diag2-IyRthX`。
 - 输入确认：
   - RIGHT press/release：`event=0,param0=15` 与 `event=1,param0=15`。
   - LEFT press/release：`event=0,param0=14` 与 `event=1,param0=14`。
@@ -77,7 +77,7 @@
 ## 用户澄清后的两次按键验证
 
 - 语义澄清：进入主菜单后第一次 `LEFT`/`RIGHT` 只关闭顶部 advbar，不切换菜单；第二次方向键才切换菜单。
-- 保留 PPM 目录：`/tmp/vmrp-optwar-tworight-HEaPUH`。
+- 保留 PPM 目录：`/tmp/skyengine-optwar-tworight-HEaPUH`。
 - 手动 E2E 结果：
   - `menu` draw count：36。
   - 第一次 `RIGHT` 后 draw count：51。
@@ -114,12 +114,12 @@
 
 ## 当前验证
 
-- `cmake --build build --target vmrp`：通过。
+- `cmake --build build --target skyengine`：通过。
 - `pnpm vitest run test/e2e/optwar/game-prepare.test.ts`：通过。
 - `pnpm vitest run test/e2e/dota/download-plugin.test.ts`：通过。
 - `pnpm vitest run test/e2e/opbzqe/game-prepare.test.ts`：通过。
 - `pnpm vitest run test/e2e/gxdzc-pixel.test.ts`：通过。
-- 当前 PPM 目录：`/tmp/vmrp-optwar-current-STwnT0`。
+- 当前 PPM 目录：`/tmp/skyengine-optwar-current-STwnT0`。
   - `menu -> right1`：只改变顶部广告条区域 `y=0..39` 共 9600 像素，菜单区 `y>=40` 无变化。
   - `right1 -> right2`：菜单区变化 296 像素，bbox `[96,263,142,273]`。
   - `(98,264)`：`menu=[0,252,0]`，`right1=[0,252,0]`，`right2=[128,128,128]`。

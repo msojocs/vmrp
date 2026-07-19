@@ -51,7 +51,7 @@ typedef struct ArmExtHostIface {
    (或在 iface 上放互斥)——这是唯一有真实并发语义的项,放最后。
 4. 单测:unit_stubs 提供第二个 iface 实例,验证两个 ArmExtModule 并存
    (make_module ×2 分配互不干扰)。
-5. wasm/共享库入口暴露多实例 API(与 vmrp_api.c 协调,另行设计)。
+5. wasm/共享库入口暴露多实例 API(与 skyengine_api.c 协调,另行设计)。
 
 ## 风险
 

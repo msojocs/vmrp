@@ -14,9 +14,9 @@ endfunction()
 if(MSVC)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /J /W3 /utf-8")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /J /W3 /utf-8")
-  add_definitions(-DVMRP -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE -DWIN32_LEAN_AND_MEAN)
+  add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE -DWIN32_LEAN_AND_MEAN)
 else()
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall -DVMRP -funsigned-char")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall -funsigned-char")
 endif()
 
 option(SKYENGINE_BUILD_SHARED "Build libskyengine shared library (no SDL)" OFF)
@@ -231,7 +231,7 @@ set(SKYENGINE_CORE_SOURCES
   ./src/utils.c
   ./src/rbtree.c
   ./src/network.c
-  ./src/fileLib.c
+  ./src/file_lib.c
 )
 
 set(SKYENGINE_PLATFORM_SDL_SOURCES
@@ -284,12 +284,6 @@ set(SKYENGINE_MYTHROAD_SOURCES
   ./src/mythroad/src/lib/mr_tablib.c
   ./src/mythroad/src/lib/mr_tcp_target.c
 )
-if(MSVC)
-  set(SKYENGINE_UNDEFINE_VMRP_OPTION "/UVMRP")
-else()
-  set(SKYENGINE_UNDEFINE_VMRP_OPTION "-UVMRP")
-endif()
-set_source_files_properties(${SKYENGINE_MYTHROAD_SOURCES} PROPERTIES COMPILE_OPTIONS "${SKYENGINE_UNDEFINE_VMRP_OPTION}")
 
 # ARM EXT 执行器源码组(Phase 2 拆分中,见 docs/arm-ext-executor-refactor-plan.md
 # 第五节):从单文件 arm_ext_executor.c 逐步抽取到 src/arm_ext/ 子目录,三个
@@ -466,7 +460,7 @@ if(EMCC)
     OUTPUT ${SKYENGINE_WASM_OUTPUT}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${SKYENGINE_WASM_OUTPUT_DIR}
     COMMAND ${EMCC} -Os -Wall
-      -DVMRP -DVMRP_SDL_AUDIO
+      -DVMRP_SDL_AUDIO
       -DTARGET_MOD -DMTK_MOD -DMR_PLAT_DRAWTEXT -DDSM_FULL -DTRUST_BINARIES
       -funsigned-char
       -I${CMAKE_CURRENT_SOURCE_DIR}/wasm/unicorn

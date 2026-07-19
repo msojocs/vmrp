@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-**已修复（2026-06-16）。** `build/vmrp mythroad/dota.mrp` 及 `test/dota/hp.sh` 的花屏（开机角落 15×15 花屏块 + 点击后整屏 RGB 噪声带）全部消失，输出与回归前基线(9d24757)逐像素一致。
+**已修复（2026-06-16）。** `build/skyengine mythroad/dota.mrp` 及 `test/dota/hp.sh` 的花屏（开机角落 15×15 花屏块 + 点击后整屏 RGB 噪声带）全部消失，输出与回归前基线(9d24757)逐像素一致。
 
 ## 根因（最终定位）
 - **回归提交**：`ffe4cf4 "fix: 有游戏启动报错"`（git bisect，good=9d24757 bad=2f4efa6，判据=开机"开启声音?"屏角落 softkey 色彩多样性）。它把 `table[131]` (mr_cacheSync) 的 staging 路径从「整段覆盖+word[0]=EXT_TABLE_ADDR」改成「跳过前 8 字节、保留 wrapper 写的 module record/P」(`internal_loader_staging` 分支)，本意修 gxdzc/dsm_gm 的"请稍候"卡死。
@@ -20,4 +20,4 @@ metadata:
 - 只还原 record[125]：dota 干净 + gxdzc 仍 416（5/5）+ dsm_gm start-app 仍加载，mpc/nes/mrpinfo 零崩溃。
 
 ## 验证方法（headless）
-`VMRP_NO_MOUSE=1 VMRP_PPM=1 [VMRP_AUTO_CLICKS=...] timeout N build/vmrp mythroad/dota.mrp`，读 `/tmp/vmrp_screen.ppm`。判据：开机屏角落 18×18 区 distinct 色 <12=干净；hp.sh 全屏与 9d24757 基线 `pixdiff=0`。gxdzc 成功=点击流后 nonblack≈416("是否开启音乐?")。相关 [[app-compat-generalization]]。
+`VMRP_NO_MOUSE=1 VMRP_PPM=1 [VMRP_AUTO_CLICKS=...] timeout N build/skyengine mythroad/dota.mrp`，读 `/tmp/skyengine_screen.ppm`。判据：开机屏角落 18×18 区 distinct 色 <12=干净；hp.sh 全屏与 9d24757 基线 `pixdiff=0`。gxdzc 成功=点击流后 nonblack≈416("是否开启音乐?")。相关 [[app-compat-generalization]]。

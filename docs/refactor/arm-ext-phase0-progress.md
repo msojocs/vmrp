@@ -9,12 +9,12 @@
   只作用于 src/ 外层第一方源码;mythroad 子项目与 third_party 不受影响)和
   `VMRP_WERROR`(默认 OFF,冒烟验证可零错误通过)。
 - 存量 63 条告警全部清零(均为行为不变修复):
-  - `()`→`(void)` 原型补全:skyengine.h/bridge.h/dsm.h/main.c/vmrp.c/utils.c/network.c;
+  - `()`→`(void)` 原型补全:skyengine.h/bridge.h/dsm.h/main.c/skyengine.c/utils.c/network.c;
   - 未用参数 `(void)` 标注(SDL/bridge/Unicorn ABI 固定签名);
   - shadow 变量重命名(executor split_lo/hi、tail_lo/hi);
   - 符号比较显式转换(fileLib、executor 7197 位模式等价比较);
   - main.c 编辑框 fallthrough 加规范注释;
-  - 死代码删除:utils.c `vmrp_wstrlen`(未引用)、executor case 46 的
+  - 死代码删除:utils.c `skyengine_wstrlen`(未引用)、executor case 46 的
     "ret<0 查 MRP 缓存"回退块(`ret` 为 uint32,-Wtype-limits 证实恒不成立,
     删除即保持现行为,且符合"禁止兜底"规范);
   - network.c guest 地址截断显式化 `(uint32_t)(uintptr_t)`。
@@ -47,7 +47,7 @@
 
 - `test/unit/test_arm_ext.c`:直接 `#include` executor 翻译单元测 static 函数;
   `unit_stubs.c` 提供"一触即 abort"的 mythroad/bridge 桩(意外触达=大声失败)。
-- CMake `vmrp-unit` 目标 + ctest 注册。
+- CMake `skyengine-unit` 目标 + ctest 注册。
 - 覆盖:`arm_alloc`(对齐/保留区跳过/容量/B3 溢出回归)、
   `arm_ext_compact_heap_cut_range`(中部拆分/裁头/裁尾/整段摘除/无重叠 5 拓扑,
   含 free_bytes 记账)、`arm_ext_guest_memcpy/strncpy`(重叠语义)、
@@ -77,7 +77,7 @@
 
 - 普通构建全量 e2e:16 文件 / 27 用例全绿(含全部今日改动)。
 - `VMRP_WERROR=ON` 冒烟构建零错误。
-- vmrp-unit 47 checks 全过。
+- skyengine-unit 47 checks 全过。
 - sanitizer 报告 0 条;时序性失败的串行复跑结果见附注。
 
 ## 遗留 / 移交 Phase 1

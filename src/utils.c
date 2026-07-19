@@ -7,13 +7,13 @@
 #endif
 #include <time.h>
 
-#include "./include/fileLib.h"
+#include "./include/file_lib.h"
 #include "./include/skyengine.h"
 
 void printScreen(char *filename, uint16_t *buf) {
     /* buf 为全屏缓冲,LCD 旋转后其几何即显示尺寸(rotation==0 时同面板) */
-    int w = vmrp_display_width();
-    int h = vmrp_display_height();
+    int w = skyengine_display_width();
+    int h = skyengine_display_height();
     uint32_t pixel_bytes = (uint32_t)(w * h * 2);
     uint32_t file_size = 70 + pixel_bytes;
     int32_t neg_h = -h;
@@ -199,10 +199,10 @@ int32_t getDatetime(mr_datetime *datetime) {
 
     /* Emulate a configurable handset RTC date while retaining a live clock.
      * device_year == 0 is the explicit host-wall-clock mode. */
-    if (vmrp_config.device_year > 0) {
-        datetime->year = vmrp_config.device_year;
-        datetime->month = vmrp_config.device_month;
-        datetime->day = vmrp_config.device_day;
+    if (skyengine_config.device_year > 0) {
+        datetime->year = skyengine_config.device_year;
+        datetime->month = skyengine_config.device_month;
+        datetime->day = skyengine_config.device_day;
     } else {
         datetime->year = t->tm_year + 1900;
         datetime->month = t->tm_mon + 1;

@@ -35,9 +35,9 @@ int32_t my_opendir(const char *name);
 char *my_readdir(int32_t f);
 int32_t my_closedir(int32_t f);
 
-FILE *vmrp_host_fopen(const char *filename, const char *mode);
-int32_t vmrp_host_chdir(const char *name);
+FILE *skyengine_host_fopen(const char *filename, const char *mode);
+int32_t skyengine_host_chdir(const char *name);
 
-void vmrp_writeFile(const char *filename, void *data, uint32 length);
-char *readFile(const char *filename);
+void skyengine_writeFile(const char *filename, void *data, uint32 length);
+char *skyengine_readFile(const char *filename);
 #endif

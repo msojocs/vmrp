@@ -14,7 +14,7 @@
   - `LEFT_SOFT` 发送后固定等待 `1s`；
   - 截屏验证仍停留在付费确认 UI 的颜色点 `[248, 80, 0]`；
   - 随后固定等待 `5s`，没有在测试里等待“付费成功”文本或成功画面。
-- `test/e2e/vmrp-e2e.ts` 中：
+- `test/e2e/skyengine-e2e.ts` 中：
   - `key()` 会先读 `DRAW_COUNT`，发送 `KEY`，再调用 `WAIT_DRAW previous timeoutMs`；
   - 当前 gms 用例大多数 `key(..., 1000)` 最多只等下一帧 1 秒；
   - `delay()` 是纯 sleep，不检查状态；
@@ -39,7 +39,7 @@
 
 ## 2026-06-26 子 Agent 只读结论
 
-- e2e 层确认：`vmrp.key(name, 1000)` 展开为 `DRAW_COUNT -> KEY -> WAIT_DRAW previous 1000`。
+- e2e 层确认：`skyengine.key(name, 1000)` 展开为 `DRAW_COUNT -> KEY -> WAIT_DRAW previous 1000`。
 - `KEY` 控制线程默认 `SDL_KEYDOWN -> SDL_Delay(500ms) -> SDL_KEYUP`，默认保持时间来自 `VMRP_E2E_HOLD_MS`。
 - `WAIT_DRAW` 只等任意一次 `guiDrawBitmap()`，不是等“付费成功”。
 - `SCREEN` 需要回主线程 dump PPM，因此若主线程被 ARM/timer 处理占住，截图命令本身可能等待，但它也不是成功条件。
@@ -99,7 +99,7 @@
 - 临时启用 `VMRP_SMS_DIAG=1`，只观察 `table[59]` 以及 `table[139]/[140]` 两个 4 字节槽，不启用全量 `VMRP_ARM_EXT_TRACE`。
 - 命令：`env VMRP_E2E_KEEP_TMP=1 VMRP_SMS_DIAG=1 pnpm vitest run test/e2e/gms/game-prepare.test.ts`
 - 结果：通过，Vitest 报告测试耗时约 `62.61s`，未明显被诊断拖慢。
-- 保留临时目录：`/tmp/vmrp-e2e-mcwvqE`。
+- 保留临时目录：`/tmp/skyengine-e2e-mcwvqE`。
 - 关键日志：
   - `Chn -- 0 Cost -- 20 Mcc -- 460`
   - `SMS_DIAG table[59] pre lr=0xE9A3F4 num=10668001 encode=24 flagSlot=0x200060 flag=0 valSlot=0x200064 val=0`
@@ -140,7 +140,7 @@
   - 在下一次 timer 安全点投递 `mr_event(MR_SMS_RESULT, MR_SUCCESS, 0)`，避免在 `table[59]` 调用栈内重入 ARM EXT。
 - 运行命令：
   - `env VMRP_E2E_KEEP_TMP=1 VMRP_SMS_RESULT_EXPERIMENT=1 VMRP_SMS_DIAG=1 pnpm vitest run test/e2e/gms/payment-latency-probe.test.ts`
-- 保留临时目录：`/tmp/vmrp-e2e-5wCnX9`。
+- 保留临时目录：`/tmp/skyengine-e2e-5wCnX9`。
 - stdout 证明 result 事件已经实际投递：
   - `SMS_DIAG table[59] pre lr=0xE9A3F4 num=10668001 encode=24 ...`
   - `mr_sendSms(10668001)`
@@ -193,7 +193,7 @@
 
 - 临时探针只把测试作为自动点击入口：到确认付费后继续观察 `90s`。
 - 命令：`env VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gms/payment-long-probe.test.ts`
-- 结果：通过，临时目录最新为 `/tmp/vmrp-e2e-*`，该探针运行约 `147s`。
+- 结果：通过，临时目录最新为 `/tmp/skyengine-e2e-*`，该探针运行约 `147s`。
 - 关键采样：
   - 确认前：`t=55996ms`，`draw=904`，hash `e6dc2f196b44`，像素 `[248,80,0]`。
   - 确认后 `1s`：`t=57507ms`，`draw=929`，hash `f36a187e1797`，像素 `[248,80,0]`。
@@ -210,7 +210,7 @@
 - 为避免全量 trace，只临时加了环境变量控制的 PC watch，观察已知支付 PC 和少量状态槽。该诊断包含 `base = r9 + 0xE24` 的 gms 状态偏移假设，采集完成后已从 `src/arm_ext_executor.c` 移除，不作为通用产品逻辑保留。
 - 命令：
   - `env VMRP_E2E_KEEP_TMP=1 VMRP_ARM_EXT_WATCH_PC='0xEA207C,0xEA8044,0xEA8124,0xEA8378,0xEA8400,0xEA8584,0xE9A3F4,0xEA5C5C,0xEA4238' pnpm vitest run test/e2e/gms/payment-long-probe.test.ts`
-- 结果：通过，临时目录 `/tmp/vmrp-e2e-OSMe5z`，stdout 只有 `576` 行，没有打开全量 trace。
+- 结果：通过，临时目录 `/tmp/skyengine-e2e-OSMe5z`，stdout 只有 `576` 行，没有打开全量 trace。
 - PC 命中计数：
   - `0xEA4238`: `70`
   - `0xEA8378`: `70`
@@ -259,7 +259,7 @@
 
 ## 2026-06-26 PPM 复核
 
-- 从 `/tmp/vmrp-e2e-OSMe5z` 保留的 PPM 文件重算 hash，关键像素均为 `[248,80,0]`：
+- 从 `/tmp/skyengine-e2e-OSMe5z` 保留的 PPM 文件重算 hash，关键像素均为 `[248,80,0]`：
 
 | 时间点 | PPM hash 前缀 | `pixel(61,119)` |
 | --- | --- | --- |

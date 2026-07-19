@@ -14,14 +14,14 @@
 
 ## 待验证
 
-- 目标用例的真实崩溃 PC、寄存器、最近文件访问和 `/tmp/vmrp_crash.bin` 内容。
+- 目标用例的真实崩溃 PC、寄存器、最近文件访问和 `/tmp/skyengine_crash.bin` 内容。
 - 下载后实际落盘的插件名与启动路径是否一致。
 - 崩溃是否来自通用 ARM EXT wrapper/桥接布局、文件映射或插件生命周期，而不是 DOTA 特定逻辑。
 
 ## 2026-06-27 复现与初步定位
 
 - `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功" --reporter=verbose` 当前失败点是测试内 TODO throw，但 stdout 已记录 ARM EXT 异常，说明进程未直接退出不等于浏览器插件启动成功。
-- 保留目录：`/tmp/vmrp-e2e-j6Fok9`、`/tmp/vmrp-e2e-6y04fc`。
+- 保留目录：`/tmp/skyengine-e2e-j6Fok9`、`/tmp/skyengine-e2e-6y04fc`。
 - 下载结果画面有效：`download-result.ppm` 为 `240x320`，`unique=6`，断言点 `(152,146)=[0,252,0]`。
 - 启动后截图异常：`start-browser.ppm` 基本黑屏，`unique=2`，`nonblack=253`；`screen.ppm` 后续虽有非黑像素，但目标启动阶段已经记录异常。
 - `Harvey` 子 Agent 只读结论：
@@ -34,7 +34,7 @@
   - `UC_MEM_WRITE_UNMAPPED addr=0x202C7831 size=4 value=0x0`
   - `crash PC=0x2C97FC (thumb)`
   - `R4=0x202C7831`，`R9=0x002C9FAC`，`LR=0x002C93F1`
-  - 反汇编命令：`arm-none-eabi-objdump -D -b binary -m arm -M force-thumb --adjust-vma=0x2C96FC /tmp/vmrp_crash.bin`
+  - 反汇编命令：`arm-none-eabi-objdump -D -b binary -m arm -M force-thumb --adjust-vma=0x2C96FC /tmp/skyengine_crash.bin`
   - PC 附近指令：
     - `0x2C97F8: bl 0x2C93E0`
     - `0x2C97FC: str r0, [r4, #0]`
@@ -48,7 +48,7 @@
 
 - 崩溃阶段修复后，目标用例继续失败在浏览器启动画面低色数断言：
   `expected 3 to be greater than 4`。
-- 关键运行时证据来自 `/tmp/vmrp-e2e-BHFHIz/stdout.log`：
+- 关键运行时证据来自 `/tmp/skyengine-e2e-BHFHIz/stdout.log`：
   - DSM 下载流先发布完整 MRPG：`len=21538 path="mythroad/vld/7530410/753041.t"`。
   - 随后重命名到安装路径：`mythroad/plugins/embrw.mrp`。
   - 安装包内包含 `brw.ext`、`frame.ext`、`logo.bmp`、`progress.bmp`、`font.uni` 等条目；磁盘条目为 gzip 压缩，loader 暂存的子模块是解压后的 payload。
@@ -62,17 +62,17 @@
   - 对已安装 DSM MRP，遍历索引式和顺序式 payload；若条目为 gzip，则解压后再与 staged child 比较。匹配成功后把子模块 owner 提升为 host-openable `mythroad/plugins/embrw.mrp`，后续空 `table[100]` 的资源读取通过该 host 包解析。RAM-package 辅助证明也必须同时满足“同一 encoded payload 存在于已安装 MRP”且“该 payload 解码后匹配 staged child”，不能只靠共享资源命中。
   - 修复没有按应用名或文件名分支；边界是 DSM 文件写入 provenance 和通用 MRP payload 字节证明。
 - 修复后诊断验证：
-  - `/tmp/vmrp-e2e-IRIipF/stdout.log` 中 `package_host candidate ... lastPath="mythroad/plugins/embrw.mrp" lastLen=21538 direct=1 ... match=1`。
+  - `/tmp/skyengine-e2e-IRIipF/stdout.log` 中 `package_host candidate ... lastPath="mythroad/plugins/embrw.mrp" lastLen=21538 direct=1 ... match=1`。
   - `logo.bmp`、`progress.bmp`、`focus.bmp`、`no_focus.bmp`、`font.uni` 资源读均为 `ok=1`。
 - 最终验证命令：
-  - `cmake --build build --target vmrp -j2`
+  - `cmake --build build --target skyengine -j2`
   - `VMRP_E2E_KEEP_TMP=1 VMRP_ARM_EXT_DIAG=1 pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功" --reporter=verbose`
   - `pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功"`
 
 ## 2026-06-27 simpleDownload 最后 60 秒复查
 
 - 新任务：分析 `pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功"` 最后 `60s` 内发起 `simpleDownload` 的触发条件；不跑 `xvfb`，避免全量 trace，继续用 stdout/PPM/反汇编证据。
-- 当前工作树已有前序修复形态，不能直接采信旧 wiki 结论；本轮以新保留目录 `/tmp/vmrp-e2e-GLjzVe` 为准。
+- 当前工作树已有前序修复形态，不能直接采信旧 wiki 结论；本轮以新保留目录 `/tmp/skyengine-e2e-GLjzVe` 为准。
 - 目标用例通过：`VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功" --reporter=verbose`，耗时约 `83s`。
 - 低噪声 stdout 证据：
   - 启动早期先有一次 `cmwap` 请求 `POST /payOneAsTlv` 到 `rop.skymobiapp.com:80`。
@@ -87,7 +87,7 @@
   - 本轮测试后运行时 `mythroad/plugins` 只有 `embrw.mrp` 与 `netpay.mrp`；`brwmain.mrp`、`brwcore.mrp`、`brwshell.mrp` 等浏览器下级插件只存在于 `build/mythroad/plugins`，没有被测试工作目录预置。
   - `embrw.mrp` 内部只含 `brw.ext`、`frame.ext`、`logo.bmp`、`progress.bmp`、`font.uni`、焦点位图；`frame.ext` 字符串包含 `brw/vercfg.bin`、`brw/upd/vercfg.bin`、`brw/brw2.cfg`、`CMWAP`、`CMNET`、`plugins/embrw.mrp`。这支持一个候选解释：最后 `60s` 的左软键是在已启动的 `frame.ext` 浏览器壳中确认继续/更新，因下级浏览器包或版本配置缺失而再次进入下载服务。
 - 当前 x86_64 反汇编核验：
-  - `build/vmrp` 中 `my_initNetwork` 位于 `0x22010`，对 `mode` 做 `strncasecmp("cmwap", mode, 5)`，每次覆盖全局 `isCMWAP`。
+  - `build/skyengine` 中 `my_initNetwork` 位于 `0x22010`，对 `mode` 做 `strncasecmp("cmwap", mode, 5)`，每次覆盖全局 `isCMWAP`。
   - `my_socket` 位于 `0x21df0`，创建 socket 时把当前 `isCMWAP` 复制到 `mSocket+0x10`。
   - `my_connectAsync` 位于 `0x21c50`，真实连接结果写到 `realState`，再按 `mSocket+0x10` 决定是否同步 guest 可见 `state`。
   - `my_getSocketState` 位于 `0x21da0`，返回 `mSocket+0x0c`；本轮日志的 `my_getSocketState(3): 0` 证明 CMNET 阶段没有复现旧的 `MR_WAITING` 状态污染。
@@ -95,8 +95,8 @@
 ## 2026-06-27 simpleDownload 触发条件结论
 
 - 复现稳定：
-  - `/tmp/vmrp-e2e-GLjzVe/stdout.log` 和 `/tmp/vmrp-e2e-aj82ck/stdout.log` 均显示最后 `60s` 窗口内有第二次 `POST /simpleDownload`。
-  - `strace -f -s 4096 -e trace=connect,sendto,recvfrom -o /tmp/vmrp-dota-simpledownload-sendto.strace ...` 再次复现通过，系统调用级证据显示第二次请求在测试第 180 行 `LEFT_SOFT` 后出现。
+  - `/tmp/skyengine-e2e-GLjzVe/stdout.log` 和 `/tmp/skyengine-e2e-aj82ck/stdout.log` 均显示最后 `60s` 窗口内有第二次 `POST /simpleDownload`。
+  - `strace -f -s 4096 -e trace=connect,sendto,recvfrom -o /tmp/skyengine-dota-simpledownload-sendto.strace ...` 再次复现通过，系统调用级证据显示第二次请求在测试第 180 行 `LEFT_SOFT` 后出现。
 - 触发条件：
   - 前提一：测试开头删除运行时 `mythroad/plugins/embrw.mrp`，DOTA 进入“下载浏览器插件”界面。
   - 前提二：第 158 行 `LEFT_SOFT` 下载并安装 `embrw.mrp`，第一次 `/simpleDownload` 的 TLV `0x29CE=480004 (0x75304)`，与 `build/mythroad/plugins/embrw.mrp` 的 appid 一致，返回 `200 OK`。
@@ -108,8 +108,8 @@
   - 第二次日志有 `[my_send] cmwap off.`，因此 `Host: spd.skymobiapp.com:6009` 不会被平台用于重连。
   - `connect('159.75.119.124', 80)` 是 guest/plugin 传入的平台参数；`Host: ...:6009` 是 guest/plugin 随后构造的 HTTP 头。当前证据不支持“VMRP 把 6009 改成 80”的平台 BUG。
 - 反汇编证据：
-  - `/tmp/vmrp-embrw-extract/frame.ext` 中 `CMWAP` 位于文件偏移 `0x24f0`，`CMNET` 位于 `0x24f8`。
-  - `arm-none-eabi-objdump -D -b binary -m arm -M force-thumb --adjust-vma=0x2c8000 /tmp/vmrp-embrw-extract/frame.ext` 显示 `0x2c9200` 函数根据 `r0 == 1` 选择 `CMWAP`，否则选择 `CMNET`，再进入网络初始化/连接路径。
+  - `/tmp/skyengine-embrw-extract/frame.ext` 中 `CMWAP` 位于文件偏移 `0x24f0`，`CMNET` 位于 `0x24f8`。
+  - `arm-none-eabi-objdump -D -b binary -m arm -M force-thumb --adjust-vma=0x2c8000 /tmp/skyengine-embrw-extract/frame.ext` 显示 `0x2c9200` 函数根据 `r0 == 1` 选择 `CMWAP`，否则选择 `CMNET`，再进入网络初始化/连接路径。
   - `frame.ext` 字符串还包含 `brw/vercfg.bin`、`brw/upd/vercfg.bin`、`brw/wvercfg.bin`、`brw/brw2.cfg`、`plugins/embrw.mrp`；这些配置/组件在运行时目录缺失，支持“浏览器壳启动后进入更新/下载检查”的解释。
 - 更具体的按键触发反汇编：
   - `src/e2e_control.c` 把 `LEFT_SOFT` 映射为 `SDLK_EQUALS`；`src/main.c` 再把 `SDLK_EQUALS` 送成 `MR_KEY_SOFTLEFT`。`src/include/types.h` 中 `MR_KEY_SOFTLEFT` 的枚举值为 `17`，`MR_KEY_SELECT` 为 `20`。
@@ -120,7 +120,7 @@
   - `0x2c9200` 之后调用疑似 `initNetwork(APN)` 包装的 `0x2c9a48`。若返回 `2`，`0x2c9232..0x2c9242` 使用 `0x4e20`（`20000ms`）注册重试回调；该回调落在 `0x2c84d0` 附近，会再次调用 `0x2c9260` 和 `0x2c9200`。这解释了左软键后观察窗口内出现 CMNET 初始化和后续下载请求。
   - 因此“第 180 行左软键触发”不只是测试时序判断：`frame.ext` 内部确有左软键/确认键分支直接调用网络模式选择函数。尚未静态定位到 `simpleDownload` 字符串或 appid `700015` 的构造函数，因为这些字符串不在 `frame.ext`/`brw.ext` 明文中；`700015` 的具体资源身份仍按运行时 TLV 证据归为中置信推断。
 - PPM/可见状态：
-  - `/tmp/vmrp-e2e-7SRio9/start-browser.ppm` 为 `240x320`，不是黑屏；前序断言 `uniqueColorCount() > 4` 已通过。
+  - `/tmp/skyengine-e2e-7SRio9/start-browser.ppm` 为 `240x320`，不是黑屏；前序断言 `uniqueColorCount() > 4` 已通过。
   - 最终 `screen.ppm` 也有大量非黑像素；当前问题是网络业务触发条件，不是浏览器插件启动崩溃或空画面。
 - 结论：
   - 最后 `60s` 发起 `simpleDownload` 的直接触发条件是“浏览器插件启动后在 `frame.ext` 界面再次按左软键”；更完整的条件是运行时只安装了外层 `embrw.mrp`，下级浏览器组件/配置缺失，`frame.ext` 在左软键确认后走 `CMNET` 更新/下载路径，请求 appid `700015`。
@@ -129,24 +129,24 @@
 ### 2026-06-27 17:16 当前状态复验
 
 - 复验命令：`VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功" --reporter=verbose`，结果 `1 passed | 1 skipped`，目标用例耗时 `83299ms`。
-- 新保留目录：`/tmp/vmrp-e2e-i2ymhU`。
+- 新保留目录：`/tmp/skyengine-e2e-i2ymhU`。
 - 新 stdout 与前述结论一致：
   - 第一次 `/simpleDownload`：`my_initNetwork(..., 'cmwap')`，`my_connect('159.75.119.124', 6009)`，`POST /simpleDownload`，返回 `HTTP/1.1 200 OK`。
   - 最后 `60s` 窗口内第二次 `/simpleDownload`：`my_initNetwork(..., 'CMNET')`，`my_getHostByName('spd.skymobiapp.com')`，`my_connect('159.75.119.124', 80)`，`my_getSocketState(3): 0`，`[my_send] cmwap off.`，`POST /simpleDownload`，`Host: spd.skymobiapp.com:6009`，返回 `HTTP/1.1 404 Not Found`。
-- PPM 检查：`/tmp/vmrp-e2e-i2ymhU/start-browser.ppm` 与 `screen.ppm` 均为 `240x320` raw pixmap；去除 PPM 头后分别有 `34708` 与 `39880` 个非零字节，证明不是黑屏路径。
+- PPM 检查：`/tmp/skyengine-e2e-i2ymhU/start-browser.ppm` 与 `screen.ppm` 均为 `240x320` raw pixmap；去除 PPM 头后分别有 `34708` 与 `39880` 个非零字节，证明不是黑屏路径。
 
 ### 2026-06-27 19:52 当前状态重新复现
 
 - 复现命令：`VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功" --reporter=verbose`。
 - 当前失败点不是测试内 TODO throw，而是第 180 行再次按 `LEFT_SOFT` 后 `VmrpE2e.key()` 等待新绘制超时：`ERR wait_draw_timeout current=160 target>160`。
-- 保留目录：`/tmp/vmrp-e2e-w6QYxK`。
+- 保留目录：`/tmp/skyengine-e2e-w6QYxK`。
 - stdout 证据：
   - 第一次 `/simpleDownload` 仍是下载外层 `embrw.mrp`，返回 `HTTP/1.1 200 OK`。
   - 浏览器启动后第二次 `/simpleDownload` 改为返回 `HTTP/1.1 200 OK`，不再是旧记录里的 404。
   - 第二次返回后立即出现 ARM EXT 异常：`UC_MEM_READ_UNMAPPED addr=0x75747879 size=4`，`crash PC=0x2CF5CA (thumb)`，`last_file=0x4134E0..0x4136C0`。
   - 寄存器：`R4=0x75747869`，`R9=0x002C7784`，`LR=0x002CF5CB`，`PC=0x002CF5CA`。
 - 反汇编证据：
-  - 命令：`arm-none-eabi-objdump -D -b binary -m arm -M force-thumb --adjust-vma=0x2CF4CA /tmp/vmrp_crash.bin`。
+  - 命令：`arm-none-eabi-objdump -D -b binary -m arm -M force-thumb --adjust-vma=0x2CF4CA /tmp/skyengine_crash.bin`。
   - `0x2CF5A4` 函数是 12 字节节点的链表插入/注册逻辑；`0x2CF5CA: ldr r0, [r4, #16]` 读取链表头字段。
   - `R4=0x75747869` 不是有效 ARM 内存指针，`R4+0x10=0x75747879` 导致崩溃；该值像文本/数据字节被当成结构指针传入。
 - 新运行时文件状态：
@@ -159,7 +159,7 @@
 ### 2026-06-27 19:55 DIAG 复现
 
 - 复现命令：`VMRP_E2E_KEEP_TMP=1 VMRP_ARM_EXT_DIAG=1 pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功" --reporter=verbose`。
-- 结果同样失败于 `ERR wait_draw_timeout current=160 target>160`；保留目录：`/tmp/vmrp-e2e-8mM4I4`。
+- 结果同样失败于 `ERR wait_draw_timeout current=160 target>160`；保留目录：`/tmp/skyengine-e2e-8mM4I4`。
 - 关键差异：
   - 第二次 `/simpleDownload` 的 700015 配置返回 `HTTP/1.1 200 OK` 后，连续同步四个浏览器组件：
     - `file=0x2CF110 len=22884 ... rw=0x2C7784`
@@ -191,8 +191,8 @@
   - 对需要短包名 ABI 的 child，根据已记录的 package provenance 生成 ARM 可见短 alias，例如 `mythroad/plugins/embrw.mrp`；如果 root-relative 或 basename 仍超过 32 字节 fixed-buffer 上限，则分配 `~pN` 合成 alias，并在 executor 内维护 alias->host package 映射供 I/O 解析。
   - host 侧 table[125] 仍通过已证明的 package owner 做 I/O 解析；没有在 table[125] 做坏指针兜底或吞异常。
 - 复验：
-  - `cmake --build build --target vmrp -j2` 通过。
+  - `cmake --build build --target skyengine -j2` 通过。
   - `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/dota/download-plugin.test.ts -t "下载浏览器插件 - 成功" --reporter=verbose` 通过：`1 passed | 1 skipped`，目标用例耗时 `83429ms`。
-  - 成功保留目录 `/tmp/vmrp-e2e-GSqFvj`：stdout/stderr 无 `invalid memory`、`UC_MEM`、`UC_ERR`、`2CF5CA`、`757478`、`2C9844` 或 `pc bytes`。
+  - 成功保留目录 `/tmp/skyengine-e2e-GSqFvj`：stdout/stderr 无 `invalid memory`、`UC_MEM`、`UC_ERR`、`2CF5CA`、`757478`、`2C9844` 或 `pc bytes`。
   - PPM：`start-browser.ppm` 为 `240x320`、`27` 色、`nonzero=222900`；`browser-running.ppm` 为 `240x320`、`24` 色、`nonzero=223287`、`pixel(152,146)=(240,240,240)`；最终 `screen.ppm` 为 `2954` 色。
   - 目标用例最终断言记录第 180 行再次 `LEFT_SOFT` 前的 `drawCount`，60 秒后要求 `drawCount` 增长，并保存/检查 `browser-running.ppm`，避免只用旧帧证明存活。

@@ -5,7 +5,7 @@
 运行 `test/dsm_gm/start-app.sh`，从 DSM 应用列表选择应用并点击"启动应用"后，
 界面一直停在"请稍候..."状态，应用无法加载。
 
-直接启动 MRP（如 `build/vmrp mythroad/gxdzc.mrp`）也有同样问题——黑屏。
+直接启动 MRP（如 `build/skyengine mythroad/gxdzc.mrp`）也有同样问题——黑屏。
 
 ## 排查思路
 
@@ -16,7 +16,7 @@
 ```bash
 export VMRP_AUTO_CLICKS="0,0,1000;75,176,500;75,176,500;59,58,500;59,58,500"
 export VMRP_PPM=1
-timeout 25 build/vmrp > stdout.log 2> stderr.log
+timeout 25 build/skyengine > stdout.log 2> stderr.log
 ```
 
 通过 `grep "CLICK" stdout.log` 确认 5 个点击全部触发。PPM 截屏确认界面停在
@@ -112,24 +112,24 @@ if (r1 == 9 && internal_loader_staging &&
 # 1. 从 DSM 应用列表启动（原始问题场景）
 export VMRP_AUTO_CLICKS="0,0,1000;75,176,500;75,176,500;59,58,500;59,58,500"
 export VMRP_PPM=1
-timeout 20 build/vmrp
+timeout 20 build/skyengine
 # 截屏应显示"是否开启音乐?"而非"请稍候..."
 
 # 2. 直接启动 gxdzc
 export VMRP_AUTO_CLICKS="0,0,500;228,309,500;76,291,500;123,291,500"
 export VMRP_PPM=1
-timeout 20 build/vmrp mythroad/gxdzc.mrp
+timeout 20 build/skyengine mythroad/gxdzc.mrp
 # 截屏应显示游戏画面
 
 # 3. 回归测试 gghjt
 export VMRP_AUTO_CLICKS="0,0,500;228,309,500;158,293,1000;-3,0,500;133,295,3000"
 export VMRP_PPM=1
-timeout 20 build/vmrp mythroad/gghjt.mrp
+timeout 20 build/skyengine mythroad/gghjt.mrp
 # 截屏应显示"罪恶都市 - 开始游戏"
 
 # 4. 单元测试
-./build/test_vmrp        # All tests PASSED
-./build/test_vmrp_api    # 16/16 passed
+./build/test_skyengine        # All tests PASSED
+./build/test_skyengine_api    # 16/16 passed
 ```
 
 ## 已知遗留问题

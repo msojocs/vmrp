@@ -2,12 +2,12 @@
 
 ## 问题描述
 
-执行 `build/vmrp mythroad/gghjt.mrp` 后按特定步骤进入付费流程，点击付费后程序崩溃（UC_MEM_READ_UNMAPPED）。
+执行 `build/skyengine mythroad/gghjt.mrp` 后按特定步骤进入付费流程，点击付费后程序崩溃（UC_MEM_READ_UNMAPPED）。
 
 复现脚本：`test/bug.sh`
 ```bash
 export VMRP_AUTO_CLICKS="0,0,5000;227,308,2000;227,308,2000;227,308,2000;227,308,2000;227,308,4000;160,290,3000;121,291,1000;121,291,3000;28,308,2000"
-build/vmrp mythroad/gghjt.mrp
+build/skyengine mythroad/gghjt.mrp
 ```
 
 ## 分析方法
@@ -97,12 +97,12 @@ if (strncmp2(dsmWorkPath, "mythroad/", 9) != 0 &&
 ```bash
 # 支付流程测试（应看到 sms.sav 和 dat.sav 被写入，无 crash）
 VMRP_AUTO_CLICKS="0,0,5000;227,308,2000;227,308,2000;227,308,2000;227,308,2000;227,308,4000;160,290,3000;121,291,1000;121,291,3000;28,308,2000" \
-  timeout 90 build/vmrp mythroad/gghjt.mrp 2>&1 | grep "sms\.sav\|dat\.sav\|NETPAY\|invalid memory"
+  timeout 90 build/skyengine mythroad/gghjt.mrp 2>&1 | grep "sms\.sav\|dat\.sav\|NETPAY\|invalid memory"
 
 # 兼容性测试
-timeout 10 build/vmrp mythroad/nes.mrp 2>&1 | grep -c "invalid memory"     # 应为 0
-timeout 10 build/vmrp mythroad/dota.mrp 2>&1 | grep -c "invalid memory"    # 应为 0
-timeout 10 build/vmrp mythroad/mrpinfo.mrp 2>&1 | grep -c "invalid memory" # 应为 0
+timeout 10 build/skyengine mythroad/nes.mrp 2>&1 | grep -c "invalid memory"     # 应为 0
+timeout 10 build/skyengine mythroad/dota.mrp 2>&1 | grep -c "invalid memory"    # 应为 0
+timeout 10 build/skyengine mythroad/mrpinfo.mrp 2>&1 | grep -c "invalid memory" # 应为 0
 ```
 
 ## 内存布局示意

@@ -10,9 +10,9 @@
 你可以检测PPM，来验证修复是否成功。
 
 注意：
-在解决完BUG后，再去考虑兼容`build/vmrp mythroad/nes.mrp`
-`build/vmrp mythroad/dota.mrp`
-`build/vmrp mythroad/mrpinfo.mrp`
+在解决完BUG后，再去考虑兼容`build/skyengine mythroad/nes.mrp`
+`build/skyengine mythroad/dota.mrp`
+`build/skyengine mythroad/mrpinfo.mrp`
 
 分析并修复执行命令`test/gghjt/pay-normal-back.sh`启动应用后，自动点击进入下载界面，并返回，但是返回没有反应。
 
@@ -290,7 +290,7 @@ my_recv(s:2): recv=0, errno=11
 充分利用子Agent。
 记得存储记忆数据。
 
-分析这个应用启动失败`build/vmrp temp/RX4.5.mrp`
+分析这个应用启动失败`build/skyengine temp/RX4.5.mrp`
 
 注意trace日志量会特别大。
 不要使用xvfb。
@@ -320,7 +320,7 @@ my_recv(s:2): recv=0, errno=11
 充分利用子Agent。
 记得存储记忆数据。
 
-分析命令`build/vmrp build/mythroad/wbrw.mrp`启动时会向服务器发送/simpleDownload请求下载资源/插件，分析缺失的文件路径。
+分析命令`build/skyengine build/mythroad/wbrw.mrp`启动时会向服务器发送/simpleDownload请求下载资源/插件，分析缺失的文件路径。
 
 可能是类似于：
 ```
@@ -336,7 +336,7 @@ if (!exists('path/to/file'))
 充分利用子Agent。
 记得存储记忆数据。
 
-命令`build/vmrp build/mythroad/talkcat.mrp`启动后，界面图像存在部分损坏，分析并修复它。
+命令`build/skyengine build/mythroad/talkcat.mrp`启动后，界面图像存在部分损坏，分析并修复它。
 
 预期结果：游戏主界面显示正常。
 实际结果：进入后存在部分花屏形状的横线。
@@ -392,7 +392,7 @@ if (!exists('path/to/file'))
 充分利用子Agent。
 记得存储记忆数据。
 
-命令`build/vmrp build/mythroad/gtcm.mrp`执行后，一直黑屏，分析并修复它。
+命令`build/skyengine build/mythroad/gtcm.mrp`执行后，一直黑屏，分析并修复它。
 
 预期结果：启动游戏。
 实际结果：黑屏，没有任何显示。
@@ -546,7 +546,7 @@ tool/server-http.js已启动，修改tool/proxy.js来实现代理服务器。
 记得存储记忆数据。
 
 工作区中的修改是修复以下BUG产生的，分析实现方案是否合理：
-命令`build/vmrp build/mythroad/愤怒的小鸟VS僵尸2_v1002-3.mrp`执行后，`build/mythroad/cache`会出现乱码文件夹，分析哪里来的，如果是程序释放资源的文件夹，那就修正编码。
+命令`build/skyengine build/mythroad/愤怒的小鸟VS僵尸2_v1002-3.mrp`执行后，`build/mythroad/cache`会出现乱码文件夹，分析哪里来的，如果是程序释放资源的文件夹，那就修正编码。
 
 
 程序的现有代码不一定正确。

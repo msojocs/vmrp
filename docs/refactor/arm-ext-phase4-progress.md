@@ -9,7 +9,7 @@
   (primary/wrapper/active compact timer 节点 + 注册模块映像/ER_RW)一次收集,
   经新增 `arm_ext_merge_protect_ranges` 排序合并(重叠/相邻/重复区间并段)。
   语义不变(cut_range 对重复区间本就是空跑),遍历次数确定、便于诊断。
-  单测覆盖 5 种拓扑(乱序/重叠/相邻/重复/吞并),vmrp-unit 升至 56 checks。
+  单测覆盖 5 种拓扑(乱序/重叠/相邻/重复/吞并),skyengine-unit 升至 56 checks。
 - **生命周期断言**:`drop_stale`/`retire-data-read`/`restore-dump0` 三个模块
   状态迁移函数出口接入 `arm_ext_verify_invariants`(env 门控)——
   retire/drop/restore 改状态机前先有一致性监督。
@@ -35,7 +35,7 @@
 
 ## 验证
 
-- vmrp-unit 56 checks ✅;全量 e2e 27/27 ✅;第一方告警 0 ✅;
+- skyengine-unit 56 checks ✅;全量 e2e 27/27 ✅;第一方告警 0 ✅;
   VMRP_ARM_EXT_INVARIANTS=1 下 gzwdzjs 双用例零报警 ✅。
 
 ## 第 2 批(同日续):指纹字节资产单测 ✅
@@ -49,7 +49,7 @@
   gzwdzjs/gtcm/dota/talkcat/opglqa/sky_istore/wbrw 各版 wrapper
   (sched_off 0x1FC~0x2A8 各异);chain_thunk 仅 gghjt/gwkdl 19428 字节
   wrapper;free_return 命中面最广(ctrl_off 0x14C~0x270)。
-- 单测(test_arm_ext.c,vmrp-unit 69→94 checks):
+- 单测(test_arm_ext.c,skyengine-unit 69→94 checks):
   - timer_dispatch:gxdzc/wbrw 正样本(地址+sched_off 提取)、通配位
     (i==0/16)扰动仍命中、固定字节扰动不命中、literal 越界/未对齐时
     "命中但不提取偏移"。

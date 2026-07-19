@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 import fs from "fs";
 
 describe("gzwdzjs 进入主菜单", () => {
@@ -49,7 +49,7 @@ describe("gzwdzjs 进入主菜单", () => {
         await engine.delay(1_000);
       }
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("need-power");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
@@ -63,7 +63,7 @@ describe("gzwdzjs 进入主菜单", () => {
         await engine.delay(1_000);
       }
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("need-power");
         // rgb(200, 204, 248)
         expect(screen.pixel(94, 145)).toEqual([200, 204, 248]);
@@ -75,7 +75,7 @@ describe("gzwdzjs 进入主菜单", () => {
       await engine.delay(1_000);
       console.info('等待演示动画')
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("need-power");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);
@@ -103,7 +103,7 @@ describe("gzwdzjs 进入主菜单", () => {
     }
     {
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("introduce");
         // rgb(208, 244, 200)
         expect(screen.pixel(94, 145)).toEqual([208, 244, 200]);

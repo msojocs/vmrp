@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace, readPpm } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace, readPpm } from "../engine-e2e.js";
 
 /**
  * P5.3 golden 关键帧回归(见 docs/arm-ext-executor-refactor-plan.md 第八节):
@@ -38,7 +38,7 @@ describe("golden 关键帧", () => {
       // 画面为无限等待输入的静态帧:到达晚不影响判定,waitFor 只吸收
       // 启动速度抖动,判据始终是全图零差异。
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen(name);
         expect(screen.diffPixelCount(golden)).toBe(0);
       }, { timeout: 20_000, interval: 1_500 });
