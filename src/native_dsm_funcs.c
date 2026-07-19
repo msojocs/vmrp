@@ -32,6 +32,7 @@
 
 #include "./include/bridge.h"
 #include "./include/fileLib.h"
+#include "./include/native_text_widget.h"
 #include "./include/network.h"
 #include "./include/utils.h"
 #include "./include/vmrp.h"
@@ -996,23 +997,20 @@ static int32 native_dialogRefresh(int32 dialog, const char *title, const char *t
     return MR_FAILED;
 }
 
+/* 平台文本框:委托 native_text_widget(黑底绿字全屏文本页,软键转
+ * MR_DIALOG_EVENT)。此前直接返回 MR_FAILED 会让"先注册模态状态、后调
+ * mr_textCreate 且失败不回滚"的应用(如 gtdgdq 帮助页)死等对话框事件,
+ * 表现为按键全部失效。验证:test/e2e/gtdgdq/menu.test.ts。 */
 static int32 native_textCreate(const char *title, const char *text, int32 type) {
-    (void)title;
-    (void)text;
-    (void)type;
-    return MR_FAILED;
+    return native_text_widget_create(title, text, type);
 }
 
 static int32 native_textRelease(int32 text) {
-    (void)text;
-    return MR_FAILED;
+    return native_text_widget_release(text);
 }
 
 static int32 native_textRefresh(int32 handle, const char *title, const char *text) {
-    (void)handle;
-    (void)title;
-    (void)text;
-    return MR_FAILED;
+    return native_text_widget_refresh(handle, title, text);
 }
 
 static void native_drawBitmap(uint16 *bmp, int16 x, int16 y, uint16 w, uint16 h) {

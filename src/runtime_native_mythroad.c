@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "./include/native_dsm_funcs.h"
+#include "./include/native_text_widget.h"
 #include "./mythroad/include/dsm.h"
 
 extern int32 mr_start_dsm(char *filename, char *ext, char *entry);
@@ -29,6 +30,19 @@ int vmrp_runtime_start_dsm(VmrpRuntime *rt, const char *mrp, const char *ext, co
 
 int vmrp_runtime_event(VmrpRuntime *rt, int32_t code, int32_t p0, int32_t p1) {
     (void)rt;
+    /* 平台文本框(mr_textCreate)显示期间按真机语义接管输入:软键翻译为
+     * MR_DIALOG_EVENT 投递给应用,其余输入事件被平台窗口消费。这里是
+     * 全部前端入口(SDL/wasm/flutter)进入 guest 的唯一漏斗,保证行为一致。
+     * MR_DIALOG_EVENT=6/MR_SUCCESS 见 include/types.h。 */
+    int32_t dialog_param = 0;
+    switch (native_text_widget_filter_event(code, p0, &dialog_param)) {
+        case 1: /* 平台窗口消费(含滚动),不投递给应用 */
+            return MR_SUCCESS;
+        case 2: /* 软键命中文本框按钮 → 对话框事件 */
+            return mr_event((int16)MR_DIALOG_EVENT, dialog_param, 0);
+        default:
+            break;
+    }
     return mr_event((int16)code, p0, p1);
 }
 
