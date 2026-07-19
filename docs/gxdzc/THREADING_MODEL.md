@@ -133,7 +133,7 @@ while (SDL_WaitEvent(&ev)) {  // ← Blocks until event available
 ├─────────────────────────┤
 │ loop() [SAFE]           │
 │  └─ timer()             │
-│     └─ vmrp_runtime_    │
+│     └─ skyengine_runtime_    │
 │        timer()          │
 │        └─ Unicorn ✓     │
 │           [SAFE]        │
@@ -171,7 +171,7 @@ static AutoClickPoint *autoClickList;     // Accessed by:
 ```c
 // Signal Handler (async context)
 static void sigusr1_handler(int sig) {
-    dump_screen_ppm("/tmp/vmrp_screen.ppm");  // ← Reads window
+    dump_screen_ppm("/tmp/skyengine_screen.ppm");  // ← Reads window
 }
 
 // Main Thread

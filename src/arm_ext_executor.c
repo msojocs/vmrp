@@ -6,7 +6,7 @@
 #include "./include/app_compat.h"
 #include "./include/bridge.h"
 #include "./include/network.h"
-#include "./include/fileLib.h"
+#include "./include/file_lib.h"
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -694,7 +694,7 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
         AexTableCtx tc = { idx, r0, r1, r2, r3, MR_SUCCESS };
         h(m, &tc);
         cb_ret(m, tc.ret);
-        if (vmrp_is_exited()) {
+        if (skyengine_is_exited()) {
             /* table[54] may return into guest code after requesting a platform
              * exit. Stop here so a guest-side exit loop cannot pin the worker. */
             reg_write32(uc, UC_ARM_REG_PC, EXT_STOP_ADDR);
@@ -769,14 +769,14 @@ static bool hook_invalid(uc_engine *uc, uc_mem_type type, uint64_t address, int 
             uint32_t dump_len = dump_end - dump_start;
             uint8_t *dump_buf = malloc(dump_len);
             if (dump_buf && uc_mem_read(uc, dump_start, dump_buf, dump_len) == UC_ERR_OK) {
-                FILE *df = fopen("/tmp/vmrp_crash.bin", "wb");
+                FILE *df = fopen("/tmp/skyengine_crash.bin", "wb");
                 if (df) {
                     fwrite(dump_buf, 1, dump_len, df);
                     fclose(df);
-                    printf("  [CRASH_DUMP] saved %u bytes [0x%X..0x%X] to /tmp/vmrp_crash.bin\n",
+                    printf("  [CRASH_DUMP] saved %u bytes [0x%X..0x%X] to /tmp/skyengine_crash.bin\n",
                            dump_len, dump_start, dump_end);
                     printf("  [CRASH_DUMP] disassemble: arm-none-eabi-objdump -D -b binary "
-                           "-m arm -M force-thumb --adjust-vma=0x%X /tmp/vmrp_crash.bin\n",
+                           "-m arm -M force-thumb --adjust-vma=0x%X /tmp/skyengine_crash.bin\n",
                            dump_start);
                 }
             }
@@ -985,8 +985,8 @@ static void init_table(ArmExtModule *m) {
         write_table_entry(m, 24, m->port_table_addr);
     }
 
-    int32_t sw = mr_screen_w > 0 ? mr_screen_w : vmrp_config.screen_width;
-    int32_t sh = mr_screen_h > 0 ? mr_screen_h : vmrp_config.screen_height;
+    int32_t sw = mr_screen_w > 0 ? mr_screen_w : skyengine_config.screen_width;
+    int32_t sh = mr_screen_h > 0 ? mr_screen_h : skyengine_config.screen_height;
     int32_t bit = 16;
     m->screen_w = sw;
     m->screen_h = sh;
@@ -1074,11 +1074,11 @@ static void init_table(ArmExtModule *m) {
      * 部分游戏的 exRam 预算计算（= 固定值 − origin_mem_len）溢出为负，
      * 导致 SCRRAM 分配被跳过、图像资源无法渲染。默认取与真机一致的
      * 1MB(sky_istore 启动时校验堆容量,512KB 会报"内存不足");需要
-     * 更大堆的应用用 --memory/VMRP_MEMORY 调整(1M-16M)。arm_alloc 仍
+     * 更大堆的应用用 --memory/SKYENGINE_MEMORY 调整(1M-16M)。arm_alloc 仍
      * 可提供远超此值的实际内存。
      * 池在 ARM 16MB 空间的 bump 堆(0x200000 起)上分配,还需避开栈区/
      * 代码区与顶部屏幕保留区,过大的档位(16M)放不下,钳制到 8MB。 */
-    m->origin_mem_len = vmrp_memory_bytes(vmrp_config.memory_mb);
+    m->origin_mem_len = SKYENGINE_MEMORY_bytes(skyengine_config.memory_mb);
     {
         uint32_t ext_pool_max = 8u * 1024u * 1024u;
         if (m->origin_mem_len > ext_pool_max) {
@@ -1558,7 +1558,7 @@ static void arm_ext_restore_modal_fg_snapshot(ArmExtModule *m) {
  * 真机上这些写全部落在 child 自己的 RW,对 wrapper 从未发生。完整修复
  * (staging 窗口按 child P[0] 恢复 R9)已验证可消除腐蚀,但它让 SKY
  * 推广/计费框架真正跑通启动流程(联网上报、termsync/gbreg 注册),game
- * 随即等待 vmrp 尚未模拟的完成信号——当前全部通过用例都建立在该框架
+ * 随即等待 skyengine 尚未模拟的完成信号——当前全部通过用例都建立在该框架
  * 瘫痪的基线上。在补齐那条链路之前,宿主以与真机一致的最小语义兜住分歧:
  * 「wrapper 静态区只有 wrapper 本体代码(和宿主)能持久写入」。
  *

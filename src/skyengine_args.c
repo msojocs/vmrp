@@ -23,10 +23,10 @@
 #include <unistd.h>
 #endif
 
-#include "./include/fileLib.h"
+#include "./include/file_lib.h"
 #include "./include/utils.h"
 
-#define VMRP_DEFAULT_DNS_MAP "wap.skmeg.com->159.75.119.124;rop.skymobiapp.com->159.75.119.124;spd.skymobiapp.com->159.75.119.124;freeads.51mrp.com->159.75.119.124;proxy.51mrp.com->159.75.119.124;proxy2.51mrp.com->159.75.119.124;help.proxy.51mrp.com->159.75.119.124"
+#define DEFAULT_DNS_MAP "wap.skmeg.com->159.75.119.124;rop.skymobiapp.com->159.75.119.124;spd.skymobiapp.com->159.75.119.124;freeads.51mrp.com->159.75.119.124;proxy.51mrp.com->159.75.119.124;proxy2.51mrp.com->159.75.119.124;help.proxy.51mrp.com->159.75.119.124"
 
 #ifdef _WIN32
 static int wide_to_utf8(const wchar_t *wide, char *output, size_t output_size) {
@@ -208,15 +208,15 @@ static int resolve_executable_dir(const char *argv0, char *output, size_t output
     return MR_SUCCESS;
 }
 
-static void vmrp_args_set_default_dirs(VmrpArgs *args, const char *argv0) {
+static void skyengine_args_set_default_dirs(SkyEngineArgs *args, const char *argv0) {
     if (!args) return;
     if (resolve_executable_dir(argv0, args->work_dir, sizeof(args->work_dir)) != MR_SUCCESS) {
         snprintf(args->work_dir, sizeof(args->work_dir), ".");
     }
 }
 
-VmrpArgs vmrp_args_default(void) {
-    VmrpArgs args;
+SkyEngineArgs skyengine_args_default(void) {
+    SkyEngineArgs args;
     memset(&args, 0, sizeof(args));
     args.screen_width = DEFAULT_SCREEN_WIDTH;
     args.screen_height = DEFAULT_SCREEN_HEIGHT;
@@ -224,14 +224,14 @@ VmrpArgs vmrp_args_default(void) {
     args.device_year = DEFAULT_DEVICE_YEAR;
     args.device_month = DEFAULT_DEVICE_MONTH;
     args.device_day = DEFAULT_DEVICE_DAY;
-    vmrp_args_set_default_dirs(&args, NULL);
+    skyengine_args_set_default_dirs(&args, NULL);
     snprintf(args.ext_name, sizeof(args.ext_name), "start.mr");
-    snprintf(args.dns_map, sizeof(args.dns_map), "%s", VMRP_DEFAULT_DNS_MAP);
+    snprintf(args.dns_map, sizeof(args.dns_map), "%s", DEFAULT_DNS_MAP);
     return args;
 }
 
-void vmrp_args_print_usage(const char *program) {
-    const char *name = (program && *program) ? program : "vmrp";
+void skyengine_args_print_usage(const char *program) {
+    const char *name = (program && *program) ? program : "skyengine";
     printf("Usage: %s [OPTIONS] [MRP_PATH] [EXT_NAME] [ENTRY]\n", name);
     printf("       %s --help\n", name);
     printf("\n");
@@ -243,16 +243,16 @@ void vmrp_args_print_usage(const char *program) {
     printf("  --dns-map MAP       Resolve original domains using fake domains\n");
     printf("\n");
     printf("Environment variables:\n");
-    printf("  VMRP_SCREEN_WIDTH   Screen width  (overridden by --screen)\n");
-    printf("  VMRP_SCREEN_HEIGHT  Screen height (overridden by --screen)\n");
-    printf("  VMRP_MEMORY         App-visible memory (overridden by --memory)\n");
-    printf("  VMRP_DEVICE_DATE    Handset date (overridden by --device-date)\n");
-    printf("  VMRP_WORK_DIR       Working directory (overridden by --work-dir)\n");
-    printf("  VMRP_DNS_MAP        Domain map, e.g. old.example->new.example\n");
-    printf("  VMRP_PPM_PATH       PPM screen dump path for SIGUSR1/verification\n");
-    printf("  VMRP_E2E_SOCKET     Unix socket path for stepwise E2E control\n");
+    printf("  SKYENGINE_SCREEN_WIDTH   Screen width  (overridden by --screen)\n");
+    printf("  SKYENGINE_SCREEN_HEIGHT  Screen height (overridden by --screen)\n");
+    printf("  SKYENGINE_MEMORY         App-visible memory (overridden by --memory)\n");
+    printf("  SKYENGINE_DEVICE_DATE    Handset date (overridden by --device-date)\n");
+    printf("  SKYENGINE_WORK_DIR       Working directory (overridden by --work-dir)\n");
+    printf("  SKYENGINE_DNS_MAP        Domain map, e.g. old.example->new.example\n");
+    printf("  SKYENGINE_PPM_PATH       PPM screen dump path for SIGUSR1/verification\n");
+    printf("  SKYENGINE_E2E_SOCKET     Unix socket path for stepwise E2E control\n");
     printf("\n");
-    printf("Without arguments, vmrp keeps the old behavior and starts VMRP_MRP or dsm_gm.mrp.\n");
+    printf("Without arguments, skyengine keeps the old behavior and starts VMRP_MRP or dsm_gm.mrp.\n");
     printf("Examples:\n");
     printf("  %s /path/to/app.mrp\n", name);
     printf("  %s --screen 176x220 /path/to/app.mrp\n", name);
@@ -264,7 +264,7 @@ void vmrp_args_print_usage(const char *program) {
 
 static int resolve_cli_mrp_path(const char *input, char *output, size_t output_size) {
     if (!input || !*input) {
-        fprintf(stderr, "vmrp: empty MRP path\n");
+        fprintf(stderr, "skyengine: empty MRP path\n");
         return MR_FAILED;
     }
 
@@ -274,24 +274,24 @@ static int resolve_cli_mrp_path(const char *input, char *output, size_t output_s
     if (!winput || _wfullpath(woutput, winput, sizeof(woutput) / sizeof(woutput[0])) == NULL ||
         wide_to_utf8(woutput, output, output_size) != MR_SUCCESS) {
         free(winput);
-        fprintf(stderr, "vmrp: unable to resolve '%s'\n", input);
+        fprintf(stderr, "skyengine: unable to resolve '%s'\n", input);
         return MR_FAILED;
     }
     free(winput);
 #else
     (void)output_size;
     if (realpath(input, output) == NULL) {
-        fprintf(stderr, "vmrp: unable to resolve '%s': %s\n", input, strerror(errno));
+        fprintf(stderr, "skyengine: unable to resolve '%s': %s\n", input, strerror(errno));
         return MR_FAILED;
     }
 #endif
 
     if (my_info(output) != MR_IS_FILE) {
-        fprintf(stderr, "vmrp: MRP file not found: %s\n", output);
+        fprintf(stderr, "skyengine: MRP file not found: %s\n", output);
         return MR_FAILED;
     }
     if (strlen(output) >= VMRP_MRP_NAME_LIMIT) {
-        fprintf(stderr, "vmrp: MRP path is too long for Mythroad runtime (%zu >= %d): %s\n",
+        fprintf(stderr, "skyengine: MRP path is too long for Mythroad runtime (%zu >= %d): %s\n",
                 strlen(output), VMRP_MRP_NAME_LIMIT, output);
         return MR_FAILED;
     }
@@ -329,7 +329,7 @@ static int parse_memory_size(const char *str, int *mb) {
     return MR_SUCCESS;
 }
 
-int vmrp_args_parse_device_date(const char *str, int *year, int *month, int *day) {
+int skyengine_args_parse_device_date(const char *str, int *year, int *month, int *day) {
     static const int days_per_month[] = {
         0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
     };
@@ -389,7 +389,7 @@ static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
         }
         if (!after_dashdash && strcmp(arg, "--screen") == 0) {
             if (i + 1 >= argc) {
-                fprintf(stderr, "vmrp: --screen requires an argument (e.g. 176x220)\n");
+                fprintf(stderr, "skyengine: --screen requires an argument (e.g. 176x220)\n");
                 return MR_FAILED;
             }
             *screen_arg = argv[++i];
@@ -397,7 +397,7 @@ static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
         }
         if (!after_dashdash && strcmp(arg, "--memory") == 0) {
             if (i + 1 >= argc) {
-                fprintf(stderr, "vmrp: --memory requires an argument (e.g. 4M)\n");
+                fprintf(stderr, "skyengine: --memory requires an argument (e.g. 4M)\n");
                 return MR_FAILED;
             }
             *memory_arg = argv[++i];
@@ -405,7 +405,7 @@ static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
         }
         if (!after_dashdash && strcmp(arg, "--device-date") == 0) {
             if (i + 1 >= argc) {
-                fprintf(stderr, "vmrp: --device-date requires YYYY-MM-DD or host\n");
+                fprintf(stderr, "skyengine: --device-date requires YYYY-MM-DD or host\n");
                 return MR_FAILED;
             }
             *device_date_arg = argv[++i];
@@ -413,7 +413,7 @@ static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
         }
         if (!after_dashdash && strcmp(arg, "--dns-map") == 0) {
             if (i + 1 >= argc) {
-                fprintf(stderr, "vmrp: --dns-map requires an argument (e.g. old.example->new.example)\n");
+                fprintf(stderr, "skyengine: --dns-map requires an argument (e.g. old.example->new.example)\n");
                 return MR_FAILED;
             }
             *dns_map_arg = argv[++i];
@@ -421,15 +421,15 @@ static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
         }
         if (!after_dashdash && strcmp(arg, "--work-dir") == 0) {
             if (i + 1 >= argc) {
-                fprintf(stderr, "vmrp: --work-dir requires an argument\n");
+                fprintf(stderr, "skyengine: --work-dir requires an argument\n");
                 return MR_FAILED;
             }
             *work_dir_arg = argv[++i];
             continue;
         }
         if (!after_dashdash && arg[0] == '-') {
-            fprintf(stderr, "vmrp: unknown option: %s\n", arg);
-            vmrp_args_print_usage(argv[0]);
+            fprintf(stderr, "skyengine: unknown option: %s\n", arg);
+            skyengine_args_print_usage(argv[0]);
             return MR_FAILED;
         }
 
@@ -440,8 +440,8 @@ static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
         } else if (positional == 2) {
             *entry_arg = arg;
         } else {
-            fprintf(stderr, "vmrp: too many arguments\n");
-            vmrp_args_print_usage(argv[0]);
+            fprintf(stderr, "skyengine: too many arguments\n");
+            skyengine_args_print_usage(argv[0]);
             return MR_FAILED;
         }
         positional++;
@@ -449,7 +449,7 @@ static int parse_positional_args(int argc, char *argv[], const char **mrp_arg,
     return MR_SUCCESS;
 }
 
-int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
+int skyengine_args_parse(int argc, char *argv[], SkyEngineArgs *out) {
     const char *mrp_arg = NULL;
     const char *ext_arg = NULL;
     const char *entry_arg = NULL;
@@ -459,8 +459,8 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
     const char *memory_arg = NULL;
     const char *device_date_arg = NULL;
 
-    *out = vmrp_args_default();
-    vmrp_args_set_default_dirs(out, (argc > 0) ? argv[0] : NULL);
+    *out = skyengine_args_default();
+    skyengine_args_set_default_dirs(out, (argc > 0) ? argv[0] : NULL);
 
     if (parse_positional_args(argc, argv, &mrp_arg, &ext_arg, &entry_arg,
                               &screen_arg, &work_dir_arg, &dns_map_arg,
@@ -472,7 +472,7 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
     if (work_dir_arg) {
         if (resolve_config_dir(work_dir_arg, out->work_dir,
                                sizeof(out->work_dir)) != MR_SUCCESS) {
-            fprintf(stderr, "vmrp: invalid work dir '%s'\n", work_dir_arg);
+            fprintf(stderr, "skyengine: invalid work dir '%s'\n", work_dir_arg);
             return MR_FAILED;
         }
     } else {
@@ -480,7 +480,7 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
         if (env_work_dir && *env_work_dir) {
             if (resolve_config_dir(env_work_dir, out->work_dir,
                                    sizeof(out->work_dir)) != MR_SUCCESS) {
-                fprintf(stderr, "vmrp: invalid VMRP_WORK_DIR '%s'\n", env_work_dir);
+                fprintf(stderr, "skyengine: invalid SKYENGINE_WORK_DIR '%s'\n", env_work_dir);
                 return MR_FAILED;
             }
         }
@@ -525,7 +525,7 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
     if (screen_arg) {
         int w, h;
         if (parse_screen_size(screen_arg, &w, &h) != MR_SUCCESS) {
-            fprintf(stderr, "vmrp: invalid screen size '%s' (expected WxH, e.g. 176x220)\n", screen_arg);
+            fprintf(stderr, "skyengine: invalid screen size '%s' (expected WxH, e.g. 176x220)\n", screen_arg);
             return MR_FAILED;
         }
         out->screen_width = w;
@@ -545,7 +545,7 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
     if (memory_arg) {
         int mb;
         if (parse_memory_size(memory_arg, &mb) != MR_SUCCESS) {
-            fprintf(stderr, "vmrp: invalid memory size '%s' (allowed: 1M,2M,4M,6M,8M,16M)\n", memory_arg);
+            fprintf(stderr, "skyengine: invalid memory size '%s' (allowed: 1M,2M,4M,6M,8M,16M)\n", memory_arg);
             return MR_FAILED;
         }
         out->memory_mb = mb;
@@ -557,11 +557,11 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
         if (env_device_date && *env_device_date) device_date_arg = env_device_date;
     }
     if (device_date_arg &&
-        vmrp_args_parse_device_date(device_date_arg, &out->device_year,
+        skyengine_args_parse_device_date(device_date_arg, &out->device_year,
                                     &out->device_month,
                                     &out->device_day) != MR_SUCCESS) {
         fprintf(stderr,
-                "vmrp: invalid device date '%s' (expected YYYY-MM-DD or host)\n",
+                "skyengine: invalid device date '%s' (expected YYYY-MM-DD or host)\n",
                 device_date_arg);
         return MR_FAILED;
     }

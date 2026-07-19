@@ -22,18 +22,18 @@
 #define PATH_MAX 4096
 #endif
 
-#include "./include/fileLib.h"
+#include "./include/file_lib.h"
 #include "./include/utils.h"
 #include "./include/debug.h"
 #include "./include/network.h"
 #include "./include/runtime.h"
 #include "./include/arm_ext_executor.h"
-#include "./mythroad/include/dsm.h" /* dsm_get_lcd_rotation:plat(101) 旋转状态 */
+#include "./include/dsm.h" /* dsm_get_lcd_rotation:plat(101) 旋转状态 */
 
-#define VMRP_LOG_ENABLED() (getenv("SKYENGINE_LOG") != NULL)
+#define LOG_ENABLED() (getenv("SKYENGINE_LOG") != NULL)
 #define SKYENGINE_LOG(...)                          \
     do {                                      \
-        if (VMRP_LOG_ENABLED()) {             \
+        if (LOG_ENABLED()) {             \
             fprintf(stderr, __VA_ARGS__);     \
             fflush(stderr);                   \
         }                                     \
@@ -43,7 +43,7 @@
 #include <emscripten.h>
 #endif
 
-VmrpConfig vmrp_config = {
+SkyEngineConfig skyengine_config = {
     .screen_width = DEFAULT_SCREEN_WIDTH,
     .screen_height = DEFAULT_SCREEN_HEIGHT,
     .device_year = DEFAULT_DEVICE_YEAR,
@@ -55,36 +55,36 @@ VmrpConfig vmrp_config = {
  * 旋转状态由 DSM 层持有(guest 经 plat(101) 设置,见 dsm.c);语义见
  * skyengine.h 声明处注释。rotation==0 时与 screen_width/height 恒等,未调
  * plat(101) 的应用路径行为不变。 */
-int vmrp_display_width(void) {
-    return (dsm_get_lcd_rotation() & 1) ? vmrp_config.screen_height
-                                        : vmrp_config.screen_width;
+int skyengine_display_width(void) {
+    return (dsm_get_lcd_rotation() & 1) ? skyengine_config.screen_height
+                                        : skyengine_config.screen_width;
 }
 
-int vmrp_display_height(void) {
-    return (dsm_get_lcd_rotation() & 1) ? vmrp_config.screen_width
-                                        : vmrp_config.screen_height;
+int skyengine_display_height(void) {
+    return (dsm_get_lcd_rotation() & 1) ? skyengine_config.screen_width
+                                        : skyengine_config.screen_height;
 }
 
 static VmrpRuntime runtime;
 #ifdef _WIN32
-static volatile LONG vmrp_exit_requested = 0;
+static volatile LONG skyengine_exit_requested = 0;
 #else
-static atomic_int vmrp_exit_requested = 0;
+static atomic_int skyengine_exit_requested = 0;
 #endif
 
-static void vmrp_set_exit_requested(int requested) {
+static void skyengine_set_exit_requested(int requested) {
 #ifdef _WIN32
-    InterlockedExchange(&vmrp_exit_requested, requested);
+    InterlockedExchange(&skyengine_exit_requested, requested);
 #else
-    atomic_store_explicit(&vmrp_exit_requested, requested, memory_order_release);
+    atomic_store_explicit(&skyengine_exit_requested, requested, memory_order_release);
 #endif
 }
 
-static int vmrp_get_exit_requested(void) {
+static int skyengine_get_exit_requested(void) {
 #ifdef _WIN32
-    return (int)InterlockedCompareExchange(&vmrp_exit_requested, 0, 0);
+    return (int)InterlockedCompareExchange(&skyengine_exit_requested, 0, 0);
 #else
-    return atomic_load_explicit(&vmrp_exit_requested, memory_order_acquire);
+    return atomic_load_explicit(&skyengine_exit_requested, memory_order_acquire);
 #endif
 }
 
@@ -170,7 +170,7 @@ static int extract_ext_from_mrp(uint8 *raw, uint32 raw_len, const char *name,
 }
 
 static int smoke_arm_ext(const char *path) {
-    FILE *fp = vmrp_host_fopen(path, "rb");
+    FILE *fp = skyengine_host_fopen(path, "rb");
     if (!fp) {
         perror(path);
         return MR_FAILED;
@@ -233,75 +233,75 @@ static int smoke_arm_ext(const char *path) {
 #ifdef __EMSCRIPTEN__
 EMSCRIPTEN_KEEPALIVE
 int32_t c_event(int32_t code, int32_t p1, int32_t p2) {
-    return vmrp_runtime_event(&runtime, code, p1, p2);
+    return skyengine_runtime_event(&runtime, code, p1, p2);
 }
 #endif
 
 int32_t event(int32_t code, int32_t p1, int32_t p2) {
-    if (vmrp_get_exit_requested()) return MR_FAILED;
-    return vmrp_runtime_event(&runtime, code, p1, p2);
+    if (skyengine_get_exit_requested()) return MR_FAILED;
+    return skyengine_runtime_event(&runtime, code, p1, p2);
 }
 
 int32_t timer(void) {
-    if (vmrp_get_exit_requested()) return MR_FAILED;
-    return vmrp_runtime_timer(&runtime);
+    if (skyengine_get_exit_requested()) return MR_FAILED;
+    return skyengine_runtime_timer(&runtime);
 }
 
 /* 动感芯片样本注入(前端/嵌入端调用),guest 未开启监听时被忽略。
  * x/y/z 取值 ±1000,坐标系见《动感芯片接口》文档。 */
-int32_t vmrp_motion_input(int32_t x, int32_t y, int32_t z) {
-    if (vmrp_get_exit_requested()) return MR_FAILED;
-    return vmrp_runtime_motion(&runtime, x, y, z);
+int32_t skyengine_motion_input(int32_t x, int32_t y, int32_t z) {
+    if (skyengine_get_exit_requested()) return MR_FAILED;
+    return skyengine_runtime_motion(&runtime, x, y, z);
 }
 
-int configureVmrpDnsMap(const char *map) {
+int configureSkyEngineDnsMap(const char *map) {
     return my_configureDnsMap(map);
 }
 
-static int apply_config_paths(const VmrpArgs *args) {
+static int apply_config_paths(const SkyEngineArgs *args) {
     if (args->work_dir[0]) {
-        snprintf(vmrp_config.work_dir, sizeof(vmrp_config.work_dir), "%s", args->work_dir);
-    } else if (!vmrp_config.work_dir[0]) {
-        snprintf(vmrp_config.work_dir, sizeof(vmrp_config.work_dir), ".");
+        snprintf(skyengine_config.work_dir, sizeof(skyengine_config.work_dir), "%s", args->work_dir);
+    } else if (!skyengine_config.work_dir[0]) {
+        snprintf(skyengine_config.work_dir, sizeof(skyengine_config.work_dir), ".");
     }
 
-    if (vmrp_host_chdir(vmrp_config.work_dir) != MR_SUCCESS) {
-        fprintf(stderr, "vmrp: unable to switch working directory to '%s': %s\n",
-                vmrp_config.work_dir, strerror(errno));
+    if (skyengine_host_chdir(skyengine_config.work_dir) != MR_SUCCESS) {
+        fprintf(stderr, "skyengine: unable to switch working directory to '%s': %s\n",
+                skyengine_config.work_dir, strerror(errno));
         return MR_FAILED;
     }
     return MR_SUCCESS;
 }
 
-int startVmrp(const VmrpArgs *args) {
-    vmrp_set_exit_requested(0);
-    vmrp_config.screen_width = args->screen_width;
-    vmrp_config.screen_height = args->screen_height;
-    /* LCD 旋转由 dsm_init() 随 DSM 初始化归零(vmrp_runtime_init 内) */
-    vmrp_config.memory_mb = args->memory_mb;
+int startEngine(const SkyEngineArgs *args) {
+    skyengine_set_exit_requested(0);
+    skyengine_config.screen_width = args->screen_width;
+    skyengine_config.screen_height = args->screen_height;
+    /* LCD 旋转由 dsm_init() 随 DSM 初始化归零(skyengine_runtime_init 内) */
+    skyengine_config.memory_mb = args->memory_mb;
     /* The DSM callback reads this virtual handset RTC through table[34]. */
-    vmrp_config.device_year = args->device_year;
-    vmrp_config.device_month = args->device_month;
-    vmrp_config.device_day = args->device_day;
+    skyengine_config.device_year = args->device_year;
+    skyengine_config.device_month = args->device_month;
+    skyengine_config.device_day = args->device_day;
     if (apply_config_paths(args) != MR_SUCCESS) {
         return MR_FAILED;
     }
 
     if (args->dns_map[0]) {
         if (my_configureDnsMap(args->dns_map) != MR_SUCCESS) {
-            fprintf(stderr, "vmrp: invalid DNS map '%s'\n", args->dns_map);
+            fprintf(stderr, "skyengine: invalid DNS map '%s'\n", args->dns_map);
             return MR_FAILED;
         }
     }
 
-    SKYENGINE_LOG("[startVmrp] vmrp_runtime_init...\n");
-    if (vmrp_runtime_init(&runtime) != MR_SUCCESS) return MR_FAILED;
-    SKYENGINE_LOG("[startVmrp] vmrp_runtime_init OK\n");
+    SKYENGINE_LOG("[startEngine] skyengine_runtime_init...\n");
+    if (skyengine_runtime_init(&runtime) != MR_SUCCESS) return MR_FAILED;
+    SKYENGINE_LOG("[startEngine] skyengine_runtime_init OK\n");
 
     const char *arm_ext_smoke = getenv("SKYENGINE_ARM_EXT_SMOKE");
     if (arm_ext_smoke && *arm_ext_smoke) {
         int smoke_ret = smoke_arm_ext(arm_ext_smoke);
-        vmrp_runtime_destroy(&runtime);
+        skyengine_runtime_destroy(&runtime);
         exit(smoke_ret == MR_SUCCESS ? 0 : 1);
     }
 
@@ -313,32 +313,32 @@ int startVmrp(const VmrpArgs *args) {
     if (!extName || !*extName) extName = "start.mr";
 
     if (strlen(filename) >= VMRP_MRP_NAME_LIMIT) {
-        fprintf(stderr, "vmrp: MRP path is too long for Mythroad runtime (%zu >= %d): %s\n",
+        fprintf(stderr, "skyengine: MRP path is too long for Mythroad runtime (%zu >= %d): %s\n",
                 strlen(filename), VMRP_MRP_NAME_LIMIT, filename);
-        vmrp_runtime_destroy(&runtime);
+        skyengine_runtime_destroy(&runtime);
         return MR_FAILED;
     }
 
-    SKYENGINE_LOG("[startVmrp] vmrp_runtime_start_dsm('%s','%s','%s')...\n",
+    SKYENGINE_LOG("[startEngine] skyengine_runtime_start_dsm('%s','%s','%s')...\n",
              filename, extName, entry ? entry : "");
-    uint32_t ret = vmrp_runtime_start_dsm(&runtime, filename, extName, entry);
-    SKYENGINE_LOG("[startVmrp] vmrp_runtime_start_dsm returned 0x%X\n", ret);
+    uint32_t ret = skyengine_runtime_start_dsm(&runtime, filename, extName, entry);
+    SKYENGINE_LOG("[startEngine] skyengine_runtime_start_dsm returned 0x%X\n", ret);
     if (ret != MR_SUCCESS) {
-        vmrp_runtime_destroy(&runtime);
+        skyengine_runtime_destroy(&runtime);
         return MR_FAILED;
     }
     return MR_SUCCESS;
 }
 
-void stopVmrp(void) {
-    vmrp_runtime_destroy(&runtime);
-    vmrp_set_exit_requested(0);
+void stopEngine(void) {
+    skyengine_runtime_destroy(&runtime);
+    skyengine_set_exit_requested(0);
 }
 
-void vmrp_request_exit(void) {
-    vmrp_set_exit_requested(1);
+void skyengine_request_exit(void) {
+    skyengine_set_exit_requested(1);
 }
 
-int vmrp_is_exited(void) {
-    return vmrp_get_exit_requested();
+int skyengine_is_exited(void) {
+    return skyengine_get_exit_requested();
 }

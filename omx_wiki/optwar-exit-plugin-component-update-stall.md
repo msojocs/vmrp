@@ -16,9 +16,9 @@ schemaVersion: 1
 
 Target command: `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/optwar/exit-plugin.test.ts --reporter=verbose`.
 
-Current tree builds with `cmake --build build --target vmrp -j2`. The target test now passes the earlier no-network/red-failure stage and fails at `test/e2e/optwar/exit-plugin.test.ts:101`: `promote-start.ppm` pixel `(104,296)` is still `[0,0,0]` after pressing `LEFT_SOFT` on the downloaded plugin result and waiting 20s. Kept artifact: `/tmp/vmrp-e2e-koss3D`.
+Current tree builds with `cmake --build build --target skyengine -j2`. The target test now passes the earlier no-network/red-failure stage and fails at `test/e2e/optwar/exit-plugin.test.ts:101`: `promote-start.ppm` pixel `(104,296)` is still `[0,0,0]` after pressing `LEFT_SOFT` on the downloaded plugin result and waiting 20s. Kept artifact: `/tmp/skyengine-e2e-koss3D`.
 
-Stdout evidence from `/tmp/vmrp-e2e-koss3D/stdout.log`:
+Stdout evidence from `/tmp/skyengine-e2e-koss3D/stdout.log`:
 - Startup ad request still uses `POST /adsystem/Ads/ClientRequest` and gets HTTP 404; this is not the target failure.
 - The exit plugin download sends `POST /simpleDownload HTTP/1.1`, receives HTTP 200, then sends `POST /dl_confirm HTTP/1.1`.
 - After launching the downloaded promote plugin, the browser/component update path sends another `POST /simpleDownload HTTP/1.1`, receives HTTP 200, then sends another `POST /dl_confirm HTTP/1.1`.
@@ -27,7 +27,7 @@ Current inference: the new failure is past network availability and past initial
 
 ## 2026-06-29 11:14 long observation
 
-Manual E2E script kept artifact `/tmp/vmrp-e2e-DeGIIr` and sampled after launching the downloaded promote plugin. Draw count moved from `164` to `207` after 5s and then to `213` by 15s, but stayed `213` through 40s and 60s. PPM evidence:
+Manual E2E script kept artifact `/tmp/skyengine-e2e-DeGIIr` and sampled after launching the downloaded promote plugin. Draw count moved from `164` to `207` after 5s and then to `213` by 15s, but stayed `213` through 40s and 60s. PPM evidence:
 - `promote-5000.ppm`: 3 colors, nonzero bbox `56,128..182,175`.
 - `promote-15000.ppm`, `promote-40000.ppm`, `promote-60000.ppm`: 3 colors, nonzero bbox `52,128..186,175`, top colors black plus green `#00fc00` and white `#f8fcf8`.
 

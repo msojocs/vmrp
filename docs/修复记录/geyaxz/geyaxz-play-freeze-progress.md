@@ -17,7 +17,7 @@
 
 ## 2026-07-18 定位:guest 死循环
 
-- WSL 下 core 被吞、yama 禁 attach → 用 `VMRP_BIN` 包装脚本让 vmrp 生为
+- WSL 下 core 被吞、yama 禁 attach → 用 `VMRP_BIN` 包装脚本让 skyengine 生为
   gdb 子进程,卡死时 SIGINT 采样。
 - 主线程栈:卡在 unicorn 内执行 wrapper 代码;12 次 PC/LR 采样全部落在
   `0xE80D28`(延迟命令队列排空循环)、`0xE81254`(命令入口)、
@@ -44,7 +44,7 @@
 - **完整修复已实现并验证可消除腐蚀**(staging 窗口按 child P[0] 恢复 R9 /
   位移记账两种变体):但 graphics/SKY 推广计费框架随即真正跑通启动流程
   (POST rop.skymobiapp.com/payOneAsTlv → 200 OK → 写 system/ntp/termsync、
-  gbreg.sys),game 每帧 present 空帧等待一个 vmrp 未模拟的完成信号,
+  gbreg.sys),game 每帧 present 空帧等待一个 skyengine 未模拟的完成信号,
   boot 黑屏 >10s。当前全部通过的用例都建立在该框架瘫痪的基线上,完整
   R9 修复需先补齐该链路,回退。
 
@@ -66,7 +66,7 @@
 
 ## 2026-07-18 最终验证矩阵(SDL dummy,无 xvfb,无全量 trace)
 
-- `cmake --build build --target vmrp`:通过;
+- `cmake --build build --target skyengine`:通过;
 - `ctest --test-dir build`:1/1 通过;`pnpm exec tsc --noEmit`:通过;
 - geyaxz boot 5.43s、play 92.49s:通过;
 - `pnpm vitest run test/e2e --retry=0`:**27 文件 / 49 测试全部通过**,

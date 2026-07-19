@@ -25,7 +25,7 @@
 ## 2026-07-12 原始用例复现与首轮反汇编
 
 - 命令：`VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gzwdzjs/play.test.ts --reporter=verbose`
-- 结果：稳定失败于 `play.test.ts:122`，总用时约 80 秒；保留目录 `/tmp/vmrp-e2e-FTntKv`。
+- 结果：稳定失败于 `play.test.ts:122`，总用时约 80 秒；保留目录 `/tmp/skyengine-e2e-FTntKv`。
 - 最终 `study-end.ppm` 实际仍是战斗画面，不存在“获得新植物”弹窗。第一段轮询的 `(94,145) == rgb(208,244,200)` 偶然命中场景像素，属于测试误判，不能作为结算证据。
 - 冻结期间 stdout 连续 532 次出现同一现场：`PC=0x22632C`、`LR=0x23D5C1`、`SP=0x445A4C`，错误为 `UC_ERR_EXCEPTION`。
 - 从 MRP 文件表按 `game.ext` 偏移 `0x284F9`、压缩长度 `0x11B62` 提取并解压，得到 116492 字节映像；运行时基址为 `0x226118`。
@@ -64,9 +64,9 @@
 
 - 通用修复位于 `src/arm_ext/aex_table.c`：`table[38]` 通过 host 输出指针与原 guest 映射的指针身份判断原地写入；两者相同时保留原 ARM 地址，不再把 `output_len=0` 误判成空输出。代码不包含应用名、MRP 名或场景地址特判。
 - 目标测试同时强化最终验收：`new-plant.ppm` 轮询“获得新植物”界面独有的绿色外框与浅绿标题背景，继续使用 20 秒 timeout，避免用普通战斗画面的偶然同色像素作为成功证据。
-- 构建：`cmake --build build --target vmrp -j2` 通过。
+- 构建：`cmake --build build --target skyengine -j2` 通过。
 - 原测试逻辑下首次验证：`play.test.ts` 通过，约 60.8 秒；stdout 299 字节，无 `UC_ERR_EXCEPTION`/`UC_ERR`。
-- 强化 PPM 条件后再次验证：`play.test.ts` 通过，约 59.8 秒；保留目录 `/tmp/vmrp-e2e-9nhlhS`。
+- 强化 PPM 条件后再次验证：`play.test.ts` 通过，约 59.8 秒；保留目录 `/tmp/skyengine-e2e-9nhlhS`。
 - `study-end.ppm` 时间为 `12:03:17.896`，`new-plant.ppm` 时间为 `12:03:19.404`，确认后约 1.5 秒显示新植物，满足 20 秒要求。
 - `new-plant.ppm`：`240x320`，28 种颜色，SHA-256 `9232a38618d36814a3daa94dd10afe33c0e353aeacacdddfc866601d91a3dae8`；画面明确显示“获得新植物 / 向日葵”。
 - 同应用兼容验证：`pnpm vitest run test/e2e/gzwdzjs/game-start.test.ts --reporter=verbose` 通过，2 个用例（教程开始、花屏检查）全部通过。

@@ -4274,7 +4274,7 @@ int32 mr_event(int16 type, int32 param1, int32 param2) {
             /* 原版平台的 mr_event 只有两级:显式注册的 mr_event_function
              * (对应上面的 native_event_function),然后 Lua dealevent;
              * 原始事件从不直接投递给 C ext——ext 只经 dealevent 打包转发
-             * (_strCom 801)收到事件。20-byte native_ext_event 是 vmrp 为
+             * (_strCom 801)收到事件。20-byte native_ext_event 是 skyengine 为
              * 无 Lua hook 的 EXT-only runtime 补的兼容入口。若在 dealevent
              * 存在时也先调它,同一按键会两次进入 wrapper,且 MR_IGNORE 语义
              * 变得含混:重放会双重处理,强制消费又截断 Lua 路径。因此与

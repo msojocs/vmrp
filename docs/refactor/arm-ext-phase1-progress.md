@@ -53,7 +53,7 @@
 
 ## 验证
 
-- 每批之后:`vmrp-unit` 47 checks 全过 + 全量 e2e 16 文件/27 用例全绿
+- 每批之后:`skyengine-unit` 47 checks 全过 + 全量 e2e 16 文件/27 用例全绿
   (P1-A、P1-B、P1-C 三轮)。
 - 第一方编译告警保持 0。
 - sanitizer 门:ASan/UBSan **报告 0 条**(达标)。5 个像素时序失败与 Phase 0

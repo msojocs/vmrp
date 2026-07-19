@@ -80,7 +80,7 @@
 通用化已落地：`arm_ext_repair_private_child_bridges()`（`src/arm_ext_executor.c`）取代了
 `gghjt_on_child_synced`，record 填值由 master `EXT_TABLE` 自指针谓词数据驱动，RW 镜像由
 声明式 `verdload_rw_runs` 描述符驱动（无文件名/指纹/魔数索引）。`VMRP_ARM_EXT_DIAG=1` 跑
-`build/vmrp mythroad/gghjt.mrp`（删 netpay.mrp 触发下载路径）实测 18 个 RW 槽逐字等于本表
+`build/skyengine mythroad/gghjt.mrp`（删 netpay.mrp 触发下载路径）实测 18 个 RW 槽逐字等于本表
 "填入值"列：`rw+0x16C=0x10068`、`rw+0x170..0x1B0=0x1000C..0x1004C`，零崩溃。
 
 跨 11 个游戏回归（`VMRP_ARM_EXT_DIAG=1`，各跑数秒）：
@@ -88,6 +88,6 @@
   （旧代码只按文件名修 gghjt 一个；通用化后这 5 个共享 wrapper 的游戏免费获得同样修复。）
 - **通用 pass 为 no-op（0 修复行）、干净启动**：applist, dsm_gm, ydqtwo, mssj。证明按结构化
   拟合 + 空白槽守卫是选择性的，不会对无该 private child 的游戏误触发。
-- 全部 11 个游戏零崩溃 / 零 Invalid instruction。`vmrp_app_compat_tests`、`vmrp_filelib_tests` 绿；
-  `vmrp_api_tests` 的 2 个 event/timer 转发失败是先于本改动存在的、与本路径无关（该测试不链接
+- 全部 11 个游戏零崩溃 / 零 Invalid instruction。`skyengine_app_compat_tests`、`skyengine_filelib_tests` 绿；
+  `skyengine_api_tests` 的 2 个 event/timer 转发失败是先于本改动存在的、与本路径无关（该测试不链接
   `arm_ext_executor.c`/`app_compat_gghjt.c`）。

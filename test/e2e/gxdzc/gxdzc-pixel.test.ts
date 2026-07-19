@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 
 describe("gxdzc pixel flow", () => {
   let engine: SkyEngineE2e | undefined;

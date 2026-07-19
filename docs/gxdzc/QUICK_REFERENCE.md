@@ -6,7 +6,7 @@
 ```bash
 export VMRP_AUTO_CLICKS="x1,y1[,delay1];x2,y2[,delay2];..."
 export VMRP_AUTO_CLICK_DELAY_MS=1000  # default: 800
-./vmrp game.mrp
+./skyengine game.mrp
 ```
 
 ### Format Examples
@@ -34,28 +34,28 @@ export VMRP_AUTO_CLICK_DELAY_MS=1000  # default: 800
 
 ### Output File
 ```
-/tmp/vmrp_screen.ppm
+/tmp/skyengine_screen.ppm
 ```
 
 ### Automatic Triggers
 ```bash
 # Always captures on 5th frame
-./vmrp game.mrp
+./skyengine game.mrp
 
 # Continuous capture every 30 frames (5th frame + every 30 after)
-VMRP_PPM=1 ./vmrp game.mrp
+VMRP_PPM=1 ./skyengine game.mrp
 ```
 
 ### Manual Capture
 ```bash
 # In another terminal, send SIGUSR1 signal
-kill -USR1 <vmrp-pid>
+kill -USR1 <skyengine-pid>
 ```
 
 ### Format
 - **Header**: `P6\n<width> <height>\n255\n` (P6 = raw binary PPM)
 - **Pixels**: RGB8 triplets (3 bytes per pixel)
-- **View**: `display /tmp/vmrp_screen.ppm` or `convert /tmp/vmrp_screen.ppm output.png`
+- **View**: `display /tmp/skyengine_screen.ppm` or `convert /tmp/skyengine_screen.ppm output.png`
 
 ---
 
@@ -92,7 +92,7 @@ kill -USR1 <vmrp-pid>
              │
       ┌──────▼──────────────┐
       │ event()              │
-      │ → vmrp_runtime_event │
+      │ → skyengine_runtime_event │
       └──────┬───────────────┘
              │
       ┌──────▼──────────────┐
@@ -109,7 +109,7 @@ kill -USR1 <vmrp-pid>
 | SDL_MOUSEBUTTONDOWN | event(MR_MOUSE_DOWN) | |
 | SDL_MOUSEBUTTONUP | event(MR_MOUSE_UP) | |
 | SDL_MOUSEMOTION | event(MR_MOUSE_MOVE) | Only if isMouseDown=true |
-| timerEventType | timer() → vmrp_runtime_timer() | Custom SDL event |
+| timerEventType | timer() → skyengine_runtime_timer() | Custom SDL event |
 
 ---
 
@@ -166,7 +166,7 @@ timerCb() [timer thread]
        └─ SDL_PushEvent() → queues to main thread
           ↓
           Main loop detects event
-          └─ timer() → vmrp_runtime_timer()
+          └─ timer() → skyengine_runtime_timer()
              └─ Executes in main thread [SAFE]
 ```
 
@@ -191,8 +191,8 @@ Uint32 timerCb(Uint32 interval, void *param) {
 | VMRP_AUTO_CLICKS | (unset) | Automated click sequence |
 | VMRP_AUTO_CLICK_DELAY_MS | 800 | Delay between clicks (ms) |
 | VMRP_PPM | (unset) | Continuous PPM dumps every 30 frames |
-| VMRP_SCREEN_WIDTH | 240 | Screen width (overridden by --screen) |
-| VMRP_SCREEN_HEIGHT | 320 | Screen height (overridden by --screen) |
+| SKYENGINE_SCREEN_WIDTH | 240 | Screen width (overridden by --screen) |
+| SKYENGINE_SCREEN_HEIGHT | 320 | Screen height (overridden by --screen) |
 | VMRP_MRP | dsm_gm.mrp | MRP file to load |
 | VMRP_EXT | start.mr | Extension/entry point |
 | VMRP_ENTRY | (none) | Entry function |
@@ -207,6 +207,6 @@ Uint32 timerCb(Uint32 interval, void *param) {
 | src/main.c (297-405) | Auto-click parsing & threading |
 | src/main.c (407-498) | SDL event loop implementation |
 | src/main.c (179-188) | Timer event callback |
-| src/vmrp.c (347-349) | event() dispatcher |
-| src/vmrp_api.c | Headless API (no SDL) |
+| src/skyengine.c (347-349) | event() dispatcher |
+| src/skyengine_api.c | Headless API (no SDL) |
 

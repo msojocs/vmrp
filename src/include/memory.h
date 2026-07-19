@@ -1,5 +1,5 @@
-#ifndef __VMRP_MEMORY_H__
-#define __VMRP_MEMORY_H__
+#ifndef __SKYENGINE_MEMORY_H__
+#define __SKYENGINE_MEMORY_H__
 
 #include <stdlib.h>
 #include <string.h>

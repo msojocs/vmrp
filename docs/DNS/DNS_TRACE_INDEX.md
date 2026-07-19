@@ -101,15 +101,15 @@ Contains:
 
 | Item | Answer | Location |
 |------|--------|----------|
-| **Domain** | `rop.skymobiapp.com` | vmrp.c:28 |
-| **Maps to** | `127.0.0.1` | vmrp.c:28 |
+| **Domain** | `rop.skymobiapp.com` | skyengine.c:28 |
+| **Maps to** | `127.0.0.1` | skyengine.c:28 |
 | **Mechanism** | In-memory lookup table | network.c:161-174 |
 | **Resolution** | system getaddrinfo() | network.c:480-517 |
 | **Entry point** | mr_getHostByName() | network.c:536 |
 | **Core function** | my_getHostByNameSync() | network.c:480 |
 | **Max entries** | 32 DNS mappings | network.c:53 |
 | **Async** | Yes, with pthread | network.c:520-528 |
-| **Customizable** | Yes, 4 methods | vmrp.c:216-233 |
+| **Customizable** | Yes, 4 methods | skyengine.c:216-233 |
 
 ---
 
@@ -117,7 +117,7 @@ Contains:
 
 ### Analysis Documents (This Directory)
 ```
-/home/msojocs/github/vmrp/
+/home/msojocs/github/skyengine/
 ├── QUICK_REFERENCE.md          ← Quick lookup (6 KB)
 ├── DNS_TRACE_ANALYSIS.md       ← Complete analysis (22 KB)
 ├── FINDINGS_SUMMARY.txt        ← Organized findings (21 KB)
@@ -127,7 +127,7 @@ Contains:
 ### Source Code Files Referenced
 ```
 src/
-├── vmrp.c                      ← DNS map definition (lines 25-282)
+├── skyengine.c                      ← DNS map definition (lines 25-282)
 ├── network.c                   ← Core DNS/socket implementation (765 lines)
 ├── arm_ext_executor.c          ← ARM SWI handler (line 1549)
 ├── native_dsm_funcs.c          ← Native function bridge (lines 178-180)
@@ -136,7 +136,7 @@ src/
 │   └── mythroad.c              ← Function table setup (line 466)
 └── include/
     ├── network.h               ← Function declarations
-    └── vmrp_api.h              ← Public API
+    └── skyengine_api.h              ← Public API
 ```
 
 ---
@@ -151,7 +151,7 @@ src/
 - **Data Structures**: FINDINGS_SUMMARY.txt section 8, DNS_TRACE_ANALYSIS.md section 9
 
 ### Finding by File
-- **vmrp.c**: FINDINGS_SUMMARY.txt end section, DNS_TRACE_ANALYSIS.md section 2
+- **skyengine.c**: FINDINGS_SUMMARY.txt end section, DNS_TRACE_ANALYSIS.md section 2
 - **network.c**: FINDINGS_SUMMARY.txt end section, DNS_TRACE_ANALYSIS.md section 3-14
 - **arm_ext_executor.c**: FINDINGS_SUMMARY.txt section 7
 - **mythroad/dsm.c**: FINDINGS_SUMMARY.txt section 7
@@ -182,19 +182,19 @@ src/
 
 ### Change DNS mapping via CLI
 ```bash
-vmrp --dns-map "rop.skymobiapp.com->192.168.1.100" mythroad/gghjt.mrp
+skyengine --dns-map "rop.skymobiapp.com->192.168.1.100" mythroad/gghjt.mrp
 ```
 
 ### Change DNS mapping via environment variable
 ```bash
-export VMRP_DNS_MAP="rop.skymobiapp.com->192.168.1.100"
-vmrp mythroad/gghjt.mrp
+export SKYENGINE_DNS_MAP="rop.skymobiapp.com->192.168.1.100"
+skyengine mythroad/gghjt.mrp
 ```
 
 ### Change DNS mapping via API
 ```c
-#include "include/vmrp_api.h"
-vmrp_api_set_dns_map("rop.skymobiapp.com->192.168.1.100");
+#include "include/skyengine_api.h"
+skyengine_api_set_dns_map("rop.skymobiapp.com->192.168.1.100");
 ```
 
 ### Expected debug output
@@ -251,7 +251,7 @@ ARM App → SWI Handler → Wrapper → Native Bridge → Network Layer → DNS 
 ### For Quick Understanding (5-10 minutes)
 1. This index (current file)
 2. QUICK_REFERENCE.md
-3. Run: `vmrp --dns-map "rop.skymobiapp.com->127.0.0.1" mythroad/gghjt.mrp`
+3. Run: `skyengine --dns-map "rop.skymobiapp.com->127.0.0.1" mythroad/gghjt.mrp`
 
 ### For Complete Understanding (30-45 minutes)
 1. This index
@@ -263,7 +263,7 @@ ARM App → SWI Handler → Wrapper → Native Bridge → Network Layer → DNS 
 1. QUICK_REFERENCE.md (functions table)
 2. FINDINGS_SUMMARY.txt (organized by topic)
 3. DNS_TRACE_ANALYSIS.md (code examples)
-4. Source files (vmrp.c, network.c)
+4. Source files (skyengine.c, network.c)
 
 ---
 
@@ -293,7 +293,7 @@ ARM App → SWI Handler → Wrapper → Native Bridge → Network Layer → DNS 
 
 To verify DNS mapping is working:
 
-- [ ] Run: `vmrp --dns-map "rop.skymobiapp.com->127.0.0.1" mythroad/gghjt.mrp`
+- [ ] Run: `skyengine --dns-map "rop.skymobiapp.com->127.0.0.1" mythroad/gghjt.mrp`
 - [ ] Look for: "dns map: rop.skymobiapp.com -> 127.0.0.1"
 - [ ] Look for: "--- IPv4 address: 127.0.0.1"
 - [ ] Look for: "my_connect('127.0.0.1', <port>)"
@@ -333,7 +333,7 @@ To verify DNS mapping is working:
 ### Advanced
 1. Read all three documents
 2. Study DNS_TRACE_ANALYSIS.md sections 2-10
-3. Review source code: vmrp.c, network.c
+3. Review source code: skyengine.c, network.c
 4. Understand: Async, threading, CMWAP mode
 5. Modify: Create custom DNS mappings
 

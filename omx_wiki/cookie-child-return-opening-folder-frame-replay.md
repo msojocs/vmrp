@@ -75,15 +75,15 @@ buffer, everywhere in the handoff round trip:
 
 `mr_open(mythroad/fm.sav,1)` read → `mr_remove(fm.sav)` → `mr_findStart(mythroad/)`
 in the return trace prove the list is really reloaded and Cookie draws
-`正在打开` itself. Both `run-mrp.test.ts` cases pass (`方式二` /tmp/vmrp-e2e-tZHWPH,
-`方式一` /tmp/vmrp-e2e-ZLESpM). The tests pre-create `mythroad/brw` so wbrw's
+`正在打开` itself. Both `run-mrp.test.ts` cases pass (`方式二` /tmp/skyengine-e2e-tZHWPH,
+`方式一` /tmp/skyengine-e2e-ZLESpM). The tests pre-create `mythroad/brw` so wbrw's
 own new root directory doesn't shift the index-based selection; the 8-item list
 is stable across launch/return, so the restored frame matches the pre-launch
 frame byte-for-byte and the last-item highlight assertion moved to (100,248).
-`tsc --noEmit`, `ctest` (vmrp-unit), and the full parallel `test/e2e`
+`tsc --noEmit`, `ctest` (skyengine-unit), and the full parallel `test/e2e`
 (19 files, 32 tests) all pass in ~308s.
 
 Related files: `src/arm_ext_executor.c`, `src/mythroad/mythroad.c`,
 `src/mythroad/dsm.c`, `src/main.c`, `src/e2e_control.c`,
-`test/e2e/cookie/run-mrp.test.ts`, `test/e2e/vmrp-e2e.ts`,
+`test/e2e/cookie/run-mrp.test.ts`, `test/e2e/skyengine-e2e.ts`,
 `docs/修复记录/cookie/cookie-run-mrp-handoff-debug.md`.

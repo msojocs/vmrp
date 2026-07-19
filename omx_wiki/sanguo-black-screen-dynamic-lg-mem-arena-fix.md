@@ -1,6 +1,6 @@
 ---
 title: "Sanguo black-screen dynamic LG_mem arena fix"
-tags: ["vmrp", "sanguo", "arm-ext", "allocator", "lg-mem", "disassembly", "ppm"]
+tags: ["skyengine", "sanguo", "arm-ext", "allocator", "lg-mem", "disassembly", "ppm"]
 created: 2026-07-16T13:58:36.204Z
 updated: 2026-07-16T13:59:05.540Z
 sources: ["src/arm_ext/aex_mem.c", "docs/修复记录/sanguo-black-screen-disassembly.md", "docs/修复记录/sanguo-black-screen-runtime.md"]
@@ -14,7 +14,7 @@ schemaVersion: 1
 
 ## Symptom and bounded evidence
 
-`build/vmrp build/mythroad/490111_240x320_sanguo.mrp` stayed inside the first synchronous cfunction.ext code-0 call at about 100% of one CPU. The 64-entry guest PC ring converged on Thumb `0xE82DE2..0xE82E3C`; the baseline P6 240x320 frame was entirely black. No Xvfb or unbounded trace was used.
+`build/skyengine build/mythroad/490111_240x320_sanguo.mrp` stayed inside the first synchronous cfunction.ext code-0 call at about 100% of one CPU. The 64-entry guest PC ring converged on Thumb `0xE82DE2..0xE82E3C`; the baseline P6 240x320 frame was entirely black. No Xvfb or unbounded trace was used.
 
 ## Root cause
 

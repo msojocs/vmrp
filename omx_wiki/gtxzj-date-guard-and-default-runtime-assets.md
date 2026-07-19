@@ -1,9 +1,9 @@
 ---
 title: "GTXZJ date guard and default runtime assets"
-tags: ["vmrp", "gtxzj", "arm-ext", "disassembly", "datetime", "rtc", "fonts", "black-screen", "ppm"]
+tags: ["skyengine", "gtxzj", "arm-ext", "disassembly", "datetime", "rtc", "fonts", "black-screen", "ppm"]
 created: 2026-07-17T02:37:08Z
 updated: 2026-07-17T03:10:52Z
-sources: ["src/utils.c", "src/vmrp_args.c", "src/vmrp.c", "src/vmrp_api.c", "src/include/vmrp_api.h", "CMakeLists.txt", "test/e2e/gtxzj/boot-to-title.test.ts", "docs/修复记录/gtxzj-black-screen-progress.md"]
+sources: ["src/utils.c", "src/skyengine_args.c", "src/skyengine.c", "src/skyengine_api.c", "src/include/skyengine_api.h", "CMakeLists.txt", "test/e2e/gtxzj/boot-to-title.test.ts", "docs/修复记录/gtxzj-black-screen-progress.md"]
 links: ["sanguo-black-screen-dynamic-lg-mem-arena-fix.md"]
 category: debugging
 confidence: high
@@ -14,7 +14,7 @@ schemaVersion: 1
 
 ## Symptom and identity
 
-`build/vmrp build/mythroad/gtxzj.mrp` opened a live 240x320 SDL window but remained
+`build/skyengine build/mythroad/gtxzj.mrp` opened a live 240x320 SDL window but remained
 entirely black. The process was idle in the SDL event loop rather than spinning, and
 15 seconds of bounded observation produced no timer or draw. A live `SIGUSR1` dump
 was P6 240x320 with an all-zero RGB payload. The investigated package is 361950 bytes
@@ -89,21 +89,21 @@ user's original command.
 
 The runtime now emulates a deterministic handset RTC date of 2011-01-01 by default,
 while hour, minute, and second still come from the live host clock. CLI
-`--device-date YYYY-MM-DD|host` and `VMRP_DEVICE_DATE` select a validated calendar
+`--device-date YYYY-MM-DD|host` and `SKYENGINE_DEVICE_DATE` select a validated calendar
 date or restore the host wall-clock date. Validation covers the fixed format,
 month lengths, and Gregorian leap years before the application starts.
 
 `getDatetime` reads only the public runtime configuration. There are no package
 names, hashes, deadline constants, post-failure retries, timeout callbacks, or
 scene-specific branches. Shared-library starts inherit the deterministic default
-through `vmrp_args_default()`. Embedding hosts can call
-`vmrp_api_set_device_date("host"|"YYYY-MM-DD")` before start; it reuses the CLI
+through `skyengine_args_default()`. Embedding hosts can call
+`skyengine_api_set_device_date("host"|"YYYY-MM-DD")` before start; it reuses the CLI
 calendar validator and leaves the previous valid mode unchanged on invalid input.
 Calls during an active VM are rejected so the worker cannot observe a mixed date.
 
 The native `skyengine-system-assets` dependency treats tracked `gb12.uc2` and `gb16.uc2`
-as required desktop assets and copies them on every requested `vmrp` build to
-`$<TARGET_FILE_DIR:vmrp>/mythroad/system`. Their deployed SHA-256 values are
+as required desktop assets and copies them on every requested `skyengine` build to
+`$<TARGET_FILE_DIR:skyengine>/mythroad/system`. Their deployed SHA-256 values are
 `f8e9a443e28eecce3a99f0ebf26a197b1ef5e65bab5406054ff7e985d48274b3` and
 `6a6d819025765b4b967aa9dd5c7efc5c86b06265b73a14db91869b22bf3d2dd5`.
 The dependency restores a deleted font without relinking and follows an overridden
@@ -123,7 +123,7 @@ cleanly. The title-to-selection and selection-to-dialog PPMs changed by 1506 and
 The GTXZJ E2E reproduces the same state-machine boundaries with stable pixel and
 regional-diff assertions. Final checks passed:
 
-- `cmake --build build --target vmrp -j2`;
+- `cmake --build build --target skyengine -j2`;
 - `pnpm exec tsc --noEmit`;
 - `SKYENGINE_BUILD_SHARED_ONLY=ON` shared-library build and direct fixed/host/invalid/
   active-run setter probes;

@@ -10,7 +10,7 @@
 ## 2026-07-06 复现与初步定位
 
 - 分步复现脚本 `/tmp/repro-steps.sh`(基于 test/e2e/gzwdzjs/repro-tutorial.sh,环境无 socat 改用 python3 socket):
-  crash 文件 `/tmp/vmrp_crash.bin` 在 **LEFT_SOFT 步骤**首次出现——崩溃发生在按下"开始教程"之后的场景加载期。
+  crash 文件 `/tmp/skyengine_crash.bin` 在 **LEFT_SOFT 步骤**首次出现——崩溃发生在按下"开始教程"之后的场景加载期。
 - stdout 崩溃信息:
   ```
   UC_MEM_READ_UNMAPPED addr=0x1A801B0 size=4
@@ -61,7 +61,7 @@
 
 - 命令:`VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gzwdzjs/game-start.test.ts -t 教程 --reporter=verbose`
 - 结果:仍失败于 `game-start.test.ts:66`,`start.ppm` 的 `(75,75)=[0,0,0]`,画面仍是读取中状态。
-- 临时目录:`/tmp/vmrp-e2e-M2Erpw`
+- 临时目录:`/tmp/skyengine-e2e-M2Erpw`
 - PPM 证据:`start.ppm` 为 `240x320`,`unique=2`,`nonzero=433`,`pixel(75,75)=[0,0,0]`。
 - stdout 证据:仍为 `UC_MEM_READ_UNMAPPED addr=0x1A801B0`, `PC=0x23BACE (thumb)`, `LR=0x23BA53`, `R0=0x01A801A8`, `R1=0xFFFF`, `R2=0x01A7BFE1`,与前一次定时器链表覆写定位一致。
 
@@ -141,9 +141,9 @@
 ## 2026-07-06 16:22 当前工作区复现
 
 - 当前 `git status` 只有文档/脚本未跟踪或修改,`src/` 无本问题修复改动;
-  `cmake --build build --target vmrp -j2` 成功但未改变行为。
+  `cmake --build build --target skyengine -j2` 成功但未改变行为。
 - 命令:`VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gzwdzjs/game-start.test.ts -t 教程 --reporter=verbose`
-- 结果:失败于 `game-start.test.ts:66`,保留目录 `/tmp/vmrp-e2e-mKY7mh`。
+- 结果:失败于 `game-start.test.ts:66`,保留目录 `/tmp/skyengine-e2e-mKY7mh`。
 - PPM 证据:`start.ppm` 为 `240x320`,`unique=2`,`nonzero=433`,
   `pixel(75,75)=[0,0,0]`。
 - stdout 证据仍为同一崩溃:
@@ -176,11 +176,11 @@
   - 修复不使用 app 名称/MRP 文件名分支;只有在发现上述 allocator
     指令形状、且 free-list 与 live timer node allocation 区间重叠时才改写
     guest free-list。
-- 构建:`cmake --build build --target vmrp -j2` 通过。
+- 构建:`cmake --build build --target skyengine -j2` 通过。
 - 目标用例:
   `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gzwdzjs/game-start.test.ts -t 教程 --reporter=verbose`
   通过。
-- 保留目录:`/tmp/vmrp-e2e-hSAUM8`。
+- 保留目录:`/tmp/skyengine-e2e-hSAUM8`。
 - PPM 证据:`start.ppm` 为 `240x320`,`unique=240`,`nonzero=75304`,
   `pixel(75,75)=[232,184,40]`。
 - stdout 检查:无 `UC_MEM_READ_UNMAPPED`,无 `PC=0x23BACE`,
@@ -199,5 +199,5 @@
 - 剩余 app E2E 回归:
   `pnpm vitest run test/e2e/gms/game-prepare.test.ts test/e2e/gwkdl/game-prepare.test.ts test/e2e/istore/boot-to-home.test.ts test/e2e/opglqa/font.test.ts test/e2e/gtcm/boot-to-home.test.ts test/e2e/wbrw/input-text.test.ts --reporter=verbose`
   通过,6 个文件/7 个用例全部通过。
-- 结果:除公共 harness `test/e2e/vmrp-e2e.ts` 和 `gzwdzjs` 手动 repro shell
+- 结果:除公共 harness `test/e2e/skyengine-e2e.ts` 和 `gzwdzjs` 手动 repro shell
   脚本外,当前 `test/e2e` 下 app 测试文件已分批覆盖,合计 16 个测试文件通过。

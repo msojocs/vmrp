@@ -4,7 +4,7 @@
 
 ## 目标与约束
 
-- 复现命令：`build/vmrp build/mythroad/愤怒的小鸟VS僵尸2_v1002.mrp`。
+- 复现命令：`build/skyengine build/mythroad/愤怒的小鸟VS僵尸2_v1002.mrp`。
 - 目标：保持宿主文件名不变也能正常启动；不得按应用名、哈希或场景特判。
 - 不使用 Xvfb，不开启全量 trace；运行证据使用 SDL dummy、E2E socket、
   有界 ARM EXT 诊断和 PPM。
@@ -136,10 +136,10 @@ DOTA 已有的真实危险形状保持不变：
 
 ## 阶段 5：目标与兼容复验
 
-- `cmake --build build --target vmrp -j2` 通过；删除失效 helper 后无新增 warning。
+- `cmake --build build --target skyengine -j2` 通过；删除失效 helper 后无新增 warning。
 - OP6120 定向 E2E 2/2 通过：既有 4M cold boot 和新增长名 cold boot 分别约
   4.70 秒、4.31 秒。
-- 使用原命令 `build/vmrp build/mythroad/愤怒的小鸟VS僵尸2_v1002.mrp`
+- 使用原命令 `build/skyengine build/mythroad/愤怒的小鸟VS僵尸2_v1002.mrp`
   在 SDL dummy 下直接运行，`DRAW_COUNT=582`，到达 `my_initNetwork`。
 - 直接运行和两个 E2E 的 P6 `240x320` PPM SHA-256 都是
   `c84009d93e752378bfaee8d98ab972ae5c2474d447b4e2c3895db7a7228b60d8`，

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 import fs from 'fs'
 
 describe("talkcat 进入游戏", () => {
@@ -21,7 +21,7 @@ describe("talkcat 进入游戏", () => {
     engine = await SkyEngineE2e.start("test/fixtures/talkcat.mrp", { workDir: ws.dir });
 
     await vi.waitFor(async () => {
-      if (!engine) throw new Error("vmrp is undefined");
+      if (!engine) throw new Error("engine is undefined");
       const boot = await engine.screen("main");
       // rgb(232, 236, 232)
       expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);
@@ -39,7 +39,7 @@ describe("talkcat 进入游戏", () => {
     engine = await SkyEngineE2e.start("test/fixtures/talkcat.mrp", { workDir: ws.dir });
 
     await vi.waitFor(async () => {
-      if (!engine) throw new Error("vmrp is undefined");
+      if (!engine) throw new Error("engine is undefined");
       const boot = await engine.screen("main");
       // rgb(232, 236, 232)
       expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);
@@ -63,7 +63,7 @@ describe("talkcat 进入游戏", () => {
       await engine.click(78, 280, 1_000)
       await engine.delay(5_000)
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const screen = await engine.screen("downloading");
         // rgb(32, 212, 0)
         expect(screen.pixel(79, 257)).toEqual([32, 212, 0]);
@@ -74,7 +74,7 @@ describe("talkcat 进入游戏", () => {
     }
     {
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         // 检查是否显示安装提示
         // rgb(32, 64, 120)
         const screen = await engine.screen("install-confirm");
@@ -89,7 +89,7 @@ describe("talkcat 进入游戏", () => {
       await engine.click(77, 279, 1_000)
       
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         // rgb(32, 212, 0)
         const screen = await engine.screen("installing");
         expect(screen.pixel(54, 257)).toEqual([32, 212, 0]);
@@ -111,7 +111,7 @@ describe("talkcat 进入游戏", () => {
     engine = await SkyEngineE2e.start("test/fixtures/talkcat.mrp", { workDir: ws.dir });
 
     await vi.waitFor(async () => {
-      if (!engine) throw new Error("vmrp is undefined");
+      if (!engine) throw new Error("engine is undefined");
       const boot = await engine.screen("main");
       // rgb(232, 236, 232)
       expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);

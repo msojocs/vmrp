@@ -1,6 +1,6 @@
 ---
 title: "OP6120 independent SCRRAM 4M startup fix"
-tags: ["vmrp", "op6120", "arm-ext", "scrram", "allocator", "table38", "disassembly", "ppm"]
+tags: ["skyengine", "op6120", "arm-ext", "scrram", "allocator", "table38", "disassembly", "ppm"]
 created: 2026-07-17T07:08:48Z
 updated: 2026-07-17T07:08:48Z
 sources: ["src/arm_ext/aex_table.c", "src/arm_ext_executor.c", "src/include/arm_ext_internal.h", "src/mythroad/dsm.c", "docs/修复记录/op6120-4m-startup-hang-debug.md", "test/e2e/op6120/boot-4m.test.ts"]
@@ -14,7 +14,7 @@ schemaVersion: 1
 
 ## Symptom and bounded reproduction
 
-`build/vmrp build/mythroad/op6120.mrp --memory 4M` remained on its progress
+`build/skyengine build/mythroad/op6120.mrp --memory 4M` remained on its progress
 artwork while the same package started with 1M. The 525104-byte MRP has SHA-256
 `611b4cd737dcf458370ff215bc73636cf65bdc6dfc36907c2ce8aa8f00b7c8e2`.
 

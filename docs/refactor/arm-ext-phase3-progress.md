@@ -32,7 +32,7 @@
 
 ## 验证
 
-- vmrp-unit 47 checks ✅;全量 e2e 27/27 两轮(P3-A 后、P3-B 后)✅;
+- skyengine-unit 47 checks ✅;全量 e2e 27/27 两轮(P3-A 后、P3-B 后)✅;
   第一方告警 0 ✅;sanitizer 门(Phase 2+3 合并覆盖):**ASan/UBSan 报告
   0 条** ✅,6 个失败与既定基线同类同集合(像素时序,普通构建全绿)。
 - 当前布局:executor 主体 5736 行 + src/arm_ext/ 七单元 5454 行。

@@ -20,10 +20,10 @@ which prevents UTF-8 Chinese paths from opening reliably on desktop builds.
   UTF-8; missing MRP-internal paths still follow the old GB-to-UTF-8 conversion.
 - `src/fileLib.c` and `src/include/dirent_win.h`: Windows host file operations
   now convert internal UTF-8 paths to UTF-16 and call wide APIs.
-- Startup-time direct MRP reads now use `vmrp_host_fopen()` so app compat header
+- Startup-time direct MRP reads now use `skyengine_host_fopen()` so app compat header
   probing, ARM EXT cache parsing, and smoke loading all follow the same host path
   behavior.
-- `src/vmrp_args.c`: Windows executable and CLI path resolution now uses wide
+- `src/skyengine_args.c`: Windows executable and CLI path resolution now uses wide
   Windows APIs and converts back to internal UTF-8.
 
 ## Verification

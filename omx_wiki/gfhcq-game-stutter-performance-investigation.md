@@ -1,6 +1,6 @@
 ---
 title: "gfhcq game stutter performance investigation"
-tags: ["vmrp", "gfhcq", "performance", "arm-ext", "e2e", "ppm"]
+tags: ["skyengine", "gfhcq", "performance", "arm-ext", "e2e", "ppm"]
 created: 2026-07-15T00:00:00+08:00
 updated: 2026-07-15T19:21:26+08:00
 sources: ["test/e2e/gfhcq/temp.test.ts", "test/fixtures/gfhcq.mrp"]
@@ -35,11 +35,11 @@ resource exhaustion into the performance result. BGM/menu waits are bounded at
 progress is sampled once every ten seconds without broad trace or per-frame PPM
 dumping.
 
-Artifacts `/tmp/vmrp-e2e-akjST9` and `/tmp/vmrp-e2e-lPLMIs` predate that
+Artifacts `/tmp/skyengine-e2e-akjST9` and `/tmp/skyengine-e2e-lPLMIs` predate that
 three-second delay and sampled a menu/transition phase. Their apparently high
 submission rates are not game baselines and are deliberately excluded.
 
-The valid pre-fix RelWithDebInfo artifact is `/tmp/vmrp-e2e-k0DfVb`. Draw
+The valid pre-fix RelWithDebInfo artifact is `/tmp/skyengine-e2e-k0DfVb`. Draw
 counts were `122,235,400,510,541,570,600`; the final three ten-second deltas
 were `31,29,30`, or about 3.0 submissions/s after the game reached its slow
 steady phase. `/usr/bin/time` reported 44.51s user, 0.80s system and 69.43s
@@ -68,7 +68,7 @@ A bounded low-volume sampler over the first ten million guest blocks recorded:
 - table `[29]` present: 552 calls;
 - timer/time tables `[31..33]`: only thousands of calls.
 
-The diagnostic artifact is `/tmp/vmrp-e2e-SEy3zA/stdout.log`; its hot game
+The diagnostic artifact is `/tmp/skyengine-e2e-SEy3zA/stdout.log`; its hot game
 runtime base was `0x2BC290`, with hotspots at `+0x1CE3A..+0x1CE78` and
 `+0x25F16`. This frequency split ruled out timer starvation, SDL event-loop
 spin, framebuffer/GOT hooks, the R9 guard path, and SDL presentation as the
@@ -115,13 +115,13 @@ table `[120]` correction and would have expanded the compatibility surface.
 
 ## Final performance and PPM evidence
 
-The final RelWithDebInfo dummy artifact is `/tmp/vmrp-e2e-sfwzrO`. Counts were
+The final RelWithDebInfo dummy artifact is `/tmp/skyengine-e2e-sfwzrO`. Counts were
 `121,284,449,613,778,942,1107`; the final three deltas were `165,164,165`, or
 16.47 submissions/s. This is 5.49x the valid dummy pre-fix steady rate of
 3.0/s. Time was 22.92s user, 0.85s system and 68.60s wall (34% CPU), reducing
 CPU time from 45.31s to 23.77s, or 47.5%, while respecting guest waits.
 
-The final Debug dummy artifact `/tmp/vmrp-e2e-tdK9Mf` produced
+The final Debug dummy artifact `/tmp/skyengine-e2e-tdK9Mf` produced
 `118,273,437,572,685,797,905`; its final deltas `113,112,108` are about
 11.1 submissions/s. Time was 48.48s user, 0.76s system and 69.91s wall. The
 earlier valid long Debug run's approximately 1.03/s severe slow phase used a
@@ -129,8 +129,8 @@ different elapsed window, so it is retained as qualitative evidence rather
 than reported as a strict paired speedup ratio.
 
 For the authoritative same-driver correctness check, pre-fix dummy artifact
-`/tmp/vmrp-e2e-k0DfVb`, immediate post-fix `/tmp/vmrp-e2e-qtrd5r`, and final
-overlap-aware dummy artifact `/tmp/vmrp-e2e-sfwzrO` have byte-identical final
+`/tmp/skyengine-e2e-k0DfVb`, immediate post-fix `/tmp/skyengine-e2e-qtrd5r`, and final
+overlap-aware dummy artifact `/tmp/skyengine-e2e-sfwzrO` have byte-identical final
 PPMs at SHA-256
 `7b0862f073b6cb9d14ac84616c4b4e28a24ebb8c17fcb1454ec3dc9d36a409ed`.
 The final Debug frame is a different timing-dependent sprite phase at SHA-256
@@ -141,8 +141,8 @@ total only 2,046 bytes and contain no PERF or broad trace output.
 
 ## Verification
 
-- `cmake --build build --target vmrp -j4`: passed.
-- `cmake --build build-perf --target vmrp -j4`: passed; only pre-existing
+- `cmake --build build --target skyengine -j4`: passed.
+- `cmake --build build-perf --target skyengine -j4`: passed; only pre-existing
   string truncation warnings were emitted.
 - Focused test in final RelWithDebInfo and Debug: both passed with explicitly
   forced SDL dummy drivers, no trace, and no `VMRP_PPM=1`.
@@ -154,6 +154,6 @@ total only 2,046 bytes and contain no PERF or broad trace output.
 - Three independent read-only agents audited implementation equivalence,
   measurement/PPM arithmetic, and requirement coverage; their findings drove
   the off-screen/no-op and explicit-driver corrections above.
-- The current checkout no longer defines the historical `vmrp-unit` target;
+- The current checkout no longer defines the historical `skyengine-unit` target;
   cached build-directory ctest output was excluded from final evidence.
 - `git diff --check`: passed after cleanup.

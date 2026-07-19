@@ -4,7 +4,7 @@
 
 ## 调查范围
 
-- 原始复现命令：`build/vmrp build/mythroad/490111_240x320_sanguo.mrp`。
+- 原始复现命令：`build/skyengine build/mythroad/490111_240x320_sanguo.mrp`。
 - 使用现有真实图形会话 `DISPLAY=:0`，没有使用 Xvfb。
 - 不打开无界 ARM/table trace。PC 取证只使用
   `VMRP_ARM_EXT_TRACE_PC=1` 的 64 项环形缓冲，并在 GDB 中读取。
@@ -21,10 +21,10 @@
 
 | 产物 | 用途 |
 | --- | --- |
-| `/tmp/vmrp-sanguo-baseline.out` | 有界启动标准输出，144 行/8192 字节 |
-| `/tmp/vmrp-sanguo-baseline.err` | `SKYENGINE_LOG=1` 启动阶段日志，32 行/1687 字节 |
-| `/tmp/vmrp-sanguo-proc.txt` | 7 秒时的进程/线程状态 |
-| `/tmp/vmrp-sanguo-baseline.ppm` | `SIGUSR1` 抓取的 240x320 基线画面 |
+| `/tmp/skyengine-sanguo-baseline.out` | 有界启动标准输出，144 行/8192 字节 |
+| `/tmp/skyengine-sanguo-baseline.err` | `SKYENGINE_LOG=1` 启动阶段日志，32 行/1687 字节 |
+| `/tmp/skyengine-sanguo-proc.txt` | 7 秒时的进程/线程状态 |
+| `/tmp/skyengine-sanguo-baseline.ppm` | `SIGUSR1` 抓取的 240x320 基线画面 |
 | `/tmp/sanguo-cfunction.ext` | 解压后 wrapper，19428 (`0x4BE4`) 字节 |
 | `/tmp/sanguo-game.ext` | 解压后主 EXT，164716 (`0x2836C`) 字节 |
 
@@ -55,7 +55,7 @@ PID    STAT  %CPU  NLWP  WCHAN
 
 ```text
 startVmrp
-  -> vmrp_runtime_start_dsm
+  -> skyengine_runtime_start_dsm
   -> mr_start_dsm / _mr_intra_start
   -> mrp_dofile("start.mr")
   -> mrp_call
@@ -69,7 +69,7 @@ startVmrp
 
 ## PPM 黑屏证据
 
-`/tmp/vmrp-sanguo-baseline.ppm` 是合法 P6 Netpbm，尺寸 240x320，总长
+`/tmp/skyengine-sanguo-baseline.ppm` 是合法 P6 Netpbm，尺寸 240x320，总长
 230415 字节，SHA-256 是
 `1edcc2a5a6f7f596acf98d8fbd248c4175886dc8759e6d75ec652b339c2a53b6`。
 

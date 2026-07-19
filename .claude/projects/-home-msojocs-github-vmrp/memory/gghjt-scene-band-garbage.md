@@ -191,7 +191,7 @@ dump 运行期 game.ext(0x646000,0x28000=160KB)，capstone 带跳空反汇编(76
 - 不使用 xvfb；trace 只做窄口径，避免全量日志。
 
 复现命令：
-`timeout 38 env VMRP_NO_MOUSE=1 VMRP_PPM=1 VMRP_PPM_PATH=/tmp/vmrp_screen.ppm ./test/gghjt/game-start.sh > /tmp/gghjt-game-start-current.log 2>&1`
+`timeout 38 env VMRP_NO_MOUSE=1 VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/skyengine_screen.ppm ./test/gghjt/game-start.sh > /tmp/gghjt-game-start-current.log 2>&1`
 按超时退出是预期。当前 PPM 仍坏：
 - `(20,48)=(136,144,80)`，`(120,75)=(200,196,104)`：上半段仍是 4004/标题图横纹。
 - `(55,250)=(0,0,0)`，`(120,250)=(0,0,0)`，`(190,210)=(0,0,0)`：道路/背景区域仍缺失为黑。

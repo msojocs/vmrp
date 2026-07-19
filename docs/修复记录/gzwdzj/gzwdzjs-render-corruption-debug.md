@@ -27,7 +27,7 @@
 
 ## 2026-07-05 PPM/trace 进展
 
-- `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gzwdzjs/game-start.test.ts -t 花屏 --reporter=verbose` 稳定失败,保留目录 `/tmp/vmrp-e2e-Al8lM6`,失败值为 `(128,276)=(0,0,0)`。
+- `VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gzwdzjs/game-start.test.ts -t 花屏 --reporter=verbose` 稳定失败,保留目录 `/tmp/skyengine-e2e-Al8lM6`,失败值为 `(128,276)=(0,0,0)`。
 - PPM 视觉检查:`render-check.ppm` 的底部 `y>=230` 左侧门板只到 `x≈73`,右侧黑区散布短线噪点;`y=276` 上 `x=96/100/101/103/218` 等点为非黑,符合“部分花屏”。
 - 已提取 `test/fixtures/gzwdzjs.mrp` 到 `/tmp/gzwdzjs-unpack`: `game.ext` 解压后 116492 字节,`MRPGCMAP` 后 `0xE80008` 为 ARM 入口;运行时 table[125] 从 RAM 源 `$` 解压 `abc` 到 `0x226118`,table[131] 注册为 primary game,`P=0x2BC3DC`,`H=0x23B38D`。
 - 按步骤采样 `/tmp/gzwdzjs-steps`:第 3 次 ENTER 后 `(128,276)=(96,60,0)`;第 4 次 ENTER 后变为 `(0,0,0)`,且 `x=96` 出现 `(48,48,48)` 噪点。问题在第 4 次 ENTER 的场景/对话框切换期间产生。
@@ -60,7 +60,7 @@
 - 右侧区域复核:临时 table[122] 像素探针显示,最终阶段存在合法 `DrawRect(2,202,236,101,0x65,0x3D,0x01)` 和正常 `table[120] rect=186,274 49x13` 绘制。因此“右侧非黑”不是 stale screen cache,不能用黑填充作为通用修复。
 - 聚焦验证:
   - `SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy VMRP_E2E_KEEP_TMP=1 pnpm vitest run test/e2e/gzwdzjs/game-start.test.ts -t '花屏' --reporter=verbose` 通过。
-  - 最新 PPM `/tmp/vmrp-e2e-Rn2k0Z/render-check.ppm`: `(128,276)=[96,60,0]`;检查区域内原花屏代表色 `(48,48,48)`/`(96,100,96)` 计数为 0。
+  - 最新 PPM `/tmp/skyengine-e2e-Rn2k0Z/render-check.ppm`: `(128,276)=[96,60,0]`;检查区域内原花屏代表色 `(48,48,48)`/`(96,100,96)` 计数为 0。
 - 兼容验证:
   - `SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy pnpm vitest run test/e2e/gxdzc/gxdzc-pixel.test.ts test/e2e/opbzqe/game-prepare.test.ts test/e2e/gghjt/game-start.test.ts --reporter=verbose` 通过,3 个文件 4 个用例通过。
   - 批量加入 `talkcat/game-prepare.test.ts` 时,该用例断言已打印通过,但批量命令收尾阶段有一个 `talkcat.mrp` 进程未退出;已中断该批量命令并确认无残留进程。此项不计作干净通过。

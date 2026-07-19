@@ -136,7 +136,7 @@
 
 ## [2026-06-27T15:07:39.467Z] ingest
 - **Pages:** dota-browser-plugin-record-pack-slot-fix.md
-- **Summary:** Refreshed final DOTA browser plugin verification evidence from /tmp/vmrp-e2e-GSqFvj
+- **Summary:** Refreshed final DOTA browser plugin verification evidence from /tmp/skyengine-e2e-GSqFvj
 ## [2026-06-27T15:46:20.555Z] ingest
 - **Pages:** dota-download-browser-components-transition-frame-fix.md
 - **Summary:** Created new page "DOTA download-browser-components transition frame fix"
@@ -353,7 +353,7 @@
 
 ## [2026-07-15T14:36:30Z] verify
 - **Pages:** cookie-child-return-opening-folder-frame-replay.md
-- **Summary:** Re-ran the default parallel E2E suite without `--no-file-parallelism`; 19 files and 31 tests passed. Refreshed retained Cookie PPM evidence at `/tmp/vmrp-e2e-Vdk5ke`, where `return-draw-0047.ppm` shows `正在打开` before the restored file-manager list.
+- **Summary:** Re-ran the default parallel E2E suite without `--no-file-parallelism`; 19 files and 31 tests passed. Refreshed retained Cookie PPM evidence at `/tmp/skyengine-e2e-Vdk5ke`, where `return-draw-0047.ppm` shows `正在打开` before the restored file-manager list.
 
 ## [2026-07-16T11:10:00+08:00] fix
 - **Pages:** cookie-child-return-opening-folder-frame-replay.md

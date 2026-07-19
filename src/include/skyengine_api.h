@@ -48,25 +48,25 @@ extern "C" {
 #define VMRP_IMAGE_PROCESSING_OPENCV 1
 
 /* Lifecycle */
-VMRP_EXPORT int vmrp_api_init(int screen_w, int screen_h);
+VMRP_EXPORT int skyengine_api_init(int screen_w, int screen_h);
 /*
  * App-visible memory in MB. Allowed: 1/2/4/6/8/16. Must be called before
- * vmrp_api_start(); takes effect on the next start.
+ * skyengine_api_start(); takes effect on the next start.
  */
-VMRP_EXPORT int vmrp_api_set_memory(int memory_mb);
+VMRP_EXPORT int skyengine_api_set_memory(int memory_mb);
 /*
  * App-visible handset date. Accepts "YYYY-MM-DD" or "host" and uses the same
- * calendar validation as the CLI. Must be called before vmrp_api_start(); an
+ * calendar validation as the CLI. Must be called before skyengine_api_start(); an
  * active run is rejected with -1.
  */
-VMRP_EXPORT int vmrp_api_set_device_date(const char *date);
-VMRP_EXPORT int vmrp_api_set_work_dir(const char *work_dir);
-VMRP_EXPORT int vmrp_api_start(const char *mrp_path, const char *ext, const char *entry);
-VMRP_EXPORT void vmrp_api_destroy(void);
-VMRP_EXPORT int vmrp_api_is_running(void);
+VMRP_EXPORT int skyengine_api_set_device_date(const char *date);
+VMRP_EXPORT int skyengine_api_set_work_dir(const char *work_dir);
+VMRP_EXPORT int skyengine_api_start(const char *mrp_path, const char *ext, const char *entry);
+VMRP_EXPORT void skyengine_api_destroy(void);
+VMRP_EXPORT int skyengine_api_is_running(void);
 /* Pauses/resumes the native VM worker without destroying emulator state. */
-VMRP_EXPORT int vmrp_api_pause(void);
-VMRP_EXPORT int vmrp_api_resume(void);
+VMRP_EXPORT int skyengine_api_pause(void);
+VMRP_EXPORT int skyengine_api_resume(void);
 
 /*
  * DNS mapping: when MRP resolves original_domain, VMRP resolves fake_domain
@@ -74,10 +74,10 @@ VMRP_EXPORT int vmrp_api_resume(void);
  *   original_domain->fake_domain
  * Multiple entries can be separated by comma, semicolon, or newline.
  */
-VMRP_EXPORT int vmrp_api_set_dns_map(const char *map);
+VMRP_EXPORT int skyengine_api_set_dns_map(const char *map);
 
 /* Input events */
-VMRP_EXPORT int vmrp_api_event(int code, int p0, int p1);
+VMRP_EXPORT int skyengine_api_event(int code, int p0, int p1);
 
 /*
  * Motion chip (accelerometer, SKYENGINE mr_plat(4001~4006) 动感芯片接口):
@@ -85,11 +85,11 @@ VMRP_EXPORT int vmrp_api_event(int code, int p0, int p1);
  * Axis convention (device coordinates): phone flat face-up -> +Z max; screen
  * facing left, held sideways -> +X max; screen facing away, upright -> +Y max.
  * Samples are dropped while the guest has no active listener; poll
- * vmrp_api_motion_active() and only push platform sensor data when it
+ * skyengine_api_motion_active() and only push platform sensor data when it
  * returns >= 0 (-1 = idle, 0 = shake mode, 1 = tilt mode).
  */
-VMRP_EXPORT int vmrp_api_motion(int x, int y, int z);
-VMRP_EXPORT int vmrp_api_motion_active(void);
+VMRP_EXPORT int skyengine_api_motion(int x, int y, int z);
+VMRP_EXPORT int skyengine_api_motion_active(void);
 
 /*
  * Vibration motor (mr_startShake/mr_stopShake, SKYENGINE 手册
@@ -99,38 +99,38 @@ VMRP_EXPORT int vmrp_api_motion_active(void);
  * -1 = stop vibrating.  Consecutive start/stop requests collapse to the
  * last one (matches real motor behavior).  Poll after events/timer ticks.
  */
-VMRP_EXPORT int vmrp_api_take_shake(void);
+VMRP_EXPORT int skyengine_api_take_shake(void);
 
 /*
  * Timer: shared-library builds run the VM timer on a native worker thread so
  * Flutter hosts do not need to schedule it on the UI isolate. These functions
  * are kept for ABI compatibility with hosts that still use manual scheduling.
  */
-VMRP_EXPORT int vmrp_api_timer(void);
-VMRP_EXPORT int vmrp_api_get_timer_interval(void);
+VMRP_EXPORT int skyengine_api_timer(void);
+VMRP_EXPORT int skyengine_api_get_timer_interval(void);
 
 /*
  * Selects the host-facing screen conversion path. The OpenCV mode is accepted
  * as a runtime option; builds without an OpenCV converter fall back to native.
  */
-VMRP_EXPORT int vmrp_api_set_image_processing_mode(int mode);
-VMRP_EXPORT int vmrp_api_get_image_processing_mode(void);
+VMRP_EXPORT int skyengine_api_set_image_processing_mode(int mode);
+VMRP_EXPORT int skyengine_api_get_image_processing_mode(void);
 
 /*
  * Screen buffer: RGB565 format, row-major, size = width * height * 2 bytes.
- * The pointer remains valid until vmrp_api_destroy().
- * Call vmrp_api_get_screen_dirty() to check if the buffer has been updated
+ * The pointer remains valid until skyengine_api_destroy().
+ * Call skyengine_api_get_screen_dirty() to check if the buffer has been updated
  * since the last call (it auto-clears the flag).
  *
  * The RGBA buffer is host-owned and refreshed when
- * vmrp_api_get_screen_rgba_buffer() is called. It stays valid until the next
- * vmrp_api_get_screen_rgba_buffer(), vmrp_api_init(), or vmrp_api_destroy().
+ * skyengine_api_get_screen_rgba_buffer() is called. It stays valid until the next
+ * skyengine_api_get_screen_rgba_buffer(), skyengine_api_init(), or skyengine_api_destroy().
  */
-VMRP_EXPORT const uint16_t *vmrp_api_get_screen_buffer(void);
-VMRP_EXPORT const uint8_t *vmrp_api_get_screen_rgba_buffer(void);
-VMRP_EXPORT int vmrp_api_get_screen_dirty(void);
-VMRP_EXPORT int vmrp_api_get_screen_width(void);
-VMRP_EXPORT int vmrp_api_get_screen_height(void);
+VMRP_EXPORT const uint16_t *skyengine_api_get_screen_buffer(void);
+VMRP_EXPORT const uint8_t *skyengine_api_get_screen_rgba_buffer(void);
+VMRP_EXPORT int skyengine_api_get_screen_dirty(void);
+VMRP_EXPORT int skyengine_api_get_screen_width(void);
+VMRP_EXPORT int skyengine_api_get_screen_height(void);
 /*
  * Current LCD rotation requested by the guest via mr_plat(101, param)
  * (MR_LCD_ROTATE_*: 0=normal, 1=90°, 2=180°, 3=270°).  For odd rotations the
@@ -139,31 +139,31 @@ VMRP_EXPORT int vmrp_api_get_screen_height(void);
  * rebuild the texture/layout when width/height/rotation changed
  * (总像素数在转置下不变,buffer 指针保持有效).
  */
-VMRP_EXPORT int vmrp_api_get_screen_rotation(void);
+VMRP_EXPORT int skyengine_api_get_screen_rotation(void);
 
 /*
  * Audio stream: the runtime decodes/synthesizes MRP sound into signed
- * 16-bit little-endian stereo PCM at vmrp_api_audio_sample_rate().
- * Hosts without SDL (Flutter) should poll vmrp_api_audio_is_active() and
- * push frames returned by vmrp_api_audio_render_s16le() to their platform
+ * 16-bit little-endian stereo PCM at skyengine_api_audio_sample_rate().
+ * Hosts without SDL (Flutter) should poll skyengine_api_audio_is_active() and
+ * push frames returned by skyengine_api_audio_render_s16le() to their platform
  * audio backend. buffer must hold frames * channels * sizeof(int16_t) bytes.
  */
-VMRP_EXPORT int vmrp_api_audio_sample_rate(void);
-VMRP_EXPORT int vmrp_api_audio_channels(void);
-VMRP_EXPORT int vmrp_api_audio_is_active(void);
-VMRP_EXPORT int vmrp_api_audio_render_s16le(void *buffer, int frames);
-VMRP_EXPORT void vmrp_api_audio_stop(void);
+VMRP_EXPORT int skyengine_api_audio_sample_rate(void);
+VMRP_EXPORT int skyengine_api_audio_channels(void);
+VMRP_EXPORT int skyengine_api_audio_is_active(void);
+VMRP_EXPORT int skyengine_api_audio_render_s16le(void *buffer, int frames);
+VMRP_EXPORT void skyengine_api_audio_stop(void);
 
 /*
- * Text edit: when MRP requests text input, vmrp_api_is_edit_active()
- * returns 1. The host can read vmrp_api_get_edit_text() for the
+ * Text edit: when MRP requests text input, skyengine_api_is_edit_active()
+ * returns 1. The host can read skyengine_api_get_edit_text() for the
  * app-provided initial content, display a text input UI, then call
- * vmrp_api_set_edit_text() to confirm or vmrp_api_cancel_edit() to cancel.
+ * skyengine_api_set_edit_text() to confirm or skyengine_api_cancel_edit() to cancel.
  */
-VMRP_EXPORT int vmrp_api_is_edit_active(void);
-VMRP_EXPORT const char *vmrp_api_get_edit_text(void);
-VMRP_EXPORT int vmrp_api_set_edit_text(const char *text);
-VMRP_EXPORT int vmrp_api_cancel_edit(void);
+VMRP_EXPORT int skyengine_api_is_edit_active(void);
+VMRP_EXPORT const char *skyengine_api_get_edit_text(void);
+VMRP_EXPORT int skyengine_api_set_edit_text(const char *text);
+VMRP_EXPORT int skyengine_api_cancel_edit(void);
 
 #ifdef __cplusplus
 }

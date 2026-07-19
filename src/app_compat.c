@@ -1,5 +1,5 @@
 #include "./include/app_compat.h"
-#include "./include/fileLib.h"
+#include "./include/file_lib.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -43,7 +43,7 @@ static void app_compat_read_mrp_header_name(const char *pack_filename,
     if (!pack_filename || !*pack_filename)
         return;
 
-    fp = vmrp_host_fopen(pack_filename, "rb");
+    fp = skyengine_host_fopen(pack_filename, "rb");
     if (!fp)
         return;
     n = fread(header, 1, sizeof(header), fp);

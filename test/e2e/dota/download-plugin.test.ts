@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 import fs from "fs";
 
 describe("dota pixel flow", () => {
@@ -169,7 +169,7 @@ describe("dota pixel flow", () => {
       // 点击确定，下载浏览器插件，进入下载结果界面
       await engine.key('LEFT_SOFT', 1_000);
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen("download-result");
         // rgb(0, 252, 0)
         expect(screen.pixel(152, 146)).toEqual([0, 252, 0]);

@@ -4,7 +4,7 @@
 
 ## 现象
 
-`build/vmrp build/mythroad/talkcat.mrp` 启动后完全无声,stdout 反复输出:
+`build/skyengine build/mythroad/talkcat.mrp` 启动后完全无声,stdout 反复输出:
 
 ```
 native_playSound: unsupported compressed sound type 2 len=10560
@@ -33,7 +33,7 @@ talkcat 的启动音与交互音效均为 MPEG1 Layer III(启动音 24KHz mono,
    - 全量解码到交织 S16 PCM(动态扩容,MRP 音效通常仅数秒);
    - 以首帧采样率/声道数为准,中途参数变化的畸形流截断处理,避免变调;
    - 解码结果交给已有的 `native_audio_set_pcm()` 统一重采样为
-     44.1KHz/S16/stereo,SDL 与 Flutter(`vmrp_api_audio_render_s16le`)
+     44.1KHz/S16/stereo,SDL 与 Flutter(`skyengine_api_audio_render_s16le`)
      两条渲染路径都自动受益;
    - 成功时打印 `native_playSound: mp3 len=... -> ...Hz/...ch samples=...`,
      供 e2e 从 stdout 判断链路是否触发。
@@ -51,7 +51,7 @@ talkcat 的启动音与交互音效均为 MPEG1 Layer III(启动音 24KHz mono,
 
 ## 验证
 
-- `cmake --build build --target vmrp` 通过;`skyengine-shared` 构建通过。
+- `cmake --build build --target skyengine` 通过;`skyengine-shared` 构建通过。
 - 手动运行(work-dir 隔离,MRP 位于 work-dir 内,参见 e2e 工作区隔离经验):
   stdout 中原 `unsupported compressed sound type 2` 全部消失,替换为
   `native_playSound: mp3 len=10560 -> 24000Hz/1ch samples=50112 loop=0` 等。
@@ -59,7 +59,7 @@ talkcat 的启动音与交互音效均为 MPEG1 Layer III(启动音 24KHz mono,
 - 用独立小程序对 `build/mythroad/talkcat/` 的多个 MP3 全量解码,帧数/
   采样率/时长与 `file` 命令解析一致。
 - `pnpm vitest run test/e2e/talkcat/game-prepare.test.ts -t "游戏启动正常"` 通过。
-- `build/test_vmrp`、`build/test_vmrp_api`、`build/test_vmrp_filelib` 均通过。
+- `build/test_skyengine`、`build/test_skyengine_api`、`build/test_skyengine_filelib` 均通过。
 
 ## 剩余风险
 

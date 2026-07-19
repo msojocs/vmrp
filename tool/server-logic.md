@@ -1,4 +1,4 @@
-# vmrp 本地 TCP 服务器逻辑说明
+# skyengine 本地 TCP 服务器逻辑说明
 
 本文档说明 `tool/applist-server.js` 和 `tool/download-server.js` 两个服务器的协议逻辑与实现细节。
 

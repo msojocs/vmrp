@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 import fs from "fs";
 
 describe("gghjt pixel flow", () => {
@@ -30,7 +30,7 @@ describe("gghjt pixel flow", () => {
       await engine.key('LEFT_SOFT', 1_000);
       await engine.delay(1_000);
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         const boot = await engine.screen("bgm-select");
         // rgb(0, 0, 0)
         expect(boot.pixel(227, 308)).toEqual([0, 0, 0]);
@@ -57,7 +57,7 @@ describe("gghjt pixel flow", () => {
     await engine.delay(1_000);
     {
       await vi.waitFor(async () => {
-        if (!engine) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("engine is undefined");
         // 进入主菜单
         const screen = await engine.screen("menu");
         // rgb(152, 112, 32)
@@ -72,7 +72,7 @@ describe("gghjt pixel flow", () => {
         await engine.click(162, 291, 3_000);
         await engine.delay(1_000);
         await vi.waitFor(async () => {
-          if (!engine) throw new Error("vmrp is undefined");
+          if (!engine) throw new Error("engine is undefined");
           const screen = await engine.screen("continueMenu");
           // rgb(232, 196, 104)
           expect(screen.pixel(162, 291)).toEqual([232, 196, 104 ]);
@@ -293,7 +293,7 @@ describe("gghjt pixel flow", () => {
     await engine.click(5, 308, 1_000);
     // 等待下载开始
     await vi.waitFor(async () => {
-      if (!engine) throw new Error('vmrp not defined')
+      if (!engine) throw new Error('skyengine not defined')
       // 检查屏幕是否成功的绿色
       const downloading = await engine.screen("download-ing");
       expect(downloading.pixel(70, 176)).toEqual([0, 252, 0]);
@@ -303,7 +303,7 @@ describe("gghjt pixel flow", () => {
     })
     // 等待下载完成
     await vi.waitFor(async () => {
-      if (!engine) throw new Error('vmrp not defined')
+      if (!engine) throw new Error('skyengine not defined')
       // 检查屏幕是否成功的绿色
       const success = await engine.screen("download-end");
       expect(success.pixel(101, 148)).toEqual([0, 252, 0]);

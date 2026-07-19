@@ -39,7 +39,7 @@
   guest free 语义不变。
 - 验证：`VMRP_WATCH_ALLOC=0x282000,0x286000 pnpm vitest run
   test/e2e/talkcat/game-prepare.test.ts -t "循环" --reporter=verbose` 已通过。
-  最新 watched artifact 在 `/tmp/vmrp-e2e-9ckQqC`，#35 之后点击返回值保持 0，
+  最新 watched artifact 在 `/tmp/skyengine-e2e-9ckQqC`，#35 之后点击返回值保持 0，
   `4886,4886,13213` 的 `readFile("abc")` 序列继续出现，无
   `WATCH_READFILE_FAIL`/invalid memory。
 - 补充：full TalkCat e2e 运行到「下载喝水资源包并安装」时命中既有像素断言

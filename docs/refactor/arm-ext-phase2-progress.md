@@ -8,11 +8,11 @@
 - `src/arm_ext/` 拆分目录;`src/include/arm_ext_priv.h` 跨单元内部 API
   (对外公开接口仍只有 arm_ext_executor.h;函数抽出时若被其它单元调用,
   在 priv 头登记并去 static,单元私有的保持 static 不进头)。
-- CMake:`SKYENGINE_ARM_EXT_SOURCES`(vmrp/wasm/shared 三目标统一引用)+
-  `SKYENGINE_ARM_EXT_SPLIT_SOURCES`(vmrp-unit 链接已抽出单元)。
+- CMake:`SKYENGINE_ARM_EXT_SOURCES`(skyengine/wasm/shared 三目标统一引用)+
+  `SKYENGINE_ARM_EXT_SPLIT_SOURCES`(skyengine-unit 链接已抽出单元)。
 - 微工具上收 priv 头 static inline:`align4`/`reg_read32`/`arm_ext_addr_range_mapped`。
 
-## 已抽出单元(每单元后过 vmrp-unit + 全量 e2e,均 27/27)
+## 已抽出单元(每单元后过 skyengine-unit + 全量 e2e,均 27/27)
 
 | 单元 | 行数 | 内容 |
 |---|---|---|
@@ -31,7 +31,7 @@ executor 主体:10261 → **7324 行**。
 | `aex_exec.c` | 361 | set_arm_mode/arg_read、trace_pc/dump_pc_ring/hook_intr、run_arm(_with_sp)、restore_ext_r9、arm_str/format_arm |
 
 executor 主体:7324 → **6808 行**;`reg_write32` 上收 priv 内联。
-第 2 批全量 e2e 27/27 ✓,vmrp-unit 47 checks ✓。
+第 2 批全量 e2e 27/27 ✓,skyengine-unit 47 checks ✓。
 
 ## 事故与教训(已恢复,无损失)
 
@@ -58,11 +58,11 @@ assert count==1,切割后 assert 行数/内容。**
 
 ### 验证(收尾批,与 Phase 3 收尾同一提交)
 
-构建零告警(非 mythroad)→ vmrp-unit 69 checks → 全量 e2e **29/29**
+构建零告警(非 mythroad)→ skyengine-unit 69 checks → 全量 e2e **29/29**
 (golden 帧逐字节断言含在用例内)。
 
 ## 验证纪律(沿用)
 
-每单元抽取 = 一个提交粒度:构建零告警(非 mythroad)→ vmrp-unit 47 checks
+每单元抽取 = 一个提交粒度:构建零告警(非 mythroad)→ skyengine-unit 47 checks
 → 全量 e2e 27/27 逐字节一致。本批四轮全量 e2e 全绿;纯移动改动未跑
 sanitizer(无语义变化),下批结束后补一轮。

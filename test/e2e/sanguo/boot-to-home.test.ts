@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 
 // 490111 幻想三国(240x320,Lua FULL 启动 + cfunction.ext wrapper + game.ext 私有加载)。
 // fixture 来源:build/mythroad/490111_240x320_sanguo.mrp,SHA-256

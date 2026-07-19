@@ -10,7 +10,7 @@
   - 开声音确认页 → RIGHT_SOFT → 主菜单（draw=3）
   - DOWN → 高亮移到"游戏帮助"（draw=4）✓
   - LEFT_SOFT → **draw 不再增长**，且此后 DOWN 等按键全部无响应（应用死等状态）。
-  - vmrp 进程 CPU 0%：不是忙循环，是应用在等待某事件。
+  - skyengine 进程 CPU 0%：不是忙循环，是应用在等待某事件。
 
 ## 根因定位
 
@@ -56,7 +56,7 @@ table[1](0x22B36C,...)               // mr_free
 - [x] 设计：native_textCreate 平台文本页（黑底绿字、按键接管、取消事件、恢复 guest 帧）
 - [x] 实现 + PPM 验证：目标用例已通过
 - [x] 全量 e2e 回归：`pnpm test:e2e` 28 files / 51 tests 全部通过（270s）；
-  `build-shared-only`（vmrp_api.c 上屏钩子路径）编译链接通过。
+  `build-shared-only`（skyengine_api.c 上屏钩子路径）编译链接通过。
 
 ## 反汇编结论（capstone，base=0xE80000，/tmp/gtdgdq-dbg/mrpout/cfunction.ext.raw）
 
@@ -90,9 +90,9 @@ table[1](0x22B36C,...)               // mr_free
     MR_DIALOG_EVENT(OK/CANCEL)，UP/DOWN 滚动正文，其余输入被平台窗口消费；
     定时器/网络等非输入事件照常投递。
 - `src/native_dsm_funcs.c`：native_textCreate/Release/Refresh 由返回 MR_FAILED 改为委托 widget。
-- `src/runtime_native_mythroad.c`：`vmrp_runtime_event`（所有前端入口进 guest 的唯一漏斗）
+- `src/runtime_native_mythroad.c`：`skyengine_runtime_event`（所有前端入口进 guest 的唯一漏斗）
   前置调用 filter_event，实现按键接管与软键→对话框事件翻译。
-- `src/main.c` 与 `src/vmrp_api.c` 的 `guiDrawBitmapWithStride` 顶部挂 capture_frame
+- `src/main.c` 与 `src/skyengine_api.c` 的 `guiDrawBitmapWithStride` 顶部挂 capture_frame
   （SDL 与共享库两个上屏实现各一处；widget 自身上屏带 presenting 标记直通）。
 - `src/include/types.h`：补 MR_DIALOG_OK/OK_CANCEL/CANCEL 与 MR_DIALOG_KEY_OK/CANCEL
   枚举（mrporting.h 同值宿主镜像，两头文件不能同时 include）。

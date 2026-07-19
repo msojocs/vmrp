@@ -16,7 +16,7 @@
 
 ## 2026-06-21 22:18 reproduction notes
 
-- Command: `timeout 45 env VMRP_NO_MOUSE=1 VMRP_PPM=1 VMRP_PPM_PATH=/tmp/gghjt-current.ppm VMRP_GGHJT_IMAGE_DIAG=1 ./test/gghjt/game-start.sh`.
+- Command: `timeout 45 env VMRP_NO_MOUSE=1 VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/gghjt-current.ppm VMRP_GGHJT_IMAGE_DIAG=1 ./test/gghjt/game-start.sh`.
 - The run timed out as expected after producing `/tmp/gghjt-current.ppm` (240x320) and a 1145-line log.
 - Current diagnostics show band writes from `pc=0x66100E` and transform blits at `pc=0x648B8E`.
 - The sampled transform blits still use image struct `name=4004`, `iw=189`, `ih=67`, `data=0x6A3D1C`; no `1006` read/blit appeared in this log.
@@ -72,7 +72,7 @@
 
 - Re-running without `VMRP_GGHJT_IMAGE_DIAG` still produces the same striped PPM, so the visible issue is not caused by diagnostic slowdown.
 - Pillow confirms the PPM samples are the same stripe colors as the diagnostic run. A hand-written PPM parser previously skipped binary whitespace after the header and truncated pixel data; Pillow is the reliable reader for this checkpoint.
-- The process may keep running after `timeout` in this shell wrapper path, so subsequent reproductions should explicitly kill leftover `build/vmrp mythroad/gghjt.mrp` processes before retrying.
+- The process may keep running after `timeout` in this shell wrapper path, so subsequent reproductions should explicitly kill leftover `build/skyengine mythroad/gghjt.mrp` processes before retrying.
 - Current leading hypothesis: the correct `table[120]` writes update the ARM-side `m->screen_addr` buffer, but host SDL/PPM only updates on `mr_drawBitmap`/`DispUpEx`/`leave_screen_context`. The game draws a large tilemap inside a long-running callback, and the PPM captures a previously flushed intermediate frame. A generic dirty-rectangle flush from ARM screen-cache draw APIs needs to be tested.
 
 ## 2026-06-21 22:58 continuation
@@ -124,7 +124,7 @@
 - `cmake --build build -j2` passed.
 - `npm exec -- vitest run test/e2e/gghjt/debug-capture.test.ts --reporter verbose` passed and produced `/tmp/scene-render.ppm`.
 - `npm exec -- vitest run test/e2e/gghjt/game-start.test.ts --reporter verbose` passed after replacing the TODO with building-area pixel checks.
-- `timeout 45 env VMRP_NO_MOUSE=1 VMRP_PPM=1 VMRP_PPM_PATH=/tmp/gghjt-script.ppm ./test/gghjt/game-start.sh` produced a valid 240x320 PPM.
+- `timeout 45 env VMRP_NO_MOUSE=1 VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/gghjt-script.ppm ./test/gghjt/game-start.sh` produced a valid 240x320 PPM.
 - Representative fixed pixels:
   - `(55,302) = (192,148,96)` ground/reference point still matches.
   - `(92,95) = (72,60,72)`, `(108,95) = (128,128,112)`, `(124,95) = (128,128,112)`, `(172,95) = (208,200,136)`.
@@ -180,7 +180,7 @@
 
 ## 2026-06-22 clean rerun after manual-test conflict
 
-- Found and terminated one leftover `build/vmrp mythroad/gghjt.mrp` process from a manual run before rerunning the filtered e2e.
+- Found and terminated one leftover `build/skyengine mythroad/gghjt.mrp` process from a manual run before rerunning the filtered e2e.
 - The test file also contained a temporary `throw new Error('等待BUG修复后确认测试用例的后续检查')`; removing that single blocker restored the real assertions.
 - Clean rerun of `pnpm vitest run test/e2e/gghjt/game-start.test.ts -t 不缺渲染 --reporter verbose` now fails at the middle cache assertion: `(92,95)` is `(160,172,128)` instead of `(72,60,72)`. The bottom/top reference `(55,302)` passes, so the original black-band symptom is not present in this rerun.
 

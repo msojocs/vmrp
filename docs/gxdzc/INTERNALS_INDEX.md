@@ -2,7 +2,7 @@
 
 This directory contains comprehensive analysis of the VMRP (Virtual MythRoad Platform) architecture, focusing on:
 1. **Auto-click injection** (VMRP_AUTO_CLICKS)
-2. **Screen dump mechanism** (PPM format, /tmp/vmrp_screen.ppm)
+2. **Screen dump mechanism** (PPM format, /tmp/skyengine_screen.ppm)
 3. **SDL event loop architecture**
 4. **Thread synchronization**
 
@@ -146,19 +146,19 @@ Contains:
 | `loop()` | 407-498 | **Main event loop** - central processing hub |
 | `main()` | 531-587 | Initialization and startup |
 
-### src/vmrp.c
+### src/skyengine.c
 
 | Function | Lines | Purpose |
 |----------|-------|---------|
-| `event()` | 347-349 | Dispatcher to vmrp_runtime_event() |
+| `event()` | 347-349 | Dispatcher to skyengine_runtime_event() |
 | `timer()` | 351-353 | Timer dispatcher |
 
-### src/vmrp_api.c
+### src/skyengine_api.c
 
 | Function | Lines | Purpose |
 |----------|-------|---------|
 | `guiDrawBitmap()` | 19-32 | Headless variant (no SDL) |
-| `vmrp_api_event()` | 131-133 | Public API event injection |
+| `skyengine_api_event()` | 131-133 | Public API event injection |
 
 ---
 
@@ -200,7 +200,7 @@ Auto-clicks → SDL Event Queue ← Real Input ← SDL Timers
                    Main loop
                    (single-threaded)
                         ↓
-                 vmrp_runtime_event()
+                 skyengine_runtime_event()
                  (Unicorn ARM engine)
 ```
 
@@ -213,7 +213,7 @@ Auto-clicks → SDL Event Queue ← Real Input ← SDL Timers
 - Triggered every 30 frames (when VMRP_PPM set)
 - Happens on main thread (no new thread spawned)
 - Locks SDL surface briefly to read pixels
-- Writes to `/tmp/vmrp_screen.ppm` (usually fast on modern filesystems)
+- Writes to `/tmp/skyengine_screen.ppm` (usually fast on modern filesystems)
 
 ### 3. Timer Events Use Custom SDL Event Type
 - Timer callback runs in SDL's timer thread

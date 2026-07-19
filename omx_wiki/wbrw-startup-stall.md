@@ -5,7 +5,7 @@
 Command under investigation:
 
 ```sh
-build/vmrp build/mythroad/wbrw.mrp
+build/skyengine build/mythroad/wbrw.mrp
 ```
 
 Observed failure: the app stays on the green `正在启动` progress screen.
@@ -32,15 +32,15 @@ Next evidence to collect:
 Built current tree with:
 
 ```sh
-cmake --build build --target vmrp -j 4
+cmake --build build --target skyengine -j 4
 ```
 
 Reproduced with no xvfb:
 
 ```sh
 timeout 35 env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  VMRP_NO_MOUSE=1 VMRP_PPM=1 VMRP_PPM_PATH=/tmp/wbrw-current.ppm \
-  VMRP_ARM_EXT_DIAG=1 ./build/vmrp build/mythroad/wbrw.mrp \
+  VMRP_NO_MOUSE=1 VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/wbrw-current.ppm \
+  VMRP_ARM_EXT_DIAG=1 ./build/skyengine build/mythroad/wbrw.mrp \
   >/tmp/wbrw-run.log 2>&1
 ```
 
@@ -131,8 +131,8 @@ Latest no-xvfb check:
 
 ```sh
 timeout 75 env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  VMRP_NO_MOUSE=1 VMRP_PPM=1 VMRP_PPM_PATH=/tmp/wbrw-eof-fix.ppm \
-  ./build/vmrp build/mythroad/wbrw.mrp >/tmp/wbrw-eof-fix.log 2>&1
+  VMRP_NO_MOUSE=1 VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/wbrw-eof-fix.ppm \
+  ./build/skyengine build/mythroad/wbrw.mrp >/tmp/wbrw-eof-fix.log 2>&1
 ```
 
 Result: still timed out and the PPM remained the green startup screen:
@@ -190,11 +190,11 @@ module because the queue node data may target any extChunk.
 Rebuilt current tree and reran the no-xvfb baseline:
 
 ```sh
-cmake --build build --target vmrp -j 4
+cmake --build build --target skyengine -j 4
 timeout 90 env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
   VMRP_NO_MOUSE=1 VMRP_PPM=1 \
-  VMRP_PPM_PATH=/tmp/wbrw-current-run.ppm \
-  ./build/vmrp build/mythroad/wbrw.mrp \
+  SKYENGINE_PPM_PATH=/tmp/wbrw-current-run.ppm \
+  ./build/skyengine build/mythroad/wbrw.mrp \
   >/tmp/wbrw-current-run.log 2>&1
 ```
 
@@ -209,7 +209,7 @@ Narrow timer diagnostics:
 timeout 45 env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
   VMRP_NO_MOUSE=1 VMRP_PPM=1 \
   VMRP_ARM_EXT_DIAG=1 VMRP_ARM_EXT_TIMER_LIVENESS_DIAG=1 \
-  ./build/vmrp build/mythroad/wbrw.mrp \
+  ./build/skyengine build/mythroad/wbrw.mrp \
   >/tmp/wbrw-timerdiag.log 2>&1
 ```
 
@@ -238,9 +238,9 @@ Added narrow `VMRP_ARM_EXT_DIAG` logging for file descriptors, sockets,
 ```sh
 timeout 60 env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
   VMRP_NO_MOUSE=1 VMRP_PPM=1 \
-  VMRP_PPM_PATH=/tmp/wbrw-platform-diag.ppm \
+  SKYENGINE_PPM_PATH=/tmp/wbrw-platform-diag.ppm \
   VMRP_ARM_EXT_DIAG=1 \
-  ./build/vmrp build/mythroad/wbrw.mrp \
+  ./build/skyengine build/mythroad/wbrw.mrp \
   >/tmp/wbrw-platform-diag.log 2>&1
 ```
 
@@ -332,11 +332,11 @@ Fix in `src/arm_ext_executor.c`:
 Verification:
 
 ```sh
-cmake --build build --target vmrp -j 4
+cmake --build build --target skyengine -j 4
 
 timeout 12 env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  VMRP_NO_MOUSE=1 VMRP_PPM=1 VMRP_PPM_PATH=/tmp/wbrw-mirrorfix.ppm \
-  VMRP_ARM_EXT_DIAG=1 ./build/vmrp build/mythroad/wbrw.mrp \
+  VMRP_NO_MOUSE=1 VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/wbrw-mirrorfix.ppm \
+  VMRP_ARM_EXT_DIAG=1 ./build/skyengine build/mythroad/wbrw.mrp \
   >/tmp/wbrw-mirrorfix.log 2>&1
 ```
 
@@ -352,8 +352,8 @@ Final no-diagnostic check:
 
 ```sh
 timeout 30 env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  VMRP_NO_MOUSE=1 VMRP_PPM=1 VMRP_PPM_PATH=/tmp/wbrw-final.ppm \
-  ./build/vmrp build/mythroad/wbrw.mrp >/tmp/wbrw-final.log 2>&1
+  VMRP_NO_MOUSE=1 VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/wbrw-final.ppm \
+  ./build/skyengine build/mythroad/wbrw.mrp >/tmp/wbrw-final.log 2>&1
 ```
 
 The timeout status is expected because the process was capped. The captured PPM

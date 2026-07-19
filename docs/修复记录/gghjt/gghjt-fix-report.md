@@ -12,7 +12,7 @@ src/mythroad/mythroad.c |   2 +-
 
 ## 0. 起因
 
-执行 `build/vmrp mythroad/gghjt.mrp` 应用启动失败：netpay 提取循环把同样的 190 字节
+执行 `build/skyengine mythroad/gghjt.mrp` 应用启动失败：netpay 提取循环把同样的 190 字节
 反复写入 `gghjt.pak`，脚本一直检测不到正确的解压结果，无限重试。trace 量极大。
 
 ## 1. 已修复的问题
@@ -101,7 +101,7 @@ callback 破坏的 case，同样静默返回 MR_SUCCESS。
 
 **修复**：`src/mythroad/dsm.c` `mr_plat` 加 `case 1101: return MR_IGNORE;`（line 656）。
 返回值与 default 一致，只是不再 LOGW。参考实现 (`temp/jni/src/dsm.c`、上游
-zengming00/vmrp、M-CAP7AIN/mythroad_mrpbuilder) 都没有定义 1101，按 no-op 处理。
+zengming00/skyengine、M-CAP7AIN/mythroad_mrpbuilder) 都没有定义 1101，按 no-op 处理。
 
 ### 1.7 table[113/114/115] not implemented (MD5)
 
@@ -137,7 +137,7 @@ inflate 解出来的，没解出来就是花的。
 
 ### 2.2 splash 卡住不前进
 
-抓 PC ring 看，trace 大概 22000 行后**完全停下**（仅在 1 秒内打完），之后 vmrp 进程
+抓 PC ring 看，trace 大概 22000 行后**完全停下**（仅在 1 秒内打完），之后 skyengine 进程
 还活着但没有任何 table 调用 — 说明 ARM 在做纯内存轮询（busy-wait）某个状态位。
 分析下来这是 netpay 的"首次启动"工作流，包含 NTP 时间同步 / 后台对账 / 网络验证，
 我们没有网络栈，那个状态位永远不会被外部更新。
@@ -159,19 +159,19 @@ callback **没有**真正执行，所以 splash 上"请等待片刻"对应的等
 
 ## 3. 验证
 
-- `build/vmrp mythroad/gghjt.mrp`：原本的死循环消失，应用启动到 splash；所有
+- `build/skyengine mythroad/gghjt.mrp`：原本的死循环消失，应用启动到 splash；所有
   Invalid instruction / Unhandled CPU exception / mr_timer warning / mr_plat 1101 /
   table[113/114/115] not implemented 警告均不再出现。日志正常打印：
   ```
   native dsm_init success
   After app init, memory left:3969752
-  vmrp_runtime_start_dsm('/home/.../gghjt.mrp','start.mr',''): 0x0
+  skyengine_runtime_start_dsm('/home/.../gghjt.mrp','start.mr',''): 0x0
   ```
-- `build/vmrp mythroad/mpc.mrp`：无回归，与之前一样能正常启动到主界面。
+- `build/skyengine mythroad/mpc.mrp`：无回归，与之前一样能正常启动到主界面。
 
 ## 4. 参考
 
-- 上游：[vmrp/vmrp](https://github.com/vmrp/vmrp)
-- 仿真参考：[zengming00/vmrp](https://github.com/zengming00/vmrp/blob/master/vmrp.c)
+- 上游：[skyengine/skyengine](https://github.com/skyengine/skyengine)
+- 仿真参考：[zengming00/skyengine](https://github.com/zengming00/skyengine/blob/master/skyengine.c)
 - 平台文档：[Mythroad – LPC Wiki](https://lpcwiki.miraheze.org/wiki/Mythroad)
 - SDK：[M-CAP7AIN/mythroad_mrpbuilder](https://github.com/M-CAP7AIN/mythroad_mrpbuilder)

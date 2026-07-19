@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../engine-e2e.js";
 import fs from "fs";
 
 describe("gtdgdq", () => {
@@ -24,7 +24,7 @@ describe("gtdgdq", () => {
 
     {
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen("bgm-select");
         // rgb(0, 200, 248)
         expect(screen.pixel(219, 312)).toEqual([0, 200, 248]);
@@ -34,7 +34,7 @@ describe("gtdgdq", () => {
     }
     {
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen("menu");
         // rgb(248, 248, 240)
         expect(screen.pixel(168, 162)).toEqual([248, 248, 240]);
@@ -44,7 +44,7 @@ describe("gtdgdq", () => {
     {
       // 支持动感功能，只有两种颜色提示（黑色背景+绿色文字）
       await vi.waitFor(async () => {
-        if (!engine) throw new Error('vmrp not defined')
+        if (!engine) throw new Error('skyengine not defined')
         const screen = await engine.screen("menu");
         // rgb(248, 248, 240)
         expect(screen.uniqueColorCount()).toEqual(2);

@@ -84,7 +84,7 @@ subsequent draw wait.
 
 - All emulator diagnostics used `SDL_VIDEODRIVER=dummy`; no `xvfb` was used.
 - PPM evidence confirms the first soft-left menu frame and expected highlight.
-- `cmake --build build --target vmrp -j2` passed.
+- `cmake --build build --target skyengine -j2` passed.
 - `ctest --test-dir build --output-on-failure` passed 1/1.
 - `pnpm exec tsc --noEmit` passed.
 - `test/e2e/cookie/run-mrp.test.ts` has no retained diff because its scenario

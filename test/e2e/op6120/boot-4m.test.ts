@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { copyFile, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SkyEngineE2e, SkyEngineWorkspace, type PpmImage } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace, type PpmImage } from "../engine-e2e.js";
 
 // Pinned op6120 package, SHA-256:
 // 611b4cd737dcf458370ff215bc73636cf65bdc6dfc36907c2ce8aa8f00b7c8e2.
@@ -23,11 +23,11 @@ async function sha256(file: string): Promise<string> {
   return createHash("sha256").update(await readFile(file)).digest("hex");
 }
 
-async function waitForStartedFrame(vmrp: SkyEngineE2e): Promise<PpmImage> {
+async function waitForStartedFrame(engine: SkyEngineE2e): Promise<PpmImage> {
   let frame: PpmImage | undefined;
   await vi.waitFor(async () => {
-    frame = await vmrp.screen("started");
-    expect(await sha256(path.join(vmrp.tmpDir, "started.ppm"))).toBe(STARTED_FRAME_SHA256);
+    frame = await engine.screen("started");
+    expect(await sha256(path.join(engine.tmpDir, "started.ppm"))).toBe(STARTED_FRAME_SHA256);
   }, { timeout: 90_000, interval: 500 });
   if (!frame) throw new Error("op6120 started frame was not captured");
   return frame;

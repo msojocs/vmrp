@@ -16,9 +16,9 @@
 #define DEFAULT_DEVICE_MONTH 1
 #define DEFAULT_DEVICE_DAY 1
 #define VMRP_MRP_NAME_LIMIT 128
-#define VMRP_DNS_MAP_LIMIT 2048
+#define SKYENGINE_DNS_MAP_LIMIT 2048
 
-typedef struct VmrpArgs {
+typedef struct SkyEngineArgs {
     int screen_width;
     int screen_height;
     int memory_mb; /* 应用可见内存(MB):1/2/4/6/8/16 */
@@ -29,13 +29,13 @@ typedef struct VmrpArgs {
     char mrp_path[PATH_MAX];
     char ext_name[256];
     char entry[256];
-    char dns_map[VMRP_DNS_MAP_LIMIT];
-} VmrpArgs;
+    char dns_map[SKYENGINE_DNS_MAP_LIMIT];
+} SkyEngineArgs;
 
-VmrpArgs vmrp_args_default(void);
+SkyEngineArgs skyengine_args_default(void);
 /* Shared calendar validation for CLI and embedding API configuration. */
-int vmrp_args_parse_device_date(const char *str, int *year, int *month, int *day);
-int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out);
-void vmrp_args_print_usage(const char *program);
+int skyengine_args_parse_device_date(const char *str, int *year, int *month, int *day);
+int skyengine_args_parse(int argc, char *argv[], SkyEngineArgs *out);
+void skyengine_args_print_usage(const char *program);
 
 #endif

@@ -3,7 +3,7 @@
 ## 2026-07-06 复现基线
 
 - 目标命令:`test/e2e/gzwdzjs/repro.sh`。按要求不使用 xvfb,复现时使用 `SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy`。
-- 构建命令:`cmake --build build --target vmrp -j2` 通过。
+- 构建命令:`cmake --build build --target skyengine -j2` 通过。
 - 复现产物:`/tmp/gzwdzjs-repro-unmapped-current/stdout.log` 和 `stderr.log`。
 - 结果:脚本自己的 `timeout 90s` 返回 `124`,stdout 尾部持续重复:
   - `arm_ext_executor: uc_emu_start(0xE800B0) failed: 7 (Invalid memory write (UC_ERR_WRITE_UNMAPPED))`
@@ -40,7 +40,7 @@
   - 判据只依赖指令形状和运行时 SP/LR,不使用包名、应用名、固定 gzwdzjs 地址,
     也不把任意异常当作成功兜底。
 - 目标脚本验证:
-  - 命令:`SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy VMRP_E2E_SOCKET=/tmp/gzwdzjs-final-drawcount/e2e.sock VMRP_PPM=1 VMRP_PPM_PATH=/tmp/gzwdzjs-final-drawcount/latest.ppm ... build/vmrp build/mythroad/gzwdzjs.mrp`
+  - 命令:`SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy SKYENGINE_E2E_SOCKET=/tmp/gzwdzjs-final-drawcount/e2e.sock VMRP_PPM=1 SKYENGINE_PPM_PATH=/tmp/gzwdzjs-final-drawcount/latest.ppm ... build/skyengine build/mythroad/gzwdzjs.mrp`
     使用 `test/e2e/gzwdzjs/repro.sh` 的同一自动按键序列。
   - `timeout 95s` 返回 124 属观察窗口到期;stdout/stderr 合计仅 1796 字节,
     `grep 'UC_ERR|UC_MEM|invalid memory|failed|crash'` 无命中。

@@ -48,7 +48,7 @@
 - 避免改动 `third_party/unicorn/`。确实需要修改时，应说明这是上游依赖补丁，并尽量把补丁保持最小。
 - `src/mythroad/` 必须按独立 Mythroad/DSM 子项目处理：
   - 不要把 `src/` 外层模拟器实现直接混入该目录。
-  - 不要依赖外层 `VMRP` 宏才能让 Mythroad 层正常工作；当前 CMake 会对 Mythroad 源码使用 `-UVMRP`。
+  - 不要依赖外层宏才能让 Mythroad 层正常工作。DSM 接口头文件已拆分：Mythroad 侧包含 `src/mythroad/include/dsm.h`（自包含，固定屏幕尺寸），宿主侧包含 `src/include/dsm.h`（vmrp_config 动态尺寸），公共定义在 `src/mythroad/include/dsm_defs.h`，不再使用 `VMRP` 宏分叉。
   - 保持该目录代码便于将来单独移植到嵌入式或其它平台。
 - `mrc/` 主要用于研究和对照，除非任务明确要求，不要把其中实验性代码纳入主构建。
 - 不要随意修改或删除 `.mrp`、`.ext`、`.dll`、`.a`、`.exe` 等二进制资源。若必须更新，说明来源和验证方式。
@@ -69,7 +69,7 @@
 - 所有进入 Unicorn 或 Mythroad VM 的调用应保持在主线程串行执行。SDL 定时器线程和自动点击线程只能通过 SDL 事件队列投递事件，不要直接调用模拟器核心。
 - 定时器、事件和输入时序属于兼容性的一部分。自动点击脚本中的 delay、按下/释放间隔、软键映射和退出路径不要随意调整。
 - 文件系统路径、MRP 包内文件查找、gzip/zip 解压、虚拟文件描述符和大小端解析都要按 MRP 格式处理，不要用主机文件系统假设替代。
-- 屏幕默认分辨率为 240x320，但代码应继续支持 `--screen WxH`、`VMRP_SCREEN_WIDTH` 和 `VMRP_SCREEN_HEIGHT`。
+- 屏幕默认分辨率为 240x320，但代码应继续支持 `--screen WxH`、`SKYENGINE_SCREEN_WIDTH` 和 `SKYENGINE_SCREEN_HEIGHT`。
 - 图形缓冲通常是 RGB565/16 位像素，跨 SDL、PPM dump、Wasm 和 Mythroad 层传递时不要隐式改格式。
 - 网络、支付、下载、短信、电话、震动、音频等接口很多是模拟或兼容实现。改动时优先保证已有样本可继续运行，并避免引入阻塞主线程的长时间等待。
 - 不要用真实外部服务作为默认测试依赖。需要网络验证时，优先使用仓库内 `tool/` 的本地服务或可控 mock。

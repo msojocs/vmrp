@@ -18,7 +18,7 @@
 //   go run tool/skymobi-pay-server.go
 //   sudo PORT=80 go run tool/skymobi-pay-server.go
 //   # netpay 写死连 80 端口。若不想用 root，可改连别的端口：先用
-//   #   VMRP_PAY_HOST=127.0.0.1 启动 vmrp（IP 重定向），再配合端口转发，
+//   #   VMRP_PAY_HOST=127.0.0.1 启动 skyengine（IP 重定向），再配合端口转发，
 //   #   例如  socat TCP-LISTEN:80,fork,reuseaddr TCP:127.0.0.1:8080
 //   #   然后  PORT=8080 go run tool/skymobi-pay-server.go
 //
@@ -259,7 +259,7 @@ func main() {
 
 	fmt.Printf("skymobi fake pay-server listening on %s\n", addr)
 	fmt.Println("DNS 已在 src/network.c 内重定向 rop.skymobiapp.com -> 127.0.0.1，")
-	fmt.Println("直接启动 vmrp 即可，netpay 的 POST /payOneAsTlv 会落到这里。")
+	fmt.Println("直接启动 skyengine 即可，netpay 的 POST /payOneAsTlv 会落到这里。")
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {

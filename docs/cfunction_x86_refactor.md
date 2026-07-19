@@ -14,7 +14,7 @@
 
 ### 2.1 文件依赖位置
 
-当前启动路径在 `src/vmrp.c`：
+当前启动路径在 `src/skyengine.c`：
 
 - `loadCode()` 固定读取 `cfunction.ext`。
 - 文件内容写入 Unicorn 映射内存的 `CODE_ADDRESS`。
@@ -24,7 +24,7 @@ Web 版本在 `wasm/dist/fs.js` 预加载：
 
 - `"/cfunction.ext"  // mythroad层`
 
-README 也明确写到：需要单独编译 `vmrp.mrp`，再从中提取 `cfunction.ext`。
+README 也明确写到：需要单独编译 `skyengine.mrp`，再从中提取 `cfunction.ext`。
 
 ### 2.2 cfunction.ext 形态
 
@@ -134,11 +134,11 @@ option(VMRP_USE_NATIVE_MYTHROAD "Use native x86 Mythroad instead of cfunction.ex
 // src/include/runtime.h
 typedef struct VmrpRuntime VmrpRuntime;
 
-int vmrp_runtime_init(VmrpRuntime *rt);
-int vmrp_runtime_start_dsm(VmrpRuntime *rt, const char *mrp, const char *ext, const char *entry);
-int vmrp_runtime_event(VmrpRuntime *rt, int32_t code, int32_t p0, int32_t p1);
-int vmrp_runtime_timer(VmrpRuntime *rt);
-void vmrp_runtime_destroy(VmrpRuntime *rt);
+int skyengine_runtime_init(VmrpRuntime *rt);
+int skyengine_runtime_start_dsm(VmrpRuntime *rt, const char *mrp, const char *ext, const char *entry);
+int skyengine_runtime_event(VmrpRuntime *rt, int32_t code, int32_t p0, int32_t p1);
+int skyengine_runtime_timer(VmrpRuntime *rt);
+void skyengine_runtime_destroy(VmrpRuntime *rt);
 ```
 
 实现两个后端：
@@ -146,7 +146,7 @@ void vmrp_runtime_destroy(VmrpRuntime *rt);
 - `runtime_arm_cfunction.c`：包装当前 `loadCode()` + `bridge_ext_init()` 路径。
 - `runtime_native_mythroad.c`：新 x86 原生路径，直接调用 `dsm_init()`、`mr_start_dsm()`、`mr_event()`、`mr_timer()`。
 
-`src/vmrp.c` 只依赖该接口，不再散落 `cfunction.ext` 的细节。`temp/jni/src/emulator.c` 的 `native_1startMrp/native_1pause/native_1resume/native_1event/native_1callback` 可作为该 runtime 层入口顺序的参考。
+`src/skyengine.c` 只依赖该接口，不再散落 `cfunction.ext` 的细节。`temp/jni/src/emulator.c` 的 `native_1startMrp/native_1pause/native_1resume/native_1event/native_1callback` 可作为该 runtime 层入口顺序的参考。
 
 ### 阶段 2：原生化 DSM_REQUIRE_FUNCS
 
@@ -288,7 +288,7 @@ native 模式验证通过后：
 
 - 从 `wasm/dist/fs.js` 删除 `/cfunction.ext` 预加载项。
 - 运行包不再要求 `bin/cfunction.ext` 或 `wasm/dist/fs/cfunction.ext`。
-- README 中删除“单独编译 vmrp.mrp 并提取 cfunction.ext”作为必需步骤，改为历史/回退说明。
+- README 中删除“单独编译 skyengine.mrp 并提取 cfunction.ext”作为必需步骤，改为历史/回退说明。
 - CI/本地构建增加 native 模式检查。
 
 ## 6. 关键风险与处理

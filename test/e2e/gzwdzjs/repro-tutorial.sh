@@ -14,8 +14,8 @@ SOCK="$OUT/e2e.sock"
 for kv in "$@"; do export "$kv"; done
 
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-VMRP_E2E_SOCKET="$SOCK" \
-"$ROOT/build/vmrp" --work-dir "$WS" --memory 2M "$WS/gzwdzjs.mrp" \
+SKYENGINE_E2E_SOCKET="$SOCK" \
+"$ROOT/build/skyengine" --work-dir "$WS" --memory 2M "$WS/gzwdzjs.mrp" \
   >"$OUT/stdout.log" 2>"$OUT/stderr.log" &
 VMRP_PID=$!
 
