@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { VmrpE2e, VmrpWorkspace, readPpm } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace, readPpm } from "../vmrp-e2e.js";
 
 /**
  * P5.3 golden 关键帧回归(见 docs/arm-ext-executor-refactor-plan.md 第八节):
@@ -11,12 +11,12 @@ import { VmrpE2e, VmrpWorkspace, readPpm } from "../vmrp-e2e.js";
  * 需要用同一方法重新生成资产并在提交说明中写明原因。
  */
 describe("golden 关键帧", () => {
-  let vmrp: VmrpE2e | undefined;
-  let ws: VmrpWorkspace | undefined;
+  let engine: SkyEngineE2e | undefined;
+  let ws: SkyEngineWorkspace | undefined;
 
   afterEach(async () => {
-    await vmrp?.close();
-    vmrp = undefined;
+    await engine?.close();
+    engine = undefined;
     await ws?.dispose();
     ws = undefined;
   });
@@ -31,15 +31,15 @@ describe("golden 关键帧", () => {
 
   for (const [name, mrp, bootMs] of cases) {
     it(`${name} 全图与 golden 一致`, async () => {
-      ws = await VmrpWorkspace.create();
-      vmrp = await VmrpE2e.start(mrp, { workDir: ws.dir });
-      await vmrp.delay(bootMs);
+      ws = await SkyEngineWorkspace.create();
+      engine = await SkyEngineE2e.start(mrp, { workDir: ws.dir });
+      await engine.delay(bootMs);
       const golden = await readPpm(`test/fixtures/golden/${name}.ppm`);
       // 画面为无限等待输入的静态帧:到达晚不影响判定,waitFor 只吸收
       // 启动速度抖动,判据始终是全图零差异。
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp is undefined");
-        const screen = await vmrp.screen(name);
+        if (!engine) throw new Error("vmrp is undefined");
+        const screen = await engine.screen(name);
         expect(screen.diffPixelCount(golden)).toBe(0);
       }, { timeout: 20_000, interval: 1_500 });
     });

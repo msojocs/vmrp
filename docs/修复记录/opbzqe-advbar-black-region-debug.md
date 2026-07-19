@@ -314,7 +314,7 @@
   - `AGENTS.MD` 的构建与验证要求改为 `cmake --build build --target vmrp` 加相关 Vitest e2e。
   - 清理当前 `build/` 目录里旧 `CTestTestfile.cmake` 和旧 `test_vmrp*` 二进制后重新配置，避免本地验证继续读取历史生成物。
 - 当前入口检查：
-  - `rg -n "VMRP_BUILD_TESTS|enable_testing|add_test|test_vmrp|vmrp_.*tests|e2e_vitest|ctest|CTest" CMakeLists.txt src docs/TESTING.md package.json test/e2e AGENTS.MD`：无命中。
+  - `rg -n "SKYENGINE_BUILD_TESTS|enable_testing|add_test|test_vmrp|vmrp_.*tests|e2e_vitest|ctest|CTest" CMakeLists.txt src docs/TESTING.md package.json test/e2e AGENTS.MD`：无命中。
   - `ctest --test-dir build -N`：`Total Tests: 0`，确认当前 build 目录不再注册测试。
 - 验证结果：
   - `cmake -S . -B build`：通过。

@@ -26,17 +26,17 @@
   ```
 - 共享库构建：
   ```bash
-  cmake -S . -B build-shared -DVMRP_BUILD_SHARED=ON
+  cmake -S . -B build-shared -DSKYENGINE_BUILD_SHARED=ON
   cmake --build build-shared
   ```
 - 仅构建共享库：
   ```bash
-  cmake -S . -B build-shared-only -DVMRP_BUILD_SHARED_ONLY=ON
+  cmake -S . -B build-shared-only -DSKYENGINE_BUILD_SHARED_ONLY=ON
   cmake --build build-shared-only
   ```
 - WebAssembly 目标仅在 `emcc` 可用时启用：
   ```bash
-  cmake --build build --target vmrp-wasm
+  cmake --build build --target skyengine-wasm
   ```
 - `test/e2e/` 是面向真实 MRP 样本的 Vitest 回归用例，通常假定可执行文件位于 `build/vmrp`，并依赖 `test/fixtures/*.mrp` 等运行资源。
 - e2e 测试文件级并发执行（上限见 `vitest.config.ts` 的 `maxForks`，为避免 CPU 超售引起时序抖动）。数据隔离模式：每个 `it()` 用例开头 `ws = await VmrpWorkspace.create()` 获得独立的 `mythroad/` 临时副本，用 `ws.path('mythroad/...')` 访问工作区内文件，`VmrpE2e.start(mrp, { workDir: ws.dir })` 启动，`afterEach` 中 `ws.dispose()` 清理。新增用例禁止直接读写仓库根目录的 `mythroad/`。
@@ -84,7 +84,7 @@
   pnpm vitest run test/e2e/gghjt/game-start.test.ts
   pnpm vitest run test/e2e/dota/download-plugin.test.ts
   ```
-- 修改 Wasm 路径时，在有 `emcc` 的环境下构建 `vmrp-wasm`，并确认 `wasm/dist` 资源路径没有被破坏。
+- 修改 Wasm 路径时，在有 `emcc` 的环境下构建 `skyengine-wasm`，并确认 `wasm/dist` 资源路径没有被破坏。
 - 无法运行某项验证时，在最终说明中写清楚原因和剩余风险。
 
 ## 文档与沟通

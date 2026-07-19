@@ -8,7 +8,7 @@
 #endif
 
 #ifdef VMRP
-#include "../../include/vmrp.h"
+#include "../../include/skyengine.h"
 #define SCREEN_WIDTH (vmrp_config.screen_width)
 #define SCREEN_HEIGHT (vmrp_config.screen_height)
 #else

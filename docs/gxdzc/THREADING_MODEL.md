@@ -219,13 +219,13 @@ startup sequence:
   ├─ startVmrp() → reads VMRP_MRP, VMRP_EXT, VMRP_ENTRY
   └─ loop()
      ├─ startAutoClicksIfRequested()
-     │  └─ getenv("VMRP_AUTO_CLICKS") ← READ
-     │  └─ getenv("VMRP_AUTO_CLICK_DELAY_MS") ← READ
+     │  └─ getenv("SKYENGINE_AUTO_CLICKS") ← READ
+     │  └─ getenv("SKYENGINE_AUTO_CLICK_DELAY_MS") ← READ
      └─ Event loop
         ├─ autoClickThread()
-        │  └─ getenv("VMRP_AUTO_CLICK_DELAY_MS") ← READ
+        │  └─ getenv("SKYENGINE_AUTO_CLICK_DELAY_MS") ← READ
         └─ [main loop]
-           └─ getenv("VMRP_PPM") ← CHECK per draw (guiDrawBitmap)
+           └─ getenv("SKYENGINE_PPM") ← CHECK per draw (guiDrawBitmap)
 ```
 
 **Thread safety**: All env var reads are safe (environment doesn't change at runtime).

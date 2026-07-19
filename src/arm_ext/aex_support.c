@@ -116,25 +116,25 @@ static int arm_ext_env_flag_(const char *name, int *cache) {
 }
 int arm_ext_diag_on(void) {
     static int c = -1;
-    return arm_ext_env_flag_("VMRP_ARM_EXT_DIAG", &c);
+    return arm_ext_env_flag_("SKYENGINE_ARM_EXT_DIAG", &c);
 }
 int arm_ext_trace_on(void) {
     static int c = -1;
-    return arm_ext_env_flag_("VMRP_ARM_EXT_TRACE", &c);
+    return arm_ext_env_flag_("SKYENGINE_ARM_EXT_TRACE", &c);
 }
 int arm_ext_trace_pc_on(void) {
     static int c = -1;
-    return arm_ext_env_flag_("VMRP_ARM_EXT_TRACE_PC", &c);
+    return arm_ext_env_flag_("SKYENGINE_ARM_EXT_TRACE_PC", &c);
 }
 int arm_ext_timer_liveness_diag_on(void) {
     static int c = -1;
-    return arm_ext_env_flag_("VMRP_ARM_EXT_TIMER_LIVENESS_DIAG", &c);
+    return arm_ext_env_flag_("SKYENGINE_ARM_EXT_TIMER_LIVENESS_DIAG", &c);
 }
 int arm_ext_timer_owner_diag_on(void) {
     static int c = -1;
-    return arm_ext_env_flag_("VMRP_ARM_EXT_TIMER_OWNER_DIAG", &c);
+    return arm_ext_env_flag_("SKYENGINE_ARM_EXT_TIMER_OWNER_DIAG", &c);
 }
 int arm_ext_screen_diag_on(void) {
     static int c = -1;
-    return arm_ext_env_flag_("VMRP_ARM_EXT_SCREEN_DIAG", &c);
+    return arm_ext_env_flag_("SKYENGINE_ARM_EXT_SCREEN_DIAG", &c);
 }

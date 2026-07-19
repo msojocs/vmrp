@@ -7,7 +7,7 @@
 #include "./include/bridge.h"
 #include "./include/fileLib.h"
 #include "./include/types.h"
-#include "./include/vmrp.h"
+#include "./include/skyengine.h"
 
 /*
  * 平台文本框(黑底绿字全屏文本页)的宿主实现,语义与布局说明:

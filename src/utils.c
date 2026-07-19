@@ -8,7 +8,7 @@
 #include <time.h>
 
 #include "./include/fileLib.h"
-#include "./include/vmrp.h"
+#include "./include/skyengine.h"
 
 void printScreen(char *filename, uint16_t *buf) {
     /* buf 为全屏缓冲,LCD 旋转后其几何即显示尺寸(rotation==0 时同面板) */

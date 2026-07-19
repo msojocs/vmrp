@@ -1,22 +1,22 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { VmrpE2e, VmrpWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
 import fs from "fs";
 
 describe("gghjt 开始游戏", () => {
-  let vmrp: VmrpE2e | undefined;
-  let ws: VmrpWorkspace | undefined;
+  let engine: SkyEngineE2e | undefined;
+  let ws: SkyEngineWorkspace | undefined;
   const memCheckTime = 15_000
 
   afterEach(async () => {
-    await vmrp?.close();
-    vmrp = undefined;
+    await engine?.close();
+    engine = undefined;
     await ws?.dispose();
     ws = undefined;
   });
 
   it("游戏正式开始 - 不花屏", async () => {
     // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
-    ws = await VmrpWorkspace.create();
+    ws = await SkyEngineWorkspace.create();
     // 删除后，继续游戏会进入下载netpay插件界面。
     if (!fs.existsSync(ws.path('mythroad/plugins/netpay.mrp'))) {
       fs.cpSync('test/fixtures/plugins/netpay.mrp', ws.path('mythroad/plugins/netpay.mrp'));
@@ -24,71 +24,71 @@ describe("gghjt 开始游戏", () => {
     fs.rmSync(ws.path('mythroad/gghjt'), { force: true, recursive: true });
     fs.rmSync(ws.path('mythroad/cache'), { force: true, recursive: true });
     fs.cpSync('test/fixtures/gghjt', ws.path('mythroad/gghjt'), { recursive: true });
-    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp", { workDir: ws.dir });
+    engine = await SkyEngineE2e.start("test/fixtures/gghjt.mrp", { workDir: ws.dir });
 
     {
       // 检测内存
-      await vmrp.delay(1_000);
-      await vmrp.key('LEFT_SOFT', 1_000);
-      await vmrp.delay(1_000);
+      await engine.delay(1_000);
+      await engine.key('LEFT_SOFT', 1_000);
+      await engine.delay(1_000);
 
     }
-    await vmrp.delay(memCheckTime);
-    const boot = await vmrp.screen("bgm-select");
+    await engine.delay(memCheckTime);
+    const boot = await engine.screen("bgm-select");
     // rgb(72,88,0)
     expect(boot.pixel(227, 308)).toEqual([0, 0, 0]);
 
     // 是否开启音乐？-> 否
-    await vmrp.click(230, 308, 1_000);
-    await vmrp.delay(1_000);
+    await engine.click(230, 308, 1_000);
+    await engine.delay(1_000);
 
     // 跳过启动剧情
-    await vmrp.click(227, 308, 1_000);
-    await vmrp.delay(1_000);
-    await vmrp.click(227, 308, 1_000);
-    await vmrp.delay(1_000);
-    await vmrp.click(227, 308, 1_000);
-    await vmrp.delay(1_000);
-    await vmrp.click(227, 308, 1_000);
-    await vmrp.delay(1_000);
+    await engine.click(227, 308, 1_000);
+    await engine.delay(1_000);
+    await engine.click(227, 308, 1_000);
+    await engine.delay(1_000);
+    await engine.click(227, 308, 1_000);
+    await engine.delay(1_000);
+    await engine.click(227, 308, 1_000);
+    await engine.delay(1_000);
 
     // 进入主菜单
-    const wake = await vmrp.screen("menu");
+    const wake = await engine.screen("menu");
     // rgb(152, 112, 32)
     expect(wake.pixel(110, 27)).toEqual([152, 112, 32]);
     {
       // 切换菜单
-      await vmrp.click(162, 291, 3_000);
-      await vmrp.delay(1_000);
-      const screen = await vmrp.screen("menu-continue");
+      await engine.click(162, 291, 3_000);
+      await engine.delay(1_000);
+      const screen = await engine.screen("menu-continue");
       // rgb(232, 196, 104)
       expect(screen.pixel(162, 291)).toEqual([232, 196, 104 ]);
     }
     {
       // 点击继续游戏，进入付费界面
-      await vmrp.click(116, 291, 3_000);
-      await vmrp.delay(1_000);
-      const pay = await vmrp.screen("pay-start");
+      await engine.click(116, 291, 3_000);
+      await engine.delay(1_000);
+      const pay = await engine.screen("pay-start");
       // rgb(104, 104, 224)
       expect(pay.pixel(104, 147)).toEqual([104, 104, 224]);
     }
 
     {
       // 点击确定付费，进入游戏界面
-      await vmrp.key('LEFT_SOFT', 3_000);
-      await vmrp.delay(4_000);
-      const screen = await vmrp.screen("game-start");
+      await engine.key('LEFT_SOFT', 3_000);
+      await engine.delay(4_000);
+      const screen = await engine.screen("game-start");
       // rgb(0, 0, 0)
       expect(screen.pixel(88, 44)).toEqual([0, 0, 0]);
     }
 
     {
       // 两下回车，对话确认后，渲染场景
-      await vmrp.key('ENTER', 3_000);
-      await vmrp.delay(1_000);
-      await vmrp.key('ENTER', 3_000);
-      await vmrp.delay(8_000);
-      const screen = await vmrp.screen("scene-render");
+      await engine.key('ENTER', 3_000);
+      await engine.delay(1_000);
+      await engine.key('ENTER', 3_000);
+      await engine.delay(8_000);
+      const screen = await engine.screen("scene-render");
       // rgb(192, 148, 96)
       expect(screen.pixel(55, 302)).toEqual([192, 148, 96]);
       // 楼房背景由离屏 cache 合成后复制到主屏；这些点曾是深色条纹坏色。
@@ -101,60 +101,60 @@ describe("gghjt 开始游戏", () => {
   });
   it("游戏直接开始 - 不缺渲染", async () => {
     // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
-    ws = await VmrpWorkspace.create();
+    ws = await SkyEngineWorkspace.create();
     // 删除后，继续游戏会进入下载netpay插件界面。
     if (!fs.existsSync(ws.path('mythroad/plugins/netpay.mrp'))) {
       fs.cpSync('test/fixtures/plugins/netpay.mrp', ws.path('mythroad/plugins/netpay.mrp'));
     }
     fs.rmSync(ws.path('mythroad/cache'), { force: true, recursive: true });
     fs.rmSync(ws.path('mythroad/gghjt'), { force: true, recursive: true });
-    vmrp = await VmrpE2e.start("test/fixtures/gghjt.mrp", { workDir: ws.dir });
+    engine = await SkyEngineE2e.start("test/fixtures/gghjt.mrp", { workDir: ws.dir });
 
     {
       // 检测内存
-      await vmrp.delay(1_000);
-      await vmrp.key('LEFT_SOFT', 1_000);
-      await vmrp.delay(1_000);
+      await engine.delay(1_000);
+      await engine.key('LEFT_SOFT', 1_000);
+      await engine.delay(1_000);
 
     }
-    await vmrp.delay(memCheckTime);
-    const boot = await vmrp.screen("bgm-select");
+    await engine.delay(memCheckTime);
+    const boot = await engine.screen("bgm-select");
     // rgb(72,88,0)
     expect(boot.pixel(227, 308)).toEqual([0, 0, 0]);
 
     // 是否开启音乐？-> 否
-    await vmrp.click(230, 308, 1_000);
-    await vmrp.delay(1_000);
+    await engine.click(230, 308, 1_000);
+    await engine.delay(1_000);
 
     // 跳过启动剧情
-    await vmrp.click(227, 308, 1_000);
-    await vmrp.delay(1_000);
-    await vmrp.click(227, 308, 1_000);
-    await vmrp.delay(1_000);
-    await vmrp.click(227, 308, 1_000);
-    await vmrp.delay(1_000);
-    await vmrp.click(227, 308, 1_000);
-    await vmrp.delay(1_000);
+    await engine.click(227, 308, 1_000);
+    await engine.delay(1_000);
+    await engine.click(227, 308, 1_000);
+    await engine.delay(1_000);
+    await engine.click(227, 308, 1_000);
+    await engine.delay(1_000);
+    await engine.click(227, 308, 1_000);
+    await engine.delay(1_000);
 
     // 进入主菜单
-    const wake = await vmrp.screen("menu");
+    const wake = await engine.screen("menu");
     // rgb(152, 112, 32)
     expect(wake.pixel(110, 27)).toEqual([152, 112, 32]);
     {
       // 点击开始游戏，进入游戏界面
-      await vmrp.click(116, 291, 3_000);
-      await vmrp.delay(6_000);
+      await engine.click(116, 291, 3_000);
+      await engine.delay(6_000);
       // rgb(248, 252, 0)
-      await vmrp.waitForPixel(42, 140, [248, 252, 0], { name: "game-start", timeoutMs: 6_000 });
+      await engine.waitForPixel(42, 140, [248, 252, 0], { name: "game-start", timeoutMs: 6_000 });
     }
 
     {
       // 六次回车，对话确认后，渲染场景
       for (let i=0; i<6; i++) {
-        await vmrp.key('ENTER', 3_000);
-        await vmrp.delay(1_000);
+        await engine.key('ENTER', 3_000);
+        await engine.delay(1_000);
       }
-      const screen = await vmrp.screen("scene-render");
+      const screen = await engine.screen("scene-render");
       // rgb(192, 148, 96)
       expect(screen.pixel(55, 302)).toEqual([192, 148, 96]);
       // 火车顶部场景；这些点覆盖离屏背景和底部栏，防止只显示中间视口。

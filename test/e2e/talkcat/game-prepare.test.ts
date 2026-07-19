@@ -1,28 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { VmrpE2e, VmrpWorkspace } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace } from "../vmrp-e2e.js";
 import fs from 'fs'
 
 describe("talkcat 进入游戏", () => {
-  let vmrp: VmrpE2e | undefined;
-  let ws: VmrpWorkspace | undefined;
+  let engine: SkyEngineE2e | undefined;
+  let ws: SkyEngineWorkspace | undefined;
 
   afterEach(async () => {
-    await vmrp?.close();
-    vmrp = undefined;
+    await engine?.close();
+    engine = undefined;
     await ws?.dispose();
     ws = undefined;
   });
 
   it("游戏启动正常", async () => {
     // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
-    ws = await VmrpWorkspace.create();
+    ws = await SkyEngineWorkspace.create();
     fs.rmSync(ws.path('mythroad/talkcat'), { force: true, recursive: true })
 
-    vmrp = await VmrpE2e.start("test/fixtures/talkcat.mrp", { workDir: ws.dir });
+    engine = await SkyEngineE2e.start("test/fixtures/talkcat.mrp", { workDir: ws.dir });
 
     await vi.waitFor(async () => {
-      if (!vmrp) throw new Error("vmrp is undefined");
-      const boot = await vmrp.screen("main");
+      if (!engine) throw new Error("vmrp is undefined");
+      const boot = await engine.screen("main");
       // rgb(232, 236, 232)
       expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);
       // rgb(0, 12, 16)
@@ -33,14 +33,14 @@ describe("talkcat 进入游戏", () => {
   });
   it("下载喝水资源包并安装", async () => {
     // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
-    ws = await VmrpWorkspace.create();
+    ws = await SkyEngineWorkspace.create();
     fs.rmSync(ws.path('mythroad/talkcat'), { force: true, recursive: true })
 
-    vmrp = await VmrpE2e.start("test/fixtures/talkcat.mrp", { workDir: ws.dir });
+    engine = await SkyEngineE2e.start("test/fixtures/talkcat.mrp", { workDir: ws.dir });
 
     await vi.waitFor(async () => {
-      if (!vmrp) throw new Error("vmrp is undefined");
-      const boot = await vmrp.screen("main");
+      if (!engine) throw new Error("vmrp is undefined");
+      const boot = await engine.screen("main");
       // rgb(232, 236, 232)
       expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);
       // rgb(0, 12, 16)
@@ -51,20 +51,20 @@ describe("talkcat 进入游戏", () => {
 
     {
       // 点击水杯图标，触发下载提示
-      await vmrp.click(22, 280, 1_000)
-      await vmrp.delay(1_000)
+      await engine.click(22, 280, 1_000)
+      await engine.delay(1_000)
       // 检查像素
-      const screen = await vmrp.screen("download-confirm");
+      const screen = await engine.screen("download-confirm");
       // rgb(32, 64, 120)
       expect(screen.pixel(78, 280)).toEqual([32, 64, 120]);
     }
     {
       // 点击确定开始下载
-      await vmrp.click(78, 280, 1_000)
-      await vmrp.delay(5_000)
+      await engine.click(78, 280, 1_000)
+      await engine.delay(5_000)
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp is undefined");
-        const screen = await vmrp.screen("downloading");
+        if (!engine) throw new Error("vmrp is undefined");
+        const screen = await engine.screen("downloading");
         // rgb(32, 212, 0)
         expect(screen.pixel(79, 257)).toEqual([32, 212, 0]);
       }, {
@@ -74,10 +74,10 @@ describe("talkcat 进入游戏", () => {
     }
     {
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("vmrp is undefined");
         // 检查是否显示安装提示
         // rgb(32, 64, 120)
-        const screen = await vmrp.screen("install-confirm");
+        const screen = await engine.screen("install-confirm");
         expect(screen.pixel(77, 279)).toEqual([32, 64, 120]);
       }, {
         timeout: 30_000,
@@ -86,33 +86,33 @@ describe("talkcat 进入游戏", () => {
     }
     {
       // 点击确定开始安装
-      await vmrp.click(77, 279, 1_000)
+      await engine.click(77, 279, 1_000)
       
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp is undefined");
+        if (!engine) throw new Error("vmrp is undefined");
         // rgb(32, 212, 0)
-        const screen = await vmrp.screen("installing");
+        const screen = await engine.screen("installing");
         expect(screen.pixel(54, 257)).toEqual([32, 212, 0]);
       }, {
         timeout: 30_000,
         interval: 1_000
       })
 
-      await vmrp.delay(80_000)
-      const stdout = fs.readFileSync(vmrp.stdoutPath, 'utf-8')
+      await engine.delay(80_000)
+      const stdout = fs.readFileSync(engine.stdoutPath, 'utf-8')
       expect(stdout).not.contain('Invalid memory read')
     }
   });
   it("循环取消", async () => {
     // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
-    ws = await VmrpWorkspace.create();
+    ws = await SkyEngineWorkspace.create();
     fs.rmSync(ws.path('mythroad/talkcat'), { force: true, recursive: true })
 
-    vmrp = await VmrpE2e.start("test/fixtures/talkcat.mrp", { workDir: ws.dir });
+    engine = await SkyEngineE2e.start("test/fixtures/talkcat.mrp", { workDir: ws.dir });
 
     await vi.waitFor(async () => {
-      if (!vmrp) throw new Error("vmrp is undefined");
-      const boot = await vmrp.screen("main");
+      if (!engine) throw new Error("vmrp is undefined");
+      const boot = await engine.screen("main");
       // rgb(232, 236, 232)
       expect(boot.pixel(27, 273)).toEqual([232, 236, 232]);
       // rgb(0, 12, 16)
@@ -123,22 +123,22 @@ describe("talkcat 进入游戏", () => {
     for (let i = 0; i < 20; i++) {
       {
         // 点击水杯图标，触发下载提示
-        await vmrp.click(139, 266, 1_000)
-        await vmrp.delay(1_000)
+        await engine.click(139, 266, 1_000)
+        await engine.delay(1_000)
         // 检查像素
-        const screen = await vmrp.screen("download-confirm");
+        const screen = await engine.screen("download-confirm");
         // rgb(32, 64, 120)
         expect(screen.pixel(78, 280)).toEqual([32, 64, 120]);
       }
       {
         // 点击确定开始下载
-        await vmrp.click(139, 266, 1_000)
-        await vmrp.delay(1_000)
+        await engine.click(139, 266, 1_000)
+        await engine.delay(1_000)
         // rgb(32, 212, 0)
-        const screen = await vmrp.screen("download-cancel");
+        const screen = await engine.screen("download-cancel");
         // rgb(32, 64, 120)
         expect(screen.pixel(78, 280)).not.toEqual([32, 64, 120]);
-        await vmrp.delay(1_000)
+        await engine.delay(1_000)
       }
     }
   });

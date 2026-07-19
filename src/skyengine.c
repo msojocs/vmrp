@@ -1,4 +1,4 @@
-#include "./include/vmrp.h"
+#include "./include/skyengine.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -30,8 +30,8 @@
 #include "./include/arm_ext_executor.h"
 #include "./mythroad/include/dsm.h" /* dsm_get_lcd_rotation:plat(101) 旋转状态 */
 
-#define VMRP_LOG_ENABLED() (getenv("VMRP_LOG") != NULL)
-#define VMRP_LOG(...)                          \
+#define VMRP_LOG_ENABLED() (getenv("SKYENGINE_LOG") != NULL)
+#define SKYENGINE_LOG(...)                          \
     do {                                      \
         if (VMRP_LOG_ENABLED()) {             \
             fprintf(stderr, __VA_ARGS__);     \
@@ -53,7 +53,7 @@ VmrpConfig vmrp_config = {
 
 /* 旋转后的显示尺寸:奇数旋转(90°/270°)时为面板转置,否则即面板尺寸。
  * 旋转状态由 DSM 层持有(guest 经 plat(101) 设置,见 dsm.c);语义见
- * vmrp.h 声明处注释。rotation==0 时与 screen_width/height 恒等,未调
+ * skyengine.h 声明处注释。rotation==0 时与 screen_width/height 恒等,未调
  * plat(101) 的应用路径行为不变。 */
 int vmrp_display_width(void) {
     return (dsm_get_lcd_rotation() & 1) ? vmrp_config.screen_height
@@ -197,7 +197,7 @@ static int smoke_arm_ext(const char *path) {
     uint8 *code = buf;
     uint32 code_len = (uint32)sz;
     if ((uint32)sz >= 4 && memcmp(buf, "MRPG", 4) == 0) {
-        const char *ext_name = getenv("VMRP_ARM_EXT_NAME");
+        const char *ext_name = getenv("SKYENGINE_ARM_EXT_NAME");
         uint8 *extracted = NULL;
         uint32 extracted_len = 0;
         if (!ext_name || !*ext_name) ext_name = "cfunction.ext";
@@ -212,7 +212,7 @@ static int smoke_arm_ext(const char *path) {
     }
 
     ArmExtModule *mod = NULL;
-    const char *load_code_env = getenv("VMRP_ARM_EXT_LOAD_CODE");
+    const char *load_code_env = getenv("SKYENGINE_ARM_EXT_LOAD_CODE");
     int load_code = (load_code_env && *load_code_env) ? atoi(load_code_env) : 1;
     int ret = arm_ext_load(&mod, code, code_len, load_code, NULL);
     printf("arm_ext_smoke_load('%s'): %d\n", path, ret);
@@ -294,11 +294,11 @@ int startVmrp(const VmrpArgs *args) {
         }
     }
 
-    VMRP_LOG("[startVmrp] vmrp_runtime_init...\n");
+    SKYENGINE_LOG("[startVmrp] vmrp_runtime_init...\n");
     if (vmrp_runtime_init(&runtime) != MR_SUCCESS) return MR_FAILED;
-    VMRP_LOG("[startVmrp] vmrp_runtime_init OK\n");
+    SKYENGINE_LOG("[startVmrp] vmrp_runtime_init OK\n");
 
-    const char *arm_ext_smoke = getenv("VMRP_ARM_EXT_SMOKE");
+    const char *arm_ext_smoke = getenv("SKYENGINE_ARM_EXT_SMOKE");
     if (arm_ext_smoke && *arm_ext_smoke) {
         int smoke_ret = smoke_arm_ext(arm_ext_smoke);
         vmrp_runtime_destroy(&runtime);
@@ -319,10 +319,10 @@ int startVmrp(const VmrpArgs *args) {
         return MR_FAILED;
     }
 
-    VMRP_LOG("[startVmrp] vmrp_runtime_start_dsm('%s','%s','%s')...\n",
+    SKYENGINE_LOG("[startVmrp] vmrp_runtime_start_dsm('%s','%s','%s')...\n",
              filename, extName, entry ? entry : "");
     uint32_t ret = vmrp_runtime_start_dsm(&runtime, filename, extName, entry);
-    VMRP_LOG("[startVmrp] vmrp_runtime_start_dsm returned 0x%X\n", ret);
+    SKYENGINE_LOG("[startVmrp] vmrp_runtime_start_dsm returned 0x%X\n", ret);
     if (ret != MR_SUCCESS) {
         vmrp_runtime_destroy(&runtime);
         return MR_FAILED;

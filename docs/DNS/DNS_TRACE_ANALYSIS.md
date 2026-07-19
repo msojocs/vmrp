@@ -33,7 +33,7 @@ static const char *selectStartupDnsMap(const char *dns_map_arg, VmrpDnsMapSource
         *source = VMRP_DNS_MAP_SOURCE_CONFIG;
         return startup_config.dns_map;
     }
-    const char *env_dns_map = getenv("VMRP_DNS_MAP");  // Environment variable
+    const char *env_dns_map = getenv("SKYENGINE_DNS_MAP");  // Environment variable
     if (env_dns_map != NULL) {
         *source = VMRP_DNS_MAP_SOURCE_ENV;
         return env_dns_map;

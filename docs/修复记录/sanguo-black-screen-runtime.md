@@ -22,7 +22,7 @@
 | 产物 | 用途 |
 | --- | --- |
 | `/tmp/vmrp-sanguo-baseline.out` | 有界启动标准输出，144 行/8192 字节 |
-| `/tmp/vmrp-sanguo-baseline.err` | `VMRP_LOG=1` 启动阶段日志，32 行/1687 字节 |
+| `/tmp/vmrp-sanguo-baseline.err` | `SKYENGINE_LOG=1` 启动阶段日志，32 行/1687 字节 |
 | `/tmp/vmrp-sanguo-proc.txt` | 7 秒时的进程/线程状态 |
 | `/tmp/vmrp-sanguo-baseline.ppm` | `SIGUSR1` 抓取的 240x320 基线画面 |
 | `/tmp/sanguo-cfunction.ext` | 解压后 wrapper，19428 (`0x4BE4`) 字节 |

@@ -16,7 +16,7 @@
 #include "./include/bridge.h"
 #include "./include/e2e_control.h"
 #include "./include/native_text_widget.h"
-#include "./include/vmrp.h"
+#include "./include/skyengine.h"
 #include "./include/memory.h"
 
 #ifdef _MSC_VER
@@ -61,7 +61,7 @@ static SDL_atomic_t timerDispatchInProgress;
 static SDL_atomic_t runtimeExited;
 
 static const char *screen_dump_path(void) {
-    const char *path = getenv("VMRP_PPM_PATH");
+    const char *path = getenv("SKYENGINE_PPM_PATH");
     return (path && *path) ? path : "/tmp/vmrp_screen.ppm";
 }
 
@@ -107,7 +107,7 @@ static SDL_mutex *e2eDrawFrameMutex = NULL;
 static int e2e_draw_frame_capture_enabled(void) {
     static int cached = -1;
     if (cached < 0) {
-        const char *socket = getenv("VMRP_E2E_SOCKET");
+        const char *socket = getenv("SKYENGINE_E2E_SOCKET");
         cached = (socket && *socket) ? 1 : 0;
     }
     return cached;
@@ -365,7 +365,7 @@ void guiDrawBitmapWithStride(uint16_t *bmp, int32_t x, int32_t y,
      * foreground handoff bugs where the last visible frame matters.  When
      * VMRP_PPM is set, the caller has explicitly requested verification, so
      * keep the configured PPM path equal to the most recent rendered frame. */
-    int should_dump_ppm = getenv("VMRP_PPM") || draw_count == 5;
+    int should_dump_ppm = getenv("SKYENGINE_PPM") || draw_count == 5;
     /* LCD 旋转(plat(101))后的横屏自动翻转:显示尺寸与窗口不一致时调整窗口。
      * VM 全部在 SDL 主循环线程执行(定时器回调仅 SDL_PushEvent),此处调
      * SDL_SetWindowSize 线程安全;resize 使旧 surface 失效,须在取 surface
@@ -644,7 +644,7 @@ static int autoClickCount = 0;
 
 static int autoClickThread(void *data) {
     (void)data;
-    const char *delay_env = getenv("VMRP_AUTO_CLICK_DELAY_MS");
+    const char *delay_env = getenv("SKYENGINE_AUTO_CLICK_DELAY_MS");
     Uint32 default_delay = delay_env ? (Uint32)atoi(delay_env) : 800;
     if (default_delay == 0) default_delay = 800;
 
@@ -706,7 +706,7 @@ static int autoClickThread(void *data) {
 }
 
 static void startAutoClicksIfRequested(void) {
-    const char *env = getenv("VMRP_AUTO_CLICKS");
+    const char *env = getenv("SKYENGINE_AUTO_CLICKS");
     if (!env || !*env) return;
     /* 解析 "x1,y1[,delay1];x2,y2[,delay2];..." 第三个字段可选，单位 ms */
     int capacity = 8;

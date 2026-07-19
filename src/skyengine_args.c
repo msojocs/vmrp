@@ -1,4 +1,4 @@
-#include "./include/vmrp_args.h"
+#include "./include/skyengine_args.h"
 
 #include <errno.h>
 #include <stdint.h>
@@ -476,7 +476,7 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
             return MR_FAILED;
         }
     } else {
-        const char *env_work_dir = getenv("VMRP_WORK_DIR");
+        const char *env_work_dir = getenv("SKYENGINE_WORK_DIR");
         if (env_work_dir && *env_work_dir) {
             if (resolve_config_dir(env_work_dir, out->work_dir,
                                    sizeof(out->work_dir)) != MR_SUCCESS) {
@@ -493,7 +493,7 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
             return MR_FAILED;
         }
     } else {
-        const char *env_mrp = getenv("VMRP_MRP");
+        const char *env_mrp = getenv("SKYENGINE_MRP");
         if (env_mrp && *env_mrp) {
             snprintf(out->mrp_path, sizeof(out->mrp_path), "%s", env_mrp);
         } else {
@@ -505,7 +505,7 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
     if (ext_arg) {
         snprintf(out->ext_name, sizeof(out->ext_name), "%s", ext_arg);
     } else {
-        const char *env_ext = getenv("VMRP_EXT");
+        const char *env_ext = getenv("SKYENGINE_EXT");
         if (env_ext && *env_ext) {
             snprintf(out->ext_name, sizeof(out->ext_name), "%s", env_ext);
         }
@@ -515,7 +515,7 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
     if (entry_arg) {
         snprintf(out->entry, sizeof(out->entry), "%s", entry_arg);
     } else {
-        const char *env_entry = getenv("VMRP_ENTRY");
+        const char *env_entry = getenv("SKYENGINE_ENTRY");
         if (env_entry && *env_entry) {
             snprintf(out->entry, sizeof(out->entry), "%s", env_entry);
         }
@@ -531,15 +531,15 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
         out->screen_width = w;
         out->screen_height = h;
     } else {
-        const char *env_w = getenv("VMRP_SCREEN_WIDTH");
-        const char *env_h = getenv("VMRP_SCREEN_HEIGHT");
+        const char *env_w = getenv("SKYENGINE_SCREEN_WIDTH");
+        const char *env_h = getenv("SKYENGINE_SCREEN_HEIGHT");
         if (env_w && *env_w) out->screen_width = atoi(env_w);
         if (env_h && *env_h) out->screen_height = atoi(env_h);
     }
 
     /* Memory size: CLI --memory > env var > default */
     if (!memory_arg) {
-        const char *env_memory = getenv("VMRP_MEMORY");
+        const char *env_memory = getenv("SKYENGINE_MEMORY");
         if (env_memory && *env_memory) memory_arg = env_memory;
     }
     if (memory_arg) {
@@ -553,7 +553,7 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
 
     /* Device date: CLI --device-date > env var > deterministic legacy RTC. */
     if (!device_date_arg) {
-        const char *env_device_date = getenv("VMRP_DEVICE_DATE");
+        const char *env_device_date = getenv("SKYENGINE_DEVICE_DATE");
         if (env_device_date && *env_device_date) device_date_arg = env_device_date;
     }
     if (device_date_arg &&
@@ -570,7 +570,7 @@ int vmrp_args_parse(int argc, char *argv[], VmrpArgs *out) {
     if (dns_map_arg) {
         snprintf(out->dns_map, sizeof(out->dns_map), "%s", dns_map_arg);
     } else {
-        const char *env_dns_map = getenv("VMRP_DNS_MAP");
+        const char *env_dns_map = getenv("SKYENGINE_DNS_MAP");
         if (env_dns_map) {
             snprintf(out->dns_map, sizeof(out->dns_map), "%s", env_dns_map);
         }

@@ -51,7 +51,7 @@ talkcat 的启动音与交互音效均为 MPEG1 Layer III(启动音 24KHz mono,
 
 ## 验证
 
-- `cmake --build build --target vmrp` 通过;`vmrp-shared` 构建通过。
+- `cmake --build build --target vmrp` 通过;`skyengine-shared` 构建通过。
 - 手动运行(work-dir 隔离,MRP 位于 work-dir 内,参见 e2e 工作区隔离经验):
   stdout 中原 `unsupported compressed sound type 2` 全部消失,替换为
   `native_playSound: mp3 len=10560 -> 24000Hz/1ch samples=50112 loop=0` 等。

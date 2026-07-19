@@ -17,7 +17,7 @@
 │                 └──────┬──────┘  │
 │                        │ dart:ffi│
 ├────────────────────────┼─────────┤
-│  libvmrp.so (C)        │         │
+│  libskyengine.so (C)        │         │
 │  ┌─────────────────────▼──────┐  │
 │  │ vmrp_api.c (导出API)       │  │
 │  │   ↓                        │  │
@@ -37,7 +37,7 @@
 
 ## 1. 集成到 Flutter 项目
 
-推荐使用 **git submodule** 方式，Flutter 构建时自动编译 `libvmrp.so`，无需手动交叉编译。
+推荐使用 **git submodule** 方式，Flutter 构建时自动编译 `libskyengine.so`，无需手动交叉编译。
 
 ### 方式一：Git Submodule（推荐）
 
@@ -95,7 +95,7 @@ android {
         }
         externalNativeBuild {
             cmake {
-                arguments '-DVMRP_BUILD_SHARED_ONLY=ON'
+                arguments '-DSKYENGINE_BUILD_SHARED_ONLY=ON'
             }
         }
     }
@@ -108,12 +108,12 @@ android {
 }
 ```
 
-关键参数 `-DVMRP_BUILD_SHARED_ONLY=ON`：只构建 `libvmrp.so`，跳过 SDL 可执行文件和测试（Android 环境没有 SDL）。
+关键参数 `-DSKYENGINE_BUILD_SHARED_ONLY=ON`：只构建 `libskyengine.so`，跳过 SDL 可执行文件和测试（Android 环境没有 SDL）。
 
 #### 1.3 构建
 
 ```bash
-flutter build apk  # 自动触发 CMake 编译 libvmrp.so
+flutter build apk  # 自动触发 CMake 编译 libskyengine.so
 ```
 
 Flutter 的 Gradle 插件会用 Android NDK 的 CMake toolchain 自动编译，产物直接打包进 APK。
@@ -132,7 +132,7 @@ cmake -B build-android-arm64 \
   -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
   -DANDROID_ABI=arm64-v8a \
   -DANDROID_PLATFORM=android-21 \
-  -DVMRP_BUILD_SHARED_ONLY=ON \
+  -DSKYENGINE_BUILD_SHARED_ONLY=ON \
   -DCMAKE_BUILD_TYPE=Release
 
 cmake --build build-android-arm64
@@ -146,9 +146,9 @@ your_flutter_project/
       src/main/
         jniLibs/
           arm64-v8a/
-            libvmrp.so
+            libskyengine.so
           armeabi-v7a/
-            libvmrp.so
+            libskyengine.so
 ```
 
 ---
@@ -232,7 +232,7 @@ class VmrpBindings {
 
   VmrpBindings() {
     _lib = Platform.isAndroid
-        ? DynamicLibrary.open('libvmrp.so')
+        ? DynamicLibrary.open('libskyengine.so')
         : DynamicLibrary.process();
 
     init = _lib.lookupFunction<_vmrp_api_init_C, _vmrp_api_init_Dart>('vmrp_api_init');

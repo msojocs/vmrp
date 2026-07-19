@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { copyFile, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { VmrpE2e, VmrpWorkspace, type PpmImage } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace, type PpmImage } from "../vmrp-e2e.js";
 
 // Pinned op6120 package, SHA-256:
 // 611b4cd737dcf458370ff215bc73636cf65bdc6dfc36907c2ce8aa8f00b7c8e2.
@@ -23,7 +23,7 @@ async function sha256(file: string): Promise<string> {
   return createHash("sha256").update(await readFile(file)).digest("hex");
 }
 
-async function waitForStartedFrame(vmrp: VmrpE2e): Promise<PpmImage> {
+async function waitForStartedFrame(vmrp: SkyEngineE2e): Promise<PpmImage> {
   let frame: PpmImage | undefined;
   await vi.waitFor(async () => {
     frame = await vmrp.screen("started");
@@ -34,12 +34,12 @@ async function waitForStartedFrame(vmrp: VmrpE2e): Promise<PpmImage> {
 }
 
 describe("op6120 cold boot", () => {
-  let vmrp: VmrpE2e | undefined;
-  let ws: VmrpWorkspace | undefined;
+  let engine: SkyEngineE2e | undefined;
+  let ws: SkyEngineWorkspace | undefined;
 
   afterEach(async () => {
-    await vmrp?.close();
-    vmrp = undefined;
+    await engine?.close();
+    engine = undefined;
     await ws?.dispose();
     ws = undefined;
   });
@@ -47,7 +47,7 @@ describe("op6120 cold boot", () => {
   it("allocates Flash SCRRAM outside LG_mem and completes startup", async () => {
     expect(await sha256("test/fixtures/op6120.mrp")).toBe(MRP_SHA256);
 
-    ws = await VmrpWorkspace.create();
+    ws = await SkyEngineWorkspace.create();
     const mrp = ws.path("mythroad/op6120.mrp");
     const sky = ws.path("mythroad/cache/op6120/sky.bmp");
     await copyFile("test/fixtures/op6120.mrp", mrp);
@@ -56,33 +56,33 @@ describe("op6120 cold boot", () => {
     // the allocator boundary; a warm cache would skip the original failure.
     await rm(sky, { force: true });
 
-    vmrp = await VmrpE2e.start(mrp, {
+    engine = await SkyEngineE2e.start(mrp, {
       workDir: ws.dir,
       memory: "4M",
       dnsMap: LOCAL_DNS_MAP,
       timeoutMs: 90_000,
     });
-    const started = await waitForStartedFrame(vmrp);
+    const started = await waitForStartedFrame(engine);
 
     expect(started.pixel(184, 128)).toEqual([240, 240, 240]);
     expect(started.uniqueColorCount()).toBe(1_697);
     expect((await stat(sky)).size).toBe(3_822_820);
     expect(await sha256(sky)).toBe(SKY_SHA256);
 
-    const startedDrawCount = await vmrp.drawCount();
+    const startedDrawCount = await engine.drawCount();
     expect(startedDrawCount).toBeGreaterThan(13);
     await vi.waitFor(async () => {
-      expect(await vmrp!.drawCount()).toBeGreaterThan(startedDrawCount);
+      expect(await engine!.drawCount()).toBeGreaterThan(startedDrawCount);
     }, { timeout: 5_000, interval: 100 });
 
-    const output = `${await readFile(vmrp.stdoutPath, "utf8")}\n${await readFile(vmrp.stderrPath, "utf8")}`;
+    const output = `${await readFile(engine.stdoutPath, "utf8")}\n${await readFile(engine.stderrPath, "utf8")}`;
     expect(output).not.toMatch(/UC_ERR|UC_MEM|unmapped|INVARIANT|uc_emu_start failed|FATAL/);
   }, 120_000);
 
   it("keeps a valid MRP identity when the imported host name exceeds 32 bytes", async () => {
     expect(await sha256("test/fixtures/op6120.mrp")).toBe(MRP_SHA256);
 
-    ws = await VmrpWorkspace.create();
+    ws = await SkyEngineWorkspace.create();
     const importedName = "愤怒的小鸟VS僵尸2_v1002.mrp";
     // game.ext reads record[100] as a direct package-name pointer and checks
     // for `.mrp`; its earlier selector-100 MPS initializer must not be mistaken
@@ -92,18 +92,18 @@ describe("op6120 cold boot", () => {
     await copyFile("test/fixtures/op6120.mrp", mrp);
     await copyFile("test/fixtures/plugins/advbar.mrp", ws.path("mythroad/plugins/advbar.mrp"));
 
-    vmrp = await VmrpE2e.start(mrp, {
+    engine = await SkyEngineE2e.start(mrp, {
       workDir: ws.dir,
       dnsMap: LOCAL_DNS_MAP,
       timeoutMs: 90_000,
     });
-    const started = await waitForStartedFrame(vmrp);
+    const started = await waitForStartedFrame(engine);
 
     expect(started.pixel(184, 128)).toEqual([240, 240, 240]);
     expect(started.uniqueColorCount()).toBe(1_697);
-    expect(await vmrp.drawCount()).toBeGreaterThan(0);
+    expect(await engine.drawCount()).toBeGreaterThan(0);
 
-    const output = `${await readFile(vmrp.stdoutPath, "utf8")}\n${await readFile(vmrp.stderrPath, "utf8")}`;
+    const output = `${await readFile(engine.stdoutPath, "utf8")}\n${await readFile(engine.stderrPath, "utf8")}`;
     expect(output).not.toMatch(/UC_ERR|UC_MEM|unmapped|INVARIANT|uc_emu_start failed|FATAL/);
   }, 120_000);
 });

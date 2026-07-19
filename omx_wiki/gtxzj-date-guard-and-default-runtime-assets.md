@@ -101,7 +101,7 @@ through `vmrp_args_default()`. Embedding hosts can call
 calendar validator and leaves the previous valid mode unchanged on invalid input.
 Calls during an active VM are rejected so the worker cannot observe a mixed date.
 
-The native `vmrp-system-assets` dependency treats tracked `gb12.uc2` and `gb16.uc2`
+The native `skyengine-system-assets` dependency treats tracked `gb12.uc2` and `gb16.uc2`
 as required desktop assets and copies them on every requested `vmrp` build to
 `$<TARGET_FILE_DIR:vmrp>/mythroad/system`. Their deployed SHA-256 values are
 `f8e9a443e28eecce3a99f0ebf26a197b1ef5e65bab5406054ff7e985d48274b3` and
@@ -125,7 +125,7 @@ regional-diff assertions. Final checks passed:
 
 - `cmake --build build --target vmrp -j2`;
 - `pnpm exec tsc --noEmit`;
-- `VMRP_BUILD_SHARED_ONLY=ON` shared-library build and direct fixed/host/invalid/
+- `SKYENGINE_BUILD_SHARED_ONLY=ON` shared-library build and direct fixed/host/invalid/
   active-run setter probes;
 - `pnpm exec vitest run test/e2e --reporter=verbose`: 22 files and 43 tests in
   304.05 seconds, including nine focused date-contract tests;

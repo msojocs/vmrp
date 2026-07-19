@@ -7,7 +7,7 @@
  */
 #include "../include/arm_ext_priv.h"
 #include "../include/bridge.h"
-#include "../include/vmrp.h" /* vmrp_display_width/height:LCD 旋转后的显示尺寸 */
+#include "../include/skyengine.h" /* vmrp_display_width/height:LCD 旋转后的显示尺寸 */
 
 /* 宿主屏幕全局(mythroad 层导出,语义见 aex_mem/abi 文档) */
 extern uint16 *mr_screenBuf;
