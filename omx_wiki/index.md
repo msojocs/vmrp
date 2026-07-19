@@ -1,10 +1,10 @@
 # Wiki Index
 
-> 38 pages | Last updated: 2026-07-18T11:18:52.774Z
+> 39 pages | Last updated: 2026-07-18T16:12:27.749Z
 
 ## debugging
 
-- [ARM EXT canonical empty event layer recovery](arm-ext-canonical-empty-event-layer-recovery.md) — # ARM EXT canonical empty event layer recovery
+- [ARM EXT staging-window R9 divergence and wrapper invariant recovery](arm-ext-canonical-empty-event-layer-recovery.md) — # ARM EXT staging-window R9 divergence and wrapper invariant recovery
 - [Cookie child return reload protocol (table[138] binary _RL record)](cookie-child-return-opening-folder-frame-replay.md) — # Cookie child return reload protocol (table[138] binary _RL record)
 - [Cookie MRP restart and FULL runtime version contract](cookie-mrp-restart-and-full-runtime-version-contract.md) — # Cookie MRP restart and FULL runtime version contract
 - [DOTA browser plugin DSM package provenance](dota-browser-plugin-dsm-package-provenance.md) — # DOTA browser plugin DSM package provenance
@@ -26,6 +26,7 @@
 - [opglqa font download repeat investigation](opglqa-font-download-repeat-investigation.md) — # opglqa font download repeat investigation
 - [Optwar exit plugin component update stall](optwar-exit-plugin-component-update-stall.md) — # Optwar exit plugin component update stall
 - [Optwar exit plugin no-network investigation](optwar-exit-plugin-no-network-investigation.md) — # Optwar exit plugin no-network investigation
+- [Wrapper RW foreign-write journal (staging R9 divergence containment)](private-loader-wrapper-package-context-repair.md) — # Wrapper RW foreign-write journal (staging R9 divergence containment)
 - [RX4.5 ARM EXT 0x80000000 Platform IO Mapping](rx4-5-arm-ext-0x80000000-platform-io-mapping.md) — # RX4.5 ARM EXT 0x80000000 Platform IO Mapping
 - [Sanguo black-screen dynamic LG_mem arena fix](sanguo-black-screen-dynamic-lg-mem-arena-fix.md) — # Sanguo black-screen dynamic LG_mem arena fix
 - [WBRW html2sky native elements and PPM verification 2026-07-12](wbrw-html2sky-native-elements-and-ppm-verification-2026-07-12.md) — # WBRW html2sky native elements and PPM verification 2026-07-12

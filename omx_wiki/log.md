@@ -1,5 +1,4 @@
 # Wiki Log
-
 ## [2026-07-15T19:21:26+08:00] complete
 - **Pages:** gfhcq-game-stutter-performance-investigation.md
 - **Summary:** Completed independent implementation/evidence/requirements audits, replaced rectangle over-damage with actual changed-pixel spans that preserve off-screen, subview, temporary-stride and transparent/no-op semantics, remeasured 5.49x steady throughput with explicit SDL dummy, matched the pre-fix PPM byte-for-byte, and passed the final dummy 31/31 E2E suite.
@@ -519,3 +518,18 @@
   `arm_ext_restore_wrapper_command_queue`(head/tail 同时非法→canonical
   empty)并恢复 `arm_ext_restore_drained_event_layer`。
 - 详见 docs/修复记录/geyaxz/geyaxz-play-freeze-progress.md。
+## [2026-07-18T16:12:27.745Z] ingest
+- **Pages:** private-loader-wrapper-package-context-repair.md
+- **Summary:** Created new page "Private loader wrapper package context repair"
+
+## [2026-07-18T16:12:27.751Z] add
+- **Pages:** private-loader-wrapper-package-context-repair.md
+- **Summary:** Created wiki page private-loader-wrapper-package-context-repair.md
+
+## [2026-07-18T16:12:49.947Z] lint
+- **Pages:** cookie-child-return-opening-folder-frame-replay.md, cookie-mrp-restart-and-full-runtime-version-contract.md, dota-browser-plugin-dsm-package-provenance.md, dota-browser-plugin-network-state-investigation.md, dota-browser-plugin-second-simpledownload-trigger.md, dota-download-browser-components-transition-frame-fix.md, dota-download-browser-components-waiting-hypothesis-invalidated.md, gfhcq-game-stutter-performance-investigation.md, gghjt-modal-timer-and-cold-extraction-regressions.md, gms-payment-latency-analysis.md, gtxzj-date-guard-and-default-runtime-assets.md, gzwdzjs-arm-ext-drawbitmap-source-overrun.md, gzwdzjs-play-mr-ucs2gb-caller-owned-output-pointer-fix.md, gzwdzjs-primary-black-clear-damage-synthesis.md, gzwdzjs-table-bridge-stale-epilogue-guard.md, mps-selector-100-is-not-record-100.md, op6120-independent-scrram-4m-startup-fix.md, opglqa-font-download-repeat-investigation.md, optwar-exit-plugin-component-update-stall.md, optwar-exit-plugin-no-network-investigation.md, private-loader-wrapper-package-context-repair.md, rx4-5-arm-ext-0x80000000-platform-io-mapping.md, wbrw-go-html2sky-rendering-final-verification-2026-07-12.md, wbrw-go-html2sky-rendering-progress-2026-07-12.md, wbrw-html2sky-completion-audit-2026-07-12-latest.md, wbrw-html2sky-line-wrap-progress-2026-07-16.md, wbrw-html2sky-post-cleanup-final-evidence-2026-07-12.md, wbrw-proxy2-font-mrp-download.md, wbrw-proxy2-web-page-rendering.md, wbrw-proxy2-white-matte-progress-2026-07-16.md, wbrw-proxy2-bitmap-logo-gif-adaptation-2026-07-13.md
+- **Summary:** Lint: 34 issues (27 orphan, 0 stale, 2 broken, 2 contradictions)
+
+## [2026-07-18T17:30:00.000Z] update
+- **Pages:** private-loader-wrapper-package-context-repair.md, arm-ext-canonical-empty-event-layer-recovery.md
+- **Summary:** Replaced the three per-field staging-R9 symptom repairs (event layer, command queue, package-context instruction-shape matcher) with a single wrapper RW foreign-write journal; pages updated to document the forensic write list (23 foreign writes, incl. one post-registration stale-pointer write) and the byte-journal/revert mechanism.
