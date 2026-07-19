@@ -1544,122 +1544,123 @@ static void arm_ext_restore_modal_fg_snapshot(ArmExtModule *m) {
 }
 
 /*
- * graphics.ext 类 wrapper 可信扩展在私有 loader 的 staging 窗口(mr_cacheSync
- * 已过、注册未确认)内被调用 init 时,宿主 R9 同步存在一个已证实的语义分歧:
- * 进 wrapper 代码时 R9 被切为 wrapper rw,返回 staging 代码时新基址尚未进
- * registry、无法恢复,init 便以 wrapper R9 运行,把自己的初始化数据按固定
- * 偏移写进 wrapper RW(geyaxz 实测:RW+0x1C selected 事件层被写 1;
- * RW+0x2C/0x30 延迟命令队列 {head,tail} 被写成注册句柄与 mr_table 槽指针)。
- * 完整修复(staging 窗口内按 child P[0] 恢复 R9)已验证可消除该腐蚀,但它
- * 让 SKY 推广/计费框架真正跑通启动流程(联网上报、termsync/gbreg 注册),
- * game 随即等待一个 vmrp 尚未模拟的完成信号——当前全部通过的用例都建立在
- * 该框架瘫痪的基线上。在补齐那条链路之前,宿主以结构性证据修复被踩坏的两个
- * wrapper 不变量(事件层选择、延迟命令队列),不引入应用/按键/像素分支。
+ * ── wrapper 静态区外来写屏障(journal) ──
  *
- * 事件层:cfunction.ext 在 RW+0xF4 维护八组 {head,tail} 订阅链,RW+0x1C 是
- * selected;code=1 分发器(+0x1A3C)只遍历 selected 层且无空层回退;唯一的
- * 降层路径是 guest 命令 (1,0x2A) → 10ms 软定时器 → +0xC80 teardown。selected
- * 被踩成 1 后层 1 恒为 canonical empty {head=NULL, tail=&head},所有输入被
- * 丢弃。仅当 selected 顶层连续 canonical empty 且下层链结构性包含 primary
- * extChunk 时才收缩 selected。
+ * 私有 loader 把 child 迁入 arena 后的 staging 窗口(mr_cacheSync 已过、
+ * 注册未确认)存在已证实的宿主 R9 语义分歧:进 wrapper 代码时 R9 被切为
+ * wrapper rw,返回 staging 代码时新基址尚未进 registry、无法恢复,child
+ * init 便以借来的 wrapper R9 运行,把自己的静态区初始化(GOT 桥表、事件层
+ * selected、命令队列头等)按 R9 相对偏移写进 wrapper ER_RW;注册确认后
+ * 还会经 staging 期算出的陈旧指针补写(geyaxz -t 2 实测共 23 笔外来写:
+ * 0x1C=1、0x30=table 槽指针、0x34..0x74=GOT 桥指针、0x8C..0x94=0、
+ * 注册确认后经陈旧指针写 0x2C=注册句柄)。
+ *
+ * 真机上这些写全部落在 child 自己的 RW,对 wrapper 从未发生。完整修复
+ * (staging 窗口按 child P[0] 恢复 R9)已验证可消除腐蚀,但它让 SKY
+ * 推广/计费框架真正跑通启动流程(联网上报、termsync/gbreg 注册),game
+ * 随即等待 vmrp 尚未模拟的完成信号——当前全部通过用例都建立在该框架
+ * 瘫痪的基线上。在补齐那条链路之前,宿主以与真机一致的最小语义兜住分歧:
+ * 「wrapper 静态区只有 wrapper 本体代码(和宿主)能持久写入」。
+ *
+ * 机制:对 wrapper ER_RW 挂 ranged 写钩子;外来 PC(不在 EXT_CODE_ADDR..
+ * +code_len)写入时按字节记录旧值并置位;wrapper 本体 PC 随后写同一字节
+ * 则清位(wrapper 合法写接管,不回滚);arm_ext_call 入口且无 pending
+ * staging 窗口时把仍置位的字节回滚为旧值。窗口内不回滚——staged child
+ * 还要从借来的 R9 读回自己刚写的 GOT 桥。无指令签名、无布局偏移、无
+ * 应用特判;取代此前按字段各写一个的三个症状修复(事件层收缩、命令队列
+ * 复位、包上下文重发布)。
  */
-static int arm_ext_restore_drained_event_layer(ArmExtModule *m,
-                                               uint32_t wrapper_rw,
-                                               uint32_t primary_ext_chunk) {
-    enum {
-        EVENT_LEVEL_SELECTED_OFF = 0x1Cu,
-        EVENT_LEVEL_TABLE_OFF = 0xF4u,
-        EVENT_LEVEL_COUNT = 8u,
-        EVENT_NODE_CHUNK_OFF = 0x10u,
-        EVENT_CHAIN_LIMIT = 64u
-    };
-    if (!m || !wrapper_rw || !primary_ext_chunk ||
-        !arm_ptr(m, wrapper_rw + EVENT_LEVEL_SELECTED_OFF)) {
-        return 0;
-    }
-
-    uint32_t selected = 0;
-    memcpy(&selected, arm_ptr(m, wrapper_rw + EVENT_LEVEL_SELECTED_OFF), 4);
-    if (selected == 0 || selected >= EVENT_LEVEL_COUNT) return 0;
-
-    uint32_t table = wrapper_rw + EVENT_LEVEL_TABLE_OFF;
-    uint32_t target = selected;
-    while (target > 0) {
-        uint32_t head_addr = table + target * 8u;
-        if (!arm_ptr(m, head_addr + 4u)) return 0;
-        uint32_t head = 0, tail = 0;
-        memcpy(&head, arm_ptr(m, head_addr), 4);
-        memcpy(&tail, arm_ptr(m, head_addr + 4u), 4);
-        if (head != 0 || tail != head_addr) break;
-        target--;
-    }
-    if (target == selected) return 0;
-
-    uint32_t node = 0;
-    uint32_t target_head_addr = table + target * 8u;
-    if (!arm_ptr(m, target_head_addr)) return 0;
-    memcpy(&node, arm_ptr(m, target_head_addr), 4);
-    int primary_linked = 0;
-    for (uint32_t i = 0; node && i < EVENT_CHAIN_LIMIT; ++i) {
-        if (!arm_ptr(m, node + EVENT_NODE_CHUNK_OFF)) return 0;
-        uint32_t chunk = 0, next = 0;
-        memcpy(&chunk, arm_ptr(m, node + EVENT_NODE_CHUNK_OFF), 4);
-        if (chunk == primary_ext_chunk) {
-            primary_linked = 1;
-            break;
+static void hook_wrapper_rw_foreign_write(uc_engine *uc, uc_mem_type type,
+                                          uint64_t address, int size,
+                                          int64_t value, void *user_data) {
+    (void)type;
+    (void)value;
+    ArmExtModule *m = (ArmExtModule *)user_data;
+    uint32_t base = m->wrapper_rw_journal_base;
+    uint32_t len = m->wrapper_rw_journal_len;
+    if ((uint32_t)address < base || (uint32_t)address >= base + len) return;
+    uint32_t pc = reg_read32(uc, UC_ARM_REG_PC);
+    int foreign = !(pc >= EXT_CODE_ADDR && pc < EXT_CODE_ADDR + m->code_len);
+    for (int i = 0; i < size; ++i) {
+        uint32_t off = (uint32_t)address + (uint32_t)i - base;
+        if (off >= len) break;
+        uint8_t *mark = &m->wrapper_rw_journal_mark[off >> 3];
+        uint8_t bit = (uint8_t)(1u << (off & 7u));
+        if (foreign) {
+            if (!(*mark & bit)) {
+                /* 首次外来触碰:写钩子先于写入提交执行,此刻读到的仍是旧值 */
+                m->wrapper_rw_journal_shadow[off] =
+                    *(uint8_t *)arm_ptr(m, base + off);
+                *mark |= bit;
+                m->wrapper_rw_journal_dirty++;
+            }
+        } else if (*mark & bit) {
+            /* wrapper 本体重写该字节:合法状态接管,不再回滚 */
+            *mark &= (uint8_t)~bit;
+            m->wrapper_rw_journal_dirty--;
         }
-        memcpy(&next, arm_ptr(m, node), 4);
-        if (next == node) return 0;
-        node = next;
     }
-    if (!primary_linked) return 0;
-
-    memcpy(arm_ptr(m, wrapper_rw + EVENT_LEVEL_SELECTED_OFF), &target, 4);
-    if (arm_ext_diag_on()) {
-        printf("DIAG event_layer_restore selected=%u target=%u primaryChunk=0x%X\n",
-               selected, target, primary_ext_chunk);
-    }
-    return 1;
 }
 
-/*
- * 延迟命令队列:wrapper 命令入口(+0x1254)在"关闭定时器挂起"(RW+8 非零)
- * 时把命令排队到 RW+0x2C/0x30 的 {head,tail} 侵入链(空态 {0, &head},节点
- * 为堆指针),10ms 关闭回调(+0xC60)清 RW+8 后由 +0xD28 排空。上述 staging
- * 腐蚀把 head 写成小整数注册句柄、tail 写成 EXT_TABLE 槽指针,首次入队即向
- * mr_table 槽写节点指针,随后 +0xD28 在低内存垃圾链上永久循环(geyaxz 失败
- * 菜单选择后整机卡死)。head/tail 同时非法在真实队列态中不可能出现,以此为
- * 证据把队列恢复为 canonical empty。
- */
-static int arm_ext_restore_wrapper_command_queue(ArmExtModule *m,
-                                                 uint32_t wrapper_rw) {
-    enum { CMD_QUEUE_HEAD_OFF = 0x2Cu, CMD_QUEUE_TAIL_OFF = 0x30u };
-    if (!m || !wrapper_rw) return 0;
-    uint32_t head_addr = wrapper_rw + CMD_QUEUE_HEAD_OFF;
-    uint32_t tail_addr = wrapper_rw + CMD_QUEUE_TAIL_OFF;
-    if (!arm_ptr(m, head_addr) || !arm_ptr(m, tail_addr)) return 0;
-
-    uint32_t head = 0, tail = 0;
-    memcpy(&head, arm_ptr(m, head_addr), 4);
-    memcpy(&tail, arm_ptr(m, tail_addr), 4);
-
-    /* 合法态:空 {0, &head} 或 head/tail 均为可映射堆指针 */
-    int head_plausible =
-        head == 0 || (head >= EXT_HEAP_ADDR && arm_ptr(m, head));
-    int tail_plausible =
-        tail == head_addr || (tail >= EXT_HEAP_ADDR && arm_ptr(m, tail));
-    if (head_plausible && tail_plausible) return 0;
-    /* 只处理两个字段同时非法的确定性腐蚀签名,避免误伤未知布局 */
-    if (head_plausible || tail_plausible) return 0;
-
-    uint32_t zero = 0;
-    memcpy(arm_ptr(m, head_addr), &zero, 4);
-    memcpy(arm_ptr(m, tail_addr), &head_addr, 4);
-    if (arm_ext_diag_on()) {
-        printf("DIAG cmd_queue_restore head=0x%X tail=0x%X rw=0x%X\n",
-               head, tail, wrapper_rw);
+/* journal 挂载:wrapper P 结构的 ER_RW 基址/长度首次可用时挂 ranged 写
+ * 钩子并分配 shadow/位图。ER_RW 是 wrapper 的静态数据段,init 后终生
+ * 不变,因此只挂载一次。 */
+static void arm_ext_wrapper_rw_journal_install(ArmExtModule *m) {
+    uint32_t rw = 0, rw_len = 0;
+    if (!m || m->wrapper_rw_journal_base || !m->p_addr ||
+        !arm_ptr_span(m, m->p_addr, 8u)) {
+        return;
     }
-    return 1;
+    memcpy(&rw, arm_ptr(m, m->p_addr + AEX_P_ER_RW_OFF), 4);
+    memcpy(&rw_len, arm_ptr(m, m->p_addr + AEX_P_ER_RW_LEN_OFF), 4);
+    if (!rw || !rw_len || !arm_ptr_span(m, rw, rw_len)) return;
+    m->wrapper_rw_journal_shadow = (uint8_t *)malloc(rw_len);
+    m->wrapper_rw_journal_mark = (uint8_t *)calloc((rw_len + 7u) / 8u, 1u);
+    if (!m->wrapper_rw_journal_shadow || !m->wrapper_rw_journal_mark ||
+        uc_hook_add(m->uc, &m->wrapper_rw_journal_hook, UC_HOOK_MEM_WRITE,
+                    hook_wrapper_rw_foreign_write, m, rw,
+                    rw + rw_len - 1u) != UC_ERR_OK) {
+        /* 分配或挂钩失败即放弃本机制并大声报错;不留半初始化状态 */
+        printf("arm_ext_executor: FATAL wrapper rw journal install failed (rw=0x%X len=%u)\n",
+               rw, rw_len);
+        free(m->wrapper_rw_journal_shadow);
+        free(m->wrapper_rw_journal_mark);
+        m->wrapper_rw_journal_shadow = NULL;
+        m->wrapper_rw_journal_mark = NULL;
+        return;
+    }
+    m->wrapper_rw_journal_base = rw;
+    m->wrapper_rw_journal_len = rw_len;
+}
+
+/* journal 回滚:把仍置位的字节恢复为外来写覆盖前的旧值。pending staging
+ * 窗口开启时跳过(此刻 staged child 仍会读回自己刚写的值),窗口关闭由
+ * 注册确认路径清 pending 保证。 */
+static void arm_ext_wrapper_rw_journal_flush(ArmExtModule *m) {
+    if (!m || !m->wrapper_rw_journal_base || !m->wrapper_rw_journal_dirty ||
+        m->pending_internal_file_addr) {
+        return;
+    }
+    uint32_t len = m->wrapper_rw_journal_len;
+    for (uint32_t off = 0; off < len && m->wrapper_rw_journal_dirty; ++off) {
+        uint8_t *mark = &m->wrapper_rw_journal_mark[off >> 3];
+        if (*mark == 0) { /* 整字节位图为空,跳过 8 字节 */
+            off |= 7u;
+            continue;
+        }
+        uint8_t bit = (uint8_t)(1u << (off & 7u));
+        if (!(*mark & bit)) continue;
+        if (arm_ext_diag_on()) {
+            printf("DIAG wrapper_rw_journal revert off=0x%X 0x%02X->0x%02X\n",
+                   off,
+                   *(uint8_t *)arm_ptr(m, m->wrapper_rw_journal_base + off),
+                   m->wrapper_rw_journal_shadow[off]);
+        }
+        *(uint8_t *)arm_ptr(m, m->wrapper_rw_journal_base + off) =
+            m->wrapper_rw_journal_shadow[off];
+        *mark &= (uint8_t)~bit;
+        m->wrapper_rw_journal_dirty--;
+    }
 }
 
 /* code=2 之后宿主 timer 已停但仍有活跃队列(四处判活条件各异)时,统一
@@ -1797,13 +1798,10 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
 
     uint32_t rw_base = 0;
     memcpy(&rw_base, arm_ptr(m, call_p_addr), 4);
-    if (has_separate_wrapper && call_p_addr == m->p_addr) {
-        /* staging 窗口 R9 分歧踩坏的 wrapper 不变量(注释见函数定义):
-         * 队列修复须在首次入队前生效,事件层收缩只在无模态挂起时进行 */
-        arm_ext_restore_wrapper_command_queue(m, rw_base);
-        if (code == 1 && modal_suspend_depth_pre == 0)
-            arm_ext_restore_drained_event_layer(m, rw_base, modal_ext_chunk);
-    }
+    /* staging 窗口 R9 分歧的外来写在 dispatch 边界统一回滚(机制与语义
+     * 见 hook_wrapper_rw_foreign_write 前的注释) */
+    arm_ext_wrapper_rw_journal_install(m);
+    arm_ext_wrapper_rw_journal_flush(m);
     if (arm_ext_diag_on()) {
         uint32_t ev[5] = {0, 0, 0, 0, 0};
         if (code == 1 && input_addr && input_len >= sizeof(ev) &&
@@ -2868,6 +2866,8 @@ void arm_ext_unload(ArmExtModule *m) {
     m->app_state = NULL;
     mrp_cache_free(m);
     if (m->uc) uc_close(m->uc);
+    free(m->wrapper_rw_journal_shadow);
+    free(m->wrapper_rw_journal_mark);
     free(m->last_file_copy);
     free(m->modal_screen_snapshot);
     free(m->modal_fg_snapshot);
