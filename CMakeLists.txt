@@ -16,7 +16,7 @@ if(MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /J /W3 /utf-8")
   add_definitions(-DVMRP -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE -DWIN32_LEAN_AND_MEAN)
 else()
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall -DNETWORK_SUPPORT -DVMRP -funsigned-char")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall -DVMRP -funsigned-char")
 endif()
 
 option(SKYENGINE_BUILD_SHARED "Build libskyengine shared library (no SDL)" OFF)
@@ -347,7 +347,7 @@ add_executable(skyengine
   ./src/app_compat_gghjt.c
   ${SKYENGINE_MYTHROAD_SOURCES}
 )
-target_compile_definitions(skyengine PRIVATE NETWORK_SUPPORT VMRP_NATIVE VMRP_SDL_AUDIO TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
+target_compile_definitions(skyengine PRIVATE VMRP_SDL_AUDIO TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
 target_include_directories(skyengine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
 if(MSVC)
   skyengine_add_link_flags(skyengine "/FORCE:MULTIPLE")
@@ -466,7 +466,7 @@ if(EMCC)
     OUTPUT ${SKYENGINE_WASM_OUTPUT}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${SKYENGINE_WASM_OUTPUT_DIR}
     COMMAND ${EMCC} -Os -Wall
-      -DNETWORK_SUPPORT -DVMRP -DVMRP_NATIVE -DVMRP_SDL_AUDIO
+      -DVMRP -DVMRP_SDL_AUDIO
       -DTARGET_MOD -DMTK_MOD -DMR_PLAT_DRAWTEXT -DDSM_FULL -DTRUST_BINARIES
       -funsigned-char
       -I${CMAKE_CURRENT_SOURCE_DIR}/wasm/unicorn
@@ -505,7 +505,7 @@ if(SKYENGINE_BUILD_SHARED)
     ./src/app_compat_gghjt.c
     ${SKYENGINE_MYTHROAD_SOURCES}
   )
-  target_compile_definitions(skyengine-shared PRIVATE NETWORK_SUPPORT VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
+  target_compile_definitions(skyengine-shared PRIVATE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
   target_include_directories(skyengine-shared PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
   if(MSVC)
     target_compile_options(skyengine-shared PRIVATE $<$<NOT:$<CONFIG:Debug>>:/O2>)
