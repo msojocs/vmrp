@@ -123,7 +123,7 @@
   日期解析校验固定格式、月份天数和闰年，非法日期在启动前明确失败。
 - 共享库通过 `vmrp_api_set_device_date("YYYY-MM-DD"|"host")` 复用同一校验并在
   `vmrp_api_start()` 传播配置，非法调用不会覆盖上一次有效模式。
-- CMake 的 `vmrp-system-assets` 依赖在每次请求构建 `vmrp` 时使用
+- CMake 的 `skyengine-system-assets` 依赖在每次请求构建 `vmrp` 时使用
   `copy_if_different` 把 `gb12.uc2`、`gb16.uc2` 复制到
   `$<TARGET_FILE_DIR:vmrp>/mythroad/system`，无需重链接即可恢复缺失或过期字库。
 - 新增 `test/fixtures/gtxzj.mrp` 和 `test/e2e/gtxzj/boot-to-title.test.ts`。测试等待
@@ -177,10 +177,10 @@
 
 - `cmake --build build --target vmrp -j2` 和 `pnpm exec tsc --noEmit` 均通过。
 - 删除已部署的 `build/mythroad/system/gb12.uc2` 后再次增量构建，没有重链接也会
-  执行 `vmrp-system-assets` 并恢复相同 SHA-256 的字库。
+  执行 `skyengine-system-assets` 并恢复相同 SHA-256 的字库。
 - 使用 `-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/tmp/vmrp-runtime-dir-audit` 的独立配置
   验证 link 输出和两份字库都位于该目录，构建目录本身没有误放的 `mythroad/`。
-- `VMRP_BUILD_SHARED_ONLY=ON` 的 `vmrp-shared` 构建通过；公共日期 API 对
+- `SKYENGINE_BUILD_SHARED_ONLY=ON` 的 `skyengine-shared` 构建通过；公共日期 API 对
   `host`、合法闰日和多种非法日期返回值符合契约。以独立共享库进程启动 GTXZJ，
   `2011-01-01` 在 7 秒后有 1134 个非零 RGB565 像素，`host` 在当前日期 2 秒后
   仍为 0，证明配置确实穿过 `vmrp_api_start()` 到 table[34]；活动运行期间改为

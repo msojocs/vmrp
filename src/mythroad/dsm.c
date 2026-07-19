@@ -380,7 +380,7 @@ void mr_printf(const char *format, ...) {
     va_list params;
 
     if (!log_checked) {
-        log_enabled = getenv("VMRP_LOG") != NULL;
+        log_enabled = getenv("SKYENGINE_LOG") != NULL;
         log_checked = 1;
     }
     if (!log_enabled) {
@@ -1822,7 +1822,7 @@ uint16 *mr_getScreenBuffer(void) {
 #endif
 
 void dsm_prepare(void) {
-    if (getenv("VMRP_LOG")) {
+    if (getenv("SKYENGINE_LOG")) {
         fprintf(stderr, "[dsm_prepare] mkDir...\n");
         fflush(stderr);
     }
@@ -1831,24 +1831,24 @@ void dsm_prepare(void) {
     dsmInFuncs->mkDir(DSM_DRIVE_A);
     dsmInFuncs->mkDir(DSM_DRIVE_B);
     dsmInFuncs->mkDir(DSM_DRIVE_X);
-    if (getenv("VMRP_LOG")) {
+    if (getenv("SKYENGINE_LOG")) {
         fprintf(stderr, "[dsm_prepare] xl_font_sky16_init...\n");
         fflush(stderr);
     }
     xl_font_sky16_init();
-    if (getenv("VMRP_LOG")) {
+    if (getenv("SKYENGINE_LOG")) {
         fprintf(stderr, "[dsm_prepare] xl_font_sky12_init...\n");
         fflush(stderr);
     }
     xl_font_sky12_init();
-    if (getenv("VMRP_LOG")) {
+    if (getenv("SKYENGINE_LOG")) {
         fprintf(stderr, "[dsm_prepare] encode_init...\n");
         fflush(stderr);
     }
     if (encode_init() == MR_FAILED) {
         LOGW("%s", "encode load fail");
     }
-    if (getenv("VMRP_LOG")) {
+    if (getenv("SKYENGINE_LOG")) {
         fprintf(stderr, "[dsm_prepare] done\n");
         fflush(stderr);
     }

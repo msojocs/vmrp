@@ -40,7 +40,7 @@
 ## 三、Phase 0 —— 安全网(先于一切重构)
 
 **P0.1 编译加固**
-- CMake 增加 `VMRP_STRICT_WARNINGS` 选项:`-Wextra -Wshadow -Wstrict-prototypes`(先修掉存量告警,再对 src/*.c 开 `-Werror`;`-Wconversion` 存量太大可缓)。
+- CMake 增加 `SKYENGINE_STRICT_WARNINGS` 选项:`-Wextra -Wshadow -Wstrict-prototypes`(先修掉存量告警,再对 src/*.c 开 `-Werror`;`-Wconversion` 存量太大可缓)。
 - 建立 ASan+UBSan 构建目录(`-DSANITIZE=address,undefined` 已存在,从未使用),全量 e2e 在 sanitizer 下跑通一次并记录基线——**这一步本身就可能直接抓到 issues doc 里 B1(屏幕回拷越界)**。
 
 **P0.2 C 层单元测试基座**

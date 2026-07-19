@@ -144,7 +144,7 @@ src/
 ## 🔍 Search Tips
 
 ### Finding by Topic
-- **DNS Configuration**: Search "VMRP_DEFAULT_DNS_MAP" or section 1
+- **DNS Configuration**: Search "SKYENGINE_DEFAULT_DNS_MAP" or section 1
 - **DNS Functions**: See FINDINGS_SUMMARY.txt section 2
 - **Socket Functions**: See FINDINGS_SUMMARY.txt section 4
 - **Call Chain**: See all documents, section labeled "Call Chain"

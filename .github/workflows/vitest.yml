@@ -38,7 +38,7 @@ jobs:
       - name: Configure
         run: cmake -S . -B build
 
-      - name: Build vmrp
+      - name: Build Sky Engine
         run: cmake --build build --target vmrp --parallel
 
       - name: Run Vitest

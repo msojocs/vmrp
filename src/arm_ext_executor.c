@@ -2,7 +2,7 @@
 #include "./include/compat_msvc.h"
 #include "./include/arm_ext_internal.h"
 #include "./include/arm_ext_priv.h"
-#include "./include/vmrp.h"
+#include "./include/skyengine.h"
 #include "./include/app_compat.h"
 #include "./include/bridge.h"
 #include "./include/network.h"
@@ -23,7 +23,7 @@
 #include <zlib.h>
 
 #include "./include/utils.h"
-#include "./include/vmrp.h"
+#include "./include/skyengine.h"
 
 extern void mr_printf(const char *format, ...);
 extern uint16 *mr_screenBuf;
@@ -1379,7 +1379,7 @@ static const char *arm_ext_diag_filename_slot(ArmExtModule *m, uint32_t slot,
 
 static int arm_ext_lifecycle_diag(void) {
     static int cached = -1;
-    if (cached < 0) cached = getenv("VMRP_LIFECYCLE_DIAG") ? 1 : 0;
+    if (cached < 0) cached = getenv("SKYENGINE_LIFECYCLE_DIAG") ? 1 : 0;
     return cached;
 }
 

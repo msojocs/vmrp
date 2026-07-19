@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "utils.h"
-#include "vmrp_args.h"
+#include "skyengine_args.h"
 
 typedef struct VmrpConfig {
     /* screen_width/height 始终是 --screen 配置的物理面板尺寸。guest 经

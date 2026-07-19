@@ -215,7 +215,7 @@ static void e2e_write_line(int fd, const char *line) {
 }
 
 static int e2e_click_or_paste_hold_ms(void) {
-    const char *env = getenv("VMRP_E2E_HOLD_MS");
+    const char *env = getenv("SKYENGINE_E2E_HOLD_MS");
     int ms = env ? atoi(env) : 0;
     /* 点击和平台粘贴沿用已验证的 500ms 默认值。 */
     if (ms <= 0) ms = VMRP_E2E_DEFAULT_HOLD_MS;
@@ -228,7 +228,7 @@ static int e2e_configured_key_hold_ms(const char *command_value) {
         /* 命令显式传 0 表示逻辑短按，不再回落到环境变量。 */
         return ms > 0 ? ms : 0;
     }
-    const char *env = getenv("VMRP_E2E_KEY_HOLD_MS");
+    const char *env = getenv("SKYENGINE_E2E_KEY_HOLD_MS");
     if (env && *env) {
         int ms = atoi(env);
         if (ms > 0) return ms;
@@ -708,7 +708,7 @@ VmrpE2eControl *vmrp_e2e_control_create(uint32_t event_type, const VmrpE2eHooks 
 void vmrp_e2e_control_start_if_requested(VmrpE2eControl *control) {
     if (!control) return;
     if (control->thread || control->listen_fd >= 0) return;
-    const char *path = getenv("VMRP_E2E_SOCKET");
+    const char *path = getenv("SKYENGINE_E2E_SOCKET");
     if (!path || !*path) return;
 
     if (strlen(path) >= sizeof(control->socket_path)) {

@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.11)
-project(vmrp VERSION 0.1.0 LANGUAGES C CXX)
+project(sky-engine VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-function(vmrp_add_link_flags target flags)
-  get_target_property(_vmrp_existing_flags ${target} LINK_FLAGS)
-  if(NOT _vmrp_existing_flags)
-    set(_vmrp_existing_flags "")
+function(skyengine_add_link_flags target flags)
+  get_target_property(_skyengine_existing_flags ${target} LINK_FLAGS)
+  if(NOT _skyengine_existing_flags)
+    set(_skyengine_existing_flags "")
   endif()
-  set_target_properties(${target} PROPERTIES LINK_FLAGS "${_vmrp_existing_flags} ${flags}")
+  set_target_properties(${target} PROPERTIES LINK_FLAGS "${_skyengine_existing_flags} ${flags}")
 endfunction()
 
 if(MSVC)
@@ -19,8 +19,8 @@ else()
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall -DNETWORK_SUPPORT -DVMRP -funsigned-char")
 endif()
 
-option(VMRP_BUILD_SHARED "Build libvmrp shared library (no SDL)" OFF)
-option(VMRP_BUILD_SHARED_ONLY "Only build the shared library, skip SDL/test/wasm targets" OFF)
+option(SKYENGINE_BUILD_SHARED "Build libskyengine shared library (no SDL)" OFF)
+option(SKYENGINE_BUILD_SHARED_ONLY "Only build the shared library, skip SDL/test/wasm targets" OFF)
 # Sanitizer 支持: cmake -DSANITIZE=address,undefined
 set(SANITIZE "" CACHE STRING "Comma-separated sanitizers: address,undefined,thread")
 if(NOT MSVC AND SANITIZE)
@@ -29,13 +29,13 @@ if(NOT MSVC AND SANITIZE)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${SAN_FLAGS}")
   message(STATUS "Sanitizers enabled: ${SANITIZE}")
 endif()
-if(VMRP_BUILD_SHARED_ONLY)
-  set(VMRP_BUILD_SHARED ON CACHE BOOL "" FORCE)
+if(SKYENGINE_BUILD_SHARED_ONLY)
+  set(SKYENGINE_BUILD_SHARED ON CACHE BOOL "" FORCE)
 endif()
 # --- 第一方源码严格警告(重构安全网,见 docs/arm-ext-executor-refactor-plan.md P0.1)---
 # 只作用于 src/ 外层模拟器源码;third_party/unicorn 与 src/mythroad(独立子项目)
 # 不受影响。存量告警清零后用 VMRP_WERROR=ON 升级为错误,防止重构期间无声引入新告警。
-option(VMRP_STRICT_WARNINGS "Enable extra warnings for first-party src/ sources" ON)
+option(SKYENGINE_STRICT_WARNINGS "Enable extra warnings for first-party src/ sources" ON)
 option(VMRP_WERROR "Treat first-party src/ warnings as errors" OFF)
 # --- zlib ---
 if(MSVC)
@@ -44,16 +44,16 @@ if(MSVC)
     cmake_policy(SET CMP0135 NEW)
   endif()
 
-  macro(vmrp_fetchcontent_make_available name)
+  macro(skyengine_fetchcontent_make_available name)
     if(COMMAND FetchContent_MakeAvailable)
       FetchContent_MakeAvailable(${name})
     else()
       FetchContent_GetProperties(${name})
-      string(TOLOWER "${name}" _vmrp_fc_name)
-      if(NOT ${_vmrp_fc_name}_POPULATED)
+      string(TOLOWER "${name}" _skyengine_fc_name)
+      if(NOT ${_skyengine_fc_name}_POPULATED)
         FetchContent_Populate(${name})
-        if(EXISTS "${${_vmrp_fc_name}_SOURCE_DIR}/CMakeLists.txt")
-          add_subdirectory("${${_vmrp_fc_name}_SOURCE_DIR}" "${${_vmrp_fc_name}_BINARY_DIR}")
+        if(EXISTS "${${_skyengine_fc_name}_SOURCE_DIR}/CMakeLists.txt")
+          add_subdirectory("${${_skyengine_fc_name}_SOURCE_DIR}" "${${_skyengine_fc_name}_BINARY_DIR}")
         endif()
       endif()
     endif()
@@ -66,7 +66,7 @@ if(MSVC)
     GIT_SHALLOW TRUE
   )
   set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-  if(VMRP_BUILD_SHARED_ONLY)
+  if(SKYENGINE_BUILD_SHARED_ONLY)
     if(DEFINED SKIP_INSTALL_ALL)
       set(_VMRP_ZLIB_SKIP_INSTALL_ALL_WAS_DEFINED TRUE)
       set(_VMRP_ZLIB_SKIP_INSTALL_ALL "${SKIP_INSTALL_ALL}")
@@ -75,8 +75,8 @@ if(MSVC)
     endif()
     set(SKIP_INSTALL_ALL ON CACHE BOOL "Skip zlib install rules when embedded in Flutter builds" FORCE)
   endif()
-  vmrp_fetchcontent_make_available(zlib)
-  if(VMRP_BUILD_SHARED_ONLY)
+  skyengine_fetchcontent_make_available(zlib)
+  if(SKYENGINE_BUILD_SHARED_ONLY)
     if(_VMRP_ZLIB_SKIP_INSTALL_ALL_WAS_DEFINED)
       set(SKIP_INSTALL_ALL "${_VMRP_ZLIB_SKIP_INSTALL_ALL}" CACHE BOOL "" FORCE)
     else()
@@ -100,13 +100,13 @@ if(MSVC)
     endif()
   endif()
 
-  if(NOT VMRP_BUILD_SHARED_ONLY)
+  if(NOT SKYENGINE_BUILD_SHARED_ONLY)
     # --- SDL2 (pre-built MSVC/VC package) ---
     FetchContent_Declare(
       SDL2_VC
       URL "https://github.com/libsdl-org/SDL/releases/download/release-2.28.5/SDL2-devel-2.28.5-VC.zip"
     )
-    vmrp_fetchcontent_make_available(SDL2_VC)
+    skyengine_fetchcontent_make_available(SDL2_VC)
     FetchContent_GetProperties(SDL2_VC)
     set(SDL2_DIR "${sdl2_vc_SOURCE_DIR}/cmake")
     if(DEFINED CMAKE_WARN_DEPRECATED)
@@ -225,21 +225,21 @@ if(NOT MSVC AND UNICORN_HAS_ARM AND NOT EXISTS "${CMAKE_BINARY_DIR}/arm-softmmu/
     "Unicorn did not generate arm-softmmu/config-target.h. Check qemu/configure output.")
 endif()
 
-set(VMRP_CORE_SOURCES
-  ./src/vmrp.c
-  ./src/vmrp_args.c
+set(SKYENGINE_CORE_SOURCES
+  ./src/skyengine.c
+  ./src/skyengine_args.c
   ./src/utils.c
   ./src/rbtree.c
   ./src/network.c
   ./src/fileLib.c
 )
 
-set(VMRP_PLATFORM_SDL_SOURCES
+set(SKYENGINE_PLATFORM_SDL_SOURCES
   ./src/main.c
   ./src/e2e_control.c
 )
 
-set(VMRP_MYTHROAD_SOURCES
+set(SKYENGINE_MYTHROAD_SOURCES
   ./src/mythroad/mythroad.c
   ./src/mythroad/encode.c
   ./src/mythroad/mr_unzip.c
@@ -285,17 +285,17 @@ set(VMRP_MYTHROAD_SOURCES
   ./src/mythroad/src/lib/mr_tcp_target.c
 )
 if(MSVC)
-  set(VMRP_UNDEFINE_VMRP_OPTION "/UVMRP")
+  set(SKYENGINE_UNDEFINE_VMRP_OPTION "/UVMRP")
 else()
-  set(VMRP_UNDEFINE_VMRP_OPTION "-UVMRP")
+  set(SKYENGINE_UNDEFINE_VMRP_OPTION "-UVMRP")
 endif()
-set_source_files_properties(${VMRP_MYTHROAD_SOURCES} PROPERTIES COMPILE_OPTIONS "${VMRP_UNDEFINE_VMRP_OPTION}")
+set_source_files_properties(${SKYENGINE_MYTHROAD_SOURCES} PROPERTIES COMPILE_OPTIONS "${SKYENGINE_UNDEFINE_VMRP_OPTION}")
 
 # ARM EXT 执行器源码组(Phase 2 拆分中,见 docs/arm-ext-executor-refactor-plan.md
 # 第五节):从单文件 arm_ext_executor.c 逐步抽取到 src/arm_ext/ 子目录,三个
-# 构建目标(vmrp/wasm/shared)统一引用本变量,避免漏改。
-# 已抽出的拆分单元(vmrp-unit 只链接这部分,executor 主体经测试文件按翻译单元包含)
-set(VMRP_ARM_EXT_SPLIT_SOURCES
+# 构建目标(skyengine/wasm/shared)统一引用本变量,避免漏改。
+# 已抽出的拆分单元(skyengine-unit 只链接这部分,executor 主体经测试文件按翻译单元包含)
+set(SKYENGINE_ARM_EXT_SPLIT_SOURCES
   ./src/arm_ext/aex_support.c
   ./src/arm_ext/aex_pack.c
   ./src/arm_ext/aex_mem.c
@@ -307,170 +307,170 @@ set(VMRP_ARM_EXT_SPLIT_SOURCES
   ./src/arm_ext/aex_timer.c
   ./src/arm_ext/aex_module.c
 )
-set(VMRP_ARM_EXT_SOURCES
+set(SKYENGINE_ARM_EXT_SOURCES
   ./src/arm_ext_executor.c
-  ${VMRP_ARM_EXT_SPLIT_SOURCES}
+  ${SKYENGINE_ARM_EXT_SPLIT_SOURCES}
 )
 
-# 严格警告作用面 = vmrp 可执行文件里除 mythroad 子项目外的全部第一方源码
-set(VMRP_FIRST_PARTY_SOURCES
-  ${VMRP_PLATFORM_SDL_SOURCES}
-  ${VMRP_CORE_SOURCES}
+# 严格警告作用面 = skyengine 可执行文件里除 mythroad 子项目外的全部第一方源码
+set(SKYENGINE_FIRST_PARTY_SOURCES
+  ${SKYENGINE_PLATFORM_SDL_SOURCES}
+  ${SKYENGINE_CORE_SOURCES}
   ./src/native_platform_memory.c
   ./src/native_dsm_funcs.c
   ./src/native_text_widget.c
   ./src/runtime_native_mythroad.c
-  ${VMRP_ARM_EXT_SOURCES}
+  ${SKYENGINE_ARM_EXT_SOURCES}
   ./src/app_compat.c
   ./src/app_compat_gghjt.c
 )
-if(NOT MSVC AND VMRP_STRICT_WARNINGS)
-  set(VMRP_STRICT_WARNING_OPTIONS -Wextra -Wshadow -Wstrict-prototypes)
+if(NOT MSVC AND SKYENGINE_STRICT_WARNINGS)
+  set(SKYENGINE_STRICT_WARNING_OPTIONS -Wextra -Wshadow -Wstrict-prototypes)
   if(VMRP_WERROR)
-    list(APPEND VMRP_STRICT_WARNING_OPTIONS -Werror)
+    list(APPEND SKYENGINE_STRICT_WARNING_OPTIONS -Werror)
   endif()
-  set_source_files_properties(${VMRP_FIRST_PARTY_SOURCES} PROPERTIES
-    COMPILE_OPTIONS "${VMRP_STRICT_WARNING_OPTIONS}")
+  set_source_files_properties(${SKYENGINE_FIRST_PARTY_SOURCES} PROPERTIES
+    COMPILE_OPTIONS "${SKYENGINE_STRICT_WARNING_OPTIONS}")
 endif()
 
-if(NOT VMRP_BUILD_SHARED_ONLY)
+if(NOT SKYENGINE_BUILD_SHARED_ONLY)
 # --- Native 构建 ---
-add_executable(vmrp
-  ${VMRP_PLATFORM_SDL_SOURCES}
-  ${VMRP_CORE_SOURCES}
+add_executable(skyengine
+  ${SKYENGINE_PLATFORM_SDL_SOURCES}
+  ${SKYENGINE_CORE_SOURCES}
   ./src/native_platform_memory.c
   ./src/native_dsm_funcs.c
   ./src/native_text_widget.c
   ./src/runtime_native_mythroad.c
-  ${VMRP_ARM_EXT_SOURCES}
+  ${SKYENGINE_ARM_EXT_SOURCES}
   ./src/app_compat.c
   ./src/app_compat_gghjt.c
-  ${VMRP_MYTHROAD_SOURCES}
+  ${SKYENGINE_MYTHROAD_SOURCES}
 )
-target_compile_definitions(vmrp PRIVATE NETWORK_SUPPORT VMRP_NATIVE VMRP_SDL_AUDIO TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
-target_include_directories(vmrp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
+target_compile_definitions(skyengine PRIVATE NETWORK_SUPPORT VMRP_NATIVE VMRP_SDL_AUDIO TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
+target_include_directories(skyengine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
 if(MSVC)
-  vmrp_add_link_flags(vmrp "/FORCE:MULTIPLE")
-  target_include_directories(vmrp PRIVATE ${SDL2_INCLUDE_DIRS})
-  target_link_libraries(vmrp unicorn ZLIB::ZLIB SDL2::SDL2main SDL2::SDL2 ws2_32)
+  skyengine_add_link_flags(skyengine "/FORCE:MULTIPLE")
+  target_include_directories(skyengine PRIVATE ${SDL2_INCLUDE_DIRS})
+  target_link_libraries(skyengine unicorn ZLIB::ZLIB SDL2::SDL2main SDL2::SDL2 ws2_32)
   # Copy SDL2.dll next to the executable after build
   if(CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(_SDL2_DLL "${sdl2_vc_SOURCE_DIR}/lib/x64/SDL2.dll")
   else()
     set(_SDL2_DLL "${sdl2_vc_SOURCE_DIR}/lib/x86/SDL2.dll")
   endif()
-  add_custom_command(TARGET vmrp POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_SDL2_DLL}" $<TARGET_FILE_DIR:vmrp>
+  add_custom_command(TARGET skyengine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_SDL2_DLL}" $<TARGET_FILE_DIR:skyengine>
   )
 else()
-  vmrp_add_link_flags(vmrp "-Wl,--allow-multiple-definition")
+  skyengine_add_link_flags(skyengine "-Wl,--allow-multiple-definition")
   # --no-as-needed 确保 libm 不被 GNU ld 按需跳过——unicorn 的内部静态库
   # （arm-softmmu）在链接顺序上排在 -lm 之后，需要其中的 sqrtf 等符号
-  target_link_libraries(vmrp unicorn "-Wl,--no-as-needed" SDL2main SDL2 m pthread z)
+  target_link_libraries(skyengine unicorn "-Wl,--no-as-needed" SDL2main SDL2 m pthread z)
 endif()
 
 # The executable directory is the desktop default work-dir.  Deploy the base
 # fonts there so a freshly built CLI can render text without a source-tree cwd.
-set(_VMRP_SYSTEM_ASSET_DIR
+set(_SKYENGINE_SYSTEM_ASSET_DIR
   "${CMAKE_CURRENT_SOURCE_DIR}/wasm/dist/fs/mythroad/system")
 # Avoid TARGET_FILE_DIR here: that generator expression adds an implicit edge
-# back to vmrp and would cycle with the explicit asset dependency below. Read
+# back to SkyEngine and would cycle with the explicit asset dependency below. Read
 # the initialized output properties instead, including caller overrides.
-get_property(_VMRP_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-get_target_property(_VMRP_RUNTIME_BASE vmrp RUNTIME_OUTPUT_DIRECTORY)
-if(NOT _VMRP_RUNTIME_BASE OR _VMRP_RUNTIME_BASE MATCHES "-NOTFOUND$")
-  set(_VMRP_RUNTIME_BASE "${CMAKE_CURRENT_BINARY_DIR}")
+get_property(_SKYENGINE_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+get_target_property(_SKYENGINE_RUNTIME_BASE skyengine RUNTIME_OUTPUT_DIRECTORY)
+if(NOT _SKYENGINE_RUNTIME_BASE OR _SKYENGINE_RUNTIME_BASE MATCHES "-NOTFOUND$")
+  set(_SKYENGINE_RUNTIME_BASE "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
-if(_VMRP_MULTI_CONFIG)
-  set(_VMRP_NATIVE_RUNTIME_DIR "")
-  foreach(_VMRP_CONFIG IN LISTS CMAKE_CONFIGURATION_TYPES)
-    string(TOUPPER "${_VMRP_CONFIG}" _VMRP_CONFIG_UPPER)
-    get_target_property(_VMRP_CONFIG_RUNTIME_DIR vmrp
-      "RUNTIME_OUTPUT_DIRECTORY_${_VMRP_CONFIG_UPPER}")
-    if(NOT _VMRP_CONFIG_RUNTIME_DIR OR
-       _VMRP_CONFIG_RUNTIME_DIR MATCHES "-NOTFOUND$")
-      set(_VMRP_CONFIG_RUNTIME_DIR "${_VMRP_RUNTIME_BASE}")
-      if(NOT _VMRP_CONFIG_RUNTIME_DIR MATCHES "\\$<")
-        string(APPEND _VMRP_CONFIG_RUNTIME_DIR "/${_VMRP_CONFIG}")
+if(_SKYENGINE_MULTI_CONFIG)
+  set(_SKYENGINE_NATIVE_RUNTIME_DIR "")
+  foreach(_SKYENGINE_CONFIG IN LISTS CMAKE_CONFIGURATION_TYPES)
+    string(TOUPPER "${_SKYENGINE_CONFIG}" _SKYENGINE_CONFIG_UPPER)
+    get_target_property(_SKYENGINE_CONFIG_RUNTIME_DIR skyengine
+      "RUNTIME_OUTPUT_DIRECTORY_${_SKYENGINE_CONFIG_UPPER}")
+    if(NOT _SKYENGINE_CONFIG_RUNTIME_DIR OR
+       _SKYENGINE_CONFIG_RUNTIME_DIR MATCHES "-NOTFOUND$")
+      set(_SKYENGINE_CONFIG_RUNTIME_DIR "${_SKYENGINE_RUNTIME_BASE}")
+      if(NOT _SKYENGINE_CONFIG_RUNTIME_DIR MATCHES "\\$<")
+        string(APPEND _SKYENGINE_CONFIG_RUNTIME_DIR "/${_SKYENGINE_CONFIG}")
       endif()
     endif()
-    string(APPEND _VMRP_NATIVE_RUNTIME_DIR
-      "$<$<CONFIG:${_VMRP_CONFIG}>:${_VMRP_CONFIG_RUNTIME_DIR}>")
+    string(APPEND _SKYENGINE_NATIVE_RUNTIME_DIR
+      "$<$<CONFIG:${_SKYENGINE_CONFIG}>:${_SKYENGINE_CONFIG_RUNTIME_DIR}>")
   endforeach()
 else()
-  set(_VMRP_NATIVE_RUNTIME_DIR "${_VMRP_RUNTIME_BASE}")
+  set(_SKYENGINE_NATIVE_RUNTIME_DIR "${_SKYENGINE_RUNTIME_BASE}")
   if(CMAKE_BUILD_TYPE)
-    string(TOUPPER "${CMAKE_BUILD_TYPE}" _VMRP_CONFIG_UPPER)
-    get_target_property(_VMRP_CONFIG_RUNTIME_DIR vmrp
-      "RUNTIME_OUTPUT_DIRECTORY_${_VMRP_CONFIG_UPPER}")
-    if(_VMRP_CONFIG_RUNTIME_DIR AND
-       NOT _VMRP_CONFIG_RUNTIME_DIR MATCHES "-NOTFOUND$")
-      set(_VMRP_NATIVE_RUNTIME_DIR "${_VMRP_CONFIG_RUNTIME_DIR}")
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" _SKYENGINE_CONFIG_UPPER)
+    get_target_property(_SKYENGINE_CONFIG_RUNTIME_DIR skyengine
+      "RUNTIME_OUTPUT_DIRECTORY_${_SKYENGINE_CONFIG_UPPER}")
+    if(_SKYENGINE_CONFIG_RUNTIME_DIR AND
+       NOT _SKYENGINE_CONFIG_RUNTIME_DIR MATCHES "-NOTFOUND$")
+      set(_SKYENGINE_NATIVE_RUNTIME_DIR "${_SKYENGINE_CONFIG_RUNTIME_DIR}")
     endif()
   endif()
 endif()
-add_custom_target(vmrp-system-assets
+add_custom_target(skyengine-system-assets
   COMMAND ${CMAKE_COMMAND} -E make_directory
-    "${_VMRP_NATIVE_RUNTIME_DIR}/mythroad/system"
+    "${_SKYENGINE_NATIVE_RUNTIME_DIR}/mythroad/system"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${_VMRP_SYSTEM_ASSET_DIR}/gb12.uc2"
-    "${_VMRP_NATIVE_RUNTIME_DIR}/mythroad/system/gb12.uc2"
+    "${_SKYENGINE_SYSTEM_ASSET_DIR}/gb12.uc2"
+    "${_SKYENGINE_NATIVE_RUNTIME_DIR}/mythroad/system/gb12.uc2"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${_VMRP_SYSTEM_ASSET_DIR}/gb16.uc2"
-    "${_VMRP_NATIVE_RUNTIME_DIR}/mythroad/system/gb16.uc2"
+    "${_SKYENGINE_SYSTEM_ASSET_DIR}/gb16.uc2"
+    "${_SKYENGINE_NATIVE_RUNTIME_DIR}/mythroad/system/gb16.uc2"
   DEPENDS
-    "${_VMRP_SYSTEM_ASSET_DIR}/gb12.uc2"
-    "${_VMRP_SYSTEM_ASSET_DIR}/gb16.uc2"
+    "${_SKYENGINE_SYSTEM_ASSET_DIR}/gb12.uc2"
+    "${_SKYENGINE_SYSTEM_ASSET_DIR}/gb16.uc2"
   COMMENT "Deploying Mythroad base fonts"
   VERBATIM
 )
-# A custom dependency runs for every requested vmrp build; copy_if_different
+# A custom dependency runs for every requested SkyEngine build; copy_if_different
 # keeps it cheap while restoring deleted assets without forcing a relink.
-add_dependencies(vmrp vmrp-system-assets)
-unset(_VMRP_CONFIG_RUNTIME_DIR)
-unset(_VMRP_CONFIG_UPPER)
-unset(_VMRP_CONFIG)
-unset(_VMRP_RUNTIME_BASE)
-unset(_VMRP_NATIVE_RUNTIME_DIR)
-unset(_VMRP_MULTI_CONFIG)
-unset(_VMRP_SYSTEM_ASSET_DIR)
+add_dependencies(skyengine skyengine-system-assets)
+unset(_SKYENGINE_CONFIG_RUNTIME_DIR)
+unset(_SKYENGINE_CONFIG_UPPER)
+unset(_SKYENGINE_CONFIG)
+unset(_SKYENGINE_RUNTIME_BASE)
+unset(_SKYENGINE_NATIVE_RUNTIME_DIR)
+unset(_SKYENGINE_MULTI_CONFIG)
+unset(_SKYENGINE_SYSTEM_ASSET_DIR)
 
 # --- Wasm 构建（emcc）---
-# 用法: cmake --build build --target vmrp-wasm
+# 用法: cmake --build build --target skyengine-wasm
 # 需要 emcc 在 PATH 中
 find_program(EMCC emcc)
 if(EMCC)
-  set(VMRP_WASM_OUTPUT_DIR ${CMAKE_BINARY_DIR}/wasm)
-  set(VMRP_WASM_OUTPUT ${VMRP_WASM_OUTPUT_DIR}/vmrp.js)
+  set(SKYENGINE_WASM_OUTPUT_DIR ${CMAKE_BINARY_DIR}/wasm)
+  set(SKYENGINE_WASM_OUTPUT ${SKYENGINE_WASM_OUTPUT_DIR}/skyengine.js)
 
-  set(VMRP_WASM_SOURCES
-    ${VMRP_PLATFORM_SDL_SOURCES}
-    ${VMRP_CORE_SOURCES}
+  set(SKYENGINE_WASM_SOURCES
+    ${SKYENGINE_PLATFORM_SDL_SOURCES}
+    ${SKYENGINE_CORE_SOURCES}
     ./src/native_platform_memory.c
     ./src/native_dsm_funcs.c
     ./src/native_text_widget.c
     ./src/runtime_native_mythroad.c
-    ${VMRP_ARM_EXT_SOURCES}
+    ${SKYENGINE_ARM_EXT_SOURCES}
     ./src/app_compat.c
     ./src/app_compat_gghjt.c
-    ${VMRP_MYTHROAD_SOURCES}
+    ${SKYENGINE_MYTHROAD_SOURCES}
   )
   # 将相对路径转为绝对路径
-  set(VMRP_WASM_ABS_SOURCES "")
-  foreach(src ${VMRP_WASM_SOURCES})
+  set(SKYENGINE_WASM_ABS_SOURCES "")
+  foreach(src ${SKYENGINE_WASM_SOURCES})
     get_filename_component(abs_src ${src} ABSOLUTE)
-    list(APPEND VMRP_WASM_ABS_SOURCES ${abs_src})
+    list(APPEND SKYENGINE_WASM_ABS_SOURCES ${abs_src})
   endforeach()
 
   add_custom_command(
-    OUTPUT ${VMRP_WASM_OUTPUT}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${VMRP_WASM_OUTPUT_DIR}
+    OUTPUT ${SKYENGINE_WASM_OUTPUT}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${SKYENGINE_WASM_OUTPUT_DIR}
     COMMAND ${EMCC} -Os -Wall
       -DNETWORK_SUPPORT -DVMRP -DVMRP_NATIVE -DVMRP_SDL_AUDIO
       -DTARGET_MOD -DMTK_MOD -DMR_PLAT_DRAWTEXT -DDSM_FULL -DTRUST_BINARIES
       -funsigned-char
       -I${CMAKE_CURRENT_SOURCE_DIR}/wasm/unicorn
-      ${VMRP_WASM_ABS_SOURCES}
+      ${SKYENGINE_WASM_ABS_SOURCES}
       ${CMAKE_CURRENT_SOURCE_DIR}/wasm/unicorn/libunicorn.a
       -s EXPORTED_FUNCTIONS="['_main','_malloc','_free']"
       -s ALLOW_MEMORY_GROWTH=1
@@ -479,47 +479,47 @@ if(EMCC)
       -s USE_ZLIB=1
       -s WASM=1
       -s FORCE_FILESYSTEM=1
-      -o ${VMRP_WASM_OUTPUT}
-    DEPENDS ${VMRP_WASM_ABS_SOURCES}
+      -o ${SKYENGINE_WASM_OUTPUT}
+    DEPENDS ${SKYENGINE_WASM_ABS_SOURCES}
             ${CMAKE_CURRENT_SOURCE_DIR}/wasm/unicorn/libunicorn.a
-    COMMENT "Building vmrp for WebAssembly with emcc"
+    COMMENT "Building SkyEngine for WebAssembly with emcc"
     VERBATIM
   )
-  add_custom_target(vmrp-wasm DEPENDS ${VMRP_WASM_OUTPUT})
+  add_custom_target(skyengine-wasm DEPENDS ${SKYENGINE_WASM_OUTPUT})
 else()
-  message(STATUS "emcc not found, vmrp-wasm target disabled")
+  message(STATUS "emcc not found, skyengine-wasm target disabled")
 endif()
-endif() # NOT VMRP_BUILD_SHARED_ONLY
+endif() # NOT SKYENGINE_BUILD_SHARED_ONLY
 
 # --- Shared library (for Android/Flutter via dart:ffi) ---
-if(VMRP_BUILD_SHARED)
-  add_library(vmrp-shared SHARED
-    ./src/vmrp_api.c
-    ${VMRP_CORE_SOURCES}
+if(SKYENGINE_BUILD_SHARED)
+  add_library(skyengine-shared SHARED
+    ./src/skyengine_api.c
+    ${SKYENGINE_CORE_SOURCES}
     ./src/native_platform_memory.c
     ./src/native_dsm_funcs.c
     ./src/native_text_widget.c
     ./src/runtime_native_mythroad.c
-    ${VMRP_ARM_EXT_SOURCES}
+    ${SKYENGINE_ARM_EXT_SOURCES}
     ./src/app_compat.c
     ./src/app_compat_gghjt.c
-    ${VMRP_MYTHROAD_SOURCES}
+    ${SKYENGINE_MYTHROAD_SOURCES}
   )
-  target_compile_definitions(vmrp-shared PRIVATE NETWORK_SUPPORT VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
-  target_include_directories(vmrp-shared PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
+  target_compile_definitions(skyengine-shared PRIVATE NETWORK_SUPPORT VMRP_NATIVE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
+  target_include_directories(skyengine-shared PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/unicorn/include)
   if(MSVC)
-    target_compile_options(vmrp-shared PRIVATE $<$<NOT:$<CONFIG:Debug>>:/O2>)
+    target_compile_options(skyengine-shared PRIVATE $<$<NOT:$<CONFIG:Debug>>:/O2>)
   elseif(NOT MSVC)
-    target_compile_options(vmrp-shared PRIVATE -O3)
+    target_compile_options(skyengine-shared PRIVATE -O3)
   endif()
-  set_target_properties(vmrp-shared PROPERTIES OUTPUT_NAME "vmrp")
+  set_target_properties(skyengine-shared PROPERTIES OUTPUT_NAME "skyengine")
   if(MSVC)
-    vmrp_add_link_flags(vmrp-shared "/FORCE:MULTIPLE")
-    target_link_libraries(vmrp-shared ZLIB::ZLIB unicorn ws2_32)
+    skyengine_add_link_flags(skyengine-shared "/FORCE:MULTIPLE")
+    target_link_libraries(skyengine-shared ZLIB::ZLIB unicorn ws2_32)
   else()
-    vmrp_add_link_flags(vmrp-shared "-Wl,--allow-multiple-definition")
-    target_link_libraries(vmrp-shared unicorn "-Wl,--no-as-needed" m z)
-    set_target_properties(vmrp-shared PROPERTIES C_VISIBILITY_PRESET hidden)
+    skyengine_add_link_flags(skyengine-shared "-Wl,--allow-multiple-definition")
+    target_link_libraries(skyengine-shared unicorn "-Wl,--no-as-needed" m z)
+    set_target_properties(skyengine-shared PROPERTIES C_VISIBILITY_PRESET hidden)
   endif()
 endif()
 

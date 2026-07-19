@@ -67,7 +67,7 @@ typedef struct {
 static DnsMapEntry dnsMap[VMRP_DNS_MAP_MAX];
 static int dnsMapCount = 0;
 
-#define VMRP_NET_LOG_ENABLED() (getenv("VMRP_NETWORK_LOG") != NULL || getenv("VMRP_LOG") != NULL)
+#define VMRP_NET_LOG_ENABLED() (getenv("SKYENGINE_NETWORK_LOG") != NULL || getenv("SKYENGINE_LOG") != NULL)
 #define VMRP_NET_LOG(...)                       \
     do {                                       \
         if (VMRP_NET_LOG_ENABLED()) {          \

@@ -140,7 +140,7 @@
 
 ### M1. 两个超大函数
 
-- `hook_table`（约 6315–7796，约 1480 行）：单个 switch，case 号乱序（…60,61,81,82…69,70…），case 内交织大段 `if (getenv("VMRP_ARM_EXT_DIAG"))` 寄存器 dump。
+- `hook_table`（约 6315–7796，约 1480 行）：单个 switch，case 号乱序（…60,61,81,82…69,70…），case 内交织大段 `if (getenv("SKYENGINE_ARM_EXT_DIAG"))` 寄存器 dump。
 - `arm_ext_call`（约 8903–9456，约 550 行）：15+ 个 `code == 2 && …` 嵌套分支，多段几乎逐字重复（约 9232–9284 四段 `mr_timerStart(50); mr_timer_state=1; …`；模态屏幕恢复块与 `arm_ext_call_dispatch` 逐字节重复，含 `extern` 声明重复出现）。任一处修复容易漏改另一处。
 
 ### M2. getenv 未缓存、无文档

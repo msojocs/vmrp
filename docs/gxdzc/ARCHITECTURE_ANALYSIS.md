@@ -120,7 +120,7 @@ Screenshots are saved as PPM (Portable PixMap) format to `/tmp/vmrp_screen.ppm` 
 1. **Automatic on 5th frame** (lines 141-143):
    ```c
    if (guiDrawBitmapCount == 5 || 
-       (guiDrawBitmapCount % 30 == 0 && getenv("VMRP_PPM"))) {
+       (guiDrawBitmapCount % 30 == 0 && getenv("SKYENGINE_PPM"))) {
        dump_screen_ppm("/tmp/vmrp_screen.ppm");
    }
    ```

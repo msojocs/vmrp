@@ -5,11 +5,11 @@
 
 ## P0.1a 编译加固 ✅
 
-- CMake 新增 `VMRP_STRICT_WARNINGS`(默认 ON,`-Wextra -Wshadow -Wstrict-prototypes`,
+- CMake 新增 `SKYENGINE_STRICT_WARNINGS`(默认 ON,`-Wextra -Wshadow -Wstrict-prototypes`,
   只作用于 src/ 外层第一方源码;mythroad 子项目与 third_party 不受影响)和
   `VMRP_WERROR`(默认 OFF,冒烟验证可零错误通过)。
 - 存量 63 条告警全部清零(均为行为不变修复):
-  - `()`→`(void)` 原型补全:vmrp.h/bridge.h/dsm.h/main.c/vmrp.c/utils.c/network.c;
+  - `()`→`(void)` 原型补全:skyengine.h/bridge.h/dsm.h/main.c/vmrp.c/utils.c/network.c;
   - 未用参数 `(void)` 标注(SDL/bridge/Unicorn ABI 固定签名);
   - shadow 变量重命名(executor split_lo/hi、tail_lo/hi);
   - 符号比较显式转换(fileLib、executor 7197 位模式等价比较);

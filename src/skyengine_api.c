@@ -1,5 +1,5 @@
-#include "./include/vmrp_api.h"
-#include "./include/vmrp.h"
+#include "./include/skyengine_api.h"
+#include "./include/skyengine.h"
 #include "./include/bridge.h"
 #include "./include/memory.h"
 #include "./include/native_dsm_funcs.h"
@@ -21,7 +21,7 @@
 
 #define VMRP_API_ASYNC_RUNNER 1
 #define API_QUEUE_CAP 64
-#define VMRP_API_LOG_ENABLED() (getenv("VMRP_LOG") != NULL)
+#define VMRP_API_LOG_ENABLED() (getenv("SKYENGINE_LOG") != NULL)
 #define VMRP_API_LOG(...)                          \
     do {                                           \
         if (VMRP_API_LOG_ENABLED()) {              \

@@ -35,7 +35,7 @@
 #include "./include/native_text_widget.h"
 #include "./include/network.h"
 #include "./include/utils.h"
-#include "./include/vmrp.h"
+#include "./include/skyengine.h"
 
 /* MP3 解码器(vendored 单头文件, 见 third_party/minimp3/README.md)。
  * talkcat 等应用的音效/音乐是 MPEG1 Layer III 流, 之前 native_playSound

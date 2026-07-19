@@ -1056,7 +1056,7 @@ void hook_compact_heap_free_return(uc_engine *uc, uint64_t address,
 
 static int arm_ext_invariants_enabled_(void) {
     static int cached = -1;
-    if (cached < 0) cached = getenv("VMRP_ARM_EXT_INVARIANTS") ? 1 : 0;
+    if (cached < 0) cached = getenv("SKYENGINE_ARM_EXT_INVARIANTS") ? 1 : 0;
     return cached;
 }
 

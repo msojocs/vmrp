@@ -8,8 +8,8 @@
 - `src/arm_ext/` 拆分目录;`src/include/arm_ext_priv.h` 跨单元内部 API
   (对外公开接口仍只有 arm_ext_executor.h;函数抽出时若被其它单元调用,
   在 priv 头登记并去 static,单元私有的保持 static 不进头)。
-- CMake:`VMRP_ARM_EXT_SOURCES`(vmrp/wasm/shared 三目标统一引用)+
-  `VMRP_ARM_EXT_SPLIT_SOURCES`(vmrp-unit 链接已抽出单元)。
+- CMake:`SKYENGINE_ARM_EXT_SOURCES`(vmrp/wasm/shared 三目标统一引用)+
+  `SKYENGINE_ARM_EXT_SPLIT_SOURCES`(vmrp-unit 链接已抽出单元)。
 - 微工具上收 priv 头 static inline:`align4`/`reg_read32`/`arm_ext_addr_range_mapped`。
 
 ## 已抽出单元(每单元后过 vmrp-unit + 全量 e2e,均 27/27)

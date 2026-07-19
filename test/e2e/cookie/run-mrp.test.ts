@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { VmrpE2e, VmrpWorkspace, type PpmImage, type Rgb } from "../vmrp-e2e.js";
+import { SkyEngineE2e, SkyEngineWorkspace, type PpmImage, type Rgb } from "../vmrp-e2e.js";
 import { cpSync, mkdirSync, rmSync } from "fs";
 
 function pixelEquals(screen: PpmImage, x: number, y: number, expected: Rgb): boolean {
@@ -22,7 +22,7 @@ function isStartupOverlayFrame(screen: PpmImage): boolean {
 }
 
 async function collectDrawFrames(
-  vmrp: VmrpE2e,
+  vmrp: SkyEngineE2e,
   startDrawCount: number,
   namePrefix: string,
 ): Promise<PpmImage[]> {
@@ -52,33 +52,33 @@ async function collectDrawFrames(
 }
 
 describe("cookie 应用正常启动并且退出到文件管理器", () => {
-  let vmrp: VmrpE2e | undefined;
-  let ws: VmrpWorkspace | undefined;
+  let engine: SkyEngineE2e | undefined;
+  let ws: SkyEngineWorkspace | undefined;
 
   afterEach(async () => {
-    await vmrp?.close();
-    vmrp = undefined;
+    await engine?.close();
+    engine = undefined;
     await ws?.dispose();
     ws = undefined;
   });
 
   it("方式一", async () => {
     // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
-    ws = await VmrpWorkspace.create();
+    ws = await SkyEngineWorkspace.create();
     rmSync(ws.path("mythroad/dsm_gm.mrp"), { force: true, recursive: true });
     cpSync("test/fixtures/wbrw.mrp", ws.path("mythroad/wbrw.mrp"));
     // wbrw 首次运行会在根目录创建自己的数据目录 brw/。预创建它,使文件管理器
     // 的根目录列表在启动子应用前后保持一致,"返回后画面与启动前逐字节一致"
     // 的断言才有意义(否则子应用合法新增的目录会使列表项位移)。
     mkdirSync(ws.path("mythroad/brw"), { recursive: true });
-    vmrp = await VmrpE2e.start("test/fixtures/cookie_v6110.mrp", { workDir: ws.dir, memory: "2M" });
+    engine = await SkyEngineE2e.start("test/fixtures/cookie_v6110.mrp", { workDir: ws.dir, memory: "2M" });
     let fileManagerBeforeLaunch: PpmImage | undefined;
 
     {
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("vmrp 未初始化");
         // 从第一项向上循环到末项“文件管理”，直接验证末行高亮背景。
-        const screen = await vmrp.screen("home");
+        const screen = await engine.screen("home");
         // rgb(32, 72, 112)
         expect(screen.pixel(75, 276)).toEqual([32, 72, 112]);
       }, {
@@ -87,12 +87,12 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       })
     }
     {
-      await vmrp.key('LEFT_SOFT', 1_000, 250)
+      await engine.key('LEFT_SOFT', 1_000, 250)
 
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("vmrp 未初始化");
         // 主页面
-        const screen = await vmrp.screen("menu-first");
+        const screen = await engine.screen("menu-first");
         // rgb(248, 192, 32)
         expect(screen.pixel(94, 166)).toEqual([248, 192, 32]);
       }, {
@@ -101,12 +101,12 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       })
     }
     {
-      await vmrp.key('UP', 1_000)
+      await engine.key('UP', 1_000)
 
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("vmrp 未初始化");
         // 主页面
-        const screen = await vmrp.screen("menu-last");
+        const screen = await engine.screen("menu-last");
         // rgb(248, 192, 32)
         expect(screen.pixel(99, 274)).toEqual([248, 192, 32]);
       }, {
@@ -115,12 +115,12 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       })
     }
     {
-      await vmrp.key('LEFT_SOFT', 1_000)
+      await engine.key('LEFT_SOFT', 1_000)
 
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("vmrp 未初始化");
         // 文件管理根目录加载完成后第一项高亮；目录可全部显示时右侧不会绘制滚动滑块。
-        const screen = await vmrp.screen("file-manage-top");
+        const screen = await engine.screen("file-manage-top");
         // rgb(248, 200, 24)
         expect(screen.pixel(100, 48)).toEqual([248, 200, 24]);
       }, {
@@ -129,13 +129,13 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       })
     }
     {
-      await vmrp.key('UP', 1_000)
+      await engine.key('UP', 1_000)
 
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("vmrp 未初始化");
         // 从第一项向上循环到末项“冒泡浏览器”，直接验证末行高亮背景。
         // 预创建 brw/ 后根目录为 8 项,末项高亮下移到 y≈248。
-        const screen = await vmrp.screen("file-manage-bottom");
+        const screen = await engine.screen("file-manage-bottom");
         // rgb(248, 200, 24)
         expect(screen.pixel(100, 248)).toEqual([248, 200, 24]);
         fileManagerBeforeLaunch = screen;
@@ -145,12 +145,12 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       })
     }
     {
-      await vmrp.key('LEFT_SOFT', 1_000)
+      await engine.key('LEFT_SOFT', 1_000)
 
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("vmrp 未初始化");
         // 文件菜单第一项“进入”的高亮背景证明菜单已打开。
-        const screen = await vmrp.screen("file-manage-menu");
+        const screen = await engine.screen("file-manage-menu");
         // rgb(248, 192, 32)
         expect(screen.pixel(86, 251)).toEqual([248, 192, 32]);
       }, {
@@ -160,10 +160,10 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
     }
     {
       // 启动
-      await vmrp.key('LEFT_SOFT', 1_000)
+      await engine.key('LEFT_SOFT', 1_000)
 
       // rgb(200, 228, 248)
-      const secondApp = await vmrp.waitForPixel(
+      const secondApp = await engine.waitForPixel(
         211,
         88,
         [200, 228, 248],
@@ -178,11 +178,11 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
     }
     {
       // 打开菜单
-      await vmrp.key('LEFT_SOFT', 1_000)
+      await engine.key('LEFT_SOFT', 1_000)
       // rgb(224, 240, 248)
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
-        const screen = await vmrp.screen("second-app-menu");
+        if (!engine) throw new Error("vmrp 未初始化");
+        const screen = await engine.screen("second-app-menu");
         expect(screen.pixel(71, 283)).toEqual([224, 240, 248]);
       }, {
         timeout: 10_000,
@@ -191,11 +191,11 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
     }
     {
       // 向上选择最后一个菜单项“退出”
-      await vmrp.key('UP', 1_000)
+      await engine.key('UP', 1_000)
       // rgb(128, 192, 240)
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
-        const screen = await vmrp.screen("second-app-menu");
+        if (!engine) throw new Error("vmrp 未初始化");
+        const screen = await engine.screen("second-app-menu");
         expect(screen.pixel(68, 284)).toEqual([128, 192, 240]);
       }, {
         timeout: 10_000,
@@ -204,22 +204,22 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
     }
     {
       // 选择退出
-      await vmrp.delay(1_000)
-      await vmrp.key('LEFT_SOFT', 1_000)
+      await engine.delay(1_000)
+      await engine.key('LEFT_SOFT', 1_000)
       // 二次确认退出
-      await vmrp.delay(1_000)
+      await engine.delay(1_000)
       // 退出，返回文件管理器，跟file-manage-bottom画面一致
-      const returnDrawCount = await vmrp.drawCount();
-      await vmrp.key('LEFT_SOFT', { waitForDraw: false })
-      const returnFrames = await collectDrawFrames(vmrp, returnDrawCount, "return-draw");
+      const returnDrawCount = await engine.drawCount();
+      await engine.key('LEFT_SOFT', { waitForDraw: false })
+      const returnFrames = await collectDrawFrames(engine, returnDrawCount, "return-draw");
 
       expect(returnFrames.some(isOpeningFolderFrame)).toBe(true);
       expect(returnFrames.some(isStartupOverlayFrame)).toBe(false);
 
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("vmrp 未初始化");
         if (!fileManagerBeforeLaunch) throw new Error("启动前文件管理器画面未初始化");
-        const screen = await vmrp.screen("back-to-file-manage");
+        const screen = await engine.screen("back-to-file-manage");
         expect(screen.diffPixelCount(fileManagerBeforeLaunch, {
           x: 0,
           y: 0,
@@ -233,10 +233,10 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
 
       // 文件管理器的“退出”先返回 Cookie 主界面；恢复后的父 VM 必须继续
       // 接收正常事件，不能只停留在一张宿主强制提交的列表快照上。
-      await vmrp.key('RIGHT_SOFT', 2_000);
+      await engine.key('RIGHT_SOFT', 2_000);
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
-        const screen = await vmrp.screen("parent-home-after-return");
+        if (!engine) throw new Error("vmrp 未初始化");
+        const screen = await engine.screen("parent-home-after-return");
         expect(screen.pixel(75, 276)).toEqual([32, 72, 112]);
       }, {
         timeout: 10_000,
@@ -247,21 +247,21 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
 
   it("方式二", async () => {
     // 每个用例使用独立的 mythroad 数据副本,避免并发执行时互相覆盖插件/缓存/存档。
-    ws = await VmrpWorkspace.create();
+    ws = await SkyEngineWorkspace.create();
     rmSync(ws.path("mythroad/dsm_gm.mrp"), { force: true, recursive: true });
     cpSync("test/fixtures/wbrw.mrp", ws.path("mythroad/wbrw.mrp"));
     // wbrw 首次运行会在根目录创建自己的数据目录 brw/。预创建它,使文件管理器
     // 的根目录列表在启动子应用前后保持一致,"返回后画面与启动前逐字节一致"
     // 的断言才有意义(否则子应用合法新增的目录会使列表项位移)。
     mkdirSync(ws.path("mythroad/brw"), { recursive: true });
-    vmrp = await VmrpE2e.start("test/fixtures/cookie_v6110.mrp", { workDir: ws.dir, memory: "2M" });
+    engine = await SkyEngineE2e.start("test/fixtures/cookie_v6110.mrp", { workDir: ws.dir, memory: "2M" });
     let fileManagerBeforeLaunch: PpmImage | undefined;
 
     {
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("vmrp 未初始化");
         // 从第一项向上循环到末项“文件管理”，直接验证末行高亮背景。
-        const screen = await vmrp.screen("home");
+        const screen = await engine.screen("home");
         // rgb(32, 72, 112)
         expect(screen.pixel(75, 276)).toEqual([32, 72, 112]);
       }, {
@@ -270,12 +270,12 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       })
     }
     {
-      await vmrp.key('LEFT_SOFT', 1_000, 250)
+      await engine.key('LEFT_SOFT', 1_000, 250)
 
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("vmrp 未初始化");
         // 主页面
-        const screen = await vmrp.screen("menu-first");
+        const screen = await engine.screen("menu-first");
         // rgb(248, 192, 32)
         expect(screen.pixel(94, 166)).toEqual([248, 192, 32]);
       }, {
@@ -284,12 +284,12 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       })
     }
     {
-      await vmrp.key('UP', 1_000)
+      await engine.key('UP', 1_000)
 
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("vmrp 未初始化");
         // 主页面
-        const screen = await vmrp.screen("menu-last");
+        const screen = await engine.screen("menu-last");
         // rgb(248, 192, 32)
         expect(screen.pixel(99, 274)).toEqual([248, 192, 32]);
       }, {
@@ -298,12 +298,12 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       })
     }
     {
-      await vmrp.key('LEFT_SOFT', 1_000)
+      await engine.key('LEFT_SOFT', 1_000)
 
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("vmrp 未初始化");
         // 文件管理根目录加载完成后第一项高亮；目录可全部显示时右侧不会绘制滚动滑块。
-        const screen = await vmrp.screen("file-manage-top");
+        const screen = await engine.screen("file-manage-top");
         // rgb(248, 200, 24)
         expect(screen.pixel(100, 48)).toEqual([248, 200, 24]);
       }, {
@@ -312,13 +312,13 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
       })
     }
     {
-      await vmrp.key('UP', 1_000)
+      await engine.key('UP', 1_000)
 
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("vmrp 未初始化");
         // 从第一项向上循环到末项“冒泡浏览器”，直接验证末行高亮背景。
         // 预创建 brw/ 后根目录为 8 项,末项高亮下移到 y≈248。
-        const screen = await vmrp.screen("file-manage-bottom");
+        const screen = await engine.screen("file-manage-bottom");
         // rgb(248, 200, 24)
         expect(screen.pixel(100, 248)).toEqual([248, 200, 24]);
         fileManagerBeforeLaunch = screen;
@@ -329,10 +329,10 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
     }
     {
       // 启动
-      await vmrp.key('ENTER', 1_000)
+      await engine.key('ENTER', 1_000)
 
       // rgb(200, 228, 248)
-      const secondApp = await vmrp.waitForPixel(
+      const secondApp = await engine.waitForPixel(
         211,
         88,
         [200, 228, 248],
@@ -347,11 +347,11 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
     }
     {
       // 打开菜单
-      await vmrp.key('LEFT_SOFT', 1_000)
+      await engine.key('LEFT_SOFT', 1_000)
       // rgb(224, 240, 248)
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
-        const screen = await vmrp.screen("second-app-menu");
+        if (!engine) throw new Error("vmrp 未初始化");
+        const screen = await engine.screen("second-app-menu");
         expect(screen.pixel(71, 283)).toEqual([224, 240, 248]);
       }, {
         timeout: 10_000,
@@ -360,11 +360,11 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
     }
     {
       // 向上选择最后一个菜单项“退出”
-      await vmrp.key('UP', 1_000)
+      await engine.key('UP', 1_000)
       // rgb(128, 192, 240)
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
-        const screen = await vmrp.screen("second-app-menu");
+        if (!engine) throw new Error("vmrp 未初始化");
+        const screen = await engine.screen("second-app-menu");
         expect(screen.pixel(68, 284)).toEqual([128, 192, 240]);
       }, {
         timeout: 10_000,
@@ -373,22 +373,22 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
     }
     {
       // 选择退出
-      await vmrp.delay(1_000)
-      await vmrp.key('LEFT_SOFT', 1_000)
+      await engine.delay(1_000)
+      await engine.key('LEFT_SOFT', 1_000)
       // 二次确认退出
-      await vmrp.delay(1_000)
+      await engine.delay(1_000)
       // 退出，返回文件管理器，跟file-manage-bottom画面一致
-      const returnDrawCount = await vmrp.drawCount();
-      await vmrp.key('LEFT_SOFT', { waitForDraw: false })
-      const returnFrames = await collectDrawFrames(vmrp, returnDrawCount, "return-draw");
+      const returnDrawCount = await engine.drawCount();
+      await engine.key('LEFT_SOFT', { waitForDraw: false })
+      const returnFrames = await collectDrawFrames(engine, returnDrawCount, "return-draw");
 
       expect(returnFrames.some(isOpeningFolderFrame)).toBe(true);
       expect(returnFrames.some(isStartupOverlayFrame)).toBe(false);
 
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
+        if (!engine) throw new Error("vmrp 未初始化");
         if (!fileManagerBeforeLaunch) throw new Error("启动前文件管理器画面未初始化");
-        const screen = await vmrp.screen("back-to-file-manage");
+        const screen = await engine.screen("back-to-file-manage");
         expect(screen.diffPixelCount(fileManagerBeforeLaunch, {
           x: 0,
           y: 0,
@@ -402,10 +402,10 @@ describe("cookie 应用正常启动并且退出到文件管理器", () => {
 
       // 文件管理器的“退出”先返回 Cookie 主界面；恢复后的父 VM 必须继续
       // 接收正常事件，不能只停留在一张宿主强制提交的列表快照上。
-      await vmrp.key('RIGHT_SOFT', 2_000);
+      await engine.key('RIGHT_SOFT', 2_000);
       await vi.waitFor(async () => {
-        if (!vmrp) throw new Error("vmrp 未初始化");
-        const screen = await vmrp.screen("parent-home-after-return");
+        if (!engine) throw new Error("vmrp 未初始化");
+        const screen = await engine.screen("parent-home-after-return");
         expect(screen.pixel(75, 276)).toEqual([32, 72, 112]);
       }, {
         timeout: 10_000,

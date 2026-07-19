@@ -400,7 +400,7 @@ static void hook_watch_pc(uc_engine *uc, uint64_t address, uint32_t size,
 }
 
 void arm_ext_install_pc_watches(ArmExtModule *m, uint32_t base, uint32_t len) {
-    const char *list = getenv("VMRP_ARM_EXT_WATCH_PC");
+    const char *list = getenv("SKYENGINE_ARM_EXT_WATCH_PC");
     if (!m || !list || !*list) return;
     char buf[512];
     snprintf(buf, sizeof(buf), "%s", list);

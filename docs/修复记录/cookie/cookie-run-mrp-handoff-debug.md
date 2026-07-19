@@ -237,7 +237,7 @@
 
 ## 2026-07-16 Phase 1 运行时证据：launch 前持久化 + `_RL` 冷启动实测
 
-- `VMRP_LOG=1 VMRP_LIFECYCLE_DIAG=1` 逐事件追踪（产物 `/tmp/vmrp-e2e-ombWvn`）确认协议：
+- `SKYENGINE_LOG=1 VMRP_LIFECYCLE_DIAG=1` 逐事件追踪（产物 `/tmp/vmrp-e2e-ombWvn`）确认协议：
   - Cookie 从文件管理器启动 wbrw 前，先写 `mythroad/fm.sav`（13 字节，
     `00 00 00 01 | 00 00 00 00 | 01 00 00 00 | 06`，末字节 0x06 与选中项
     序号 6 吻合；字面量 0x3F094 紧邻 `..\appmgr\filemanager\fm_view.c`），
