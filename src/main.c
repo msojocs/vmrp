@@ -15,6 +15,7 @@
 
 #include "./include/bridge.h"
 #include "./include/e2e_control.h"
+#include "./include/native_text_widget.h"
 #include "./include/vmrp.h"
 #include "./include/memory.h"
 
@@ -350,6 +351,14 @@ void guiDrawBitmapWithStride(uint16_t *bmp, int32_t x, int32_t y,
                              int32_t source_x,
                              int32_t source_y) {
     if (!bmp || source_stride <= 0 || w <= 0 || h <= 0) return;
+    /* 平台文本框(native_text_widget):guest 帧先写入显示镜像;文本框显示
+     * 期间该帧被平台窗口遮盖——不上屏、不计入 draw_count(可见帧计数),
+     * 关闭文本框时由 widget 重推镜像恢复画面。文本框自身的上屏在 widget
+     * 内部带 presenting 标记,不会被这里截留。 */
+    if (native_text_widget_capture_frame(bmp, x, y, w, h,
+                                         source_stride, source_x, source_y)) {
+        return;
+    }
     int draw_count = SDL_AtomicAdd(&guiDrawBitmapCount, 1) + 1;
     /* Dump after the bitmap is copied to the SDL surface.  Dumping before the
      * draw captures the previous frame, which makes VMRP_PPM misleading for

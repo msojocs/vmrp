@@ -318,6 +318,7 @@ set(VMRP_FIRST_PARTY_SOURCES
   ${VMRP_CORE_SOURCES}
   ./src/native_platform_memory.c
   ./src/native_dsm_funcs.c
+  ./src/native_text_widget.c
   ./src/runtime_native_mythroad.c
   ${VMRP_ARM_EXT_SOURCES}
   ./src/app_compat.c
@@ -339,6 +340,7 @@ add_executable(vmrp
   ${VMRP_CORE_SOURCES}
   ./src/native_platform_memory.c
   ./src/native_dsm_funcs.c
+  ./src/native_text_widget.c
   ./src/runtime_native_mythroad.c
   ${VMRP_ARM_EXT_SOURCES}
   ./src/app_compat.c
@@ -446,6 +448,7 @@ if(EMCC)
     ${VMRP_CORE_SOURCES}
     ./src/native_platform_memory.c
     ./src/native_dsm_funcs.c
+    ./src/native_text_widget.c
     ./src/runtime_native_mythroad.c
     ${VMRP_ARM_EXT_SOURCES}
     ./src/app_compat.c
@@ -495,6 +498,7 @@ if(VMRP_BUILD_SHARED)
     ${VMRP_CORE_SOURCES}
     ./src/native_platform_memory.c
     ./src/native_dsm_funcs.c
+    ./src/native_text_widget.c
     ./src/runtime_native_mythroad.c
     ${VMRP_ARM_EXT_SOURCES}
     ./src/app_compat.c

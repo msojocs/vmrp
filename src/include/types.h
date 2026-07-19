@@ -74,8 +74,7 @@ enum {
 };
 
 enum {
-    MR_KEY_PRESS,      /*0*/
-    MR_KEY_RELEASE,    /*1*/
+    MR_KEY_PRESS,      /*0*/    MR_KEY_RELEASE,    /*1*/
     MR_MOUSE_DOWN,     /*2*/
     MR_MOUSE_UP,       /*3*/
     MR_MENU_SELECT,    /*4*/
@@ -94,6 +93,21 @@ enum {
     MR_SMS_GET_SC,
     MR_DATA_ACCOUNT_EVENT,
     MR_MOTION_EVENT
+};
+
+/* 平台对话框/文本框类型与按钮 ID(与 src/mythroad/include/mrporting.h 同值
+ * 的宿主侧镜像;宿主实现 mr_textCreate 等平台 UI 时使用,两处枚举不可同时
+ * include,值属于 SKYENGINE ABI 不可改动) */
+enum {
+    MR_DIALOG_OK,  //对话框有"确定"键
+    MR_DIALOG_OK_CANCEL,
+    MR_DIALOG_CANCEL,
+    MR_DIALOG_NONE = 100
+};
+
+enum {
+    MR_DIALOG_KEY_OK,
+    MR_DIALOG_KEY_CANCEL
 };
 
 typedef struct {

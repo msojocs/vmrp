@@ -3,6 +3,7 @@
 #include "./include/bridge.h"
 #include "./include/memory.h"
 #include "./include/native_dsm_funcs.h"
+#include "./include/native_text_widget.h"
 #include "./mythroad/include/dsm.h" /* dsm_get/set_lcd_rotation:plat(101) 旋转状态 */
 
 #include <stdio.h>
@@ -210,6 +211,13 @@ void guiDrawBitmapWithStride(uint16_t *bmp, int32_t x, int32_t y,
                              int32_t source_x,
                              int32_t source_y) {
     if (!screen_buf || !bmp || source_stride <= 0 || w <= 0 || h <= 0) return;
+    /* 平台文本框(native_text_widget):与 SDL 入口(main.c)一致,guest 帧先
+     * 写入显示镜像;文本框显示期间不写 screen_buf(平台窗口遮盖应用画面),
+     * 关闭时由 widget 重推镜像恢复。widget 自身上屏带 presenting 标记直通。 */
+    if (native_text_widget_capture_frame(bmp, x, y, w, h,
+                                         source_stride, source_x, source_y)) {
+        return;
+    }
     /* LCD 旋转(plat(101))后 screen_buf 行宽/裁剪按显示尺寸;像素总数在转置
      * 下不变(w*h 相等),无需重分配。嵌入端经 get_screen_width/height/
      * rotation 读到同一显示尺寸,对 buffer 的行宽解释保持一致。 */
