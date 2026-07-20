@@ -315,8 +315,6 @@ set(SKYENGINE_FIRST_PARTY_SOURCES
   ./src/native_text_widget.c
   ./src/runtime_native_mythroad.c
   ${SKYENGINE_ARM_EXT_SOURCES}
-  ./src/app_compat.c
-  ./src/app_compat_gghjt.c
 )
 if(NOT MSVC AND SKYENGINE_STRICT_WARNINGS)
   set(SKYENGINE_STRICT_WARNING_OPTIONS -Wextra -Wshadow -Wstrict-prototypes)
@@ -337,8 +335,6 @@ add_executable(skyengine
   ./src/native_text_widget.c
   ./src/runtime_native_mythroad.c
   ${SKYENGINE_ARM_EXT_SOURCES}
-  ./src/app_compat.c
-  ./src/app_compat_gghjt.c
   ${SKYENGINE_MYTHROAD_SOURCES}
 )
 target_compile_definitions(skyengine PRIVATE VMRP_SDL_AUDIO TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)
@@ -445,8 +441,6 @@ if(EMCC)
     ./src/native_text_widget.c
     ./src/runtime_native_mythroad.c
     ${SKYENGINE_ARM_EXT_SOURCES}
-    ./src/app_compat.c
-    ./src/app_compat_gghjt.c
     ${SKYENGINE_MYTHROAD_SOURCES}
   )
   # 将相对路径转为绝对路径
@@ -495,8 +489,6 @@ if(SKYENGINE_BUILD_SHARED)
     ./src/native_text_widget.c
     ./src/runtime_native_mythroad.c
     ${SKYENGINE_ARM_EXT_SOURCES}
-    ./src/app_compat.c
-    ./src/app_compat_gghjt.c
     ${SKYENGINE_MYTHROAD_SOURCES}
   )
   target_compile_definitions(skyengine-shared PRIVATE TARGET_MOD MTK_MOD MR_PLAT_DRAWTEXT DSM_FULL TRUST_BINARIES)

@@ -3,7 +3,6 @@
 #include "./include/arm_ext_internal.h"
 #include "./include/arm_ext_priv.h"
 #include "./include/skyengine.h"
-#include "./include/app_compat.h"
 #include "./include/bridge.h"
 #include "./include/network.h"
 #include "./include/file_lib.h"
@@ -669,6 +668,28 @@ static void hook_table(uc_engine *uc, uint64_t address, uint32_t size, void *use
     ArmExtModule *m = (ArmExtModule *)user_data;
     if (address < EXT_TABLE_ADDR || address >= EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4) return;
     uint32_t idx = (uint32_t)((address - EXT_TABLE_ADDR) / 4);
+    /*
+     * 真机上 table 槽指向固件里真实的 ARM 实现,任何一次调用都会在调用方
+     * SP 之下压出若干层被调用者栈帧(AAPCS 规定 SP 之下是被调用者可随意
+     * 使用的死区),固件返回后死区里残留的是各层帧的返回地址、保存的栈帧
+     * 指针等地址类数值。宿主实现不触碰 guest 栈,死区因此保留早前遗留的
+     * 小数值:读取未初始化栈槽的应用代码(如 SDK 资源提取器 readChunk 的
+     * 输出容量槽,真机上靠残留地址恒大于解压尺寸通过容量判定)在这里读到
+     * 小长度值,容量判定失败,每条压缩记录都以陈旧缓冲写出。此处以本次
+     * 调用的返回地址与调用方 SP——死区中最普遍的两类残留——填充 SP 之下
+     * 64 字节,恢复与真机一致的死区语义;对遵守 AAPCS 的代码没有可观察
+     * 差异。
+     */
+    {
+        uint32_t sp = reg_read32(m->uc, UC_ARM_REG_SP);
+        void *frame = sp >= 64u ? arm_ptr_span(m, sp - 64u, 64u) : NULL;
+        if (frame) {
+            uint32_t lr = reg_read32(m->uc, UC_ARM_REG_LR);
+            uint32_t residue[16];
+            for (int i = 0; i < 16; i++) residue[i] = (i & 1) ? sp : lr;
+            memcpy(frame, residue, sizeof(residue));
+        }
+    }
     if (m->pending_internal_file_addr) {
         arm_ext_sync_internal_nested_module(m, m->pending_internal_file_addr,
                                             m->pending_internal_file_len);
@@ -827,9 +848,6 @@ static void hook_got_write(uc_engine *uc, uc_mem_type type, uint64_t address, in
                     break;
                 }
             }
-        }
-        if (app_should_protect_got_addr(m, (uint32_t)address)) {
-            return;
         }
         /* bridge 函数指针写入 → 记录快照。只在 got_snapshot_base 尚未
          * 设置或与当前 R9 一致时更新 base，防止嵌套插件（如 netpay）
@@ -1180,11 +1198,6 @@ int arm_ext_load(ArmExtModule **out, const uint8 *code, uint32 len, int32 load_c
     m->host_code = code;
 
     arm_ext_init_pack_names(m);
-    m->profile = app_compat_select(m->pack_host_path[0] ?
-                                   m->pack_host_path :
-                                   mr_get_pack_filename());
-    if (m->profile && m->profile->init)
-        m->app_state = m->profile->init(m);
 
     uc_err err = uc_open(UC_ARCH_ARM, UC_MODE_ARM, &m->uc);
     if (err != UC_ERR_OK) goto fail;
@@ -2861,9 +2874,6 @@ uint32_t arm_ext_host_motion_acc_slot(ArmExtModule *m,
 
 void arm_ext_unload(ArmExtModule *m) {
     if (!m) return;
-    if (m->profile && m->profile->cleanup)
-        m->profile->cleanup(m->app_state);
-    m->app_state = NULL;
     mrp_cache_free(m);
     if (m->uc) uc_close(m->uc);
     free(m->wrapper_rw_journal_shadow);

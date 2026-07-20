@@ -224,11 +224,6 @@ void internal_slot_write(ArmExtModule *m, uint32_t slot, uint32_t value);
 void arm_ext_diag_owner_for_lr(ArmExtModule *m, uint32_t *owner_p, uint32_t *owner_h, uint32_t *owner_file, uint32_t *owner_len);
 
 /* 复杂 case(0/3/14/38/44/125)迁移所需的 executor 符号 */
-static inline int app_should_protect_got_addr(ArmExtModule *m, uint32_t addr) {
-    if (m && m->profile && m->profile->should_protect_got_addr)
-        return m->profile->should_protect_got_addr(m, m->app_state, addr);
-    return 0;
-}
 int arm_ext_child_has_package_owner(ArmExtModule *m, ArmExtNestedModule *owner);
 int arm_ext_mirror_read_file_to_adjacent_slot(ArmExtModule *m, uint32_t len_slot, const void *data, uint32_t len, uint32_t ret_addr, uint32_t *slot_out);
 int arm_ext_range_contains(uint32_t outer, uint32_t outer_len, uint32_t inner, uint32_t inner_len);
