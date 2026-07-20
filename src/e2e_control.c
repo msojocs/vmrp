@@ -257,6 +257,30 @@ static void e2e_inject_click(int x, int y, int fd) {
     e2e_write_line(fd, resp);
 }
 
+/* 滑动手势：部分应用（如切水果类）用 MR_MOUSE_MOVE 轨迹而非点击识别输入。
+ * down 后按固定步数线性插值注入 MOUSEMOTION（主循环仅在按下状态转发
+ * MR_MOUSE_MOVE），步间延迟沿用点击 hold，保证 guest 定时器能观察到轨迹。 */
+static void e2e_inject_swipe(int x1, int y1, int x2, int y2, int fd) {
+    const int steps = 8;
+    e2e_push_mouse_button(SDL_MOUSEBUTTONDOWN, x1, y1, SDL_PRESSED);
+    SDL_Delay((Uint32)e2e_click_or_paste_hold_ms());
+    for (int i = 1; i <= steps; i++) {
+        SDL_Event ev;
+        memset(&ev, 0, sizeof(ev));
+        ev.type = SDL_MOUSEMOTION;
+        ev.motion.type = SDL_MOUSEMOTION;
+        ev.motion.state = SDL_BUTTON_LMASK;
+        ev.motion.x = x1 + (x2 - x1) * i / steps;
+        ev.motion.y = y1 + (y2 - y1) * i / steps;
+        SDL_PushEvent(&ev);
+        SDL_Delay((Uint32)e2e_click_or_paste_hold_ms());
+    }
+    e2e_push_mouse_button(SDL_MOUSEBUTTONUP, x2, y2, SDL_RELEASED);
+    char resp[80];
+    snprintf(resp, sizeof(resp), "OK swipe %d %d %d %d", x1, y1, x2, y2);
+    e2e_write_line(fd, resp);
+}
+
 static int e2e_push_key_and_wait(E2eControl *control, Uint32 type,
                                  SDL_Keycode key, Uint8 state,
                                  uint32_t *timer_arm_generation,
@@ -603,6 +627,13 @@ static void e2e_handle_client(E2eControl *control, int fd) {
             return;
         }
         e2e_inject_click(x, y, fd);
+    } else if (strcasecmp(op, "SWIPE") == 0) {
+        int x1, y1, x2, y2;
+        if (sscanf(line, "%*31s %d %d %d %d", &x1, &y1, &x2, &y2) != 4) {
+            e2e_write_line(fd, "ERR usage");
+            return;
+        }
+        e2e_inject_swipe(x1, y1, x2, y2, fd);
     } else if (strcasecmp(op, "KEY") == 0) {
         SDL_Keycode key = a[0] ? e2e_parse_key(a) : SDLK_UNKNOWN;
         if (key == SDLK_UNKNOWN) {

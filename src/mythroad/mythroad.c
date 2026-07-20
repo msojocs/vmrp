@@ -4094,6 +4094,10 @@ int32 mr_stop_ex(int16 freemem) {
     }
 
     mr_editRelease(0);
+    /* Multichannel OPEN data is allocated from LG_mem, while native decoded
+     * voices outlive ARM module teardown.  Release both before either owner is
+     * reset so restart cannot retain dangling slots or audible old voices. */
+    dsm_media_channels_release_all();
     native_ext_reset();
     mr_state = MR_STATE_IDLE;
     mr_timer_state = MR_TIMER_STATE_IDLE;
