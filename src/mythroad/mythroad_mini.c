@@ -14,6 +14,7 @@
 #include "./include/mythroad.h"
 #include "./include/string.h"
 #include "./include/encode.h"
+#include "./include/dsm.h" /* multichannel media lifecycle */
 #include "../include/arm_ext_executor.h"
 
 #define MR_VERSION 2011
@@ -1940,6 +1941,10 @@ int32 mr_stop_ex(int16 freemem) {
         c_event_st.param1 = 0;
         _mr_TestComC(801, (char*)&c_event_st, sizeof(c_event_st), 1);
     }
+
+    /* Keep the MINI restart path consistent with FULL: channel copies belong
+     * to LG_mem and native decoded voices must stop before that heap is freed. */
+    dsm_media_channels_release_all();
 
     mr_state = MR_STATE_IDLE;
     mr_timer_state = MR_TIMER_STATE_IDLE;

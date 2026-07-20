@@ -92,6 +92,13 @@ typedef struct {
     uint16 *(*getScreenBuffer)(void);
 #endif
 
+    /* 多通道媒体的 guest 句柄由 DSM 分配和校验，平台只按句柄维护可混音
+     * 的播放 voice。字段追加在既有函数区末尾，不改变已有回调的相对顺序；
+     * DSM 与宿主必须用本头文件同步重编译后使用。 */
+    int32 (*mr_playSoundChannel)(int32 handle, int type, const void *data,
+                                 uint32 dataLen, int32 loop);
+    int32 (*mr_stopSoundChannel)(int32 handle);
+
     // 变量放在最后
     int32 flags;  // 调整运行时的一些参数，目前只有调整文件系统路径名是否使用UTF8编码这一个功能
     int32 screen_width;
@@ -111,6 +118,9 @@ typedef struct start_t {
 } start_t;
 
 int32 dsm_init(DSM_REQUIRE_FUNCS *inFuncs);
+/* Called before an application heap is released; multichannel OPEN copies
+ * live in that heap while decoded voices are owned by the native mixer. */
+void dsm_media_channels_release_all(void);
 int32 mr_restart_old_app(void);
 /* 宿主编码路径 → guest(GBK) 编码；get_filename() 编码规则的逆操作，
  * 详见 dsm.c 中实现处的注释。 */

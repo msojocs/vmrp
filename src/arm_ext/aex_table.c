@@ -2119,6 +2119,36 @@ static void aex_t038(ArmExtModule *m, AexTableCtx *c) {
                 }
                 goto aex_done;
             }
+            if (r0 / 10u == 222u && r0 % 10u != 0u) {
+                /* MR_MEDIA_OPEN_MUTICHANNEL carries {guest_data,len,loop}.
+                 * Translate the nested address here: replacing it in-place
+                 * would truncate a 64-bit host pointer into the 32-bit ABI. */
+                uint32_t open_args[3];
+                void *guest_args = arm_ptr_span(m, r1, sizeof(open_args));
+                ret = MR_FAILED;
+                if (r2 == sizeof(open_args) && guest_args) {
+                    memcpy(open_args, guest_args, sizeof(open_args));
+                    const void *data = arm_ptr_span(m, open_args[0], open_args[1]);
+                    if (data) {
+                        ret = dsm_media_open_channel_host(
+                            (int)(r0 % 10u), data, open_args[1],
+                            (int32)open_args[2]);
+                    }
+                }
+                goto aex_done;
+            }
+            if (r0 / 10u >= 223u && r0 / 10u <= 225u &&
+                r0 % 10u != 0u) {
+                /* PLAY/STOP/CLOSE each carry exactly one 32-bit handle.  The
+                 * generic bridge only maps the first byte, so validate the
+                 * complete guest payload here before DSM copies four bytes. */
+                void *handle_arg = arm_ptr_span(m, r1, sizeof(uint32_t));
+                ret = (r2 == sizeof(uint32_t) && handle_arg)
+                    ? mr_platEx((int32)r0, handle_arg, (int32)r2,
+                                NULL, NULL, NULL)
+                    : MR_FAILED;
+                goto aex_done;
+            }
             uint32_t outputp_addr = r3;
             uint32_t output_lenp_addr = arg_read(m, 4);
             uint32_t arm_output = 0;

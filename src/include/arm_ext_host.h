@@ -45,6 +45,11 @@ extern void mr_set_old_start_filename(const char *name);
 extern void mr_set_start_fileparameter(const char *name);
 extern int32 mr_platEx(int32 code, uint8 *input, int32 input_len,
                        uint8 **output, int32 *output_len, MR_PLAT_EX_CB *cb);
+/* table[38] translates MR_MEDIA_OPEN_MUTICHANNEL's nested 32-bit guest
+ * address before entering DSM; the public 12-byte payload cannot carry a
+ * 64-bit host pointer without breaking the guest ABI. */
+extern int32 dsm_media_open_channel_host(int device, const void *data,
+                                         uint32 data_len, int32 loop);
 extern int32 mr_ferrno(void);
 extern int32 mr_open(const char *filename, uint32 mode);
 extern int32 mr_close(int32 f);
