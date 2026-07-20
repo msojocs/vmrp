@@ -810,34 +810,16 @@ static void aex_t043(ArmExtModule *m, AexTableCtx *c) {
              * success.  Match table[44]/mr_read: an unmapped span is an ABI
              * failure and must never be dereferenced by the host. */
             void *src = arm_ptr_span(m, r1, r2 ? r2 : 1u);
-            uint32_t len = r2;
-            int substituted = 0;
-            void *new_src = NULL;
-            uint32_t new_len = 0;
-            if (m->profile && m->profile->intercept_write &&
-                m->profile->intercept_write(m, m->app_state, r0, r1, r2,
-                                            &new_src, &new_len)) {
-                src = new_src;
-                len = new_len;
-                substituted = 1;
-            }
-            ret = src ? mr_write((int32)r0, src, len) : MR_FAILED;
-            if (substituted) {
-                if (m->profile && m->profile->post_write_cleanup)
-                    m->profile->post_write_cleanup(m->app_state);
-                /* ret 为 uint32_t,与 len 直接比较即位模式相等判定(与原
-                 * (int32_t) 强转比较数值等价),消除符号比较告警 */
-                if (ret == len) ret = (int32_t)r2;
-            }
+            ret = src ? mr_write((int32)r0, src, r2) : MR_FAILED;
             if (arm_ext_diag_on()) {
                 char preview[192];
                 uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
-                arm_ext_diag_preview_bytes(src, len, preview, sizeof(preview));
+                arm_ext_diag_preview_bytes(src, r2, preview, sizeof(preview));
                 arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
                                           &owner_file, &owner_len);
-                printf("DIAG table43 fd=%d name='%s' src=0x%X len=%u ret=0x%X subst=%d preview='%s' lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
+                printf("DIAG table43 fd=%d name='%s' src=0x%X len=%u ret=0x%X preview='%s' lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
                        (int32_t)r0, arm_ext_diag_fd_name(m, (int32_t)r0),
-                       r1, r2, ret, substituted, preview,
+                       r1, r2, ret, preview,
                        reg_read32(m->uc, UC_ARM_REG_LR),
                        owner_p, owner_h, owner_file, owner_len,
                        m->active_p_addr, m->primary_p_addr);
@@ -1991,8 +1973,7 @@ static void aex_t003(ArmExtModule *m, AexTableCtx *c) {
                     if (m->got_snapshot[i] >= EXT_TABLE_ADDR &&
                         m->got_snapshot[i] < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4 &&
                         addr >= r0 && addr + 4 <= cpy_end &&
-                        !arm_ext_should_skip_got_snapshot_restore(m, addr) &&
-                        !app_should_protect_got_addr(m, addr)) {
+                        !arm_ext_should_skip_got_snapshot_restore(m, addr)) {
                         memcpy(arm_ptr(m, addr), &m->got_snapshot[i], 4);
                     }
                 }
@@ -2025,8 +2006,7 @@ static void aex_t014(ArmExtModule *m, AexTableCtx *c) {
                     if (m->got_snapshot[i] >= EXT_TABLE_ADDR &&
                         m->got_snapshot[i] < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4 &&
                         addr >= r0 && addr + 4 <= set_end &&
-                        !arm_ext_should_skip_got_snapshot_restore(m, addr) &&
-                        !app_should_protect_got_addr(m, addr)) {
+                        !arm_ext_should_skip_got_snapshot_restore(m, addr)) {
                         memcpy(arm_ptr(m, addr), &m->got_snapshot[i], 4);
                     }
                 }
@@ -2254,8 +2234,6 @@ static void aex_t044(ArmExtModule *m, AexTableCtx *c) {
                        m->active_p_addr, m->primary_p_addr,
                        overlap_lo, overlap_hi);
             }
-            if (m->profile && m->profile->post_read_hook)
-                m->profile->post_read_hook(m, m->app_state, r1, r2, ret, hp);
             if ((int32_t)ret > 0)
                 arm_ext_retire_modules_overwritten_by_data_read(
                     m, r1, (uint32_t)ret);
@@ -2285,8 +2263,7 @@ static void aex_t044(ArmExtModule *m, AexTableCtx *c) {
                         if (m->got_snapshot[i] >= EXT_TABLE_ADDR &&
                             m->got_snapshot[i] < EXT_TABLE_ADDR + EXT_TABLE_COUNT * 4 &&
                             addr >= r1 && addr + 4 <= read_end &&
-                            !arm_ext_should_skip_got_snapshot_restore(m, addr) &&
-                            !app_should_protect_got_addr(m, addr)) {
+                            !arm_ext_should_skip_got_snapshot_restore(m, addr)) {
                             memcpy(arm_ptr(m, addr), &m->got_snapshot[i], 4);
                         }
                     }

@@ -1,7 +1,12 @@
 #ifndef __VMRP_ARM_EXT_INTERNAL_H__
 #define __VMRP_ARM_EXT_INTERNAL_H__
 
-#include "app_compat.h"
+#if !defined(_TYPES_H) && !defined(_M_TYPE__)
+#include "types.h"
+#endif
+
+typedef struct ArmExtModule ArmExtModule;
+
 #include <unicorn/unicorn.h>
 #include <stdint.h>
 #include <string.h>
@@ -429,9 +434,6 @@ struct ArmExtModule {
     /* P5.2 pack 归属正向缓存(环形写入) */
     ArmExtPackMatchCache pack_match_cache[ARM_EXT_PACK_MATCH_CACHE_MAX];
     uint32_t pack_match_cache_next;
-
-    const AppCompatProfile *profile;
-    void *app_state;
 };
 
 static inline void *arm_ptr(ArmExtModule *m, uint32_t addr) {

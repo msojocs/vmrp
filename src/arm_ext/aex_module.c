@@ -536,10 +536,6 @@ static int arm_ext_current_pack_matches_staged_file(ArmExtModule *m,
                                                     const char **pack_out);
 
 
-static inline void app_on_child_confirmed(ArmExtModule *m, uint32_t p, uint32_t h) {
-    if (m && m->profile && m->profile->on_child_confirmed)
-        m->profile->on_child_confirmed(m, m->app_state, p, h);
-}
 
 
 
@@ -1861,7 +1857,6 @@ int arm_ext_sync_internal_nested_module(ArmExtModule *m,
         arm_ext_record_nested_module(m, file_addr, file_len, p_addr, helper_addr);
         arm_ext_apply_short_pack_alias_for_private_child(m, file_addr,
                                                          file_len, p_addr);
-        app_on_child_confirmed(m, p_addr, helper_addr);
         /*
          * Host-visible nested loads (table[25]) make every loaded child the
          * active foreground module.  cfunction.ext's private loader builds
