@@ -563,10 +563,10 @@ tool/server-http.js已启动，修改tool/proxy.js来实现代理服务器。
 记得存储记忆数据。
 
 工作区中的修改是修复以下BUG产生的，分析有必要改这么多代码吗
-命令`build/skyengine build/mythroad/2937_240320_rzsgqd.mrp`执行后，默认应该会播放背景音乐，但实际没声音。
+命令`pnpm vitest run test/e2e/gwyaz/temp.test.ts`执行后，应用启动会卡死。
 
-预期结果：播放背景音乐。
-实际结果：没用声音。
+预期结果：成功进入应用界面。
+实际结果：卡死。
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。

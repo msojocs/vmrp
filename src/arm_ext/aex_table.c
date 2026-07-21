@@ -777,11 +777,11 @@ static void aex_t042(ArmExtModule *m, AexTableCtx *c) {
  {
             const char *info_name = arm_str(m, r0);
             ret = mr_info(arm_ext_pack_to_host_path(m, info_name));
-            /* 磁盘上不存在时检查 MRP 缓存 */
-            if (ret != MRP_IS_FILE && m->mrp_cache_count > 0) {
-                if (mrp_cache_find(m, info_name))
-                    ret = MRP_IS_FILE;
-            }
+            /* table[42] is the platform filesystem-state query used by guest
+             * installers before extracting bundled files.  An entry in the
+             * current MRP is a source payload, not an already-installed EFS
+             * file; reporting it as MRP_IS_FILE skips the guest's manifest
+             * extraction and leaves the next RESTART without its package. */
             if (arm_ext_diag_on()) {
                 uint32_t owner_p = 0, owner_h = 0;
                 ArmExtNestedModule *owner =
