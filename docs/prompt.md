@@ -563,10 +563,10 @@ tool/server-http.js已启动，修改tool/proxy.js来实现代理服务器。
 记得存储记忆数据。
 
 工作区中的修改是修复以下BUG产生的，分析有必要改这么多代码吗
-命令`pnpm vitest run test/e2e/gwyaz/temp.test.ts`执行后，应用启动会卡死。
+测试用例`pnpm vitest run test/e2e/gjxwsmn/boot-to-menu.test.ts`执行后，游戏界面渲染缺失。
 
-预期结果：成功进入应用界面。
-实际结果：卡死。
+预期结果：游戏界面渲染正常。
+实际结果：渲染缺失。
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。

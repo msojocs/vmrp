@@ -1529,6 +1529,96 @@ aex_done:
     c->ret = ret;
 }
 
+static void aex_t121(ArmExtModule *m, AexTableCtx *c) {
+    uint32_t ret = MR_SUCCESS;
+    uint32_t trans_addr = arg_read(m, 4);
+    uint16_t trans_color = (uint16_t)arg_read(m, 5);
+
+    /* The ARM ABI uses a 4-byte pointer and therefore a 12-byte bitmap
+     * descriptor. Decode it field by field before constructing the native
+     * descriptor; casting it on a 64-bit host shifts every field after p. */
+    const uint8_t *src_desc = arm_ptr_span(m, c->r0, 12u);
+    const uint8_t *dst_desc = arm_ptr_span(m, c->r1, 12u);
+    const uint8_t *trans_desc = arm_ptr_span(m, trans_addr, 10u);
+    if (!src_desc || !dst_desc || !trans_desc) goto aex_done;
+
+    uint32_t src_p = 0;
+    uint16_t src_w = 0, src_h = 0, src_x = 0, src_y = 0;
+    uint32_t dst_p = 0;
+    uint16_t dst_w = 0, dst_h = 0, dst_x = 0, dst_y = 0;
+    int16_t A = 0, B = 0, C = 0, D = 0;
+    uint16_t rop = 0;
+    memcpy(&src_p, src_desc, 4u);
+    memcpy(&src_w, src_desc + 4u, 2u);
+    memcpy(&src_h, src_desc + 6u, 2u);
+    memcpy(&src_x, src_desc + 8u, 2u);
+    memcpy(&src_y, src_desc + 10u, 2u);
+    memcpy(&dst_p, dst_desc, 4u);
+    memcpy(&dst_w, dst_desc + 4u, 2u);
+    memcpy(&dst_h, dst_desc + 6u, 2u);
+    memcpy(&dst_x, dst_desc + 8u, 2u);
+    memcpy(&dst_y, dst_desc + 10u, 2u);
+    memcpy(&A, trans_desc, 2u);
+    memcpy(&B, trans_desc + 2u, 2u);
+    memcpy(&C, trans_desc + 4u, 2u);
+    memcpy(&D, trans_desc + 6u, 2u);
+    memcpy(&rop, trans_desc + 8u, 2u);
+
+    uint16_t w = (uint16_t)c->r2;
+    uint16_t h = (uint16_t)c->r3;
+    uint64_t src_len = (uint64_t)src_w * src_h * sizeof(uint16_t);
+    uint64_t dst_len = (uint64_t)dst_w * dst_h * sizeof(uint16_t);
+    if (!src_p || !dst_p || !src_len || !dst_len ||
+        src_len > UINT32_MAX || dst_len > UINT32_MAX) {
+        goto aex_done;
+    }
+    /* The renderer clips transformed output to the destination, but it assumes
+     * the requested source rectangle is wholly contained in the source bitmap. */
+    if (src_x > src_w || src_y > src_h ||
+        w > src_w - src_x || h > src_h - src_y) {
+        goto aex_done;
+    }
+    uint16_t *src_pixels =
+        (uint16_t *)arm_ptr_span(m, src_p, (uint32_t)src_len);
+    uint16_t *dst_pixels =
+        (uint16_t *)arm_ptr_span(m, dst_p, (uint32_t)dst_len);
+    /* DrawBitmapEx applies the inverse transform; a zero determinant has no
+     * inverse and would otherwise divide by zero in the native renderer. */
+    int32_t determinant = (int32_t)A * D - (int32_t)B * C;
+    if (!src_pixels || !dst_pixels || determinant == 0) goto aex_done;
+
+    uint32_t claim_p = 0;
+    uint32_t claim_helper = 0;
+    if (!arm_ext_should_accept_screen_write(m, &claim_p, &claim_helper)) {
+        claim_p = 0;
+        claim_helper = 0;
+    }
+    ArmExtScreenContext screen_ctx;
+    int have_screen_ctx = arm_ext_push_draw_screen_context(m, &screen_ctx);
+    int targets_primary = have_screen_ctx &&
+        arm_ext_screen_context_targets_primary(m, &screen_ctx) &&
+        dst_p == screen_ctx.target_addr;
+    uint16_t *before = targets_primary ? arm_ext_snapshot_screen(m) : NULL;
+
+    mr_drawBitmapExHost(
+        src_pixels, src_w, src_h, src_x, src_y,
+        dst_pixels, dst_w, dst_h, dst_x, dst_y,
+        w, h, A, B, C, D, rop, trans_color);
+
+    if (have_screen_ctx) arm_ext_pop_draw_screen_context(&screen_ctx);
+    if (before) {
+        arm_ext_note_screen_damage_diff(m, before);
+        arm_ext_claim_foreground_screen_diff(m, claim_p, claim_helper, before);
+        free(before);
+        arm_ext_finish_screen_cache_write(m, &screen_ctx, claim_p,
+                                          claim_helper);
+    }
+    ret = 0;
+
+aex_done:
+    c->ret = ret;
+}
+
 static void aex_t122(ArmExtModule *m, AexTableCtx *c) {
     (void)m;
     uint32_t r0 = c->r0;
@@ -2589,6 +2679,7 @@ const AexTableHandler aex_table_handlers[EXT_TABLE_COUNT] = {
     [118] = aex_t118,
     [119] = aex_t119,
     [120] = aex_t120,
+    [121] = aex_t121,
     [122] = aex_t122,
     [123] = aex_t123,
     [124] = aex_t124,

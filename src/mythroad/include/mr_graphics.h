@@ -82,6 +82,12 @@ typedef struct _tagTransBitmap {
 } mr_transBitmap;
 
 void _DrawBitmapEx(mr_bitmapDrawSt* srcbmp, mr_bitmapDrawSt* dstbmp, uint16 w, uint16 h, mr_transMatrixSt* pTrans, uint16 transcoler);
+void mr_drawBitmapExHost(uint16* src, uint16 src_w, uint16 src_h,
+                         uint16 src_x, uint16 src_y, uint16* dst,
+                         uint16 dst_w, uint16 dst_h, uint16 dst_x,
+                         uint16 dst_y, uint16 w, uint16 h, int16 A,
+                         int16 B, int16 C, int16 D, uint16 rop,
+                         uint16 transcolor);
 
 int32 mr_transbitmapDraw(mr_transBitmap* hTransBmp, uint16* dstBuf, int32 dest_max_w, int32 dest_max_h, int32 sx, int32 sy, int32 width, int32 height, int32 dx, int32 dy);
 
