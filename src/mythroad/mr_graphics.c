@@ -422,3 +422,18 @@ void _DrawBitmapEx(mr_bitmapDrawSt *srcbmp, mr_bitmapDrawSt *dstbmp, uint16 w, u
         }
     }
 }
+
+void mr_drawBitmapExHost(uint16 *src, uint16 src_w, uint16 src_h,
+                         uint16 src_x, uint16 src_y, uint16 *dst,
+                         uint16 dst_w, uint16 dst_h, uint16 dst_x,
+                         uint16 dst_y, uint16 w, uint16 h, int16 A,
+                         int16 B, int16 C, int16 D, uint16 rop,
+                         uint16 transcolor) {
+    /* ARM EXT descriptors contain 32-bit guest pointers, while native
+     * descriptors contain host pointers. Keep that ABI conversion outside the
+     * renderer so _DrawBitmapEx continues to have one transform algorithm. */
+    mr_bitmapDrawSt srcbmp = {src, src_w, src_h, src_x, src_y};
+    mr_bitmapDrawSt dstbmp = {dst, dst_w, dst_h, dst_x, dst_y};
+    mr_transMatrixSt trans = {A, B, C, D, rop};
+    _DrawBitmapEx(&srcbmp, &dstbmp, w, h, &trans, transcolor);
+}

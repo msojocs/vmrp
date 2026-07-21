@@ -90,6 +90,12 @@ extern uint16 *c2u(const char *cp, int *err, int *size);
 extern int wstrlen(char *txt);
 extern void _DrawPoint(int16 x, int16 y, uint16 nativecolor);
 extern void _DrawBitmap(uint16 *p, int16 x, int16 y, uint16 w, uint16 h, uint16 rop, uint16 transcoler, int16 sx, int16 sy, int16 mw);
+extern void mr_drawBitmapExHost(uint16 *src, uint16 src_w, uint16 src_h,
+                                uint16 src_x, uint16 src_y, uint16 *dst,
+                                uint16 dst_w, uint16 dst_h, uint16 dst_x,
+                                uint16 dst_y, uint16 w, uint16 h, int16 A,
+                                int16 B, int16 C, int16 D, uint16 rop,
+                                uint16 transcolor);
 extern void DrawRect(int16 x, int16 y, int16 w, int16 h, uint8 r, uint8 g, uint8 b);
 extern int32 _DrawText(char *pcText, int16 x, int16 y, uint8 r, uint8 g, uint8 b, int is_unicode, uint16 font);
 extern int _BitmapCheck(uint16 *p, int16 x, int16 y, uint16 w, uint16 h, uint16 transcoler, uint16 color_check);

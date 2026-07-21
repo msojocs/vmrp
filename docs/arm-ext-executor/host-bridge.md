@@ -38,7 +38,7 @@ handler 必须遵循：
 
 Mythroad 期望的槽位定义在 `src/mythroad/mythroad.c` 的 `_mr_c_function_table_init()`，执行器实际写入 guest 的值由 `init_table()` 决定，当前 handler 分发表在 `src/arm_ext/aex_table.c`。三者需要一起核对：原生表里是函数或 `NULL`，不等于执行器 guest 表里就是 host 函数指针或 0。
 
-当前 150 个槽可精确分成三类：99 个有 `AexTableHandler`，32 个被替换为 guest 数据/表地址，余下 19 个保留桥地址但没有 handler。最后一类被 guest 调用时会记录 `not implemented` 并返回 `MR_IGNORE`。
+当前 150 个槽可精确分成三类：100 个有 `AexTableHandler`，32 个被替换为 guest 数据/表地址，余下 18 个保留桥地址但没有 handler。最后一类被 guest 调用时会记录 `not implemented` 并返回 `MR_IGNORE`。
 
 | 槽位 | 执行器状态 | 典型接口或数据 |
 | --- | --- | --- |
@@ -52,8 +52,7 @@ Mythroad 期望的槽位定义在 `src/mythroad/mythroad.c` 的 `_mr_c_function_
 | `91..112` | guest 指针/数据 | screen、资源数组、包名、RAM 包、应用堆、SMS 配置 |
 | `113..115` | handler | MD5 init/append/finish |
 | `116..117` | fallback | load/save SMS config |
-| `118..120` | handler | DispUpEx、DrawPoint、DrawBitmap |
-| `121` | fallback | DrawBitmapEx |
+| `118..121` | handler | DispUpEx、DrawPoint、DrawBitmap、DrawBitmapEx |
 | `122..127` | handler | DrawRect、DrawText、BitmapCheck、readFile、wstrlen、registerAPP |
 | `128..129` | fallback | DrawTextEx、EffSetCon |
 | `130..134` | handler | TestCom、TestCom1、c2u、div、mod |
@@ -67,7 +66,7 @@ Mythroad 期望的槽位定义在 `src/mythroad/mythroad.c` 的 `_mr_c_function_
 | `146` | guest 数据 | `LG_mem_free` 头节点 |
 | `147..149` | fallback | transbitmapDraw、drawRegion、保留；原生 table[149] 为 `NULL` |
 
-这里的 `fallback` 表示执行器当前行为，不表示对应 Mythroad 能力在设计上可有可无。例如 table[121] 对依赖 DrawBitmapEx 的应用仍是明确的兼容性缺口。
+这里的 `fallback` 表示执行器当前行为，不表示对应 Mythroad 能力在设计上可有可无。
 
 表的“存在”与执行器“已经实现 handler”是两回事。新增 handler 前应先确认上游函数签名、返回语义、guest 指针所有权和异步回调方式。
 
@@ -85,7 +84,7 @@ Mythroad 期望的槽位定义在 `src/mythroad/mythroad.c` 的 `_mr_c_function_
 
 table[25] 负责建立 P/helper/module ownership，是 wrapper 与 primary/child 之间的关键边界。它还需要识别 nested loader 的 LR、设置 child R9、记录首次 primary 初始化请求。
 
-### table[29] / table[118..120,122..124]：图形
+### table[29] / table[118..124]：图形
 
 图形 handler 不能直接“画到窗口就返回”。它们需要：
 
@@ -96,7 +95,10 @@ table[25] 负责建立 P/helper/module ownership，是 wrapper 与 primary/child
 - 避免被前台 child 覆盖的 primary 提交穿透到窗口；
 - 在 child 关闭后恢复底层画面。
 
-table[121] DrawBitmapEx 当前没有 handler，调用会走 `MR_IGNORE` fallback；不能把相邻图形槽已经实现视为它也受支持。
+table[121] DrawBitmapEx 的两个 guest 位图描述符含 4 字节 ARM 指针，在 64 位
+宿主上不能强转为原生结构。handler 逐字段读取 12 字节描述符与 10 字节矩阵，
+验证源/目标区间和可逆矩阵后再构造宿主描述符。主 framebuffer 写入继续经过
+damage/foreground owner 跟踪；离屏目标只更新 guest 缓冲。
 
 ### table[31]/[32]：宿主 timer
 
