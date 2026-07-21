@@ -334,15 +334,16 @@ struct ArmExtModule {
     int primary_host_init_pending;
     uint32_t wrapper_timer_dispatch_addr;
     /*
-     * wrapper 静态区外来写屏障(journal)。私有 loader 的 staging 窗口存在
+     * wrapper ER_RW 无主写屏障(journal)。私有 loader 的 staging 窗口存在
      * 已证实的 R9 语义分歧(见 arm_ext_wrapper_rw_journal_flush 注释):
      * staged child 以借来的 wrapper R9 运行,把自己的初始化数据按 R9 相对
      * 偏移写进 wrapper ER_RW。真机上这些写落在 child 自己的 RW,对 wrapper
-     * 从未发生,因此宿主按字节记录旧值并在 dispatch 边界回滚。
+     * 从未发生,因此宿主按字节记录无已确认模块所有权的写入并在 dispatch
+     * 边界回滚;已登记 child 对 wrapper 共享对象的合法写入不在此列。
      */
     uint32_t wrapper_rw_journal_base;  /* 挂钩时的 P[0](ER_RW 基址) */
     uint32_t wrapper_rw_journal_len;   /* 挂钩时的 P[4](ER_RW 长度) */
-    uint8_t *wrapper_rw_journal_shadow; /* len 字节:被外来写覆盖前的旧值 */
+    uint8_t *wrapper_rw_journal_shadow; /* len 字节:被无主写覆盖前的旧值 */
     uint8_t *wrapper_rw_journal_mark;   /* len/8 位图:置位=待回滚字节 */
     uint32_t wrapper_rw_journal_dirty;  /* 当前置位字节数,0 时回滚免扫描 */
     uc_hook wrapper_rw_journal_hook;

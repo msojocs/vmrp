@@ -545,3 +545,10 @@
 - **Pages:** rzsgqd-background-music-silent-debugging.md
 - **Summary:** Created wiki page rzsgqd-background-music-silent-debugging.md
 
+## [2026-07-21T04:03:19.000Z] complete
+- **Pages:** gwyaz-installed-file-probe-and-wrapper-rw-owner-fix.md, private-loader-wrapper-package-context-repair.md
+- **Summary:** Recorded that table[42]/mr_info must expose real EFS installation state rather than MRP-cache source availability, and refined the wrapper RW journal from all non-wrapper PCs to unowned PCs so confirmed children can update wrapper-allocated shared objects while stale staging writes remain contained.
+
+## [2026-07-21T04:14:46.000Z] verify
+- **Pages:** gwyaz-installed-file-probe-and-wrapper-rw-owner-fix.md
+- **Summary:** Target and focused DIAG passed with distinct before/after PPMs and no 0x8F4 revert; geyaxz retained all three journal-protection paths; final no-retry E2E passed 28 files/51 tests, with ctest, TypeScript, and diff checks also clean.

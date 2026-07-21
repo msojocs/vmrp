@@ -1557,7 +1557,7 @@ static void arm_ext_restore_modal_fg_snapshot(ArmExtModule *m) {
 }
 
 /*
- * ── wrapper 静态区外来写屏障(journal) ──
+ * ── wrapper ER_RW 无主写入屏障(journal) ──
  *
  * 私有 loader 把 child 迁入 arena 后的 staging 窗口(mr_cacheSync 已过、
  * 注册未确认)存在已证实的宿主 R9 语义分歧:进 wrapper 代码时 R9 被切为
@@ -1573,17 +1573,24 @@ static void arm_ext_restore_modal_fg_snapshot(ArmExtModule *m) {
  * 推广/计费框架真正跑通启动流程(联网上报、termsync/gbreg 注册),game
  * 随即等待 skyengine 尚未模拟的完成信号——当前全部通过用例都建立在该框架
  * 瘫痪的基线上。在补齐那条链路之前,宿主以与真机一致的最小语义兜住分歧:
- * 「wrapper 静态区只有 wrapper 本体代码(和宿主)能持久写入」。
+ * 「没有 wrapper/已确认 child 代码所有权的 staging 写入不得
+ * 污染 wrapper ER_RW」。
  *
- * 机制:对 wrapper ER_RW 挂 ranged 写钩子;外来 PC(不在 EXT_CODE_ADDR..
- * +code_len)写入时按字节记录旧值并置位;wrapper 本体 PC 随后写同一字节
- * 则清位(wrapper 合法写接管,不回滚);arm_ext_call 入口且无 pending
- * staging 窗口时把仍置位的字节回滚为旧值。窗口内不回滚——staged child
- * 还要从借来的 R9 读回自己刚写的 GOT 桥。无指令签名、无布局偏移、无
- * 应用特判;取代此前按字段各写一个的三个症状修复(事件层收缩、命令队列
- * 复位、包上下文重发布)。
+ * 机制:对 wrapper ER_RW 挂 ranged 写钩子;没有 wrapper 或已登记 nested
+ * module 所有权的 PC 写入时按字节记录旧值并置位;已确认 owner 随后写
+ * 同一字节则清位(合法状态接管,不回滚);arm_ext_call 入口且无
+ * pending staging 窗口时把仍置位的字节回滚为旧值。窗口内不回滚——
+ * staged child 还要从借来的 R9 读回自己刚写的 GOT 桥。
+ *
+ * 已登记 child 必须允许写 wrapper ER_RW:该区也承载 wrapper 分配并传给
+ * child 的共享对象,gwyaz GUI 的事件 root+4 就由 GUI 模块写入当前页面。
+ * 把所有非 wrapper PC 都视为外来写会在首个事件前把这个合法指针回滚为
+ * 0。真正的 staging 分歧 PC 没有已确认模块所有权;geyaxz 中登记后补写的
+ * 陈旧 staging PC 同样不落在登记后的 runtime image,仍会被本机制捕获。
+ * 该判据无指令签名、布局偏移或应用特判;取代此前按字段各写一个的三个
+ * 症状修复(事件层收缩、命令队列复位、包上下文重发布)。
  */
-static void hook_wrapper_rw_foreign_write(uc_engine *uc, uc_mem_type type,
+static void hook_wrapper_rw_unowned_write(uc_engine *uc, uc_mem_type type,
                                           uint64_t address, int size,
                                           int64_t value, void *user_data) {
     (void)type;
@@ -1593,22 +1600,25 @@ static void hook_wrapper_rw_foreign_write(uc_engine *uc, uc_mem_type type,
     uint32_t len = m->wrapper_rw_journal_len;
     if ((uint32_t)address < base || (uint32_t)address >= base + len) return;
     uint32_t pc = reg_read32(uc, UC_ARM_REG_PC);
-    int foreign = !(pc >= EXT_CODE_ADDR && pc < EXT_CODE_ADDR + m->code_len);
+    int wrapper_owned =
+        pc >= EXT_CODE_ADDR && pc < EXT_CODE_ADDR + m->code_len;
+    int nested_owned = arm_ext_find_nested_module(m, pc) != NULL;
+    int unowned = !wrapper_owned && !nested_owned;
     for (int i = 0; i < size; ++i) {
         uint32_t off = (uint32_t)address + (uint32_t)i - base;
         if (off >= len) break;
         uint8_t *mark = &m->wrapper_rw_journal_mark[off >> 3];
         uint8_t bit = (uint8_t)(1u << (off & 7u));
-        if (foreign) {
+        if (unowned) {
             if (!(*mark & bit)) {
-                /* 首次外来触碰:写钩子先于写入提交执行,此刻读到的仍是旧值 */
+                /* 首次无主触碰:写钩子先于写入提交执行,此刻读到的仍是旧值 */
                 m->wrapper_rw_journal_shadow[off] =
                     *(uint8_t *)arm_ptr(m, base + off);
                 *mark |= bit;
                 m->wrapper_rw_journal_dirty++;
             }
         } else if (*mark & bit) {
-            /* wrapper 本体重写该字节:合法状态接管,不再回滚 */
+            /* 已确认 owner 重写该字节:合法状态接管,不再回滚 */
             *mark &= (uint8_t)~bit;
             m->wrapper_rw_journal_dirty--;
         }
@@ -1616,8 +1626,9 @@ static void hook_wrapper_rw_foreign_write(uc_engine *uc, uc_mem_type type,
 }
 
 /* journal 挂载:wrapper P 结构的 ER_RW 基址/长度首次可用时挂 ranged 写
- * 钩子并分配 shadow/位图。ER_RW 是 wrapper 的静态数据段,init 后终生
- * 不变,因此只挂载一次。 */
+ * 钩子并分配 shadow/位图。P[0]/P[4] 是模块加载后稳定的区间身份;
+ * 区间内容仍可包含分配后传给 child 的共享对象,因此只挂载一次
+ * 并由 PC 所有权区分合法写入。 */
 static void arm_ext_wrapper_rw_journal_install(ArmExtModule *m) {
     uint32_t rw = 0, rw_len = 0;
     if (!m || m->wrapper_rw_journal_base || !m->p_addr ||
@@ -1631,7 +1642,7 @@ static void arm_ext_wrapper_rw_journal_install(ArmExtModule *m) {
     m->wrapper_rw_journal_mark = (uint8_t *)calloc((rw_len + 7u) / 8u, 1u);
     if (!m->wrapper_rw_journal_shadow || !m->wrapper_rw_journal_mark ||
         uc_hook_add(m->uc, &m->wrapper_rw_journal_hook, UC_HOOK_MEM_WRITE,
-                    hook_wrapper_rw_foreign_write, m, rw,
+                    hook_wrapper_rw_unowned_write, m, rw,
                     rw + rw_len - 1u) != UC_ERR_OK) {
         /* 分配或挂钩失败即放弃本机制并大声报错;不留半初始化状态 */
         printf("arm_ext_executor: FATAL wrapper rw journal install failed (rw=0x%X len=%u)\n",
@@ -1646,7 +1657,7 @@ static void arm_ext_wrapper_rw_journal_install(ArmExtModule *m) {
     m->wrapper_rw_journal_len = rw_len;
 }
 
-/* journal 回滚:把仍置位的字节恢复为外来写覆盖前的旧值。pending staging
+/* journal 回滚:把仍置位的字节恢复为无主写覆盖前的旧值。pending staging
  * 窗口开启时跳过(此刻 staged child 仍会读回自己刚写的值),窗口关闭由
  * 注册确认路径清 pending 保证。 */
 static void arm_ext_wrapper_rw_journal_flush(ArmExtModule *m) {
@@ -1811,8 +1822,8 @@ int arm_ext_call(ArmExtModule *m, int32 code, const void *input, uint32 input_le
 
     uint32_t rw_base = 0;
     memcpy(&rw_base, arm_ptr(m, call_p_addr), 4);
-    /* staging 窗口 R9 分歧的外来写在 dispatch 边界统一回滚(机制与语义
-     * 见 hook_wrapper_rw_foreign_write 前的注释) */
+    /* staging 窗口 R9 分歧的无主写在 dispatch 边界统一回滚(机制与语义
+     * 见 hook_wrapper_rw_unowned_write 前的注释) */
     arm_ext_wrapper_rw_journal_install(m);
     arm_ext_wrapper_rw_journal_flush(m);
     if (arm_ext_diag_on()) {

@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 40 pages | Last updated: 2026-07-20T12:44:26.961Z
+> 41 pages | Last updated: 2026-07-21T04:14:46.000Z
 
 ## debugging
 
@@ -21,6 +21,7 @@
 - [gzwdzjs play MR_UCS2GB caller-owned output pointer fix](gzwdzjs-play-mr-ucs2gb-caller-owned-output-pointer-fix.md) — # gzwdzjs play MR_UCS2GB caller-owned output pointer fix
 - [gzwdzjs primary black clear damage synthesis](gzwdzjs-primary-black-clear-damage-synthesis.md) — # gzwdzjs primary black clear damage synthesis
 - [gzwdzjs table bridge stale epilogue guard](gzwdzjs-table-bridge-stale-epilogue-guard.md) — # gzwdzjs table bridge stale epilogue guard
+- [gwyaz installed-file probe and wrapper RW owner fix](gwyaz-installed-file-probe-and-wrapper-rw-owner-fix.md) — # gwyaz installed-file probe and wrapper RW owner fix
 - [MPS selector 100 is not record 100](mps-selector-100-is-not-record-100.md) — # MPS selector 100 is not record 100
 - [OP6120 independent SCRRAM 4M startup fix](op6120-independent-scrram-4m-startup-fix.md) — # OP6120 independent SCRRAM 4M startup fix
 - [opglqa font download repeat investigation](opglqa-font-download-repeat-investigation.md) — # opglqa font download repeat investigation
