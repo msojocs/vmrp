@@ -54,7 +54,7 @@ static char readdir_buf[128];
 #define AUDIO_CHANNELS 2
 #define AUDIO_FRAMES 1024
 #define AUDIO_BYTES_PER_FRAME ((int)(sizeof(int16_t) * AUDIO_CHANNELS))
-#define MIDI_MAX_EVENTS 4096
+#define MIDI_MAX_EVENTS 0x4000
 #define MIDI_MAX_TRACKS 32
 #define MIDI_DRUM_CHANNEL 9
 #define MIDI_DEFAULT_TEMPO_US 500000
