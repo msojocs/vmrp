@@ -659,8 +659,6 @@ static int32 my_getHostByNameSync(const char* name) {
     for (res = result; res; res = res->ai_next) {
         if (res->ai_family == AF_INET) {
             struct in_addr* addr = &((struct sockaddr_in*)res->ai_addr)->sin_addr;
-            // char addrstr[100];
-            // printf("--- IPv4 address: %s\n", inet_ntop(res->ai_family, addr, addrstr, sizeof(addrstr)));
             printf("--- IPv4 address: %s\n", inet_ntoa(*addr));
             ret = ntohl((*addr).s_addr);
             VMRP_NET_LOG("get_host result name='%s' ip=%s/0x%X\n",
@@ -794,7 +792,6 @@ int32 my_send(int32 s, const char* buf, int len) {
                     printf("[my_send] Failed to get ip.\n");
                     return MR_FAILED;
                 }
-                // if (port == 6009) port = 8080;
                 if (my_connect(s, ip, port, MR_SOCKET_BLOCK) == MR_FAILED) {
                     printf("[my_send] Failed to connect to ip.\n");
                     return MR_FAILED;

@@ -1075,6 +1075,17 @@ static int arm_ext_thumb_word_ref_has_imm(uint16_t insn, uint32_t imm) {
     return ((uint32_t)((insn >> 6) & 0x1Fu) * 4u) == imm;
 }
 
+static int arm_ext_thumb_word_imm_fields(uint16_t insn, uint16_t opcode,
+                                         uint32_t *rt_out,
+                                         uint32_t *rn_out,
+                                         uint32_t *imm_out) {
+    if ((insn & 0xF800u) != opcode) return 0;
+    if (rt_out) *rt_out = insn & 0x7u;
+    if (rn_out) *rn_out = (insn >> 3) & 0x7u;
+    if (imm_out) *imm_out = ((uint32_t)((insn >> 6) & 0x1Fu) * 4u);
+    return 1;
+}
+
 static int arm_ext_thumb_bridge_base_offset(const uint8_t *code,
                                             uint32_t file_len,
                                             uint32_t before_off,
@@ -1415,21 +1426,20 @@ int arm_ext_find_compact_timer_scheduler(const uint8_t *code,
                                          uint32_t *walker_file_off) {
     if (scheduler_off) *scheduler_off = 0;
     if (walker_file_off) *walker_file_off = 0;
-    if (!code || file_len < 64u) return 0;
+    if (!code || file_len < 0xD8u) return 0;
     static const uint8_t pat[] = {
         0x00, 0x48, 0xF8, 0xB5, 0x78, 0x44, 0x80, 0x6B,
         0x80, 0x30, 0x40, 0x68, 0x80, 0x47, 0x00, 0x25,
-        0x00, 0x4E, 0x4E, 0x44, 0x31, 0x69, 0x35, 0x61,
-        0x41, 0x1A, 0xB0, 0x68, 0x0B, 0x1C, 0x00, 0x28,
+        0x00, 0x4E, 0x4E, 0x44,
     };
-    for (uint32_t off = 0; off + sizeof(pat) <= file_len; off += 2u) {
+    for (uint32_t off = 0; off + 0xD8u <= file_len; off += 2u) {
         int match = 1;
         for (uint32_t i = 0; i < sizeof(pat); ++i) {
             /*
-             * Compact helper code=2 walkers load an R9-relative scheduler
-             * base, then use +8/+12/+16 as queue/current/last-tick.  The LDR
-             * literal immediates and the base value move with code layout, so
-             * only those bytes are wildcarded.
+             * Compact helper code=2 walkers share this getTime/R9 setup.  The
+             * two literal immediates move with code layout, so only those bytes
+             * are wildcarded; the scheduler fields below are decoded instead
+             * of being fixed to one SDK revision.
              */
             if (i == 0 || i == 16) continue;
             if (code[off + i] != pat[i]) {
@@ -1438,14 +1448,65 @@ int arm_ext_find_compact_timer_scheduler(const uint8_t *code,
             }
         }
         if (match) {
+            uint32_t queued_imm = 0;
+            /* Child compact SDK ABIs start this triple at +4 or +8.  The +12
+             * layout belongs to the wrapper dispatcher and is owned by the
+             * separate wrapper scanner. */
+            for (uint32_t candidate = 4u; candidate <= 8u;
+                 candidate += 4u) {
+                uint32_t current_imm = candidate + 4u;
+                uint32_t timestamp_imm = current_imm + 4u;
+                uint32_t state = 0;
+
+                /* The compiler may move ordinary instructions between queue
+                 * operations.  Decode the ordered consumer behavior instead
+                 * of pinning it to one SDK build's instruction addresses. */
+                for (uint32_t p = off + sizeof(pat);
+                     p + 2u <= off + 0xD8u; p += 2u) {
+                    uint32_t rt = 0, rn = 0, imm = 0;
+                    uint16_t insn = arm_ext_code_u16(code, p);
+                    int is_load = arm_ext_thumb_word_imm_fields(
+                        insn, 0x6800u, &rt, &rn, &imm);
+                    int is_store = arm_ext_thumb_word_imm_fields(
+                        insn, 0x6000u, &rt, &rn, &imm);
+                    if (rn != 6u) continue;
+
+                    if (state == 0u && is_load && rt == 1u &&
+                        imm == timestamp_imm) {
+                        state = 1u;
+                    } else if (state == 1u && is_store && rt == 5u &&
+                               imm == timestamp_imm) {
+                        state = 2u;
+                    } else if (state == 2u && is_load && rt == 0u &&
+                               imm == candidate) {
+                        state = 3u;
+                    } else if (state == 3u && is_store && rt == 0u &&
+                               imm == current_imm) {
+                        state = 4u;
+                    } else if (state == 4u && is_load && rt == 4u &&
+                               imm == current_imm) {
+                        state = 5u;
+                    } else if (state == 5u && is_store && rt == 5u &&
+                               imm == current_imm) {
+                        queued_imm = candidate;
+                        break;
+                    }
+                }
+                if (queued_imm) break;
+            }
+            if (!queued_imm) continue;
+
             uint32_t off_value = 0;
-            /* The second literal is added to R9 immediately before the walker
-             * reads queued/current/last-tick at +8/+12/+16.  Decode it instead
-             * of assuming one SDK's fixed RW layout. */
             if (arm_ext_thumb_ldr_literal_u32(code, file_len, off + 16u,
                                               &off_value) &&
                 off_value && (off_value & 3u) == 0) {
-                if (scheduler_off) *scheduler_off = off_value;
+                uint64_t normalized = (uint64_t)off_value + queued_imm;
+                if (normalized < 8u || normalized - 8u > UINT32_MAX)
+                    continue;
+                normalized -= 8u;
+                if (!normalized || (normalized & 3u) != 0)
+                    continue;
+                if (scheduler_off) *scheduler_off = (uint32_t)normalized;
                 /* The matched instruction is the Thumb function entry, not
                  * merely a signature near it, so callers can run the walker
                  * with the owning module's R9 when helper routing is indirect. */

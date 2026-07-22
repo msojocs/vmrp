@@ -552,3 +552,43 @@
 ## [2026-07-21T04:14:46.000Z] verify
 - **Pages:** gwyaz-installed-file-probe-and-wrapper-rw-owner-fix.md
 - **Summary:** Target and focused DIAG passed with distinct before/after PPMs and no 0x8F4 revert; geyaxz retained all three journal-protection paths; final no-retry E2E passed 28 files/51 tests, with ctest, TypeScript, and diff checks also clean.
+
+## [2026-07-22T04:41:05.712Z] ingest
+- **Pages:** gjxqy-local-download-protocol-and-fixture-id-mismatch.md
+- **Summary:** Created new page "GJXQY local download protocol and fixture ID mismatch"
+
+## [2026-07-22T04:41:05.716Z] add
+- **Pages:** gjxqy-local-download-protocol-and-fixture-id-mismatch.md
+- **Summary:** Created wiki page gjxqy-local-download-protocol-and-fixture-id-mismatch.md
+
+## [2026-07-22T05:28:02.637Z] update
+- **Pages:** gjxqy-local-download-protocol-and-fixture-id-mismatch.md
+- **Summary:** Classified temp/gjxqy as a mixed base-resource and resource-package extraction overlay; all 41 extracted data entries match res_1.mrp, but no EXT or installer-produced res.bin1 exists, so the 0xF983C versus 4001 mismatch remains.
+
+## [2026-07-22T05:32:00.000Z] verify
+- **Pages:** gjxqy-local-download-protocol-and-fixture-id-mismatch.md
+- **Summary:** A controlled v1008 launch with temp/gjxqy reached save selection without network traffic or res.bin1 creation, proving preset res.v slot state bypasses download gating and that the positive PPM is not installation evidence.
+
+## [2026-07-22T05:40:00.000Z] update
+- **Pages:** gjxqy-local-download-protocol-and-fixture-id-mismatch.md
+- **Summary:** Verified that newly added test/fixtures/gjxqy_v1012.mrp is byte-identical v1008 content and retains wrapper slot ID 0xF983C with no 4001 literal, so it does not resolve the resource installer mismatch.
+
+## [2026-07-22T06:59:00.000Z] verify
+- **Pages:** gjxqy-local-download-protocol-and-fixture-id-mismatch.md
+- **Summary:** Reproduced exact client download followed by the same three-color installer failure; three independent audits confirmed the opaque fixture-ID mismatch, rejected the unsupported offline-package inference, and verified the stricter one-shot fixture-server lifecycle with two no-SDL tests.
+
+## [2026-07-22T07:03:00.000Z] verify
+- **Pages:** gjxqy-local-download-protocol-and-fixture-id-mismatch.md
+- **Summary:** Rebuilt and reran after the server lifecycle fix; byte download still succeeds, the same ID rejection deletes res_1.mrp without creating res.bin1 or changing res.v, and build/TypeScript/server/CTest checks pass.
+
+## [2026-07-22T07:18:24.000Z] update
+- **Pages:** gjxqy-local-download-protocol-and-fixture-id-mismatch.md
+- **Summary:** Exhausted local Git, asset, wrapper-sample, and Mrpeditor generation paths; both opaque IDs are recoverable from their binaries, but no authoritative local rule or matching pair maps them, so a positive install requires a matching asset or explicitly authorized derived fixture.
+
+## [2026-07-22T07:38:40.000Z] complete
+- **Pages:** gjxqy-local-download-protocol-and-fixture-id-mismatch.md
+- **Summary:** Added a separately labeled, reproducible compatible resource fixture without changing the supplied package or runtime; target download/install now verifies exact res.bin1/res.v plus stable positive pixels, and the no-retry full E2E passes 32 files/56 tests.
+
+## [2026-07-22T07:43:48.000Z] verify
+- **Pages:** gjxqy-local-download-protocol-and-fixture-id-mismatch.md
+- **Summary:** Final post-edit target rerun passed without retry in 44.74 seconds; retained bytes again prove the exact derived download, installed res.bin1, updated res.v, and positive save-selection frame.

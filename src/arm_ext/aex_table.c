@@ -1079,11 +1079,25 @@ aex_done:
 }
 
 static void aex_t084(ArmExtModule *m, AexTableCtx *c) {
-    (void)m;
     uint32_t r0 = c->r0;
     uint32_t r1 = c->r1;
     uint32_t ret = MR_SUCCESS;
- ret = mr_socket((int32)r0, (int32)r1); goto aex_done;
+ {
+            ret = mr_socket((int32)r0, (int32)r1);
+            if (arm_ext_diag_on()) {
+                uint32_t owner_p = 0, owner_h = 0, owner_file = 0, owner_len = 0;
+                /* A socket is created immediately before guest-side connect
+                 * setup, so its return site identifies control-flow stalls
+                 * without enabling the high-volume table or PC traces. */
+                arm_ext_diag_owner_for_lr(m, &owner_p, &owner_h,
+                                          &owner_file, &owner_len);
+                printf("DIAG table84 type=%d protocol=%d ret=%d lr=0x%X ownerP=0x%X ownerH=0x%X ownerFile=0x%X ownerLen=%u activeP=0x%X primaryP=0x%X\n",
+                       (int32_t)r0, (int32_t)r1, (int32_t)ret,
+                       reg_read32(m->uc, UC_ARM_REG_LR),
+                       owner_p, owner_h, owner_file, owner_len,
+                       m->active_p_addr, m->primary_p_addr);
+            }
+        } goto aex_done;
 aex_done:
     c->ret = ret;
 }

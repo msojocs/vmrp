@@ -50,7 +50,7 @@ describe("gjxwsmn", () => {
         // rgb(248, 220, 144)
         expect(screen.pixel(173, 156)).toEqual([248, 220, 144]);
         // rgb(216, 228, 232)
-        expect(screen.pixel(174, 42)).toEqual([216, 228, 232]);
+        expect(screen.pixel(116, 55)).toEqual([216, 228, 232]);
       }, { timeout: 10_000, interval: 1_000 });
     }
   });
