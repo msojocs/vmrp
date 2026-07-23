@@ -563,12 +563,12 @@ tool/server-http.js已启动，修改tool/proxy.js来实现代理服务器。
 记得存储记忆数据。
 
 工作区中的修改是修复以下以下产生的，但实际还是提示失败，分析失败原因是什么？
-测试用例`pnpm vitest run test/e2e/gjxqy/download-res.test.ts`执行后，会下载资源包，目前使用本地nodejs服务器，但是下载文件后还是提示失败，分析原因尝试修复这个问题。
-工作区的文件不一定正确，需要确认。
-真机疑似可以正常执行：`temp/gjxqy`
+测试用例`pnpm vitest run test/e2e/gjxqy/temp.test.ts -t download`执行后，会下载资源包，目前使用本地nodejs服务器，但是下载文件后还是提示失败，分析原因尝试修复这个问题。
+现有的分析文件不一定正确，需要确认。
+真机的数据目录，资源包已经释放过，可以正常执行：`test/fixtures/gjxqy/`，但是在本地nodejs服务器上执行会提示下载失败。
 
 预期结果：资源包下载成功。
-实际结果：需要复现服务器环境。
+实际结果：复现服务器环境后，总是提示失败。
 服务器代码：`tool/jxqy-server.js`
 资源包文件：`temp/gjxqy-res/res_1.mrp`
 

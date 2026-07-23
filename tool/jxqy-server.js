@@ -344,6 +344,8 @@ async function runCli() {
   } finally {
     // The CLI is a one-transaction fixture server, so release the listening
     // socket after either a completed response or a protocol failure.
+    console.log("[gjxqy-server] closing after 5s");
+    await new Promise(resolve => setTimeout(resolve, 5000));
     await instance.close();
   }
 }
