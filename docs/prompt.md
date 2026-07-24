@@ -546,8 +546,7 @@ tool/server-http.js已启动，修改tool/proxy.js来实现代理服务器。
 记得存储记忆数据。
 
 工作区中的修改是修复以下BUG产生的，分析实现方案是否合理：
-命令`build/skyengine build/mythroad/愤怒的小鸟VS僵尸2_v1002-3.mrp`执行后，`build/mythroad/cache`会出现乱码文件夹，分析哪里来的，如果是程序释放资源的文件夹，那就修正编码。
-
+测试用例`pnpm vitest run test/e2e/gjxwsmn/duplicate-pay.test.ts`，游戏付费后，第二次启动还是提示要付费，分析并修正这个问题。
 
 程序的现有代码不一定正确。
 注意trace日志量会特别大。

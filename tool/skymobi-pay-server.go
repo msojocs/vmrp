@@ -6,24 +6,20 @@
 // 付费/授权。真机上服务器返回校验结果，netpay 据此放行游戏。该服务器已下线，
 // gxdzc 等游戏因此卡在等待回复处（见 docs 分析）。
 //
-// 本程序是一个本地假服务器。DNS 解析已在模拟器内部完成重定向（见
-// src/network.c 的 my_getHostByNameSync：rop.skymobiapp.com -> 127.0.0.1，
-// 无需改 /etc/hosts），netpay 的请求会直接落到本机。服务器做两件事：
+// 本程序是一个本地假服务器。用 skyengine 的 --dns-map 把
+// rop.skymobiapp.com 指向本机后，netpay 的请求会直接落到这里。服务器做两件事：
 //   1) 完整解析并打印请求的 HTTP 头与 TLV body —— 用于逆向 netpay 实际发送
 //      的字段，进而推导出能让它放行的"成功"响应格式。
-//   2) 返回一段可配置的 TLV 响应（默认是 best-effort 的"成功"占位，需要根据
-//      netpay 对响应的解析行为继续打磨）。
+//   2) 按请求阶段返回 TLV 响应：PREREG 不授权，REG echo 请求事务号并返回
+//      netpay.ext 已验证的持久注册动作。
 //
 // 用法：
 //   go run tool/skymobi-pay-server.go
-//   sudo PORT=80 go run tool/skymobi-pay-server.go
-//   # netpay 写死连 80 端口。若不想用 root，可改连别的端口：先用
-//   #   VMRP_PAY_HOST=127.0.0.1 启动 skyengine（IP 重定向），再配合端口转发，
-//   #   例如  socat TCP-LISTEN:80,fork,reuseaddr TCP:127.0.0.1:8080
-//   #   然后  PORT=8080 go run tool/skymobi-pay-server.go
+//   # 另一个终端启动 skyengine:
+//   #   build/skyengine --dns-map 'rop.skymobiapp.com->127.0.0.1:8089' ...
 //
 // 环境变量：
-//   PORT            监听端口，默认 80（skymobi 请求里写死的是 80 端口）
+//   PORT            监听端口，默认 8089
 //   RESP_TLV_FILE   指定一个文件，其内容作为响应 body 原样返回（覆盖默认响应）
 //   RESP_HTTP_FILE  指定一个文件，其内容作为完整 HTTP 响应原样返回（连头部）
 //   LOG_RAW         设为 "1" 时额外打印每个请求收到的原始 body hex
@@ -110,6 +106,23 @@ func scanTlv(body []byte) (start int, records []tlvRecord, end int) {
 	return bestStart, bestRecords, bestEnd
 }
 
+func parseTlvExact(body []byte) ([]tlvRecord, bool) {
+	var records []tlvRecord
+	off := 0
+	for off+8 <= len(body) {
+		typ := binary.BigEndian.Uint32(body[off:])
+		length := binary.BigEndian.Uint32(body[off+4:])
+		if int(length) > len(body)-(off+8) {
+			return nil, false
+		}
+		val := make([]byte, length)
+		copy(val, body[off+8:off+8+int(length)])
+		records = append(records, tlvRecord{Type: typ, Len: length, Value: val})
+		off += 8 + int(length)
+	}
+	return records, off == len(body)
+}
+
 func preview(data []byte, max int) string {
 	n := len(data)
 	if n > max {
@@ -159,7 +172,20 @@ func toAsciiSafe(data []byte) string {
 
 // ---------- 默认响应 ----------
 
-func buildDefaultBody() []byte {
+var nonEntitlingBody = append(
+	tlvEncode(0x03f1, []byte("000000006")),
+	tlvEncode(0x044f, []byte{0x00, 0x00, 0x00, 0x00})...,
+)
+
+func tlvMap(records []tlvRecord) map[uint32]tlvRecord {
+	out := make(map[uint32]tlvRecord, len(records))
+	for _, rec := range records {
+		out[rec.Type] = rec
+	}
+	return out
+}
+
+func buildDefaultBody(records []tlvRecord) []byte {
 	if f := os.Getenv("RESP_TLV_FILE"); f != "" {
 		data, err := os.ReadFile(f)
 		if err != nil {
@@ -168,10 +194,30 @@ func buildDefaultBody() []byte {
 		}
 		return data
 	}
-	// 占位"成功"响应：result(0x044f?)=0 等，后续按 netpay 解析行为修订
+
+	fields := tlvMap(records)
+	stage := ""
+	if rec, ok := fields[0x0452]; ok {
+		stage = string(rec.Value)
+	}
+	if stage != "REG" {
+		// PREREG 保持非授权响应，确保客户端仍显示注册确认页；否则只靠
+		// 每次启动的在线成功响应就会掩盖没有落盘的假阳性。
+		return append([]byte(nil), nonEntitlingBody...)
+	}
+
+	txn, ok := fields[0x045b]
+	if !ok || len(txn.Value) != 4 {
+		fmt.Fprintln(os.Stderr, "REG request missing 4-byte transaction TLV 0x045b")
+		return append([]byte(nil), nonEntitlingBody...)
+	}
+
+	// REG 模式下 netpay.ext 会把响应 type 101 与请求 0x045b 比较；action
+	// 12 是该 SDK 的持久注册续接动作，会走入 guest 自己的 SID 写入路径。
 	var body []byte
-	body = append(body, tlvEncode(0x03f1, []byte("000000006"))...)
-	body = append(body, tlvEncode(0x044f, []byte{0x00, 0x00, 0x00, 0x00})...)
+	body = append(body, tlvEncode(101, txn.Value)...)
+	body = append(body, tlvEncode(100, u32be(200))...)
+	body = append(body, tlvEncode(200, []byte{12})...)
 	return body
 }
 
@@ -241,7 +287,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respBody := buildDefaultBody()
+	exactRecords, exactOk := parseTlvExact(body)
+	if !exactOk {
+		fmt.Printf("[#%d] exact TLV parse failed; using non-entitling response\n", id)
+	}
+	respBody := buildDefaultBody(exactRecords)
 	fmt.Printf("[#%d] -> reply %dB body\n", id, len(respBody))
 	w.Header().Set("Content-Type", "application/x-tar")
 	w.Header().Set("Connection", "close")
@@ -252,14 +302,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "80"
+		port = "8089"
 	}
 
 	addr := "0.0.0.0:" + port
 
 	fmt.Printf("skymobi fake pay-server listening on %s\n", addr)
-	fmt.Println("DNS 已在 src/network.c 内重定向 rop.skymobiapp.com -> 127.0.0.1，")
-	fmt.Println("直接启动 skyengine 即可，netpay 的 POST /payOneAsTlv 会落到这里。")
+	fmt.Println("使用 --dns-map 'rop.skymobiapp.com->127.0.0.1:<PORT>' 将 payOneAsTlv 请求导向这里。")
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
